@@ -59,6 +59,37 @@ public class RegressionSuitesTest {
         assertSame(original,error); assertEquals(2,error.getSuppressed().length);
         assertFalse(restored.get(),"Auto-commit could commit writes after rollback failed");
     }
+    @Test void driverSelectionPersistenceAndCoordinates() {
+        var configuration = new ConnectionConfig(DatabaseType.MYSQL, "selected driver");
+        assertEquals(DriverSource.BUNDLED, configuration.getDriverSource());
+        configuration.setDriverSource(DriverSource.DOWNLOAD); configuration.setDriverVersion("5.1.49");
+        configuration.setDriverJarPath("D:/drivers/mysql.jar");
+        var restored = com.intellij.util.xmlb.XmlSerializer.deserialize(com.intellij.util.xmlb.XmlSerializer.serialize(configuration.copy()), ConnectionConfig.class);
+        assertEquals(DriverSource.DOWNLOAD, restored.getDriverSource());
+        assertEquals("5.1.49", restored.getDriverVersion()); assertEquals(configuration.getDriverJarPath(), restored.getDriverJarPath());
+        assertEquals("mysql/mysql-connector-java/5.1.49/mysql-connector-java-5.1.49.jar", com.vibe.ideadb.service.DriverCatalog.artifactPath(DatabaseType.MYSQL,"5.1.49"));
+        assertEquals("com/mysql/mysql-connector-j/8.0.33/mysql-connector-j-8.0.33.jar", com.vibe.ideadb.service.DriverCatalog.artifactPath(DatabaseType.MYSQL,"8.0.33"));
+        assertEquals("org/hsqldb/hsqldb/2.7.4/hsqldb-2.7.4-jdk8.jar", com.vibe.ideadb.service.DriverCatalog.artifactPath(DatabaseType.HSQLDB,"2.7.4-jdk8"));
+        assertThrows(IllegalArgumentException.class, () -> com.vibe.ideadb.service.DriverCatalog.artifactPath(DatabaseType.MYSQL,"../secret"));
+        assertThrows(IllegalArgumentException.class, () -> com.vibe.ideadb.service.DriverCatalog.artifactPath(DatabaseType.MYSQL,"8.0.33-jdk8"));
+    }
+    @Test @Tag("integration") void changingDriverRevokesExistingSessions() throws Exception {
+        var config = new ConnectionConfig(DatabaseType.HSQLDB, "driver switch");
+        var manager = com.vibe.ideadb.service.DatabaseConnectionManager.getInstance();
+        manager.registerConfiguration(config);
+        try {
+            var previous = manager.getConnection(config);
+            var unchanged = config.copy(); unchanged.setDriverVersion("unused selection");
+            manager.registerConfiguration(unchanged);
+            assertSame(previous, manager.getConnection(config), "Unused driver fields must not retire sessions");
+            var updated = config.copy(); updated.setDriverSource(DriverSource.LOCAL_JAR);
+            updated.setDriverJarPath(new java.io.File("lib/hsqldb-2.7.3.jar").getAbsolutePath());
+            manager.registerConfiguration(updated);
+            assertTrue(previous.isClosed());
+            assertThrows(java.sql.SQLException.class, () -> manager.getConnection(config));
+            try (var current = manager.openConnection(updated)) { assertFalse(current.isClosed()); }
+        } finally { manager.removeConfiguration(config.getId()); }
+    }
     @Test @Tag("integration") void existingDatabaseFlows() { PluginIntegrationTest.main(new String[0]); }
     @Test @Tag("integration") void liveFunctionalRegressions() throws Exception { FunctionalRegressionTest.main(new String[0]); }
 }

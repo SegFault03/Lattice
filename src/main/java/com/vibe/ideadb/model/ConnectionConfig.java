@@ -15,6 +15,9 @@ public class ConnectionConfig {
     private String password = "";
     private String customUrl = "";
     private boolean autoCommit = true;
+    private DriverSource driverSource = DriverSource.BUNDLED;
+    private String driverVersion = "";
+    private String driverJarPath = "";
 
     public ConnectionConfig() {
     }
@@ -46,7 +49,7 @@ public class ConnectionConfig {
             String db = (databaseName != null && !databaseName.trim().isEmpty()) ? databaseName.trim() : "";
             String h = (host != null && !host.trim().isEmpty()) ? host.trim() : "localhost";
             int p = port > 0 ? port : 3306;
-            return "jdbc:mysql://" + h + ":" + p + "/" + db + "?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=utf8";
+            return "jdbc:mysql://" + h + ":" + p + "/" + db + "?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&useLegacyDatetimeCode=false&forceConnectionTimeZoneToSession=true&characterEncoding=utf8";
         } else if (type == DatabaseType.HSQLDB) {
             String db = (databaseName != null && !databaseName.trim().isEmpty()) ? databaseName.trim() : "testdb";
             if (hsqlMode == HsqlMode.MEM) {
@@ -77,8 +80,18 @@ public class ConnectionConfig {
         c.password = this.password;
         c.customUrl = this.customUrl;
         c.autoCommit = this.autoCommit;
+        c.driverSource = this.driverSource;
+        c.driverVersion = this.driverVersion;
+        c.driverJarPath = this.driverJarPath;
         return c;
     }
+
+    public DriverSource getDriverSource() { return driverSource == null ? DriverSource.BUNDLED : driverSource; }
+    public void setDriverSource(DriverSource source) { driverSource = source; }
+    public String getDriverVersion() { return Objects.requireNonNullElse(driverVersion, ""); }
+    public void setDriverVersion(String version) { driverVersion = version; }
+    public String getDriverJarPath() { return Objects.requireNonNullElse(driverJarPath, ""); }
+    public void setDriverJarPath(String path) { driverJarPath = path; }
 
     // Getters and Setters
     public String getId() { return id; }

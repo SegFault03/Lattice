@@ -13,7 +13,7 @@
 ## 🌟 Key Features
 
 ### 1. Multi-Engine Support
-- **MySQL (5.7, 8.x, 9.x+)**:
+- **MySQL (5.5+, with a compatible JDBC driver)**:
   - Connect via Standard Host / Port / User / Password / Database
   - Custom JDBC connection strings and SSL parameters
   - Bundled with `mysql-connector-j-9.0.0.jar`
@@ -22,6 +22,10 @@
   - **Embedded File (`file:`)**: Local persistent database file storage with file browser picker
   - **Remote Server (`hsql://`)**: Network connection to standalone HSQLDB instances
   - Bundled with `hsqldb-2.7.3.jar`
+- **Driver selection**: use bundled drivers, choose/download a release from Maven Central, or browse to a local JDBC JAR. HSQLDB Java 8 variants are identified by `-jdk8`. Driver choices are saved per connection.
+- **Server version detection**: Test Connection reports the actual database and JDBC driver versions after connecting.
+
+The plugin targets **IntelliJ IDEA 2025.1 and later**, with Java 21 bytecode. Java 8 compatibility applies to database servers and JDBC drivers, not the IDE plugin runtime. See [the tested compatibility matrix](review/compatibility-2026-10-04.md) for exact versions and limitations.
 
 ---
 
@@ -165,6 +169,8 @@ Lattice/
 
 Running either build script compiles the Java sources, bundles JDBC drivers, and generates the distributable archive `build/Lattice-1.0.0.zip` ready for installation.
 
+For a distribution supporting 2025 IDEs, compile against a 2025.1 SDK. The Windows script accepts `-IdeaHome <SDK directory>`; the Bash script accepts `IDEA_HOME`. Both emit Java 21 bytecode and keep their intermediate outputs in `build/standalone/`.
+
 ### Windows (PowerShell)
 ```powershell
 powershell.exe -ExecutionPolicy Bypass -File .\build-plugin.ps1
@@ -185,15 +191,21 @@ build/Lattice-1.0.0.zip
 
 ## 🧪 Running Integration Tests
 
+The live regression suites expect the supplied local MySQL and HSQLDB fixtures to be running. Temporary test schemas are removed after each suite.
+
 ### Windows
 ```powershell
-$javac = "..\proto\idea-2026.2.3.win\jbr\bin\javac.exe"
-$java = "..\proto\idea-2026.2.3.win\jbr\bin\java.exe"
-$cp = "..\proto\idea-2026.2.3.win\lib\*;.\lib\*;.\build\classes"
-& $javac -encoding UTF-8 -cp $cp -d .\build\test-classes .\src\test\java\com\vibe\ideadb\PluginIntegrationTest.java
-$runCp = "..\proto\idea-2026.2.3.win\lib\*;.\lib\*;.\build\classes;.\build\test-classes"
-& $java -cp $runCp com.vibe.ideadb.PluginIntegrationTest
+.\test-functional.ps1 -IdeaHome 'C:\path\to\idea-2025.1'
 ```
+
+### Gradle (Java 21)
+```powershell
+.\gradlew.bat test integrationTest buildPlugin '-Plattice.ide.home=C:/path/to/idea-2025.1'
+```
+
+`test` runs pure regressions; `integrationTest` opts into live databases. Omitting `lattice.ide.home` downloads the configured 2025.1 SDK. Gradle packages into `build/distributions/`.
+
+For the Java 8 driver/server matrix and Plugin Verifier commands, see [compatibility validation](review/compatibility-2026-10-04.md).
 
 ### Linux / macOS
 ```bash

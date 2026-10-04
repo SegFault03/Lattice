@@ -12,6 +12,9 @@ import com.vibe.ideadb.model.ConnectionConfig;
 import com.vibe.ideadb.model.ConnectionTestResult;
 import com.vibe.ideadb.model.DatabaseType;
 import com.vibe.ideadb.model.HsqlMode;
+import com.vibe.ideadb.model.DriverSource;
+import com.vibe.ideadb.service.DriverCatalog;
+import com.intellij.openapi.ui.ValidationInfo;
 import com.vibe.ideadb.service.DatabaseConnectionManager;
 import org.jetbrains.annotations.Nullable;
 
@@ -23,6 +26,17 @@ import java.awt.event.ItemEvent;
 
 public class ConnectionDialog extends DialogWrapper {
     private final ConnectionConfig config;
+    private JComboBox<DriverSource> driverSourceCombo;
+    private JComboBox<String> driverVersionCombo;
+    private TextFieldWithBrowseButton driverJarField;
+    private JPanel driverCards;
+    private final CardLayout driverLayout = new CardLayout();
+    private final JButton downloadDriverButton = new JButton("Download");
+    private final JButton listVersionsButton = new JButton("More versions");
+    private final JBLabel driverStatusLabel = new JBLabel(" ");
+    private java.util.concurrent.Future<?> driverTask;
+    private java.util.concurrent.Future<?> connectionTask;
+    private boolean driverBusy;
 
     // Header fields
     private JBTextField nameField;
@@ -85,7 +99,7 @@ public class ConnectionDialog extends DialogWrapper {
     @Override
     protected @Nullable JComponent createCenterPanel() {
         JPanel root = new JPanel(new BorderLayout(0, 10));
-        root.setPreferredSize(new Dimension(530, 370));
+        root.setPreferredSize(new Dimension(620, 520));
 
         // 1. Top Section: Name, Database Type, Connection Method
         JPanel topPanel = new JPanel(new GridBagLayout());
@@ -121,6 +135,32 @@ public class ConnectionDialog extends DialogWrapper {
         radioPanel.add(customUrlRadio);
         topPanel.add(radioPanel, gbc);
 
+        gbc.gridx = 0; gbc.gridy = 3; gbc.weightx = 0.22;
+        topPanel.add(new JBLabel("JDBC driver:"), gbc);
+        gbc.gridx = 1; gbc.weightx = 0.78;
+        driverSourceCombo = new JComboBox<>(DriverSource.values());
+        topPanel.add(driverSourceCombo, gbc);
+        gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 2; gbc.weightx = 1;
+        driverCards = new JPanel(driverLayout);
+        driverCards.add(new JBLabel("MySQL 9.0.0 / HSQLDB 2.7.3 included"), DriverSource.BUNDLED.name());
+        JPanel versionPanel = new JPanel(new BorderLayout(6, 0));
+        driverVersionCombo = new JComboBox<>(); driverVersionCombo.setEditable(true);
+        versionPanel.add(driverVersionCombo, BorderLayout.CENTER);
+        JPanel downloadActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+        downloadActions.add(listVersionsButton); downloadActions.add(downloadDriverButton);
+        versionPanel.add(downloadActions, BorderLayout.EAST);
+        driverCards.add(versionPanel, DriverSource.DOWNLOAD.name());
+        driverJarField = new TextFieldWithBrowseButton();
+        driverJarField.setToolTipText("Choose the driver matching the server or HSQLDB file format.");
+        driverJarField.addBrowseFolderListener(null, FileChooserDescriptorFactory.createSingleFileDescriptor("jar").withTitle("Select JDBC Driver JAR"));
+        driverCards.add(driverJarField, DriverSource.LOCAL_JAR.name());
+        topPanel.add(driverCards, gbc);
+        gbc.gridy = 5; topPanel.add(driverStatusLabel, gbc);
+        driverSourceCombo.addActionListener(e -> { driverLayout.show(driverCards, ((DriverSource)driverSourceCombo.getSelectedItem()).name()); updateDriverStatus(); });
+        driverVersionCombo.addActionListener(e -> updateDriverStatus());
+        downloadDriverButton.addActionListener(e -> runDriverAction(false));
+        listVersionsButton.addActionListener(e -> runDriverAction(true));
+        refillDriverVersions();
         root.add(topPanel, BorderLayout.NORTH);
 
         // 2. Center Section: Switchable Cards (Standard vs JDBC URL)
@@ -407,6 +447,7 @@ public class ConnectionDialog extends DialogWrapper {
                         hsqlServerDbField.setText("testdb");
                     }
                 }
+                refillDriverVersions();
                 updatePreview();
             }
         });
@@ -488,6 +529,9 @@ public class ConnectionDialog extends DialogWrapper {
         c.setName(nameField != null ? nameField.getText().trim() : config.getName());
         DatabaseType type = (DatabaseType) typeCombo.getSelectedItem();
         c.setType(type);
+        c.setDriverSource((DriverSource)driverSourceCombo.getSelectedItem());
+        c.setDriverVersion(String.valueOf(driverVersionCombo.getEditor().getItem()).trim());
+        c.setDriverJarPath(driverJarField.getText().trim());
 
         if (customUrlRadio.isSelected()) {
             c.setCustomUrl(customUrlField.getText().trim());
@@ -530,21 +574,93 @@ public class ConnectionDialog extends DialogWrapper {
         return c;
     }
 
+    private void refillDriverVersions() {
+        driverVersionCombo.removeAllItems();
+        for (String version : DriverCatalog.suggestedVersions((DatabaseType)typeCombo.getSelectedItem())) driverVersionCombo.addItem(version);
+        updateDriverStatus();
+    }
+    private void updateDriverStatus() {
+        if (driverBusy || driverSourceCombo == null) return;
+        DriverSource source = (DriverSource)driverSourceCombo.getSelectedItem();
+        if (source == DriverSource.DOWNLOAD) {
+            try {
+                var path = DriverCatalog.downloadedJar((DatabaseType)typeCombo.getSelectedItem(), String.valueOf(driverVersionCombo.getEditor().getItem()).trim());
+                driverStatusLabel.setText(java.nio.file.Files.isRegularFile(path) ? "Downloaded and ready" : "Choose a version, then Download. You can also enter a release version.");
+            } catch (IllegalArgumentException error) { driverStatusLabel.setText(error.getMessage()); }
+        } else driverStatusLabel.setText(source == DriverSource.LOCAL_JAR ? "Select the driver JAR matching your database server." : "Bundled drivers are ready to use.");
+    }
+    private void runDriverAction(boolean listOnly) {
+        if (driverBusy || !testButton.isEnabled() || isDisposed()) return;
+        DatabaseType type = (DatabaseType)typeCombo.getSelectedItem();
+        String version = String.valueOf(driverVersionCombo.getEditor().getItem()).trim();
+        driverBusy = true; downloadDriverButton.setEnabled(false); listVersionsButton.setEnabled(false);
+        driverSourceCombo.setEnabled(false); driverVersionCombo.setEnabled(false); typeCombo.setEnabled(false);
+        testButton.setEnabled(false); setOKActionEnabled(false);
+        driverStatusLabel.setText(listOnly ? "Loading versions from Maven Central..." : "Downloading and verifying " + version + "...");
+        driverTask = com.vibe.ideadb.service.DatabaseTaskService.getInstance().submit(() -> {
+            String error = null; java.util.List<String> versions = null;
+            try { if (listOnly) versions = DriverCatalog.availableVersions(type); else DriverCatalog.download(type, version); }
+            catch (Exception failure) { error = failure.getMessage(); }
+            String failure = error; java.util.List<String> available = versions;
+            SwingUtilities.invokeLater(() -> {
+                if (isDisposed()) return;
+                driverBusy = false; downloadDriverButton.setEnabled(true); listVersionsButton.setEnabled(true);
+                driverSourceCombo.setEnabled(true); driverVersionCombo.setEnabled(true); typeCombo.setEnabled(true);
+                testButton.setEnabled(true); setOKActionEnabled(true);
+                if (available != null) {
+                    driverVersionCombo.removeAllItems(); available.forEach(driverVersionCombo::addItem); driverVersionCombo.setSelectedItem(version);
+                }
+                updateDriverStatus();
+                if (failure != null) { driverStatusLabel.setText("Download failed; use a local JAR or retry."); Messages.showErrorDialog(failure, "JDBC Driver"); }
+            });
+        });
+    }
+    @Override protected @Nullable ValidationInfo doValidate() {
+        if (driverBusy) return new ValidationInfo("Wait for the driver download to finish", driverSourceCombo);
+        ConnectionConfig candidate = createTempConfig();
+        try {
+            if (candidate.getDriverSource() == DriverSource.DOWNLOAD) {
+                var downloaded = DriverCatalog.downloadedJar(candidate.getType(), candidate.getDriverVersion());
+                if (!java.nio.file.Files.isRegularFile(downloaded)) return new ValidationInfo("Download the selected driver first", driverVersionCombo);
+                DriverCatalog.validateJar(candidate.getType(), downloaded);
+            } else if (candidate.getDriverSource() == DriverSource.LOCAL_JAR) {
+                DriverCatalog.validateJar(candidate.getType(), java.nio.file.Path.of(candidate.getDriverJarPath()));
+            }
+        } catch (Exception error) { return new ValidationInfo(error.getMessage(), driverSourceCombo); }
+        return null;
+    }
+    @Override protected void dispose() {
+        if (driverTask != null) driverTask.cancel(true);
+        if (connectionTask != null) connectionTask.cancel(true);
+        super.dispose();
+    }
+
+    private static boolean sameRequest(ConnectionConfig left, ConnectionConfig right) {
+        return left.buildJdbcUrl().equals(right.buildJdbcUrl()) && left.getType() == right.getType()
+                && java.util.Objects.equals(left.getUser(), right.getUser()) && java.util.Objects.equals(left.getPassword(), right.getPassword())
+                && left.getDriverSource() == right.getDriverSource() && left.getDriverVersion().equals(right.getDriverVersion())
+                && left.getDriverJarPath().equals(right.getDriverJarPath());
+    }
+
     private void doTestConnection() {
-        if (!testButton.isEnabled() || isDisposed()) return;
+        if (driverBusy || !testButton.isEnabled() || isDisposed()) return;
         ConnectionConfig temp = createTempConfig();
         DatabaseType originalType = temp.getType();
+        ConnectionConfig requested = temp.copy();
         testStatusLabel.setText("Connecting...");
         testStatusLabel.setForeground(JBColor.GRAY);
-        testButton.setEnabled(false);
+        testButton.setEnabled(false); downloadDriverButton.setEnabled(false); listVersionsButton.setEnabled(false);
 
-        com.vibe.ideadb.service.DatabaseTaskService.getInstance().submit(() -> {
+        connectionTask = com.vibe.ideadb.service.DatabaseTaskService.getInstance().submit(() -> {
                 if(isDisposed()) return;
                 ConnectionTestResult result = DatabaseConnectionManager.getInstance().testConnection(temp);
 
                 SwingUtilities.invokeLater(() -> {
                     if (isDisposed()) return;
-                    testButton.setEnabled(true);
+                    testButton.setEnabled(true); downloadDriverButton.setEnabled(true); listVersionsButton.setEnabled(true);
+                    if (!sameRequest(requested, createTempConfig())) {
+                        testStatusLabel.setText("Settings changed; test again"); return;
+                    }
                     if (result.isSuccess()) {
                         // If the backend detected a database type mismatch (e.g. MySQL port was running HSQLDB)
                         if (temp.getType() != originalType) {
@@ -559,7 +675,8 @@ public class ConnectionDialog extends DialogWrapper {
                             }
                             updatePreview();
                         }
-                        testStatusLabel.setText("Connected! (" + result.getResponseTimeMs() + "ms)");
+                        testStatusLabel.setText(result.getDatabaseProductName() + " " + result.getDatabaseProductVersion());
+                        testStatusLabel.setToolTipText("Driver: " + result.getDriverName() + " " + result.getDriverVersion() + "; " + result.getResponseTimeMs() + " ms");
                         testStatusLabel.setForeground(new JBColor(new Color(40, 160, 80), new Color(98, 181, 67)));
                         Messages.showInfoMessage(result.getSummaryMessage(), "Connection Successful");
                     } else {
@@ -599,6 +716,12 @@ public class ConnectionDialog extends DialogWrapper {
             hsqlPasswordField.setText(config.getPassword());
         }
 
+        if (!config.getDriverVersion().isBlank()) driverVersionCombo.setSelectedItem(config.getDriverVersion());
+        driverJarField.setText(config.getDriverJarPath());
+        driverSourceCombo.setSelectedItem(config.getDriverSource());
+        driverLayout.show(driverCards, config.getDriverSource().name());
+        updateDriverStatus();
+
         // Custom URL or Standard mode
         if (config.getCustomUrl() != null && !config.getCustomUrl().isEmpty()) {
             customUrlRadio.setSelected(true);
@@ -625,5 +748,8 @@ public class ConnectionDialog extends DialogWrapper {
         config.setUser(temp.getUser());
         config.setPassword(temp.getPassword());
         config.setCustomUrl(temp.getCustomUrl());
+        config.setDriverSource(temp.getDriverSource());
+        config.setDriverVersion(temp.getDriverVersion());
+        config.setDriverJarPath(temp.getDriverJarPath());
     }
 }

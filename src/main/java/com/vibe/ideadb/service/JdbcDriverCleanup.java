@@ -18,9 +18,14 @@ public final class JdbcDriverCleanup {
                 try { DriverManager.deregisterDriver(driver); } catch(SQLException ignored) { }
             }
         }
-        try {
-            Class<?> cleanup=Class.forName("com.mysql.cj.jdbc.AbandonedConnectionCleanupThread",false,owner);
-            if(cleanup.getClassLoader()==owner) cleanup.getMethod("uncheckedShutdown").invoke(null);
-        } catch(ReflectiveOperationException ignored) { }
+        for (String name : new String[]{"com.mysql.cj.jdbc.AbandonedConnectionCleanupThread", "com.mysql.jdbc.AbandonedConnectionCleanupThread"}) {
+            try {
+                Class<?> cleanup = Class.forName(name, false, owner);
+                if (cleanup.getClassLoader() == owner) {
+                    try { cleanup.getMethod("uncheckedShutdown").invoke(null); }
+                    catch (NoSuchMethodException legacy) { cleanup.getMethod("shutdown").invoke(null); }
+                }
+            } catch (ReflectiveOperationException ignored) { }
+        }
     }
 }

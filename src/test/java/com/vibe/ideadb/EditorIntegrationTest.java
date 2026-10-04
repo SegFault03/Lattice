@@ -81,6 +81,8 @@ public class EditorIntegrationTest {
     private static void testFileEditorProviderAcceptance() {
         System.out.print("[TEST] File Editor Provider Acceptance & Policy... ");
         DatabaseFileEditorProvider provider = new DatabaseFileEditorProvider();
+        Project project = (Project)java.lang.reflect.Proxy.newProxyInstance(Project.class.getClassLoader(), new Class[]{Project.class},
+                (proxy, method, args) -> { throw new AssertionError("Provider acceptance should not inspect project services"); });
 
         ConnectionConfig cfg = new ConnectionConfig(DatabaseType.HSQLDB, "HSQLDB Local");
         TableMetadata tm = new TableMetadata(null, "PUBLIC", "employees", "TABLE");
@@ -90,10 +92,10 @@ public class EditorIntegrationTest {
         WelcomeVirtualFile welcomeFile = new WelcomeVirtualFile();
         LightVirtualFile normalFile = new LightVirtualFile("Sample.java");
 
-        if (!provider.accept(null, tableFile)) throw new AssertionError("Provider should accept TableDataVirtualFile");
-        if (!provider.accept(null, consoleFile)) throw new AssertionError("Provider should accept SqlConsoleVirtualFile");
-        if (!provider.accept(null, welcomeFile)) throw new AssertionError("Provider should accept WelcomeVirtualFile");
-        if (provider.accept(null, normalFile)) throw new AssertionError("Provider must NOT accept regular LightVirtualFile");
+        if (!provider.accept(project, tableFile)) throw new AssertionError("Provider should accept TableDataVirtualFile");
+        if (!provider.accept(project, consoleFile)) throw new AssertionError("Provider should accept SqlConsoleVirtualFile");
+        if (!provider.accept(project, welcomeFile)) throw new AssertionError("Provider should accept WelcomeVirtualFile");
+        if (provider.accept(project, normalFile)) throw new AssertionError("Provider must NOT accept regular LightVirtualFile");
 
         if (provider.getPolicy() != FileEditorPolicy.HIDE_DEFAULT_EDITOR) {
             throw new AssertionError("Policy should be HIDE_DEFAULT_EDITOR");

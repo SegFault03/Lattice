@@ -1,6 +1,10 @@
 package com.vibe.ideadb.service;
 
 import com.vibe.ideadb.model.DatabaseType;
+import com.vibe.ideadb.model.ConnectionConfig;
+import com.vibe.ideadb.model.DriverSource;
+import java.nio.file.Path;
+import java.nio.file.Files;
 
 import java.io.File;
 import java.net.URL;
@@ -15,7 +19,7 @@ public class DriverRegistry implements com.intellij.openapi.Disposable {
     private static final class Standalone { private static final DriverRegistry INSTANCE=new DriverRegistry(); }
     private final List<URLClassLoader> ownedLoaders=new ArrayList<>();
     private boolean disposed;
-    private final Map<DatabaseType, Driver> driverCache = new ConcurrentHashMap<>();
+    private final Map<String, Driver> driverCache = new ConcurrentHashMap<>();
     private final List<File> searchDirectories = new ArrayList<>();
 
     public DriverRegistry() {
@@ -55,7 +59,7 @@ public class DriverRegistry implements com.intellij.openapi.Disposable {
 
     public synchronized Driver getDriver(DatabaseType type) throws Exception {
         if(disposed) throw new IllegalStateException("Driver registry is disposed");
-        Driver cached = driverCache.get(type);
+        Driver cached = driverCache.get("bundled:" + type.name());
         if (cached != null) {
             return cached;
         }
@@ -64,7 +68,7 @@ public class DriverRegistry implements com.intellij.openapi.Disposable {
         try {
             Class<?> clazz = Class.forName(type.getDriverClassName());
             Driver driver = (Driver) clazz.getDeclaredConstructor().newInstance();
-            driverCache.put(type, driver);
+            driverCache.put("bundled:" + type.name(), driver);
             return driver;
         } catch (ClassNotFoundException ignored) {
         }
@@ -78,25 +82,67 @@ public class DriverRegistry implements com.intellij.openapi.Disposable {
                     + "Please ensure " + jarKeyword + "*.jar is in the plugin's lib directory.");
         }
 
-        URL jarUrl = driverJar.toURI().toURL();
-        URLClassLoader classLoader = new URLClassLoader(new URL[]{jarUrl}, DriverRegistry.class.getClassLoader()) {
-            @Override protected synchronized Class<?> loadClass(String name,boolean resolve) throws ClassNotFoundException {
-                if(!name.equals(JdbcDriverCleanup.class.getName())) return super.loadClass(name,resolve);
-                Class<?> loaded=findLoadedClass(name);
-                if(loaded==null) {
-                    try(var resource=DriverRegistry.class.getResourceAsStream("/" + name.replace('.','/') + ".class")) {
-                        if(resource==null) throw new ClassNotFoundException(name);
-                        byte[] bytes=resource.readAllBytes(); loaded=defineClass(name,bytes,0,bytes.length);
-                    } catch(java.io.IOException error) { throw new ClassNotFoundException(name,error); }
+        Driver driver = loadIsolated(type, driverJar.toPath());
+        driverCache.put("bundled:" + type.name(), driver);
+        return driver;
+    }
+
+    /** An explicit selection must never resolve to the bundled driver's classes. */
+    public synchronized Driver getDriver(ConnectionConfig config) throws Exception {
+        if (disposed) throw new IllegalStateException("Driver registry is disposed");
+        if (config.getDriverSource() == DriverSource.BUNDLED) return getDriver(config.getType());
+        Path path = config.getDriverSource() == DriverSource.DOWNLOAD
+                ? DriverCatalog.downloadedJar(config.getType(), config.getDriverVersion()) : Path.of(config.getDriverJarPath());
+        if (!Files.isRegularFile(path)) throw new IllegalStateException("Driver JAR is missing. Download the selected version or choose an existing local JAR.");
+        path = path.toRealPath();
+        String key = config.getType() + ":" + path + ":" + Files.size(path) + ":" + Files.getLastModifiedTime(path);
+        Driver cached = driverCache.get(key);
+        if (cached != null) return cached;
+        Driver driver = loadIsolated(config.getType(), path);
+        driverCache.put(key, driver);
+        return driver;
+    }
+
+    private Driver loadIsolated(DatabaseType type, Path jar) throws Exception {
+        String driverClass = DriverCatalog.validateJar(type, jar);
+        URLClassLoader classLoader = new URLClassLoader(new URL[]{jar.toUri().toURL()}, DriverRegistry.class.getClassLoader()) {
+            @Override protected synchronized Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+                if (name.equals(JdbcDriverCleanup.class.getName())) {
+                    Class<?> loaded = findLoadedClass(name);
+                    if (loaded == null) {
+                        try (var resource = DriverRegistry.class.getResourceAsStream("/" + name.replace('.', '/') + ".class")) {
+                            if (resource == null) throw new ClassNotFoundException(name);
+                            byte[] bytes = resource.readAllBytes(); loaded = defineClass(name, bytes, 0, bytes.length);
+                        } catch (java.io.IOException error) { throw new ClassNotFoundException(name, error); }
+                    }
+                    if (resolve) resolveClass(loaded);
+                    return loaded;
                 }
-                if(resolve) resolveClass(loaded); return loaded;
+                // JDBC namespaces are child-first, including resources and static driver registration.
+                // Java/IDE/plugin classes retain the parent loader so java.sql.Driver is shared.
+                if (name.startsWith("com.mysql.") || name.startsWith("org.hsqldb.")) {
+                    Class<?> loaded = findLoadedClass(name);
+                    if (loaded == null) loaded = findClass(name);
+                    if (resolve) resolveClass(loaded);
+                    return loaded;
+                }
+                return super.loadClass(name, resolve);
+            }
+            @Override public URL getResource(String name) {
+                if (name.startsWith("com/mysql/") || name.startsWith("org/hsqldb/")) {
+                    URL own = findResource(name); if (own != null) return own;
+                }
+                return super.getResource(name);
             }
         };
         try {
-            Class<?> clazz=Class.forName(type.getDriverClassName(),true,classLoader);
-            Driver driver=(Driver)clazz.getDeclaredConstructor().newInstance();
-            ownedLoaders.add(classLoader); driverCache.put(type,driver); return driver;
-        } catch(Exception | Error failure) { classLoader.close(); throw failure; }
+            Driver driver = (Driver)Class.forName(driverClass, true, classLoader).getDeclaredConstructor().newInstance();
+            ownedLoaders.add(classLoader); return driver;
+        } catch (Exception | Error failure) {
+            try { Class.forName(JdbcDriverCleanup.class.getName(), true, classLoader).getMethod("release", ClassLoader.class).invoke(null, classLoader); }
+            catch (ReflectiveOperationException cleanup) { failure.addSuppressed(cleanup); }
+            classLoader.close(); throw failure;
+        }
     }
 
     @Override public synchronized void dispose() {

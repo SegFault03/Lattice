@@ -25,8 +25,13 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
         private boolean removed;
     }
 
-    private record Identity(String url, String user, String password, boolean autoCommit) {
-        static Identity of(ConnectionConfig config) { return new Identity(config.buildJdbcUrl(), config.getUser(), config.getPassword(), config.isAutoCommit()); }
+    private record Identity(String url, String user, String password, boolean autoCommit, com.vibe.ideadb.model.DriverSource driverSource, String driverVersion, String driverJarPath) {
+        static Identity of(ConnectionConfig config) {
+            var source = config.getDriverSource();
+            return new Identity(config.buildJdbcUrl(), config.getUser(), config.getPassword(), config.isAutoCommit(), source,
+                    source == com.vibe.ideadb.model.DriverSource.DOWNLOAD ? config.getDriverVersion() : "",
+                    source == com.vibe.ideadb.model.DriverSource.LOCAL_JAR ? config.getDriverJarPath() : "");
+        }
     }
     public void registerConfiguration(ConnectionConfig config) {
         if(disposed) throw new IllegalStateException("Connection manager is disposed");
@@ -124,7 +129,7 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
             } catch (Throwable t) {
                 String msg = t.getMessage() != null ? t.getMessage() : "";
                 // If MySQL was selected but server at port 9001 or returned HSQL handshake ('Packet for query is too large' / 5,329,736)
-                if (config.getType() == DatabaseType.MYSQL && (msg.contains("Packet for query is too large") || msg.contains("5329736") || msg.contains("5,329,736") || config.getPort() == 9001)) {
+                if (config.getDriverSource() == com.vibe.ideadb.model.DriverSource.BUNDLED && config.getType() == DatabaseType.MYSQL && (msg.contains("Packet for query is too large") || msg.contains("5329736") || msg.contains("5,329,736") || config.getPort() == 9001)) {
                     ConnectionConfig fallback = config.copy();
                     fallback.setType(DatabaseType.HSQLDB);
                     fallback.setHsqlMode(HsqlMode.SERVER);
@@ -146,7 +151,7 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
                     } catch (Throwable fallbackErr) {
                         throw t;
                     }
-                } else if (config.getType() == DatabaseType.HSQLDB && config.getPort() == 3306) {
+                } else if (config.getDriverSource() == com.vibe.ideadb.model.DriverSource.BUNDLED && config.getType() == DatabaseType.HSQLDB && config.getPort() == 3306) {
                     ConnectionConfig fallback = config.copy();
                     fallback.setType(DatabaseType.MYSQL);
                     fallback.setCustomUrl("");
@@ -242,7 +247,7 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
                 config.setType(DatabaseType.MYSQL);
             }
         }
-        Driver driver = DriverRegistry.getInstance().getDriver(type);
+        Driver driver = DriverRegistry.getInstance().getDriver(config);
 
         Properties props = new Properties();
         if (config.getUser() != null) {
@@ -257,10 +262,16 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
             if (conn == null) {
                 throw new SQLException("Driver returned null connection for URL: " + url);
             }
+            // Standard URLs declare UTC to the driver. Align the server session as well,
+            // including older Connector/J versions that ignore forceConnectionTimeZoneToSession.
+            if (type == DatabaseType.MYSQL && config.getCustomUrl().isBlank()) {
+                try (var statement = conn.createStatement()) { statement.execute("SET SESSION time_zone='+00:00'"); }
+                catch (Exception initialization) { try { conn.close(); } catch (SQLException cleanup) { initialization.addSuppressed(cleanup); } throw initialization; }
+            }
             return conn;
         } catch (Exception ex) {
             String msg = ex.getMessage() != null ? ex.getMessage() : "";
-            if (type == DatabaseType.MYSQL && (msg.contains("Packet for query is too large") || msg.contains("5329736") || msg.contains("5,329,736") || config.getPort() == 9001)) {
+            if (config.getDriverSource() == com.vibe.ideadb.model.DriverSource.BUNDLED && type == DatabaseType.MYSQL && (msg.contains("Packet for query is too large") || msg.contains("5329736") || msg.contains("5,329,736") || config.getPort() == 9001)) {
                 ConnectionConfig fallback = config.copy();
                 fallback.setType(DatabaseType.HSQLDB);
                 fallback.setHsqlMode(HsqlMode.SERVER);

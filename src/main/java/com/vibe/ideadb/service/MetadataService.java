@@ -92,10 +92,11 @@ public class MetadataService {
             while (rs.next()) pkNames.add(rs.getString("COLUMN_NAME"));
         }
         fetchColumnsInto(meta, catalog, schema, lookupTable, pkNames, columns);
-        if(columns.stream().anyMatch(c -> c.getDataType()==java.sql.Types.TIME || c.getDataType()==java.sql.Types.TIMESTAMP || c.getDataType()==java.sql.Types.TIME_WITH_TIMEZONE || c.getDataType()==java.sql.Types.TIMESTAMP_WITH_TIMEZONE)) {
+        boolean temporalPrecisionAvailable = config.getType() != DatabaseType.MYSQL || meta.getDatabaseMajorVersion() > 5 || meta.getDatabaseMajorVersion() == 5 && meta.getDatabaseMinorVersion() >= 6;
+        if(temporalPrecisionAvailable && columns.stream().anyMatch(c -> c.getDataType()==java.sql.Types.TIME || c.getDataType()==java.sql.Types.TIMESTAMP || c.getDataType()==java.sql.Types.TIME_WITH_TIMEZONE || c.getDataType()==java.sql.Types.TIMESTAMP_WITH_TIMEZONE)) {
             Map<String,Integer> temporalPrecision=new HashMap<>();
             try(java.sql.PreparedStatement statement=conn.prepareStatement("SELECT COLUMN_NAME,DATETIME_PRECISION FROM information_schema.columns WHERE table_schema=? AND table_name=? AND DATETIME_PRECISION IS NOT NULL")) {
-                statement.setString(1,config.getType()==DatabaseType.MYSQL ? (database==null ? conn.getCatalog() : database) : (schema==null ? conn.getSchema() : schema)); statement.setString(2,lookupTable);
+                statement.setString(1,config.getType()==DatabaseType.MYSQL ? (database==null ? conn.getCatalog() : database) : (schema==null ? JdbcSchema.current(conn) : schema)); statement.setString(2,lookupTable);
                 try(ResultSet result=statement.executeQuery()) { while(result.next()) temporalPrecision.put(result.getString(1),result.getInt(2)); }
             }
             columns.replaceAll(c -> temporalPrecision.containsKey(c.getName()) ? new ColumnMetadata(c.getName(),c.getTypeName(),c.getDataType(),c.getColumnSize(),temporalPrecision.get(c.getName()),c.isNullable(),c.isPrimaryKey(),c.isAutoIncrement(),c.getDefaultValue()) : c);

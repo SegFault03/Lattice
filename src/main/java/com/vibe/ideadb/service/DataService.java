@@ -256,7 +256,7 @@ public class DataService {
             boolean mysql = conn.getMetaData().getDatabaseProductName().equalsIgnoreCase("MySQL");
             if (dbName != null && !dbName.trim().isEmpty()) {
                 if (mysql) { if (!dbName.equals(conn.getCatalog())) conn.setCatalog(dbName); }
-                else { if (!dbName.equals(conn.getSchema())) conn.setSchema(dbName); }
+                else { JdbcSchema.select(conn, dbName); }
             }
             try (Statement stmt = conn.createStatement()) {
                 stmt.setQueryTimeout(options.timeoutSeconds());

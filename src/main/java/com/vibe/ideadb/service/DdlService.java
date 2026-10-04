@@ -85,8 +85,16 @@ public class DdlService {
 
     public void alterTableRenameColumn(Connection conn, ConnectionConfig config, String dbName, String tableName,
                                        String oldColName, String newColName) throws Exception {
-        String sql = "ALTER TABLE " + formatTable(config,dbName,tableName) + (config.getType()==DatabaseType.MYSQL ? " RENAME COLUMN " : " ALTER COLUMN ")
-                + quoteIdentifier(config,oldColName) + (config.getType()==DatabaseType.MYSQL ? " TO " : " RENAME TO ") + quoteIdentifier(config,newColName) + ";";
+        String sql;
+        if (config.getType() == DatabaseType.MYSQL && conn.getMetaData().getDatabaseMajorVersion() < 8) {
+            String definition = mysqlColumnDefinition(conn, config, dbName, tableName, oldColName);
+            String oldQuoted = quoteIdentifier(config, oldColName);
+            sql = "ALTER TABLE " + formatTable(config, dbName, tableName) + " CHANGE COLUMN " + oldQuoted + " "
+                    + quoteIdentifier(config, newColName) + definition.substring(oldQuoted.length()) + ";";
+        } else {
+            sql = "ALTER TABLE " + formatTable(config,dbName,tableName) + (config.getType()==DatabaseType.MYSQL ? " RENAME COLUMN " : " ALTER COLUMN ")
+                    + quoteIdentifier(config,oldColName) + (config.getType()==DatabaseType.MYSQL ? " TO " : " RENAME TO ") + quoteIdentifier(config,newColName) + ";";
+        }
         executeSql(conn, sql);
     }
 
@@ -146,11 +154,8 @@ public class DdlService {
         ColumnMetadata original = MetadataService.getInstance().getColumns(conn, config, db, table).stream()
                 .filter(column -> column.getName().equalsIgnoreCase(requested.getName())).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Column no longer exists: " + requested.getName()));
-        String create = getCreateTableStatement(conn, config, db, new TableMetadata(db, null, table, "TABLE"));
-        String name = "`" + original.getName().replace("`", "``") + "`";
-        String definition = create.lines().map(String::trim).filter(line -> line.startsWith(name + " "))
-                .findFirst().orElseThrow(() -> new IllegalArgumentException("Cannot preserve original column definition"));
-        if (definition.endsWith(",")) definition = definition.substring(0, definition.length() - 1);
+        String name = quoteIdentifier(config, original.getName());
+        String definition = mysqlColumnDefinition(conn, config, db, table, original.getName());
         int typeStart = name.length() + 1;
         int typeEnd = sqlTokenEnd(definition, typeStart);
         String oldType = definition.substring(typeStart, typeEnd);
@@ -196,6 +201,14 @@ public class DdlService {
         }
         // AUTO_INCREMENT, collation, ON UPDATE and comments remain in the original suffix.
         sql.append(name).append(' ').append(type).append(typeAttributes).append(suffix);
+    }
+
+    private String mysqlColumnDefinition(Connection conn, ConnectionConfig config, String db, String table, String column) throws Exception {
+        String create = getCreateTableStatement(conn, config, db, new TableMetadata(db, null, table, "TABLE"));
+        String name = quoteIdentifier(config, column);
+        String definition = create.lines().map(String::trim).filter(line -> line.startsWith(name + " ")).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Cannot preserve original column definition"));
+        return definition.endsWith(",") ? definition.substring(0, definition.length() - 1) : definition;
     }
 
     private static int sqlTokenEnd(String sql, int start) {
@@ -414,6 +427,29 @@ public class DdlService {
     }
 
     private void executeSql(Connection conn, String sql) throws Exception {
+        // Expression defaults arrived in MySQL 8.0.13; older servers need a literal
+        // escaped according to this connection's actual SQL mode.
+        if (sql.contains("(CONVERT(X'") && conn.getMetaData().getDatabaseProductName().equalsIgnoreCase("MySQL")) {
+            boolean modern = conn.getMetaData().getDatabaseMajorVersion() >= 8;
+            if (modern && conn.getMetaData().getDatabaseMajorVersion() == 8 && conn.getMetaData().getDatabaseMinorVersion() == 0) {
+                String[] parts = conn.getMetaData().getDatabaseProductVersion().split("[.-]");
+                modern = parts.length > 2 && Integer.parseInt(parts[2]) >= 13;
+            }
+            if (!modern) {
+                boolean backslashEscapes;
+                try (Statement mode = conn.createStatement(); ResultSet result = mode.executeQuery("SELECT @@SESSION.sql_mode")) {
+                    result.next(); backslashEscapes = !result.getString(1).contains("NO_BACKSLASH_ESCAPES");
+                }
+                var pattern = java.util.regex.Pattern.compile("\\(CONVERT\\(X'([0-9a-fA-F]+)' USING utf8mb4\\)\\)");
+                var match = pattern.matcher(sql); StringBuffer replaced = new StringBuffer();
+                while (match.find()) {
+                    String value = new String(java.util.HexFormat.of().parseHex(match.group(1)), java.nio.charset.StandardCharsets.UTF_8);
+                    if (backslashEscapes) value = value.replace("\\", "\\\\");
+                    match.appendReplacement(replaced, java.util.regex.Matcher.quoteReplacement("'" + value.replace("'", "''") + "'"));
+                }
+                match.appendTail(replaced); sql = replaced.toString();
+            }
+        }
         try (Statement stmt = conn.createStatement()) {
             stmt.setQueryTimeout(60);
             stmt.execute(sql);
@@ -427,7 +463,7 @@ public class DdlService {
                 throw new java.sql.SQLException("CREATE statement unavailable");
             }
         }
-        String schema=dbName==null || dbName.isBlank() ? conn.getSchema() : dbName;
+        String schema=dbName==null || dbName.isBlank() ? JdbcSchema.current(conn) : dbName;
         String target=scriptIdentifier(schema) + "\\." + scriptIdentifier(tableMetadata.getName());
         String anyIdentifier="(?:\"(?:[^\"]|\"\")*\"|[A-Z_][A-Z_0-9]*)";
         var create=java.util.regex.Pattern.compile("^CREATE (?:MEMORY |CACHED |TEXT )?TABLE " + target + "(?=[ (])");
@@ -435,15 +471,19 @@ public class DdlService {
         var index=java.util.regex.Pattern.compile("^CREATE (?:UNIQUE )?INDEX " + anyIdentifier + " ON " + target + "(?=[ (])");
         var trigger=java.util.regex.Pattern.compile("^CREATE TRIGGER " + anyIdentifier + " .*? ON " + target + "(?= )");
         List<String> statements=new ArrayList<>();
-        try(Statement statement=conn.createStatement(); ResultSet result=statement.executeQuery("SCRIPT")) {
-            while(result.next()) {
-                String sql=result.getString(1);
-                if(create.matcher(sql).find() || alter.matcher(sql).find() || index.matcher(sql).find() || trigger.matcher(sql).find()) statements.add(sql + ";");
+        try(Statement statement=conn.createStatement()) {
+            // SCRIPT returns data, but 2.2's parser rejects executeQuery's RETURN_RESULT hint.
+            if (!statement.execute("SCRIPT")) throw new java.sql.SQLException("SCRIPT returned no result set");
+            try (ResultSet result = statement.getResultSet()) {
+                while(result.next()) {
+                    String sql=result.getString(1);
+                    if(create.matcher(sql).find() || alter.matcher(sql).find() || index.matcher(sql).find() || trigger.matcher(sql).find()) statements.add(sql + ";");
+                }
             }
         } catch(java.sql.SQLException failure) {
             TableMetadata fallback=new TableMetadata(null,schema,tableMetadata.getName(),tableMetadata.getType());
             fallback.setColumns(MetadataService.getInstance().getColumns(conn,config,schema,tableMetadata.getName()));
-            return "-- Partial reconstruction: SCRIPT unavailable (requires sufficient privileges).\n" + generateCreateTableSql(config,schema,fallback);
+            return "-- Partial reconstruction: SCRIPT unavailable (" + failure.getMessage().replace("\n", " ") + ").\n" + generateCreateTableSql(config,schema,fallback);
         }
         if(statements.isEmpty()) throw new java.sql.SQLException("No CREATE statement found for " + tableMetadata.getName());
         return "-- Referenced tables, sequences and user-defined types must already exist.\n" + String.join("\n",statements);
