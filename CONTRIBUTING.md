@@ -1,45 +1,43 @@
 # Contributing
 
-Use JDK 21 and the committed Gradle wrapper. The compilation baseline is IntelliJ IDEA 2025.1; avoid APIs introduced after that baseline unless guarded and verified.
+## Requirements
 
-```bash
-./gradlew test buildPlugin
-python3 -m unittest discover -s scripts/tests -v
+Use JDK 21, Git and the committed Gradle wrapper. Python 3.11+ supports the optional helper scripts; Python 3.12+ is recommended for SDK extraction. Docker is needed only when asking the runner to start a MySQL fixture. No maintainer-specific folders or installed IDEs are required.
+
+```text
+python scripts/test.py --build
+python -m unittest discover -s scripts/tests -v
 ```
 
-On Windows use `gradlew.bat` and `python`. Gradle downloads the SDK or accepts `-Plattice.ide.home=/path/to/idea-2025.1`. Test-only SDKs, database servers and driver caches belong outside the repository in `../intellij-extension-test-binaries/`, overridable with `LATTICE_TEST_BINARIES`. Set `JAVA_HOME` to JDK 21, `IDEA_HOME` for standalone scripts and `JAVA8_HOME` for legacy driver probes.
+On Linux/macOS you can also use `./gradlew test buildPlugin`; on Windows use `.\gradlew.bat test buildPlugin`. Set `JAVA_HOME` to JDK 21 or put Java on PATH. Gradle downloads the configured SDK. `--ide-home` / `-Plattice.ide.home` optionally select your own IntelliJ 2025.1 SDK.
 
-## Functional fixtures
+## Database tests
 
-The shared binaries directory's README lists the preserved local servers and startup commands. Ordinary suites require MySQL on localhost:3306 (`shop_db`, root, empty password) and HSQLDB on localhost:9001 (`testdb`, SA, empty password). Use isolated test servers: the tests create/drop temporary schemas and perform DDL and writes.
-
-On Linux, the release workflow uses a MySQL 8.4 service container and `scripts/start-ci-hsqldb.sh` for an in-memory HSQLDB server. Locally, an equivalent MySQL container can be started with:
-
-```bash
-docker run --name lattice-mysql -d -p 127.0.0.1:3306:3306 \
-  -e MYSQL_ALLOW_EMPTY_PASSWORD=yes -e MYSQL_ROOT_HOST=% -e MYSQL_DATABASE=shop_db mysql:8.4
-bash scripts/start-ci-hsqldb.sh
-./gradlew integrationTest
+```text
+python scripts/test.py --live --mysql --hsqldb
 ```
 
-Wait for MySQL readiness before the tests. Stop the container with `docker stop lattice-mysql`; stop the in-memory HSQLDB process whose PID is in `build/ci-fixtures/hsqldb.pid`. Persistent HSQLDB fixtures should be stopped with SQL `SHUTDOWN` so their data is checkpointed.
+The runner owns its MySQL 8.4 Docker container and memory-only HSQLDB process, waits for readiness and stops both on exit. Published ports are bound to loopback. Logs are in `build/fixtures/`. Docker must be running and ports 3306/9001 free.
 
-`test-functional.ps1` runs all JUnit suites plus a separate fallback-driver lifecycle process. `test-driver-compatibility.ps1` runs the legacy matrix with a Java 8 JDK; pass a hashtable of available MySQL version/port pairs. It owns and cleans up its temporary HSQLDB servers. Downloads go into the external cache; temporary output stays in `build/`.
+To test against fixtures you manage yourself, omit `--mysql` and/or `--hsqldb`. Existing fixtures must be isolated and disposable: tests create/drop schemas and modify table data. They expect:
 
-## Changes and validation
+| Engine | Endpoint | Database | User | Password |
+|---|---|---|---|---|
+| MySQL | localhost:3306 | shop_db | root | empty |
+| HSQLDB | localhost:9001 | testdb | SA | empty |
 
-Keep changes focused and add regression coverage for functional defects. Exercise both database dialects when changing JDBC behavior, DDL, metadata, conversion or exports. Run Plugin Verifier when using platform APIs:
+These are test fixture credentials, not recommendations for deployed servers. Use `python scripts/test.py --live` or Gradle `test integrationTest fallbackDriverTest` after starting equivalent fixtures.
 
-```powershell
-.\verify-idea-compatibility.ps1
-```
+The historical Java 8/legacy-driver matrix is documented in [compatibility](docs/compatibility.md). Its environment-specific orchestration is not part of the public repository; `DatabaseCompatibilityTest` and `Java8DriverProbe` retain the reusable Java checks.
 
-Alternatively `./gradlew verifyPlugin` downloads the configured IDEs. The release workflow verifies the packaged candidate in separate jobs to keep disk usage bounded.
+## Validation and changes
 
-Explain the problem, resulting behavior, validation and remaining limits in a pull request. Add user-facing changes to `CHANGELOG.md`. Do not commit database data, SDKs, test installers, credentials, logs or generated distributions. SQL/log examples must use synthetic data and redact secrets.
+Run pure tests for every change. Run live suites for database behavior; check the release ZIP and Plugin Verifier for platform/dependency changes. Describe the trigger, changed behavior, validation and remaining limits in pull requests. The cross-platform workflow builds/tests on Windows, Linux and macOS; the release workflow additionally runs live fixtures and verifies three IntelliJ 2025 releases.
 
-AI-assisted contributions are welcome; contributors remain responsible for correctness and review. Lattice has used Gemini 3.8, GPT-6 Luna and GPT-6.1 Sol.
+Interactive IDE layout, actions, dynamic unload and project-close testing are separate checks; static compatibility does not establish those behaviors. Never commit passwords, connection state, user databases, generated outputs, local SDKs or native test binaries.
 
-## Third-party dependencies
+## Dependencies and packaging
 
-Production driver JARs in `lib/` support standalone packaging. Keep their versions aligned with `build.gradle.kts`, notices, license texts and source-asset metadata. Updating Connector/J requires updating and verifying the corresponding source archive/checksum in `scripts/prepare-source-asset.py`. See `THIRD_PARTY_NOTICES.md` and `RELEASING.md`.
+Production JARs in `lib/` support fallback-driver tests and carry no platform-native executables. Gradle resolves packaged production dependencies from Maven Central. Keep bundled versions aligned with `build.gradle.kts`, notices, license texts and source-asset metadata. A Connector/J upgrade also requires updating its pinned corresponding-source URL/checksum in `scripts/prepare-source-asset.py`.
+
+`assets/icon.png` is documentation branding. IntelliJ loads its plugin/tool-window icons from `src/main/resources/META-INF/` and `src/main/resources/icons/`; retain those paths. See [RELEASING](RELEASING.md).

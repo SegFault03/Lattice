@@ -10,7 +10,7 @@ Run **Build, test and release → Run workflow** on the intended branch to valid
 
 1. Update `pluginVersion` in `gradle.properties` for ordinary local builds.
 2. Move relevant `CHANGELOG.md` entries into a `## [X.Y.Z]` section and keep an Unreleased section for future changes.
-3. Run `./gradlew test integrationTest buildPlugin` with the isolated fixtures, plus the Python tooling tests and compatibility checks.
+3. Run `python scripts/test.py --live --mysql --hsqldb --build` with the isolated fixtures, plus the Python tooling tests and compatibility checks.
 4. Review the packaged plugin and commit the changes.
 5. Create and push a new annotated stable tag, for example:
 
@@ -40,18 +40,14 @@ Build/test/verification failures publish no release. The publish job uploads ass
 
 Python 3.11+ is required (3.12 recommended for SDK archive extraction).
 
-```powershell
-$env:LATTICE_TEST_BINARIES = '/path/to/workspace/intellij-extension-test-binaries'
-$env:JAVA_HOME = "$env:LATTICE_TEST_BINARIES/ides/2025.1/jbr"
+```text
 python scripts/release.py --version 1.0.0
-.\gradlew.bat "-Plattice.ide.home=$env:LATTICE_TEST_BINARIES/ides/2025.1" `
-    -PreleaseVersion=1.0.0 -PreleaseNotesFile=build/release/patch-notes.html test integrationTest buildPlugin
+python scripts/test.py --live --mysql --hsqldb --build --version 1.0.0 --notes-file build/release/patch-notes.html
 python scripts/prepare-source-asset.py
-python scripts/check-release-archive.py build/distributions/Lattice-1.0.0.zip --version 1.0.0 `
-    --source build/release/mysql-connector-j-9.0.0-source.tar.gz --checksums build/release/SHA256SUMS
-python scripts/verify-plugin.py build/distributions/Lattice-1.0.0.zip --ide-home "$env:LATTICE_TEST_BINARIES/ides/2025.1"
+python scripts/check-release-archive.py build/distributions/Lattice-1.0.0.zip --version 1.0.0 --source build/release/mysql-connector-j-9.0.0-source.tar.gz --checksums build/release/SHA256SUMS
+python scripts/verify-plugin.py build/distributions/Lattice-1.0.0.zip --ide-version 2025.1
 ```
 
-Use `--tag vX.Y.Z` when the local tag exists and points to HEAD. Scripts generate files locally and never publish. The Windows/Bash standalone packagers support a version override; distribute their ZIPs with the same license notices and corresponding-source asset.
+Use `--tag vX.Y.Z` when the local tag exists and points to HEAD. Scripts generate files locally and never publish. The same commands work on Windows, Linux and macOS. Use python3 if required by your Python installation. Set JAVA_HOME to JDK 21; Docker must be running for the owned MySQL fixture. See scripts/README.md for cache and optional SDK overrides.
 
-For dependency upgrades, update both packaging paths, third-party notices/license texts and the pinned corresponding-source URL/checksum together.
+For dependency upgrades, update Gradle dependencies, bundled fallback JARs, third-party notices/license texts and the pinned corresponding-source URL/checksum together.

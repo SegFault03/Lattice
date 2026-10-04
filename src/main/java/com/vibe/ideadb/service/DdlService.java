@@ -422,7 +422,7 @@ public class DdlService {
     }
 
     private boolean needsSize(String type) {
-        String t = type.toUpperCase();
+        String t = type.toUpperCase(java.util.Locale.ROOT);
         return t.contains("CHAR") || t.contains("VARCHAR") || t.contains("VARBINARY") || t.contains("BINARY");
     }
 

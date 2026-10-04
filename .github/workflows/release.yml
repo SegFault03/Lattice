@@ -54,15 +54,13 @@ jobs:
           RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || '' }}
           RELEASE_INPUT_VERSION: ${{ inputs.version }}
         run: python3 scripts/release.py
-      - name: Start HSQLDB fixture
-        run: bash scripts/start-ci-hsqldb.sh
       - name: Compile, test and package
         env:
           RELEASE_VERSION: ${{ steps.metadata.outputs.version }}
         run: >-
-          ./gradlew --no-daemon test integrationTest buildPlugin
-          "-PreleaseVersion=$RELEASE_VERSION"
-          -PreleaseNotesFile=build/release/patch-notes.html
+          python3 scripts/test.py --live --hsqldb --build
+          --version "$RELEASE_VERSION"
+          --notes-file build/release/patch-notes.html
       - name: Prepare corresponding source asset
         run: python3 scripts/prepare-source-asset.py
       - name: Validate ZIP and generate asset checksums
@@ -85,13 +83,6 @@ jobs:
             build/release/version.txt
             build/release/mysql-connector-j-9.0.0-source.tar.gz
             build/release/SHA256SUMS
-      - name: Stop HSQLDB fixture
-        if: always()
-        run: |
-          if [[ -f "$RUNNER_TEMP/hsqldb.pid" ]]; then
-            fixture_pid="$(cat "$RUNNER_TEMP/hsqldb.pid")"
-            kill "$fixture_pid" 2>/dev/null || true
-          fi
       - name: Upload test diagnostics
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -101,7 +92,7 @@ jobs:
           path: |
             build/reports/tests/
             build/test-results/
-            ${{ runner.temp }}/hsqldb.log
+            build/fixtures/
 
   verify:
     needs: build

@@ -6,16 +6,16 @@
 
     <description><![CDATA[
     <h3>Lattice — In-App Database Manager for IntelliJ IDEA</h3>
-    <p>A fast, lightweight, and unrestricted in-app database client for IntelliJ IDEA. Connect to, explore, query, create, and modify your databases without leaving your editor.</p>
+    <p>A database client for IntelliJ IDEA. Connect to, explore, query, create, and modify your databases without leaving your editor.</p>
 
     <h4>Key Features:</h4>
     <ul>
-        <li><b>Supported Databases:</b> Support for <b>MySQL</b> (5.5+, 8.x, 9.x with a matching driver) and <b>HSQLDB</b> (2.2.9+) (Embedded File, In-Memory, and Server modes).</li>
+        <li><b>Supported Databases:</b> <b>MySQL</b> and <b>HSQLDB</b> with a compatible JDBC driver. Tested server releases include MySQL 5.5, 5.6, 5.7 and 8.4, and HSQLDB 2.2.9 through 2.7.4 (Embedded File, In-Memory, and Server modes).</li>
         <li><b>Database Explorer:</b> Tree view of Catalogs/Databases, Schemas, Tables, Views, Columns (with data types, primary key, and auto-increment indicators).</li>
         <li><b>Interactive Data Grid:</b> Inline cell editing with early type checking, auto-generated key protection, periodic auto-refresh, add/delete rows, batch commit, revert, filter (WHERE clause), and pagination.</li>
         <li><b>SQL Query Console:</b> Execute queries with syntax support, Ctrl+Enter execution, result tables, affected row counts, elapsed time, and query history.</li>
         <li><b>Visual DDL Wizards:</b> Create databases, design tables, alter tables (add, rename, modify definition, and drop columns), truncate tables, and rename tables.</li>
-        <li><b>Import & Export:</b> Export data directly to CSV, JSON, and SQL INSERTs, and export/view CREATE TABLE DDL.</li>
+        <li><b>Export:</b> Export data directly to CSV, JSON, and SQL INSERTs, and export/view CREATE TABLE DDL.</li>
     </ul>
     ]]></description>
 

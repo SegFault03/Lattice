@@ -62,6 +62,18 @@ tasks.processResources {
     from("LICENSE", "THIRD_PARTY_NOTICES.md")
     from("licenses") { into("licenses") }
 }
+
+tasks.register<JavaExec>("fallbackDriverTest") {
+    description = "Check JDBC loading and disposal without drivers on the application classpath"
+    group = "verification"
+    dependsOn(tasks.testClasses)
+    mainClass.set("com.vibe.ideadb.FallbackDriverLifecycleTest")
+    classpath = sourceSets["main"].output + sourceSets["test"].output +
+        sourceSets["main"].compileClasspath.filter {
+            !it.name.startsWith("mysql-connector-") && !it.name.startsWith("hsqldb-")
+        }
+    args(file("lib").absolutePath)
+}
 intellijPlatform {
     pluginConfiguration {
         version.set(project.version.toString())

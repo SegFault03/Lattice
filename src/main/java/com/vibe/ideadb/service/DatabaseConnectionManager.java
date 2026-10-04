@@ -3,7 +3,6 @@ package com.vibe.ideadb.service;
 import com.vibe.ideadb.model.ConnectionConfig;
 import com.vibe.ideadb.model.ConnectionTestResult;
 import com.vibe.ideadb.model.DatabaseType;
-import com.vibe.ideadb.model.HsqlMode;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -124,56 +123,7 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
         long start = System.currentTimeMillis();
         Connection conn = null;
         try {
-            try {
-                conn = createRawConnection(config);
-            } catch (Throwable t) {
-                String msg = t.getMessage() != null ? t.getMessage() : "";
-                // If MySQL was selected but server at port 9001 or returned HSQL handshake ('Packet for query is too large' / 5,329,736)
-                if (config.getDriverSource() == com.vibe.ideadb.model.DriverSource.BUNDLED && config.getType() == DatabaseType.MYSQL && (msg.contains("Packet for query is too large") || msg.contains("5329736") || msg.contains("5,329,736") || config.getPort() == 9001)) {
-                    ConnectionConfig fallback = config.copy();
-                    fallback.setType(DatabaseType.HSQLDB);
-                    fallback.setHsqlMode(HsqlMode.SERVER);
-                    fallback.setCustomUrl("");
-                    try {
-                        conn = createRawConnection(fallback);
-                        config.setType(DatabaseType.HSQLDB);
-                        config.setHsqlMode(HsqlMode.SERVER);
-                        config.setCustomUrl("");
-                        DatabaseMetaData meta = conn.getMetaData();
-                        long elapsed = System.currentTimeMillis() - start;
-                        return ConnectionTestResult.success(
-                                meta.getDatabaseProductName() + " (Auto-detected HSQLDB on port " + fallback.getPort() + ")",
-                                meta.getDatabaseProductVersion(),
-                                meta.getDriverName(),
-                                meta.getDriverVersion(),
-                                elapsed
-                        );
-                    } catch (Throwable fallbackErr) {
-                        throw t;
-                    }
-                } else if (config.getDriverSource() == com.vibe.ideadb.model.DriverSource.BUNDLED && config.getType() == DatabaseType.HSQLDB && config.getPort() == 3306) {
-                    ConnectionConfig fallback = config.copy();
-                    fallback.setType(DatabaseType.MYSQL);
-                    fallback.setCustomUrl("");
-                    try {
-                        conn = createRawConnection(fallback);
-                        config.setType(DatabaseType.MYSQL);
-                        config.setCustomUrl("");
-                        DatabaseMetaData meta = conn.getMetaData();
-                        long elapsed = System.currentTimeMillis() - start;
-                        return ConnectionTestResult.success(
-                                meta.getDatabaseProductName() + " (Auto-detected MySQL on port " + fallback.getPort() + ")",
-                                meta.getDatabaseProductVersion(),
-                                meta.getDriverName(),
-                                meta.getDriverVersion(),
-                                elapsed
-                        );
-                    } catch (Throwable fallbackErr) {
-                        throw t;
-                    }
-                }
-                throw t;
-            }
+            conn = createRawConnection(config.copy());
 
             DatabaseMetaData meta = conn.getMetaData();
             String dbProduct = meta.getDatabaseProductName();
@@ -188,11 +138,11 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
             if (msg == null || msg.isEmpty()) {
                 msg = t.getClass().getSimpleName();
             }
-            if (msg.contains("Packet for query is too large") || (config.getType() == DatabaseType.MYSQL && config.getPort() == 9001)) {
-                msg = "Port " + config.getPort() + " appears to be running an HSQLDB server, but 'MySQL' was selected.\n\n"
-                        + "• To connect to HSQLDB: Select Database Type 'HSQLDB' (Remote Server mode, port 9001, db 'testdb', user 'SA').\n"
-                        + "• To connect to MySQL: Change Port to 3306 (user 'root', db 'shop_db').";
+            if (msg.contains("Packet for query is too large")) {
+                msg = "The endpoint did not complete the selected JDBC protocol. Check the database type, host and port.";
             }
+            if (!config.getCustomUrl().isBlank()) msg = msg.replace(config.getCustomUrl(), "[JDBC URL]");
+            if (config.getPassword() != null && !config.getPassword().isEmpty()) msg = msg.replace(config.getPassword(), "[password]");
             return ConnectionTestResult.failure(msg, elapsed);
         } finally {
             if (conn != null) {
@@ -238,7 +188,7 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
         DatabaseType type = config.getType();
         String url = config.buildJdbcUrl();
         if (url != null) {
-            String lower = url.trim().toLowerCase();
+            String lower = url.trim().toLowerCase(java.util.Locale.ROOT);
             if (lower.startsWith("jdbc:hsqldb:")) {
                 type = DatabaseType.HSQLDB;
                 config.setType(DatabaseType.HSQLDB);
@@ -257,35 +207,16 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
             props.setProperty("password", config.getPassword());
         }
 
-        try {
-            Connection conn = driver.connect(url, props);
-            if (conn == null) {
-                throw new SQLException("Driver returned null connection for URL: " + url);
-            }
-            // Standard URLs declare UTC to the driver. Align the server session as well,
-            // including older Connector/J versions that ignore forceConnectionTimeZoneToSession.
-            if (type == DatabaseType.MYSQL && config.getCustomUrl().isBlank()) {
-                try (var statement = conn.createStatement()) { statement.execute("SET SESSION time_zone='+00:00'"); }
-                catch (Exception initialization) { try { conn.close(); } catch (SQLException cleanup) { initialization.addSuppressed(cleanup); } throw initialization; }
-            }
-            return conn;
-        } catch (Exception ex) {
-            String msg = ex.getMessage() != null ? ex.getMessage() : "";
-            if (config.getDriverSource() == com.vibe.ideadb.model.DriverSource.BUNDLED && type == DatabaseType.MYSQL && (msg.contains("Packet for query is too large") || msg.contains("5329736") || msg.contains("5,329,736") || config.getPort() == 9001)) {
-                ConnectionConfig fallback = config.copy();
-                fallback.setType(DatabaseType.HSQLDB);
-                fallback.setHsqlMode(HsqlMode.SERVER);
-                fallback.setCustomUrl("");
-                Driver hsqlDriver = DriverRegistry.getInstance().getDriver(DatabaseType.HSQLDB);
-                String hsqlUrl = fallback.buildJdbcUrl();
-                Connection conn = hsqlDriver.connect(hsqlUrl, props);
-                if (conn != null) {
-                    config.setType(DatabaseType.HSQLDB);
-                    config.setHsqlMode(HsqlMode.SERVER);
-                    return conn;
-                }
-            }
-            throw ex;
+        Connection conn = driver.connect(url, props);
+        if (conn == null) {
+            throw new SQLException("Selected JDBC driver does not accept this URL scheme");
         }
+        // Generated URLs declare UTC to the driver; align the server session,
+        // including older Connector/J releases that ignore the modern property.
+        if (type == DatabaseType.MYSQL && config.getCustomUrl().isBlank()) {
+            try (var statement = conn.createStatement()) { statement.execute("SET SESSION time_zone='+00:00'"); }
+            catch (Exception initialization) { try { conn.close(); } catch (SQLException cleanup) { initialization.addSuppressed(cleanup); } throw initialization; }
+        }
+        return conn;
     }
 }

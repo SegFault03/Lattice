@@ -486,7 +486,7 @@ public class ConnectionDialog extends DialogWrapper {
             public void changedUpdate(DocumentEvent e) { checkUrlPrefix(); updatePreview(); }
 
             private void checkUrlPrefix() {
-                String u = customUrlField.getText().trim().toLowerCase();
+                String u = customUrlField.getText().trim().toLowerCase(java.util.Locale.ROOT);
                 if (u.startsWith("jdbc:hsqldb:") && typeCombo.getSelectedItem() != DatabaseType.HSQLDB) {
                     typeCombo.setSelectedItem(DatabaseType.HSQLDB);
                 } else if (u.startsWith("jdbc:mysql:") && typeCombo.getSelectedItem() != DatabaseType.MYSQL) {

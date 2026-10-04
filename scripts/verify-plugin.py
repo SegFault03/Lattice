@@ -6,9 +6,11 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import stat
 import tarfile
 import urllib.request
 import uuid
+from common import ROOT, cache_directory, java_command
 
 VERIFIER_SHA256 = "59a5ef05cbdf0584cbfd6cb6ca802c74ecf340fdeadc5a73eac24af622c22010"
 VERIFIER_URL = "https://github.com/JetBrains/intellij-plugin-verifier/releases/download/1.410/verifier-cli-1.410-all.jar"
@@ -21,14 +23,17 @@ def digest(path):
 
 def ide_home(cache, version):
     directory = cache / "ides" / version
-    existing = list(directory.rglob("product-info.json")) if directory.exists() else []
-    if existing:
-        if len(existing) != 1:
-            raise ValueError("Ambiguous IntelliJ SDK directory")
-        return existing[0].parent
+    for candidate in [directory] + list((cache / "ides").glob(version + "-*")):
+        if (candidate / ".complete").exists():
+            existing = list(candidate.rglob("product-info.json"))
+            if len(existing) != 1:
+                raise ValueError("Ambiguous IntelliJ SDK directory")
+            return existing[0].parent
     with urllib.request.urlopen("https://data.services.jetbrains.com/products/releases?code=IIC&type=release", timeout=60) as response:
         releases = json.load(response)["IIC"]
     release = next(item for item in releases if item["version"] == version)
+    # SDK bytecode verification works on every host using the official Linux
+    # archive; no IDE executable from that archive is launched here.
     download = release["downloads"]["linux"]
     archive = cache / "archives" / "ides" / f"idea-{version}-linux.tar.gz"
     archive.parent.mkdir(parents=True, exist_ok=True)
@@ -39,13 +44,26 @@ def ide_home(cache, version):
         expected = response.read(1024).decode("ascii").split()[0].lower()
     if digest(archive) != expected:
         raise ValueError("IntelliJ SDK checksum mismatch")
-    directory.mkdir(parents=True, exist_ok=True)
+    # A partial extraction must never be reused as a complete SDK.
+    if directory.exists():
+        directory = directory.with_name(version + "-" + uuid.uuid4().hex)
+    directory.mkdir(parents=True)
     # Python's data filter rejects path traversal and unsafe link targets.
     with tarfile.open(archive) as bundle:
-        bundle.extractall(directory, filter="data")
+        def safe_sdk_member(member, destination):
+            # Native binaries/JBR are unused by static verification. Skipping
+            # links also avoids Windows symlink privileges and extraction traps.
+            if member.issym() or member.islnk() or "jbr" in Path(member.name).parts:
+                return None
+            filtered = tarfile.data_filter(member, destination)
+            if filtered is not None:
+                filtered.mode = (filtered.mode or 0o644) | stat.S_IWUSR
+            return filtered
+        bundle.extractall(directory, filter=safe_sdk_member)
     existing = list(directory.rglob("product-info.json"))
     if len(existing) != 1:
         raise ValueError("Official SDK has no unique product-info.json")
+    (directory / ".complete").write_text("Checksum-verified SDK extraction\n", encoding="utf-8")
     return existing[0].parent
 
 
@@ -56,28 +74,34 @@ def main():
     parser.add_argument("--ide-home", type=Path)
     parser.add_argument("--java-home", type=Path)
     parser.add_argument("--cache", type=Path)
-    parser.add_argument("--reports", type=Path, default=Path("build/compatibility/verifier-ci"))
+    parser.add_argument("--reports", type=Path, default=ROOT / "build/compatibility/verifier-ci")
     args = parser.parse_args()
     if not args.archive.is_file():
         raise ValueError("Plugin archive does not exist")
-    cache = args.cache or Path(os.environ.get("LATTICE_TEST_BINARIES", str(Path(__file__).resolve().parents[2] / "intellij-extension-test-binaries")))
+    cache = args.cache or cache_directory()
     sdk = args.ide_home or ide_home(cache, args.ide_version)
-    java_home = args.java_home or Path(os.environ.get("JAVA_HOME", str(cache / "ides/2025.1/jbr")))
-    java = java_home / "bin" / ("java.exe" if os.name == "nt" else "java")
+    java = java_command(args.java_home)
+    java_home = args.java_home or (Path(os.environ["JAVA_HOME"]) if os.environ.get("JAVA_HOME") else None)
     verifier = cache / "tools" / "verifier" / "verifier-cli-1.410-all.jar"
     if not verifier.exists():
         verifier.parent.mkdir(parents=True, exist_ok=True)
         urllib.request.urlretrieve(VERIFIER_URL, verifier)
     if digest(verifier) != VERIFIER_SHA256:
         raise ValueError("Plugin Verifier checksum mismatch")
-    work = args.reports.parent / "verifier-work" / uuid.uuid4().hex
-    subprocess.run([str(java), "-Xmx2g", f"-Dplugin.verifier.home.dir={work.resolve()}",
+    reports = args.reports / uuid.uuid4().hex
+    # The verifier recreates its report directory during startup. Keep scratch
+    # outside it so initialization cannot delete the live plugin repository.
+    work = args.reports.parent / "verifier-work" / reports.name
+    command = [java, "-Xmx2g", f"-Dplugin.verifier.home.dir={work.resolve()}",
                     "-jar", str(verifier), "check-plugin", str(args.archive.resolve()), str(sdk.resolve()),
-                    "-runtime-dir", str(java_home.resolve()), "-verification-reports-dir", str(args.reports.resolve()), "-offline"], check=True)
-    verdicts = list(args.reports.rglob("verification-verdict.txt"))
+                    "-verification-reports-dir", str(reports.resolve()), "-offline"]
+    if java_home:
+        command += ["-runtime-dir", str(java_home.resolve())]
+    subprocess.run(command, check=True)
+    verdicts = list(reports.rglob("verification-verdict.txt"))
     if len(verdicts) != 1 or verdicts[0].read_text(encoding="utf-8").strip() != "Compatible":
         raise ValueError("Plugin verification did not produce a Compatible verdict")
-    if list(args.reports.rglob("compatibility-problems.txt")):
+    if list(reports.rglob("compatibility-problems.txt")):
         raise ValueError("Plugin Verifier reported compatibility problems")
 
 

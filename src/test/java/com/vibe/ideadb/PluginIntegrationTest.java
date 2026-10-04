@@ -14,7 +14,7 @@ public class PluginIntegrationTest {
             System.out.println("Starting Lattice Plugin Integration Tests...");
 
             testDriverLoading();
-            testScreenshotCredsAndLiveConnections();
+            testSelectedTypeAndLiveConnections();
             testHsqlConnectionAndMetadata();
             testCrudAndInlineEdits();
             testExport();
@@ -40,23 +40,20 @@ public class PluginIntegrationTest {
         System.out.println("PASSED! HSQLDB: " + hsqlDriver.getClass().getName() + ", MySQL: " + mysqlDriver.getClass().getName());
     }
 
-    private static void testScreenshotCredsAndLiveConnections() throws Exception {
-        System.out.print("[TEST] Screenshot creds handling (MySQL on port 9001 -> HSQLDB auto-detect)... ");
-        ConnectionConfig screenshotCfg = new ConnectionConfig(DatabaseType.MYSQL, "Screenshot Config");
-        screenshotCfg.setHost("localhost");
-        screenshotCfg.setPort(9001);
-        screenshotCfg.setDatabaseName("testdb");
-        screenshotCfg.setUser("SA");
-        screenshotCfg.setPassword("");
-
-        ConnectionTestResult res = DatabaseConnectionManager.getInstance().testConnection(screenshotCfg);
-        if (!res.isSuccess()) {
-            throw new AssertionError("Test connection for screenshot creds failed: " + res.getErrorMessage());
+    private static void testSelectedTypeAndLiveConnections() throws Exception {
+        System.out.print("[TEST] Wrong protocol does not change database type... ");
+        ConnectionConfig wrong = new ConnectionConfig(DatabaseType.MYSQL, "Wrong protocol");
+        wrong.setPort(9001); wrong.setDatabaseName("testdb"); wrong.setUser("SA");
+        ConnectionTestResult rejected = DatabaseConnectionManager.getInstance().testConnection(wrong);
+        if (rejected.isSuccess() || wrong.getType() != DatabaseType.MYSQL) {
+            throw new AssertionError("A protocol failure must not switch the selected database type");
         }
-        if (screenshotCfg.getType() != DatabaseType.HSQLDB) {
-            throw new AssertionError("Expected auto-detect to switch type to HSQLDB, but was: " + screenshotCfg.getType());
+        ConnectionConfig hsql = new ConnectionConfig(DatabaseType.HSQLDB, "Explicit HSQLDB");
+        ConnectionTestResult detected = DatabaseConnectionManager.getInstance().testConnection(hsql);
+        if (!detected.isSuccess() || !detected.getDatabaseProductName().contains("HSQL")) {
+            throw new AssertionError("Explicit HSQLDB connection/version detection failed");
         }
-        System.out.println("PASSED! (Auto-detected: " + res.getDatabaseProductName() + ")");
+        System.out.println("PASSED!");
 
         System.out.print("[TEST] Live MySQL server on 3306... ");
         ConnectionConfig mysqlLiveCfg = new ConnectionConfig(DatabaseType.MYSQL, "Live MySQL");

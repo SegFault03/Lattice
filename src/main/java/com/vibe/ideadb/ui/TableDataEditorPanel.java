@@ -741,7 +741,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     private void addExportFormats(JPopupMenu menu,String label,ExportScope scope) {
         JMenu submenu=new JMenu(label);
         for(String format:new String[]{"csv","json","sql"}) {
-            JMenuItem item=new JMenuItem(format.toUpperCase() + "...");
+            JMenuItem item=new JMenuItem(format.toUpperCase(java.util.Locale.ROOT) + "...");
             item.addActionListener(event -> exportData(format,scope)); submenu.add(item);
         }
         menu.add(submenu);

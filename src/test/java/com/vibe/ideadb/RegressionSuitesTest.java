@@ -63,7 +63,7 @@ public class RegressionSuitesTest {
         var configuration = new ConnectionConfig(DatabaseType.MYSQL, "selected driver");
         assertEquals(DriverSource.BUNDLED, configuration.getDriverSource());
         configuration.setDriverSource(DriverSource.DOWNLOAD); configuration.setDriverVersion("5.1.49");
-        configuration.setDriverJarPath("D:/drivers/mysql.jar");
+        configuration.setDriverJarPath(java.nio.file.Path.of("drivers", "mysql.jar").toAbsolutePath().toString());
         var restored = com.intellij.util.xmlb.XmlSerializer.deserialize(com.intellij.util.xmlb.XmlSerializer.serialize(configuration.copy()), ConnectionConfig.class);
         assertEquals(DriverSource.DOWNLOAD, restored.getDriverSource());
         assertEquals("5.1.49", restored.getDriverVersion()); assertEquals(configuration.getDriverJarPath(), restored.getDriverJarPath());
@@ -72,6 +72,27 @@ public class RegressionSuitesTest {
         assertEquals("org/hsqldb/hsqldb/2.7.4/hsqldb-2.7.4-jdk8.jar", com.vibe.ideadb.service.DriverCatalog.artifactPath(DatabaseType.HSQLDB,"2.7.4-jdk8"));
         assertThrows(IllegalArgumentException.class, () -> com.vibe.ideadb.service.DriverCatalog.artifactPath(DatabaseType.MYSQL,"../secret"));
         assertThrows(IllegalArgumentException.class, () -> com.vibe.ideadb.service.DriverCatalog.artifactPath(DatabaseType.MYSQL,"8.0.33-jdk8"));
+    }
+    @Test void ddlIsIndependentOfUserLocale() {
+        Locale previous = Locale.getDefault();
+        try {
+            Locale.setDefault(Locale.forLanguageTag("tr-TR"));
+            var column = new ColumnDefinition("payload", "binary", 16, true, false, false, null);
+            for (DatabaseType type : DatabaseType.values()) {
+                String sql = com.vibe.ideadb.service.DdlService.getInstance().buildCreateTableSql(
+                        new ConnectionConfig(type, "locale"), "PUBLIC", "items", List.of(column));
+                assertTrue(sql.contains("binary(16)"), sql);
+            }
+        } finally { Locale.setDefault(previous); }
+    }
+    @Test void rejectedUrlDoesNotExposeCredentials() {
+        var config = new ConnectionConfig(DatabaseType.HSQLDB, "unsupported URL");
+        config.setCustomUrl("jdbc:unsupported:private-password");
+        config.setPassword("private-password");
+        var result = com.vibe.ideadb.service.DatabaseConnectionManager.getInstance().testConnection(config);
+        assertFalse(result.isSuccess());
+        assertFalse(result.getErrorMessage().contains("private-password"));
+        assertFalse(result.getErrorMessage().contains(config.getCustomUrl()));
     }
     @Test @Tag("integration") void changingDriverRevokesExistingSessions() throws Exception {
         var config = new ConnectionConfig(DatabaseType.HSQLDB, "driver switch");

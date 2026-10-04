@@ -159,7 +159,7 @@ public class DriverRegistry implements com.intellij.openapi.Disposable {
     private File findJarFile(String keyword) {
         for (File dir : searchDirectories) {
             if (dir.exists() && dir.isDirectory()) {
-                File[] files = dir.listFiles((d, name) -> name.toLowerCase().contains(keyword.toLowerCase()) && name.endsWith(".jar"));
+                File[] files = dir.listFiles((d, name) -> name.toLowerCase(java.util.Locale.ROOT).contains(keyword.toLowerCase(java.util.Locale.ROOT)) && name.endsWith(".jar"));
                 if (files != null && files.length > 0) {
                     return files[0];
                 }
