@@ -18,6 +18,7 @@ import com.vibe.ideadb.model.DatabaseType;
 import com.vibe.ideadb.model.QueryResult;
 import com.vibe.ideadb.model.TableMetadata;
 import com.vibe.ideadb.model.RowIdentity;
+import com.vibe.ideadb.model.RowDefaults;
 import com.vibe.ideadb.service.DataService;
 import com.vibe.ideadb.service.DatabaseConnectionManager;
 import com.vibe.ideadb.service.DdlService;
@@ -208,6 +209,19 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 if(tableModel.isCellEditable(row,column)) tableModel.setValueAt(null,row,column);
             }
         }); toolbar.add(nullBtn);
+        JButton defaultBtn=new JButton("Use Default"); makeCompactButton(defaultBtn);
+        defaultBtn.setToolTipText("Use the database default for a selected new-row cell");
+        defaultBtn.addActionListener(event -> {
+            if(mutationRunning || disposed || !finishCellEditing()) return;
+            int selectedColumn=dataTable.getSelectedColumn(); if(selectedColumn<0) return;
+            int column=dataTable.convertColumnIndexToModel(selectedColumn);
+            ColumnMetadata metadata=tableModel.getColumnMeta(column);
+            if(metadata==null || metadata.getDefaultValue()==null) return;
+            for(int selected:dataTable.getSelectedRows()) {
+                int row=dataTable.convertRowIndexToModel(selected);
+                if(tableModel.isRowNew(row) && tableModel.isCellEditable(row,column)) tableModel.setValueAt(RowDefaults.Value.USE_DEFAULT,row,column);
+            }
+        }); toolbar.add(defaultBtn);
 
         saveBtn = new JButton("Commit", AllIcons.Actions.Commit);
         makeCompactButton(saveBtn);
@@ -580,6 +594,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     for (Map.Entry<String, Object> entry : insertRow.entrySet()) {
                         String colName = entry.getKey();
                         Object val = entry.getValue();
+                        if (val==RowDefaults.Value.USE_DEFAULT) continue;
                         ColumnMetadata cm = tableMetadata.getColumn(colName);
                         if (cm != null && cm.isAutoIncrement()) {
                             if (val == null || "(Auto)".equalsIgnoreCase(String.valueOf(val))) {
@@ -734,7 +749,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     }
 
     public static String validateCellValue(ColumnMetadata cm, Object value) {
-        if (cm == null) return null;
+        if (cm == null || value==RowDefaults.Value.USE_DEFAULT) return null;
 
         // Auto-increment columns are handled by database
         if (cm.isAutoIncrement()) return null;
@@ -1051,17 +1066,10 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             for (int i = 0; i < columns.size(); i++) {
                 String col = columns.get(i);
                 ColumnMetadata cm = (i < columnMetaList.size()) ? columnMetaList.get(i) : null;
-                if (cm != null && cm.isAutoIncrement()) {
-                    blank.add("(Auto)");
-                    newRowMap.put(col, "(Auto)");
-                } else {
-                    blank.add(null);
-                    newRowMap.put(col, null);
-                    String err = validateCellValue(cm, null);
-                    if (err != null) {
-                        validationErrors.put(new CellCoord(newRowModelIndex, i), err);
-                    }
-                }
+                Object value=RowDefaults.initialValue(cm);
+                blank.add(value); newRowMap.put(col,value);
+                String error=validateCellValue(cm,value);
+                if(error!=null) validationErrors.put(new CellCoord(newRowModelIndex,i),error);
             }
             rows.add(blank);
             newRows.add(newRowMap);

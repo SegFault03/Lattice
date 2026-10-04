@@ -51,12 +51,13 @@ public final class TableDraftState implements PersistentStateComponent<TableDraf
             Cell cell = new Cell();
             if (value == null) return cell;
             if (value instanceof byte[] bytes) { cell.kind = "bytes"; cell.text = Base64.getEncoder().encodeToString(bytes); return cell; }
-            cell.kind = value.getClass().getName(); cell.text = value.toString();
+            cell.kind = value.getClass().getName(); cell.text = value instanceof Enum<?> enumeration ? enumeration.name() : value.toString();
             return cell;
         }
         Object value() {
             return switch (kind) {
                 case "null" -> null;
+                case "com.vibe.ideadb.model.RowDefaults$Value" -> com.vibe.ideadb.model.RowDefaults.Value.USE_DEFAULT;
                 case "bytes" -> Base64.getDecoder().decode(text);
                 case "java.lang.Byte" -> Byte.valueOf(text);
                 case "java.lang.Short" -> Short.valueOf(text);

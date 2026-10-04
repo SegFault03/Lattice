@@ -100,7 +100,11 @@ public class DataService {
 
     public void insertRow(Connection conn, ConnectionConfig config, String dbName, String tableName,
                           Map<String, Object> values) throws Exception {
-        if (values.isEmpty()) return;
+        if (values.isEmpty()) {
+            String target=DdlService.formatTable(config,dbName,tableName);
+            try(PreparedStatement statement=conn.prepareStatement("INSERT INTO " + target + (config.getType()==DatabaseType.MYSQL ? " () VALUES ()" : " DEFAULT VALUES"))) { requireOneRow(statement.executeUpdate()); }
+            return;
+        }
 
         boolean isMysql = config.getType() == DatabaseType.MYSQL;
         StringBuilder sb = new StringBuilder("INSERT INTO ");

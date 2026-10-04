@@ -96,6 +96,7 @@ public class FunctionalRegressionTest {
             queryExecution(config, schema);
             metadata(config, schema);
             quotedIdentifiers(config, schema);
+            defaultRows(config, schema);
             mutations(config, schema);
             columnAlterations(config, schema);
             schemaExports(config, schema);
@@ -190,6 +191,26 @@ public class FunctionalRegressionTest {
             check(data.countRows(c,config,schema,renamed,null)==0,"Quoted identifiers must support rename/delete");
             ddl.alterTableDropColumn(c,config,schema,renamed,"extra value");
             ddl.dropTable(c,config,schema,renamed);
+        }
+    }
+    private static void defaultRows(ConnectionConfig config,String schema) throws Exception {
+        try(Connection c=manager.openConnection(config)) {
+            ddl.createTable(c,config,schema,"DEFAULT_ROWS",List.of(new ColumnDefinition("ID","BIGINT",0,false,true,true,""),new ColumnDefinition("REQUIRED","INT",0,false,false,false,"7"),new ColumnDefinition("OPTIONAL","VARCHAR",50,true,false,false,"preset")));
+            var columns=MetadataService.getInstance().getColumns(c,config,schema,"DEFAULT_ROWS");
+            ColumnMetadata required=columns.stream().filter(col -> col.getName().equals("REQUIRED")).findFirst().orElseThrow();
+            Object initial=RowDefaults.initialValue(required);
+            check(initial==RowDefaults.Value.USE_DEFAULT && com.vibe.ideadb.ui.TableDataEditorPanel.validateCellValue(required,initial)==null,"Required defaults must initialize a valid explicit default state");
+            var draft=com.vibe.ideadb.state.TableDraftState.Draft.capture(List.of("REQUIRED"),List.of("INT"),List.of(),List.of(List.of(initial)));
+            check(com.intellij.util.xmlb.XmlSerializer.deserialize(com.intellij.util.xmlb.XmlSerializer.serialize(draft),com.vibe.ideadb.state.TableDraftState.Draft.class).values().get(0).get(0)==initial,"Default-state drafts must round-trip");
+            data.commitChanges(c,config,schema,"DEFAULT_ROWS",List.of(Map.of()),List.of());
+            String table=DdlService.formatTable(config,schema,"DEFAULT_ROWS");
+            check(((Number)scalar(c,"SELECT " + DdlService.quoteIdentifier(config,"REQUIRED") + " FROM " + table)).intValue()==7 && scalar(c,"SELECT OPTIONAL FROM " + table).equals("preset"),"Default-only row must insert and use required/nullable defaults");
+            var explicitNull=new LinkedHashMap<String,Object>(); explicitNull.put("OPTIONAL",null);
+            data.insertRow(c,config,schema,"DEFAULT_ROWS",explicitNull);
+            check(((Number)scalar(c,"SELECT COUNT(*) FROM " + table + " WHERE OPTIONAL IS NULL")).intValue()==1,"Explicit NULL must remain distinct from omitted default");
+            ddl.createTable(c,config,schema,"IDENTITY_ROWS",List.of(new ColumnDefinition("ID","BIGINT",0,false,true,true,"")));
+            data.insertRow(c,config,schema,"IDENTITY_ROWS",Map.of());
+            check(data.countRows(c,config,schema,"IDENTITY_ROWS",null)==1,"Identity-only row must insert");
         }
     }
     private static void dataExports(ConnectionConfig config,String schema) throws Exception {
