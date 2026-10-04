@@ -257,7 +257,7 @@ public class DataService {
                         while (rs.next()) {
                             List<Object> row = new ArrayList<>();
                             for (int i = 1; i <= colCount; i++) {
-                                row.add(rs.getObject(i));
+                                row.add(detachValue(rs.getObject(i)));
                             }
                             rows.add(row);
                         }
@@ -276,4 +276,15 @@ public class DataService {
             return QueryResult.forError(msg, elapsed);
         }
     }
+    /** LOBs must remain usable after the ResultSet and Statement have been closed. */
+    private static Object detachValue(Object value) throws SQLException {
+        if (value instanceof Blob blob) {
+            try { return blob.getBytes(1, Math.toIntExact(blob.length())); } finally { blob.free(); }
+        }
+        if (value instanceof Clob clob) {
+            try { return clob.getSubString(1, Math.toIntExact(clob.length())); } finally { clob.free(); }
+        }
+        return value;
+    }
+
 }

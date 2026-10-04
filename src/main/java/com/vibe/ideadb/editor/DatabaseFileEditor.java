@@ -16,11 +16,13 @@ public class DatabaseFileEditor extends UserDataHolderBase implements FileEditor
     private final Project project;
     private final DatabaseVirtualFile file;
     private final JComponent component;
+    private final java.beans.PropertyChangeSupport changes = new java.beans.PropertyChangeSupport(this);
 
     public DatabaseFileEditor(@NotNull Project project, @NotNull DatabaseVirtualFile file) {
         this.project = project;
         this.file = file;
         this.component = file.createComponent(project);
+        component.addPropertyChangeListener("pendingChanges", event -> changes.firePropertyChange("modified", event.getOldValue(), event.getNewValue()));
     }
 
     @Override
@@ -44,7 +46,7 @@ public class DatabaseFileEditor extends UserDataHolderBase implements FileEditor
 
     @Override
     public boolean isModified() {
-        return false;
+        return component instanceof com.vibe.ideadb.ui.TableDataEditorPanel table && table.hasPendingChanges();
     }
 
     @Override
@@ -54,10 +56,12 @@ public class DatabaseFileEditor extends UserDataHolderBase implements FileEditor
 
     @Override
     public void addPropertyChangeListener(@NotNull PropertyChangeListener listener) {
+        changes.addPropertyChangeListener(listener);
     }
 
     @Override
     public void removePropertyChangeListener(@NotNull PropertyChangeListener listener) {
+        changes.removePropertyChangeListener(listener);
     }
 
     @Override

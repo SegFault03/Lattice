@@ -144,8 +144,28 @@ public class FunctionalRegressionTest {
             c.rollback(); c.setAutoCommit(true);
         }
     }
+    private static void drafts() {
+        var original = new ArrayList<Object>(Arrays.asList(1, new java.math.BigDecimal("12.30"), new byte[]{0, -1}, null, Timestamp.valueOf("2026-10-04 10:20:30.123456")));
+        var edited = new ArrayList<Object>(original); edited.set(0, 2);
+        var added = new ArrayList<Object>(original); added.set(0, 3);
+        var draft = com.vibe.ideadb.state.TableDraftState.Draft.capture(List.of("ID","AMOUNT","BYTES","NULL","TIME"), Collections.nCopies(5,"type"), List.of(original), List.of(edited,added));
+        var state = new com.vibe.ideadb.state.TableDraftState.State(); state.drafts.put("test",draft);
+        var xml = com.intellij.util.xmlb.XmlSerializer.serialize(state);
+        var restored = com.intellij.util.xmlb.XmlSerializer.deserialize(xml, com.vibe.ideadb.state.TableDraftState.State.class).drafts.get("test");
+        check(restored.originalValues().get(0).get(0).equals(1) && restored.values().get(0).get(0).equals(2), "Draft must keep original row identity apart from edited keys");
+        check(restored.values().size()==2 && restored.hasChanges(), "Draft must preserve newly inserted rows");
+        for (int col=1;col<5;col++) check(Objects.deepEquals(original.get(col),restored.values().get(0).get(col)),"Typed draft cell must survive XML: " + col);
+        original.set(0,99); ((byte[])original.get(2))[0]=7;
+        check(restored.originalValues().get(0).get(0).equals(1) && ((byte[])restored.values().get(0).get(2))[0]==0,"Draft captures independent values");
+        var remaining = restored.withoutRows(List.of(0));
+        check(remaining.originals.isEmpty() && remaining.values().get(0).get(0).equals(3),"Delete reconciliation must preserve unsaved inserts");
+        check(!restored.withoutRows(List.of(0,1)).hasChanges(),"Deleting all pending rows must clear draft");
+        var store = new com.vibe.ideadb.state.TableDraftState(); store.put("test", restored); store.remove("test");
+        check(store.get("test")==null,"Successful commit clears recovery draft");
+    }
     public static void main(String[] args) throws Exception {
         try {
+            drafts();
             ConnectionConfig mysql = new ConnectionConfig(DatabaseType.MYSQL, "regression MySQL"); mysql.setDatabaseName("shop_db");
             runEngine(mysql);
             runEngine(new ConnectionConfig(DatabaseType.HSQLDB, "regression HSQLDB"));

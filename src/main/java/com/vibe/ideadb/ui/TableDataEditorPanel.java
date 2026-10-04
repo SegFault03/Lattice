@@ -23,6 +23,7 @@ import com.vibe.ideadb.service.DatabaseConnectionManager;
 import com.vibe.ideadb.service.DdlService;
 import com.vibe.ideadb.service.ExportService;
 import com.vibe.ideadb.service.MetadataService;
+import com.vibe.ideadb.state.TableDraftState;
 
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
@@ -41,7 +42,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.List;
 
-public class TableDataEditorPanel extends JPanel {
+public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     private final Project project;
     private final ConnectionConfig config;
     private final String databaseName;
@@ -67,6 +68,8 @@ public class TableDataEditorPanel extends JPanel {
     private int totalRowCount = -1;
     private boolean mutationRunning;
     private long loadGeneration;
+    private volatile boolean disposed;
+    private boolean wasModified;
 
     public TableDataEditorPanel(Project project, ConnectionConfig config, String databaseName, TableMetadata tableMetadata) {
         super(new BorderLayout(0, 0));
@@ -76,7 +79,26 @@ public class TableDataEditorPanel extends JPanel {
         this.tableMetadata = tableMetadata;
 
         initUI();
-        loadData();
+        TableDraftState.Draft draft = project == null ? null : TableDraftState.getInstance(project).get(draftKey());
+        if (draft == null) loadData();
+        else {
+            tableModel.restoreDraft(draft);
+            statusLabel.setText("Restored pending edits. Commit or Revert before reloading.");
+            com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(() -> {
+                try {
+                    Connection conn = DatabaseConnectionManager.getInstance().getConnection(config);
+                    List<ColumnMetadata> columns = MetadataService.getInstance().getColumns(conn, config, databaseName, tableMetadata.getName());
+                    SwingUtilities.invokeLater(() -> {
+                        if (disposed) return;
+                        tableMetadata.setColumns(columns);
+                        tableModel.refreshColumnMetadata();
+                        updatePendingChangesState();
+                    });
+                } catch (Exception e) {
+                    SwingUtilities.invokeLater(() -> { if (!disposed) statusLabel.setText("Draft preserved; metadata unavailable: " + e.getMessage()); });
+                }
+            });
+        }
     }
 
     private void makeCompactButton(AbstractButton btn) {
@@ -104,16 +126,14 @@ public class TableDataEditorPanel extends JPanel {
         toolbar.add(new JBLabel("WHERE:"));
         whereField = new JBTextField(8);
         whereField.addActionListener(e -> {
-            currentPage = 1;
-            loadData();
+            loadData(1, pageSize);
         });
         toolbar.add(whereField);
 
         JButton filterBtn = new JButton("Filter");
         makeCompactButton(filterBtn);
         filterBtn.addActionListener(e -> {
-            currentPage = 1;
-            loadData();
+            loadData(1, pageSize);
         });
         toolbar.add(filterBtn);
 
@@ -124,9 +144,7 @@ public class TableDataEditorPanel extends JPanel {
         pageSizeCombo.setSelectedItem("100");
         pageSizeCombo.setFocusable(false);
         pageSizeCombo.addActionListener(e -> {
-            pageSize = Integer.parseInt((String) pageSizeCombo.getSelectedItem());
-            currentPage = 1;
-            loadData();
+            loadData(1, Integer.parseInt((String) pageSizeCombo.getSelectedItem()));
         });
         toolbar.add(pageSizeCombo);
 
@@ -140,8 +158,7 @@ public class TableDataEditorPanel extends JPanel {
         prevPageBtn.setFocusable(false);
         prevPageBtn.addActionListener(e -> {
             if (currentPage > 1) {
-                currentPage--;
-                loadData();
+                loadData(currentPage - 1, pageSize);
             }
         });
         toolbar.add(prevPageBtn);
@@ -157,8 +174,7 @@ public class TableDataEditorPanel extends JPanel {
         nextPageBtn.setToolTipText("Next Page");
         nextPageBtn.setFocusable(false);
         nextPageBtn.addActionListener(e -> {
-            currentPage++;
-            loadData();
+            loadData(currentPage + 1, pageSize);
         });
         toolbar.add(nextPageBtn);
 
@@ -189,7 +205,13 @@ public class TableDataEditorPanel extends JPanel {
         revertBtn = new JButton("Revert", AllIcons.Actions.Rollback);
         makeCompactButton(revertBtn);
         revertBtn.setEnabled(false);
-        revertBtn.addActionListener(e -> loadData());
+        revertBtn.addActionListener(e -> {
+            if (mutationRunning) return;
+            if (dataTable.isEditing()) dataTable.getCellEditor().cancelCellEditing();
+            tableModel.setData(tableModel.columns, tableModel.types, tableModel.originalRows);
+            updatePendingChangesState();
+            loadData();
+        });
         toolbar.add(revertBtn);
 
         toolbar.add(new JSeparator(SwingConstants.VERTICAL));
@@ -276,9 +298,16 @@ public class TableDataEditorPanel extends JPanel {
         }
     }
 
-    public void loadData() {
-        if (mutationRunning) return;
+    public void loadData() { loadData(currentPage, pageSize); }
+
+    private void loadData(int requestedPage, int requestedSize) {
+        if (mutationRunning || disposed || !finishCellEditing()) return;
+        if (tableModel.hasPendingChanges()) {
+            statusLabel.setText("Pending edits preserved. Commit or Revert before reloading.");
+            return;
+        }
         long generation = ++loadGeneration;
+        String where = whereField.getText().trim();
         statusLabel.setText("Loading data...");
         statusLabel.setForeground(null);
         new Thread(() -> {
@@ -287,16 +316,17 @@ public class TableDataEditorPanel extends JPanel {
 
                 // Keep table columns metadata up to date
                 List<ColumnMetadata> cols = MetadataService.getInstance().getColumns(conn, config, databaseName, tableMetadata.getName());
-                tableMetadata.setColumns(cols);
-
-                int offset = (currentPage - 1) * pageSize;
-                String where = whereField.getText().trim();
-
-                totalRowCount = DataService.getInstance().countRows(conn, config, databaseName, tableMetadata.getName(), where);
-                QueryResult result = DataService.getInstance().fetchData(conn, config, databaseName, tableMetadata.getName(), where, null, pageSize, offset);
+                int offset = (requestedPage - 1) * requestedSize;
+                int count = DataService.getInstance().countRows(conn, config, databaseName, tableMetadata.getName(), where);
+                QueryResult result = DataService.getInstance().fetchData(conn, config, databaseName, tableMetadata.getName(), where, null, requestedSize, offset);
+                if (result.hasError()) throw new java.sql.SQLException(result.getError());
 
                 SwingUtilities.invokeLater(() -> {
-                    if (generation != loadGeneration || mutationRunning) return;
+                    if (disposed || generation != loadGeneration || mutationRunning || dataTable.isEditing() || tableModel.hasPendingChanges()) return;
+                    tableMetadata.setColumns(cols);
+                    totalRowCount = count;
+                    currentPage = requestedPage;
+                    pageSize = requestedSize;
                     tableModel.setData(result.getColumnNames(), result.getColumnTypes(), result.getRows());
                     for (int i = 0; i < dataTable.getColumnCount(); i++) {
                         int headerWidth = dataTable.getColumnModel().getColumn(i).getHeaderValue().toString().length() * 10 + 30;
@@ -315,7 +345,7 @@ public class TableDataEditorPanel extends JPanel {
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
-                    if (generation != loadGeneration || mutationRunning) return;
+                    if (disposed || generation != loadGeneration || mutationRunning) return;
                     statusLabel.setText("Error loading data: " + ex.getMessage());
                     Messages.showErrorDialog(project, "Error: " + ex.getMessage(), "Data Fetch Error");
                 });
@@ -325,6 +355,14 @@ public class TableDataEditorPanel extends JPanel {
 
     private void updatePendingChangesState() {
         boolean hasPending = tableModel.hasPendingChanges();
+        if (wasModified != hasPending) {
+            firePropertyChange("pendingChanges", wasModified, hasPending);
+            wasModified = hasPending;
+        }
+        if (project != null) {
+            if (hasPending) TableDraftState.getInstance(project).put(draftKey(), tableModel.captureDraft());
+            else TableDraftState.getInstance(project).remove(draftKey());
+        }
         Map<CellCoord, String> errors = tableModel.getValidationErrors();
         boolean hasErrors = !errors.isEmpty();
 
@@ -351,7 +389,11 @@ public class TableDataEditorPanel extends JPanel {
     }
 
     private void truncateCurrentTable() {
-        if (mutationRunning) return;
+        if (mutationRunning || disposed || !finishCellEditing()) return;
+        if (tableModel.hasPendingChanges()) {
+            statusLabel.setText("Commit or Revert pending edits before truncating.");
+            return;
+        }
         int confirm = Messages.showYesNoDialog(
                 project,
                 "Are you sure you want to TRUNCATE table '" + tableMetadata.getName() + "'?\n" +
@@ -361,17 +403,22 @@ public class TableDataEditorPanel extends JPanel {
         );
         if (confirm != Messages.YES) return;
 
+        setMutationRunning(true);
         statusLabel.setText("Truncating table '" + tableMetadata.getName() + "'...");
         new Thread(() -> {
             try {
                 Connection conn = DatabaseConnectionManager.getInstance().getConnection(config);
                 DdlService.getInstance().truncateTable(conn, config, databaseName, tableMetadata.getName());
                 SwingUtilities.invokeLater(() -> {
+                    if (disposed) return;
+                    setMutationRunning(false);
                     Messages.showInfoMessage(project, "Table '" + tableMetadata.getName() + "' truncated successfully.", "Table Truncated");
                     loadData();
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
+                    if (disposed) return;
+                    setMutationRunning(false);
                     statusLabel.setText("Truncate failed: " + ex.getMessage());
                     Messages.showErrorDialog(project, "Failed to truncate table: " + ex.getMessage(), "Truncate Error");
                 });
@@ -472,17 +519,25 @@ public class TableDataEditorPanel extends JPanel {
                 "Confirm Delete", Messages.getWarningIcon());
         if (confirm != Messages.YES) return;
 
+        TableDraftState draftStore = project == null ? null : TableDraftState.getInstance(project);
+        TableDraftState.Draft remainingDraft = tableModel.captureDraft().withoutRows(modelRows);
         setMutationRunning(true);
         new Thread(() -> {
             try (Connection conn = DatabaseConnectionManager.getInstance().openConnection(config)) {
                 DataService.getInstance().deleteRows(conn, config, databaseName, tableMetadata.getName(), keys);
                 SwingUtilities.invokeLater(() -> {
+                    if (draftStore != null) {
+                        if (remainingDraft.hasChanges()) draftStore.put(draftKey(), remainingDraft);
+                        else draftStore.remove(draftKey());
+                    }
+                    if (disposed) return;
                     tableModel.removeRows(modelRows);
                     setMutationRunning(false);
                     statusLabel.setText("Deleted " + keys.size() + " persisted row(s)");
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
+                    if (disposed) return;
                     setMutationRunning(false);
                     Messages.showErrorDialog(project, "No rows deleted: " + ex.getMessage(), "Delete Error");
                 });
@@ -541,11 +596,14 @@ public class TableDataEditorPanel extends JPanel {
         } catch (Exception e) {
             Messages.showErrorDialog(project, e.getMessage(), "Cannot Commit"); return;
         }
+        TableDraftState draftStore = project == null ? null : TableDraftState.getInstance(project);
         setMutationRunning(true);
         new Thread(() -> {
             try (Connection conn = DatabaseConnectionManager.getInstance().openConnection(config)) {
                 DataService.getInstance().commitChanges(conn, config, databaseName, tableMetadata.getName(), inserts, updates);
                 SwingUtilities.invokeLater(() -> {
+                    if (draftStore != null) draftStore.remove(draftKey());
+                    if (disposed) return;
                     tableModel.modifiedCells.clear();
                     tableModel.newRows.clear();
                     setMutationRunning(false);
@@ -554,6 +612,7 @@ public class TableDataEditorPanel extends JPanel {
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
+                    if (disposed) return;
                     setMutationRunning(false);
                     Messages.showErrorDialog(project, "No changes committed: " + ex.getMessage(), "Commit Error");
                 });
@@ -563,6 +622,15 @@ public class TableDataEditorPanel extends JPanel {
 
     private boolean finishCellEditing() {
         return !dataTable.isEditing() || dataTable.getCellEditor().stopCellEditing();
+    }
+
+    private String draftKey() { return "table:" + config.getId() + ":" + databaseName + ":" + tableMetadata.getName(); }
+    public boolean hasPendingChanges() { return tableModel.hasPendingChanges() || dataTable.isEditing(); }
+    @Override public void close() {
+        finishCellEditing();
+        updatePendingChangesState();
+        disposed = true; loadGeneration++;
+        if (autoRefreshTimer != null) autoRefreshTimer.stop();
     }
 
     private void setMutationRunning(boolean running) {
@@ -928,6 +996,40 @@ public class TableDataEditorPanel extends JPanel {
             fireTableStructureChanged();
         }
 
+        TableDraftState.Draft captureDraft() { return TableDraftState.Draft.capture(columns, types, originalRows, rows); }
+        void refreshColumnMetadata() {
+            columnMetaList.clear();
+            for (String column : columns) columnMetaList.add(tableMetadata.getColumn(column));
+            validationErrors.clear();
+            for (int row = 0; row < rows.size(); row++) {
+                for (int col = 0; col < columns.size(); col++) {
+                    if (!isRowNew(row) && !isCellModified(row,col)) continue;
+                    if (!isRowNew(row) && !isCellModified(row,col)) continue;
+                    String error = validateCellValue(getColumnMeta(col), rows.get(row).get(col));
+                    if (error != null) validationErrors.put(new CellCoord(row,col),error);
+                }
+            }
+            fireTableStructureChanged();
+        }
+        void restoreDraft(TableDraftState.Draft draft) {
+            setData(draft.columns, draft.types, draft.originalValues());
+            rows = new ArrayList<>();
+            for (List<Object> row : draft.values()) rows.add(new ArrayList<>(row));
+            for (int row = 0; row < rows.size(); row++) {
+                if (isRowNew(row)) {
+                    Map<String,Object> values = new LinkedHashMap<>();
+                    for (int col = 0; col < columns.size(); col++) values.put(columns.get(col),rows.get(row).get(col));
+                    newRows.add(values);
+                } else {
+                    for (int col = 0; col < columns.size(); col++) {
+                        if (!Objects.deepEquals(rows.get(row).get(col),originalRows.get(row).get(col))) modifiedCells.put(new CellCoord(row,col),rows.get(row).get(col));
+                    }
+                }
+            }
+            refreshColumnMetadata();
+            updatePendingChangesState();
+        }
+
         public ColumnMetadata getColumnMeta(int col) {
             if (col >= 0 && col < columnMetaList.size()) {
                 return columnMetaList.get(col);
@@ -1009,6 +1111,7 @@ public class TableDataEditorPanel extends JPanel {
             validationErrors.clear();
             for (int row = 0; row < rows.size(); row++) {
                 for (int col = 0; col < columns.size(); col++) {
+                    if (!isRowNew(row) && !isCellModified(row,col)) continue;
                     String error = validateCellValue(getColumnMeta(col), rows.get(row).get(col));
                     if (error != null) validationErrors.put(new CellCoord(row, col), error);
                 }
