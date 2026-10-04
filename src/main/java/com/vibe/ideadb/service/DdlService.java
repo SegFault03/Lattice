@@ -388,6 +388,7 @@ public class DdlService {
 
     private void executeSql(Connection conn, String sql) throws Exception {
         try (Statement stmt = conn.createStatement()) {
+            stmt.setQueryTimeout(60);
             stmt.execute(sql);
         }
     }

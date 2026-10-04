@@ -28,6 +28,12 @@ public class AlterTableDialog extends DialogWrapper {
     private final String databaseName;
     private final TableMetadata tableMetadata;
 
+    private boolean busy;
+    private volatile Connection activeConnection;
+    private java.util.concurrent.Future<?> operationTask;
+    private JPanel centerPanel;
+    private final java.util.Map<Component,Boolean> enabledStates = new java.util.IdentityHashMap<>();
+
     // Add Column tab
     private JBTextField addColNameField;
     private JComboBox<String> addColTypeCombo;
@@ -63,12 +69,10 @@ public class AlterTableDialog extends DialogWrapper {
         this.databaseName = databaseName;
         this.tableMetadata = tableMetadata;
 
-        // Ensure columns metadata is loaded
-        ensureColumnsLoaded();
-
         setTitle("Modify Table: " + tableMetadata.getName());
         setResizable(true);
         init();
+        if (tableMetadata.getColumns().isEmpty()) runAlter(conn -> {}, tableMetadata.getName(), null);
     }
 
     @Override
@@ -76,20 +80,10 @@ public class AlterTableDialog extends DialogWrapper {
         return "Lattice.AlterTableDialog.v1";
     }
 
-    private void ensureColumnsLoaded() {
-        if (tableMetadata.getColumns().isEmpty()) {
-            try {
-                Connection conn = DatabaseConnectionManager.getInstance().getConnection(config);
-                List<ColumnMetadata> cols = MetadataService.getInstance().getColumns(conn, config, databaseName, tableMetadata.getName());
-                tableMetadata.setColumns(cols);
-            } catch (Exception ignored) {
-            }
-        }
-    }
-
     @Override
     protected @Nullable JComponent createCenterPanel() {
         JPanel root = new JPanel(new BorderLayout(0, 10));
+        centerPanel = root;
         root.setPreferredSize(new Dimension(740, 420));
         root.setMinimumSize(new Dimension(680, 380));
 
@@ -354,17 +348,50 @@ public class AlterTableDialog extends DialogWrapper {
         }
     }
 
-    private void reloadMetadata() {
-        try {
-            Connection conn = DatabaseConnectionManager.getInstance().getConnection(config);
-            List<ColumnMetadata> cols = MetadataService.getInstance().getColumns(conn, config, databaseName, tableMetadata.getName());
-            tableMetadata.setColumns(cols);
-            refreshDropdowns();
-        } catch (Exception ignored) {
-        }
+    @FunctionalInterface private interface AlterOperation { void execute(Connection connection) throws Exception; }
+    private void setBusy(boolean value) {
+        busy=value; setOKActionEnabled(!value);
+        if (value) disableControls(centerPanel);
+        else { enabledStates.forEach(Component::setEnabled); enabledStates.clear(); }
+    }
+    private void disableControls(Component component) {
+        enabledStates.put(component,component.isEnabled()); component.setEnabled(false);
+        if (component instanceof Container container) for(Component child:container.getComponents()) disableControls(child);
+    }
+    private void runAlter(AlterOperation operation, String metadataName, String success) {
+        if (busy || isDisposed()) return;
+        setBusy(true);
+        operationTask = com.vibe.ideadb.service.DatabaseTaskService.getInstance().submit(() -> {
+            if (isDisposed()) return;
+            try (Connection conn = DatabaseConnectionManager.getInstance().openConnection(config)) {
+                activeConnection=conn;
+                if (isDisposed()) return;
+                operation.execute(conn);
+                List<ColumnMetadata> columns = MetadataService.getInstance().getColumns(conn,config,databaseName,metadataName);
+                SwingUtilities.invokeLater(() -> {
+                    if (isDisposed()) return;
+                    tableMetadata.setColumns(columns); setBusy(false); refreshDropdowns();
+                    if (success != null) { Messages.showInfoMessage(project,success,"Success"); close(OK_EXIT_CODE); }
+                });
+            } catch(Exception error) {
+                SwingUtilities.invokeLater(() -> {
+                    if (isDisposed()) return;
+                    setBusy(false); Messages.showErrorDialog(project,error.getMessage(),"Database Operation Failed");
+                });
+            } finally { activeConnection=null; }
+        });
+    }
+    @Override protected void dispose() {
+        if (operationTask != null) operationTask.cancel(true);
+        Connection connection=activeConnection;
+        if (connection != null) com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(() -> {
+            try { connection.close(); } catch(java.sql.SQLException ignored) { }
+        });
+        super.dispose();
     }
 
     private void doAddColumn() {
+        if (busy || isDisposed()) return;
         String colName = addColNameField.getText().trim();
         if (colName.isEmpty()) {
             Messages.showErrorDialog(project, "Column name cannot be empty", "Validation Error");
@@ -380,18 +407,11 @@ public class AlterTableDialog extends DialogWrapper {
         ColumnDefinition col = new ColumnDefinition(colName, (String) addColTypeCombo.getSelectedItem(), size,
                 addColNullableCheck.isSelected(), false, false, addColDefaultField.getText().trim());
 
-        try {
-            Connection conn = DatabaseConnectionManager.getInstance().getConnection(config);
-            DdlService.getInstance().alterTableAddColumn(conn, config, databaseName, tableMetadata.getName(), col);
-            reloadMetadata();
-            Messages.showInfoMessage(project, "Column '" + colName + "' added successfully!", "Success");
-            close(OK_EXIT_CODE);
-        } catch (Exception ex) {
-            Messages.showErrorDialog(project, "Failed to add column: " + ex.getMessage(), "Error");
-        }
+        runAlter(conn -> DdlService.getInstance().alterTableAddColumn(conn, config, databaseName, tableMetadata.getName(), col), tableMetadata.getName(), "Column '" + colName + "' added successfully!");
     }
 
     private void doRenameColumn() {
+        if (busy || isDisposed()) return;
         String oldCol = (String) renameColCombo.getSelectedItem();
         String newCol = renameColNewNameField.getText().trim();
         if (oldCol == null || newCol.isEmpty()) {
@@ -403,18 +423,11 @@ public class AlterTableDialog extends DialogWrapper {
             return;
         }
 
-        try {
-            Connection conn = DatabaseConnectionManager.getInstance().getConnection(config);
-            DdlService.getInstance().alterTableRenameColumn(conn, config, databaseName, tableMetadata.getName(), oldCol, newCol);
-            reloadMetadata();
-            Messages.showInfoMessage(project, "Column '" + oldCol + "' renamed to '" + newCol + "' successfully!", "Success");
-            close(OK_EXIT_CODE);
-        } catch (Exception ex) {
-            Messages.showErrorDialog(project, "Failed to rename column: " + ex.getMessage(), "Error");
-        }
+        runAlter(conn -> DdlService.getInstance().alterTableRenameColumn(conn, config, databaseName, tableMetadata.getName(), oldCol, newCol), tableMetadata.getName(), "Column '" + oldCol + "' renamed to '" + newCol + "' successfully!");
     }
 
     private void doModifyColumn() {
+        if (busy || isDisposed()) return;
         String colName = (String) modifyColCombo.getSelectedItem();
         if (colName == null) return;
 
@@ -432,18 +445,11 @@ public class AlterTableDialog extends DialogWrapper {
             col.setDecimalDigits(original.getDecimalDigits());
         }
 
-        try {
-            Connection conn = DatabaseConnectionManager.getInstance().getConnection(config);
-            DdlService.getInstance().alterTableModifyColumn(conn, config, databaseName, tableMetadata.getName(), col);
-            reloadMetadata();
-            Messages.showInfoMessage(project, "Column '" + colName + "' definition updated successfully!", "Success");
-            close(OK_EXIT_CODE);
-        } catch (Exception ex) {
-            Messages.showErrorDialog(project, "Failed to modify column: " + ex.getMessage(), "Error");
-        }
+        runAlter(conn -> DdlService.getInstance().alterTableModifyColumn(conn, config, databaseName, tableMetadata.getName(), col), tableMetadata.getName(), "Column '" + colName + "' definition updated successfully!");
     }
 
     private void doDropColumn() {
+        if (busy || isDisposed()) return;
         String colName = (String) dropColCombo.getSelectedItem();
         if (colName == null) return;
 
@@ -451,32 +457,18 @@ public class AlterTableDialog extends DialogWrapper {
                 "Confirm Drop Column", Messages.getWarningIcon());
         if (confirm != Messages.YES) return;
 
-        try {
-            Connection conn = DatabaseConnectionManager.getInstance().getConnection(config);
-            DdlService.getInstance().alterTableDropColumn(conn, config, databaseName, tableMetadata.getName(), colName);
-            reloadMetadata();
-            Messages.showInfoMessage(project, "Column '" + colName + "' dropped successfully!", "Success");
-            close(OK_EXIT_CODE);
-        } catch (Exception ex) {
-            Messages.showErrorDialog(project, "Failed to drop column: " + ex.getMessage(), "Error");
-        }
+        runAlter(conn -> DdlService.getInstance().alterTableDropColumn(conn, config, databaseName, tableMetadata.getName(), colName), tableMetadata.getName(), "Column '" + colName + "' dropped successfully!");
     }
 
     private void doRenameTable() {
+        if (busy || isDisposed()) return;
         String newName = renameTableField.getText().trim();
         if (newName.isEmpty() || newName.equals(tableMetadata.getName())) {
             Messages.showErrorDialog(project, "Please enter a new table name", "Validation Error");
             return;
         }
 
-        try {
-            Connection conn = DatabaseConnectionManager.getInstance().getConnection(config);
-            DdlService.getInstance().alterTableRename(conn, config, databaseName, tableMetadata.getName(), newName);
-            reloadMetadata();
-            Messages.showInfoMessage(project, "Table renamed to '" + newName + "' successfully!", "Success");
-            close(OK_EXIT_CODE);
-        } catch (Exception ex) {
-            Messages.showErrorDialog(project, "Failed to rename table: " + ex.getMessage(), "Error");
-        }
+        runAlter(conn -> DdlService.getInstance().alterTableRename(conn, config, databaseName, tableMetadata.getName(), newName), newName, "Table renamed to '" + newName + "' successfully!");
     }
+
 }

@@ -696,20 +696,17 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         if (targetWrapper == null) return;
 
         File targetFile = targetWrapper.getFile();
-        QueryResult result = QueryResult.forResultSet(tableModel.columns, tableModel.types, tableModel.rows, 0);
-
-        try {
-            if ("csv".equalsIgnoreCase(format)) {
-                ExportService.getInstance().exportToCsv(result, targetFile);
-            } else if ("json".equalsIgnoreCase(format)) {
-                ExportService.getInstance().exportToJson(result, targetFile);
-            } else {
-                ExportService.getInstance().exportToSqlInsert(tableMetadata.getName(), result, targetFile);
+        QueryResult result = QueryResult.forResultSet(new ArrayList<>(tableModel.columns), new ArrayList<>(tableModel.types), tableModel.rows.stream().map(row -> (List<Object>)new ArrayList<>(row)).toList(), 0);
+        com.vibe.ideadb.service.DatabaseTaskService.getInstance().submit(() -> {
+            try {
+                if ("csv".equalsIgnoreCase(format)) ExportService.getInstance().exportToCsv(result,targetFile);
+                else if ("json".equalsIgnoreCase(format)) ExportService.getInstance().exportToJson(result,targetFile);
+                else ExportService.getInstance().exportToSqlInsert(tableMetadata.getName(),result,targetFile);
+                SwingUtilities.invokeLater(() -> { if (!disposed) Messages.showInfoMessage(project,"Exported data to " + targetFile.getName(),"Export Complete"); });
+            } catch(Exception error) {
+                SwingUtilities.invokeLater(() -> { if (!disposed) Messages.showErrorDialog(project,"Export failed: " + error.getMessage(),"Export Error"); });
             }
-            Messages.showInfoMessage(project, "Exported data successfully to " + targetFile.getName(), "Export Complete");
-        } catch (Exception ex) {
-            Messages.showErrorDialog(project, "Export failed: " + ex.getMessage(), "Export Error");
-        }
+        });
     }
 
     public static String validateCellValue(ColumnMetadata cm, Object value) {
