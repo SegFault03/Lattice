@@ -6,7 +6,8 @@ import com.intellij.openapi.util.IconLoader;
 import javax.swing.*;
 
 public class Icons {
-    public static final Icon LATTICE = loadIcon("/icons/lattice_detailed.svg", AllIcons.Nodes.DataTables);
+    public static final Icon LATTICE = loadIcon("/icons/lattice_header_fill.svg", AllIcons.Nodes.DataTables);
+    public static final Icon LATTICE_HEADER_FILL = loadIcon("/icons/lattice_header_fill.svg", AllIcons.Nodes.DataTables);
     public static final Icon LATTICE_MINIMAL = loadIcon("/icons/lattice.svg", AllIcons.Nodes.DataTables);
     public static final Icon LATTICE_DETAILED = loadIcon("/icons/lattice_detailed.svg", AllIcons.Nodes.DataTables);
     public static final Icon LATTICE_EMERALD = loadIcon("/icons/lattice_emerald.svg", AllIcons.Nodes.DataTables);
