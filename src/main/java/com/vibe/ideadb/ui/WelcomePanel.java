@@ -90,7 +90,7 @@ public class WelcomePanel extends JPanel {
         tipsCard.add(Box.createVerticalStrut(6));
         tipsCard.add(createTipLabel("Ctrl+Shift+D", "to quickly toggle the Lattice database tool window."));
         tipsCard.add(Box.createVerticalStrut(6));
-        tipsCard.add(createTipLabel("Built-in Demo", "includes zero-setup In-Memory HSQLDB demo for immediate testing."));
+        tipsCard.add(createTipLabel("Zero Setup", "supports In-Memory HSQLDB for instant testing without server installs."));
 
         content.add(tipsCard, gbc);
 

@@ -31,32 +31,7 @@ public class DatabaseSettingsState implements PersistentStateComponent<DatabaseS
     }
 
     public DatabaseSettingsState() {
-        // Add a friendly default in-memory HSQLDB demo connection if list is empty
-        if (state.connections.isEmpty()) {
-            ConnectionConfig sampleHsql = new ConnectionConfig(DatabaseType.HSQLDB, "Demo HSQLDB (In-Memory)");
-            sampleHsql.setHsqlMode(HsqlMode.MEM);
-            sampleHsql.setDatabaseName("demodb");
-            sampleHsql.setUser("SA");
-            sampleHsql.setPassword("");
-            state.connections.add(sampleHsql);
-
-            ConnectionConfig serverHsql = new ConnectionConfig(DatabaseType.HSQLDB, "Local HSQLDB Server (testdb)");
-            serverHsql.setHsqlMode(HsqlMode.SERVER);
-            serverHsql.setHost("localhost");
-            serverHsql.setPort(9001);
-            serverHsql.setDatabaseName("testdb");
-            serverHsql.setUser("SA");
-            serverHsql.setPassword("");
-            state.connections.add(serverHsql);
-
-            ConnectionConfig mysql = new ConnectionConfig(DatabaseType.MYSQL, "Local MySQL (shop_db)");
-            mysql.setHost("localhost");
-            mysql.setPort(3306);
-            mysql.setDatabaseName("shop_db");
-            mysql.setUser("root");
-            mysql.setPassword("");
-            state.connections.add(mysql);
-        }
+        // Clean release state: no pre-existing connections
     }
 
     @Nullable

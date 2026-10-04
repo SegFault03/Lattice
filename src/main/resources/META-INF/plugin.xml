@@ -32,7 +32,7 @@
         <toolWindow id="Lattice"
                     anchor="right"
                     secondary="false"
-                    icon="/icons/lattice_header_fill.svg"
+                    icon="/icons/lattice.svg"
                     factoryClass="com.vibe.ideadb.ui.DatabaseToolWindowFactory"/>
 
         <fileEditorProvider implementation="com.vibe.ideadb.editor.DatabaseFileEditorProvider"/>
@@ -45,7 +45,7 @@
                 class="com.vibe.ideadb.ui.OpenDatabaseManagerAction"
                 text="Lattice"
                 description="Open Lattice database tool window"
-                icon="/icons/lattice_header_fill.svg">
+                icon="/icons/lattice.svg">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
             <keyboard-shortcut first-keystroke="control shift D" keymap="$default"/>
         </action>

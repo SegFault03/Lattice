@@ -2,7 +2,11 @@
 
 **Lattice** is a fast, lightweight, and unrestricted in-app database management plugin for **IntelliJ IDEA** (Community and Ultimate editions). Connect to, explore, query, design, and modify databases directly inside your IDE without requiring paid Ultimate licenses or external database clients.
 
-![Lattice Icon](src/main/resources/icons/lattice_large.png)
+> ⚡ **Entirely vibe-coded with Google Gemini 3.8 Flash.**
+
+<p align="center">
+  <img src="src/main/resources/icons/lattice_large.svg" alt="Lattice Logo" width="96" height="96"/>
+</p>
 
 ---
 
@@ -22,7 +26,7 @@
 ---
 
 ### 2. Database Explorer (Tool Window)
-- **Docked Tool Window**: Available on the right stripe labeled **Lattice** with a custom branded icon.
+- **Docked Tool Window**: Available on the right stripe labeled **Lattice** with a custom vector SVG icon designed for JetBrains New UI.
 - **Hierarchical Tree View**:
   - **Data Sources**: Connected status indicators with distinct visual badges.
   - **Catalogs & Databases**: Schemas and database namespaces.
@@ -95,6 +99,8 @@ Lattice/
 │   │   │   │   ├── DatabaseFileEditorProvider.java
 │   │   │   │   ├── DatabaseFileTypes.java
 │   │   │   │   ├── DatabaseVirtualFile.java
+│   │   │   │   ├── SqlConsoleVirtualFile.java
+│   │   │   │   ├── TableDataVirtualFile.java
 │   │   │   │   ├── WelcomePanel.java
 │   │   │   │   └── WelcomeVirtualFile.java
 │   │   │   ├── model/               # Data structures, configs, metadata, query results
@@ -127,18 +133,28 @@ Lattice/
 │   │   │       └── TreeNodeData.java
 │   │   └── resources/
 │   │       ├── META-INF/
-│   │       │   ├── plugin.xml       # IntelliJ plugin descriptor & extension points
-│   │       │   ├── pluginIcon.png   # 80x80 marketplace icon
-│   │       │   └── pluginIcon@2x.png# 160x160 HiDPI marketplace icon
-│   │       └── icons/               # SVG & PNG icons (lattice, database, table, column, key, console)
+│   │       │   ├── plugin.xml             # IntelliJ plugin descriptor & extension points
+│   │       │   ├── pluginIcon.svg         # 40x40 vector Marketplace & Plugins dialog icon
+│   │       │   └── pluginIcon_dark.svg    # 40x40 vector Dark theme Marketplace icon
+│   │       └── icons/                     # Vector SVG icons
+│   │           ├── lattice.svg            # 16x16 side-panel tool window icon (Light)
+│   │           ├── lattice_dark.svg       # 16x16 side-panel tool window icon (Dark)
+│   │           ├── lattice_large.svg      # 48x48 Welcome panel icon (Light)
+│   │           ├── lattice_large_dark.svg # 48x48 Welcome panel icon (Dark)
+│   │           ├── column.svg
+│   │           ├── console.svg
+│   │           ├── database.svg
+│   │           ├── key.svg
+│   │           └── table.svg
 │   └── test/java/com/vibe/ideadb/
-│       └── PluginIntegrationTest.java # Comprehensive integration test suite
-├── lib/                             # Bundled JDBC drivers
+│       └── PluginIntegrationTest.java       # Comprehensive integration test suite
+├── lib/                                   # Bundled JDBC drivers
 │   ├── hsqldb-2.7.3.jar
 │   └── mysql-connector-j-9.0.0.jar
-├── icon.png                         # Master high-resolution (1024x1024) icon
-├── build-plugin.ps1                 # Automated compiler, packager & deployer
-├── build.gradle.kts                 # Standard Gradle IntelliJ Platform configuration
+├── build-plugin.ps1                       # Windows PowerShell compiler & packager (generates .zip)
+├── build-plugin.sh                        # Linux & macOS Bash compiler & packager (generates .zip)
+├── test-plugin.sh                         # Linux & macOS Bash integration test runner
+├── build.gradle.kts                       # Standard Gradle IntelliJ Platform configuration
 ├── settings.gradle.kts
 └── .gitignore
 ```
@@ -147,24 +163,29 @@ Lattice/
 
 ## 🚀 How to Build and Package
 
-### 1. Build & Deploy using PowerShell
-Run the build script from the repository root:
+Running either build script compiles the Java sources, bundles JDBC drivers, and generates the distributable archive `build/Lattice-1.0.0.zip` ready for installation.
+
+### Windows (PowerShell)
 ```powershell
 powershell.exe -ExecutionPolicy Bypass -File .\build-plugin.ps1
 ```
 
-The script performs the following tasks:
-1. Compiles Java source files against IntelliJ Platform libraries using Java 21+.
-2. Copies plugin resources, manifests, and raster/vector icons.
-3. Packages `Lattice.jar`.
-4. Bundles `hsqldb-2.7.3.jar` and `mysql-connector-j-9.0.0.jar`.
-5. Generates the release ZIP package: `build/dist/Lattice-1.0.0.zip`.
-6. Deploys directly into the IDE's plugins directory for testing.
+### Linux / macOS (Bash)
+```bash
+chmod +x ./build-plugin.sh
+./build-plugin.sh
+```
+
+The script outputs:
+```
+build/Lattice-1.0.0.zip
+```
 
 ---
 
-### 2. Run Integration Tests
-To run the automated integration test suite:
+## 🧪 Running Integration Tests
+
+### Windows
 ```powershell
 $javac = "..\proto\idea-2026.2.3.win\jbr\bin\javac.exe"
 $java = "..\proto\idea-2026.2.3.win\jbr\bin\java.exe"
@@ -174,13 +195,19 @@ $runCp = "..\proto\idea-2026.2.3.win\lib\*;.\lib\*;.\build\classes;.\build\test-
 & $java -cp $runCp com.vibe.ideadb.PluginIntegrationTest
 ```
 
+### Linux / macOS
+```bash
+chmod +x ./test-plugin.sh
+./test-plugin.sh
+```
+
 ---
 
-### 3. Installing into IntelliJ IDEA
+## 📦 Installing into IntelliJ IDEA
 1. Open IntelliJ IDEA.
 2. Navigate to **Settings** (or **Preferences**) > **Plugins**.
 3. Click the gear icon ⚙️ > **Install Plugin from Disk...**.
-4. Select `build/dist/Lattice-1.0.0.zip`.
+4. Select `build/Lattice-1.0.0.zip`.
 5. Restart IntelliJ IDEA. The **Lattice** tool window will appear on the right stripe!
 
 ---
