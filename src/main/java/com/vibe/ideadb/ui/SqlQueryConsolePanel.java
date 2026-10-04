@@ -68,10 +68,11 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
 
     private void initUI(List<String> allDatabases) {
         // Toolbar
-        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
+        JPanel toolbar = new JPanel(new WrapLayout(FlowLayout.LEFT, 6, 4));
 
         toolbar.add(new JBLabel("Database:"));
         databaseCombo = new JComboBox<>();
+        databaseCombo.setPrototypeDisplayValue("database_name_1234567");
         if (allDatabases != null) {
             for (String db : allDatabases) {
                 databaseCombo.addItem(db);
@@ -107,6 +108,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
 
         toolbar.add(new JBLabel("History:"));
         historyCombo = new JComboBox<>(new QueryHistoryEntry[]{new QueryHistoryEntry(null)});
+        historyCombo.setPrototypeDisplayValue(new QueryHistoryEntry("SELECT columns FROM table WHERE ..."));
         historyCombo.addActionListener(e -> {
             if (historyCombo.getSelectedIndex() > 0) {
                 QueryHistoryEntry query = (QueryHistoryEntry) historyCombo.getSelectedItem();
