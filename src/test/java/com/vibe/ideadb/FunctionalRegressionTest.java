@@ -117,6 +117,7 @@ public class FunctionalRegressionTest {
             queryExecution(config, schema);
             metadata(config, schema);
             quotedIdentifiers(config, schema);
+            pagination(config, schema);
             valueConversion(config, schema);
             defaultRows(config, schema);
             mutations(config, schema);
@@ -217,6 +218,28 @@ public class FunctionalRegressionTest {
             check(data.countRows(c,config,schema,renamed,null)==0,"Quoted identifiers must support rename/delete");
             ddl.alterTableDropColumn(c,config,schema,renamed,"extra value");
             ddl.dropTable(c,config,schema,renamed);
+        }
+    }
+    private static void pagination(ConnectionConfig config,String schema) throws Exception {
+        try(Connection c=manager.openConnection(config)) {
+            String table=DdlService.formatTable(config,schema,"PAGE_ROWS"); sql(c,"CREATE TABLE " + table + " (ID INT PRIMARY KEY, TENANT INT)");
+            for(int id:new int[]{9,2,7,1,5}) data.insertRow(c,config,schema,"PAGE_ROWS",Map.of("ID",id,"TENANT",0));
+            List<Integer> ids=new ArrayList<>();
+            for(int offset=0;offset<5;offset+=2) {
+                QueryResult page=data.fetchData(c,config,schema,"PAGE_ROWS",null,null,2,offset);
+                check(!page.hasError(),"Ordered page fetch succeeds");
+                for(List<Object> row:page.getRows()) ids.add(((Number)row.get(0)).intValue());
+            }
+            check(ids.equals(List.of(1,2,5,7,9)),"Default pagination must order by the unique primary key");
+            QueryResult descending=data.fetchData(c,config,schema,"PAGE_ROWS",null,"ID DESC",2,0);
+            check(((Number)descending.getRows().get(0).get(0)).intValue()==9,"Explicit sorting must override default ordering");
+            check(data.countRows(c,config,schema,"PAGE_ROWS",null)==5L,"Row count must return long");
+            var seen=new java.util.concurrent.atomic.AtomicBoolean();
+            var result=(ResultSet)java.lang.reflect.Proxy.newProxyInstance(ResultSet.class.getClassLoader(),new Class[]{ResultSet.class},(proxy,method,args) -> switch(method.getName()) { case "next" -> !seen.getAndSet(true); case "getLong" -> 3_000_000_000L; case "close" -> null; default -> throw new AssertionError("Unexpected count call " + method.getName()); });
+            var statement=(Statement)java.lang.reflect.Proxy.newProxyInstance(Statement.class.getClassLoader(),new Class[]{Statement.class},(proxy,method,args) -> switch(method.getName()) { case "executeQuery" -> result; case "setQueryTimeout","close" -> null; default -> throw new AssertionError("Unexpected statement call"); });
+            var huge=(Connection)java.lang.reflect.Proxy.newProxyInstance(Connection.class.getClassLoader(),new Class[]{Connection.class},(proxy,method,args) -> statement);
+            check(data.countRows(huge,config,schema,"PAGE_ROWS",null)==3_000_000_000L,"Count must preserve values beyond Integer.MAX_VALUE");
+            try { data.countRows(c,config,schema,"PAGE_ROWS","missing_column=1"); throw new AssertionError("Count failure swallowed"); } catch(SQLException expected) { check(true,"Count errors must be visible"); }
         }
     }
     private static void valueConversion(ConnectionConfig config,String schema) throws Exception {

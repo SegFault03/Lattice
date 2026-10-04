@@ -221,7 +221,7 @@ public class PluginIntegrationTest {
 
         // Truncate Table
         DdlService.getInstance().truncateTable(conn, cfg, "PUBLIC", "users");
-        int count = DataService.getInstance().countRows(conn, cfg, "PUBLIC", "users", null);
+        long count = DataService.getInstance().countRows(conn, cfg, "PUBLIC", "users", null);
         if (count != 0) throw new AssertionError("Table truncate failed, row count: " + count);
 
         // Drop Table

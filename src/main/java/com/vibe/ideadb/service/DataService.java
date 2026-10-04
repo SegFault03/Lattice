@@ -19,45 +19,30 @@ public class DataService {
         return INSTANCE;
     }
 
-    public QueryResult fetchData(Connection conn, ConnectionConfig config, String dbName, String tableName,
-                                 String whereClause, String orderBy, int limit, int offset) throws Exception {
-        StringBuilder sb = new StringBuilder("SELECT * FROM ");
-        sb.append(DdlService.formatTable(config, dbName, tableName));
-
-        if (whereClause != null && !whereClause.trim().isEmpty()) {
-            sb.append(" WHERE ").append(whereClause.trim());
-        }
-
-        if (orderBy != null && !orderBy.trim().isEmpty()) {
-            sb.append(" ORDER BY ").append(orderBy.trim());
-        }
-
-        if (limit > 0) {
-            sb.append(" LIMIT ").append(limit);
-            if (offset > 0) {
-                sb.append(" OFFSET ").append(offset);
-            }
-        }
-
-        return executeQuery(conn, dbName, sb.toString());
+    public QueryResult fetchData(Connection conn,ConnectionConfig config,String db,String table,String where,String order,int limit,int offset) throws Exception {
+        List<String> keys=order==null || order.isBlank() ? MetadataService.getInstance().getColumns(conn,config,db,table).stream().filter(com.vibe.ideadb.model.ColumnMetadata::isPrimaryKey).map(com.vibe.ideadb.model.ColumnMetadata::getName).toList() : List.of();
+        return fetchData(conn,config,db,table,where,order,limit,offset,keys);
     }
-
-    public int countRows(Connection conn, ConnectionConfig config, String dbName, String tableName, String whereClause) {
-        StringBuilder sb = new StringBuilder("SELECT COUNT(*) FROM ");
-        sb.append(DdlService.formatTable(config, dbName, tableName));
-
-        if (whereClause != null && !whereClause.trim().isEmpty()) {
-            sb.append(" WHERE ").append(whereClause.trim());
-        }
-
-        try (Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sb.toString())) {
-            if (rs.next()) {
-                return rs.getInt(1);
+    public QueryResult fetchData(Connection conn,ConnectionConfig config,String db,String table,String where,String order,int limit,int offset,List<String> keys) throws Exception {
+        if(limit<0 || offset<0) throw new IllegalArgumentException("Page limit/offset must not be negative");
+        StringBuilder sql=new StringBuilder("SELECT * FROM ").append(DdlService.formatTable(config,db,table));
+        if(where!=null && !where.isBlank()) sql.append(" WHERE ").append(where.trim());
+        if(order!=null && !order.isBlank()) sql.append(" ORDER BY ").append(order.trim());
+        else if(!keys.isEmpty()) sql.append(" ORDER BY ").append(keys.stream().map(key -> DdlService.quoteIdentifier(config,key)).collect(java.util.stream.Collectors.joining(", ")));
+        if(limit>0) { sql.append(" LIMIT ").append(limit); if(offset>0) sql.append(" OFFSET ").append(offset); }
+        return executeQuery(conn,db,sql.toString());
+    }
+    public long countRows(Connection conn,ConnectionConfig config,String db,String table,String where) throws Exception {
+        String sql="SELECT COUNT(*) FROM " + DdlService.formatTable(config,db,table) + (where==null || where.isBlank() ? "" : " WHERE " + where.trim());
+        synchronized(conn) {
+            try(Statement statement=conn.createStatement()) {
+                statement.setQueryTimeout(60);
+                try(ResultSet result=statement.executeQuery(sql)) {
+                    if(!result.next()) throw new SQLException("Row count unavailable");
+                    return result.getLong(1);
+                }
             }
-        } catch (Exception ignored) {
         }
-        return -1;
     }
 
     public void updateCell(Connection conn, ConnectionConfig config, String dbName, String tableName,

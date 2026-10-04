@@ -52,6 +52,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     private final TableMetadata tableMetadata;
 
     private JBTextField whereField;
+    private JBTextField orderField;
     private JComboBox<String> pageSizeCombo;
     private JComboBox<String> autoRefreshCombo;
     private javax.swing.Timer autoRefreshTimer;
@@ -68,7 +69,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
 
     private int currentPage = 1;
     private int pageSize = 100;
-    private int totalRowCount = -1;
+    private long totalRowCount = -1;
     private String appliedWhere = "";
     private enum ExportScope { PAGE, SELECTED, ALL_PERSISTED }
     private boolean mutationRunning;
@@ -141,6 +142,10 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             loadData(1, pageSize);
         });
         toolbar.add(filterBtn);
+        toolbar.add(new JBLabel("Order by:")); orderField=new JBTextField(8);
+        orderField.setToolTipText("SQL sort clause; blank uses the primary key when available");
+        orderField.addActionListener(event -> loadData(1,pageSize)); toolbar.add(orderField);
+        JButton countBtn=new JButton("Count Rows"); makeCompactButton(countBtn); countBtn.addActionListener(event -> countRows()); toolbar.add(countBtn);
 
         toolbar.add(new JSeparator(SwingConstants.VERTICAL));
 
@@ -310,7 +315,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 if (tableModel.hasPendingChanges()) {
                     statusLabel.setText("Auto-refresh paused: pending changes exist");
                 } else {
-                    loadData();
+                    loadData(currentPage,pageSize,false);
                 }
             });
             autoRefreshTimer.setRepeats(true);
@@ -327,9 +332,10 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         }
     }
 
-    public void loadData() { loadData(currentPage, pageSize); }
+    public void loadData() { loadData(currentPage,pageSize,true); }
 
-    private void loadData(int requestedPage, int requestedSize) {
+    private void loadData(int requestedPage,int requestedSize) { loadData(requestedPage,requestedSize,false); }
+    private void loadData(int requestedPage, int requestedSize, boolean refreshMetadata) {
         if (mutationRunning || disposed || !finishCellEditing()) return;
         if (tableModel.hasPendingChanges()) {
             statusLabel.setText("Pending edits preserved. Commit or Revert before reloading.");
@@ -337,6 +343,9 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         }
         long generation = ++loadGeneration;
         String where = whereField.getText().trim();
+        String order = orderField.getText().trim();
+        List<ColumnMetadata> knownColumns=new ArrayList<>(tableMetadata.getColumns());
+        long knownCount=!refreshMetadata && where.equals(appliedWhere) ? totalRowCount : -1;
         statusLabel.setText("Loading data...");
         statusLabel.setForeground(null);
         tasks.submit(() -> {
@@ -344,16 +353,19 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 Connection conn=read.connection();
 
                 // Keep table columns metadata up to date
-                List<ColumnMetadata> cols = MetadataService.getInstance().getColumns(conn, config, databaseName, tableMetadata.getName());
-                int offset = (requestedPage - 1) * requestedSize;
-                int count = DataService.getInstance().countRows(conn, config, databaseName, tableMetadata.getName(), where);
-                QueryResult result = DataService.getInstance().fetchData(conn, config, databaseName, tableMetadata.getName(), where, null, requestedSize, offset);
-                if (result.hasError()) throw new java.sql.SQLException(result.getError());
+                List<ColumnMetadata> cols = refreshMetadata || knownColumns.isEmpty() ? MetadataService.getInstance().getColumns(conn,config,databaseName,tableMetadata.getName()) : knownColumns;
+                int offset = Math.multiplyExact(requestedPage - 1, requestedSize);
+                List<String> keys=cols.stream().filter(ColumnMetadata::isPrimaryKey).map(ColumnMetadata::getName).toList();
+                QueryResult fetched = DataService.getInstance().fetchData(conn,config,databaseName,tableMetadata.getName(),where,order,requestedSize+1,offset,keys);
+                if(fetched.hasError()) throw new java.sql.SQLException(fetched.getError());
+                if(fetched.isTruncated()) throw new java.sql.SQLException("Page exceeds the display limit; reduce the row limit.");
+                boolean hasNext=fetched.getRows().size()>requestedSize;
+                QueryResult result=QueryResult.forResultSet(fetched.getColumnNames(),fetched.getColumnTypes(),fetched.getRows().subList(0,Math.min(requestedSize,fetched.getRows().size())),fetched.getExecutionTimeMs());
 
                 SwingUtilities.invokeLater(() -> {
                     if (disposed || generation != loadGeneration || mutationRunning || dataTable.isEditing() || tableModel.hasPendingChanges()) return;
                     tableMetadata.setColumns(cols);
-                    totalRowCount = count;
+                    totalRowCount = knownCount;
                     appliedWhere = where;
                     currentPage = requestedPage;
                     pageSize = requestedSize;
@@ -364,14 +376,14 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     }
                     updatePendingChangesState();
 
-                    int maxPage = totalRowCount > 0 ? (int) Math.ceil((double) totalRowCount / pageSize) : 1;
+                    long maxPage = totalRowCount >= 0 ? Math.max(1,(totalRowCount + pageSize - 1) / pageSize) : -1;
                     prevPageBtn.setEnabled(currentPage > 1);
-                    nextPageBtn.setEnabled(totalRowCount < 0 || currentPage < maxPage);
+                    nextPageBtn.setEnabled(hasNext);
                     pageLabel.setText("Page " + currentPage + (maxPage > 0 ? " of " + maxPage : ""));
 
                     statusLabel.setText(String.format("Loaded %d row(s) in %d ms | Total rows: %s",
                             result.getRows().size(), result.getExecutionTimeMs(),
-                            totalRowCount >= 0 ? String.valueOf(totalRowCount) : "unknown"));
+                            totalRowCount >= 0 ? String.valueOf(totalRowCount) : "not counted") + (keys.isEmpty() && order.isEmpty() ? " | No primary key: specify Order by for predictable pages" : ""));
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
@@ -379,6 +391,26 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     statusLabel.setText("Error loading data: " + ex.getMessage());
                     Messages.showErrorDialog(project, "Error: " + ex.getMessage(), "Data Fetch Error");
                 });
+            }
+        });
+    }
+
+    private void countRows() {
+        if(disposed || mutationRunning) return;
+        long generation=loadGeneration; String where=appliedWhere;
+        statusLabel.setText("Counting persisted rows...");
+        tasks.submit(() -> {
+            try(var read=tasks.openRead(config)) {
+                long count=DataService.getInstance().countRows(read.connection(),config,databaseName,tableMetadata.getName(),where);
+                SwingUtilities.invokeLater(() -> {
+                    if(disposed || mutationRunning || generation!=loadGeneration) return;
+                    totalRowCount=count;
+                    long pages=Math.max(1,(count+pageSize-1)/pageSize);
+                    pageLabel.setText("Page " + currentPage + " of " + pages);
+                    statusLabel.setText("Persisted rows matching current filter: " + count);
+                });
+            } catch(Exception error) {
+                SwingUtilities.invokeLater(() -> { if(!disposed && generation==loadGeneration) statusLabel.setText("Count failed: " + error.getMessage()); });
             }
         });
     }
