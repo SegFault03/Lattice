@@ -67,12 +67,32 @@ public class FunctionalRegressionTest {
             check(connections.size() == 1, "Concurrent browser acquisition leaked connections");
         } finally { executor.shutdownNow(); manager.closeConnection(fresh.getId()); }
     }
+    private static void configurationLifecycle(ConnectionConfig source) throws Exception {
+        ConnectionConfig original=source.copy(); original.setId(UUID.randomUUID().toString());
+        manager.registerConfiguration(original);
+        Connection first=manager.getConnection(original);
+        try (DatabaseSession staleSession=manager.createSession(original)) {
+            Connection sessionConnection=staleSession.execute(c -> c);
+            ConnectionConfig changed=original.copy(); changed.setAutoCommit(false);
+            manager.registerConfiguration(changed);
+            check(first.isClosed() && sessionConnection.isClosed(),"Settings changes must retire browser and console connections");
+            try { manager.getConnection(original); throw new AssertionError("Stale browser resurrected old settings"); } catch (SQLException expected) { check(expected.getMessage().contains("settings changed"),"Stale browser must report reopen guidance"); }
+            try { staleSession.execute(c -> c); throw new AssertionError("Stale session resurrected old settings"); } catch (SQLException expected) { check(true,"Stale console rejected"); }
+            try { manager.openConnection(original); throw new AssertionError("Stale grid mutation accepted"); } catch (SQLException expected) { check(true,"Stale grid mutation rejected"); }
+            Connection fresh=manager.getConnection(changed);
+            check(!fresh.getAutoCommit(),"Fresh editors must use updated settings");
+            manager.removeConfiguration(changed.getId());
+            check(fresh.isClosed(),"Removing a connection retires all sessions");
+            try { manager.getConnection(changed); throw new AssertionError("Removed connection resurrected"); } catch (SQLException expected) { check(expected.getMessage().contains("removed"),"Removed editors must be rejected"); }
+        } finally { manager.closeConnection(original.getId()); }
+    }
     private static void runEngine(ConnectionConfig config) throws Exception {
         String schema = "LATTICE_FIX_" + UUID.randomUUID().toString().replace("-", "").substring(0, 10).toUpperCase(Locale.ROOT);
         Connection connection = manager.getConnection(config);
         ddl.createDatabase(connection, config, schema);
         try {
             sessions(config, schema);
+            configurationLifecycle(config);
             mutations(config, schema);
             columnAlterations(config, schema);
         } finally {

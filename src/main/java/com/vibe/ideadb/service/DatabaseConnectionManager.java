@@ -19,6 +19,36 @@ public class DatabaseConnectionManager {
 
     private static final class ConnectionGroup {
         private final Map<String, Connection> connections = new java.util.HashMap<>();
+        private ConnectionConfig configuration;
+        private boolean registered;
+        private boolean removed;
+    }
+
+    private record Identity(String url, String user, String password, boolean autoCommit) {
+        static Identity of(ConnectionConfig config) { return new Identity(config.buildJdbcUrl(), config.getUser(), config.getPassword(), config.isAutoCommit()); }
+    }
+    public void registerConfiguration(ConnectionConfig config) {
+        ConnectionGroup group = activeConnections.computeIfAbsent(config.getId(), id -> new ConnectionGroup());
+        synchronized (group) {
+            if (group.configuration != null && !Identity.of(group.configuration).equals(Identity.of(config))) closeGroup(group);
+            group.configuration = config.copy(); group.registered = true; group.removed = false;
+        }
+    }
+    public void removeConfiguration(String id) {
+        ConnectionGroup group = activeConnections.computeIfAbsent(id, key -> new ConnectionGroup());
+        synchronized (group) { closeGroup(group); group.removed = true; group.registered = true; }
+    }
+    private void validateConfiguration(ConnectionGroup group, ConnectionConfig config) throws SQLException {
+        if (group.removed) throw new SQLException("This connection was removed. Close this editor and choose an existing connection.");
+        if (group.configuration != null && !Identity.of(group.configuration).equals(Identity.of(config))) {
+            if (group.registered) throw new SQLException("Connection settings changed. Close and reopen this editor before accessing the database.");
+            closeGroup(group);
+        }
+        if (!group.registered) group.configuration = config.copy();
+    }
+    private void closeGroup(ConnectionGroup group) {
+        group.connections.values().forEach(DatabaseConnectionManager::closeQuietly);
+        group.connections.clear();
     }
 
     private DatabaseConnectionManager() {
@@ -33,19 +63,24 @@ public class DatabaseConnectionManager {
     }
 
     public DatabaseSession createSession(ConnectionConfig config) {
-        return new DatabaseSession(this, config);
+        return new DatabaseSession(this, config.copy());
     }
 
     /** Exclusive short-lived connection for a transaction; caller closes it. */
     public Connection openConnection(ConnectionConfig config) throws Exception {
-        Connection connection = createRawConnection(config);
-        try { connection.setAutoCommit(true); return connection; }
-        catch (Exception e) { connection.close(); throw e; }
+        ConnectionGroup group = activeConnections.computeIfAbsent(config.getId(), id -> new ConnectionGroup());
+        synchronized (group) {
+            validateConfiguration(group, config);
+            Connection connection = createRawConnection(config.copy());
+            try { connection.setAutoCommit(true); return connection; }
+            catch (Exception e) { connection.close(); throw e; }
+        }
     }
 
     Connection getConnection(ConnectionConfig config, String sessionId) throws Exception {
         ConnectionGroup group = activeConnections.computeIfAbsent(config.getId(), id -> new ConnectionGroup());
         synchronized (group) {
+            validateConfiguration(group, config);
             Connection conn = group.connections.get(sessionId);
             if (conn != null && !conn.isClosed()) return conn;
             conn = createRawConnection(config);

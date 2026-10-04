@@ -64,6 +64,11 @@ public class DatabaseSettingsState implements PersistentStateComponent<DatabaseS
             }
             restored.connections.add(copy);
         }
+        var manager = com.vibe.ideadb.service.DatabaseConnectionManager.getInstance();
+        for (ConnectionConfig old : state.connections) {
+            if (restored.connections.stream().noneMatch(c -> c.getId().equals(old.getId()))) manager.removeConfiguration(old.getId());
+        }
+        restored.connections.forEach(manager::registerConfiguration);
         state = restored;
     }
     public synchronized List<ConnectionConfig> getConnections() { return state.connections.stream().map(ConnectionConfig::copy).toList(); }
@@ -72,12 +77,14 @@ public class DatabaseSettingsState implements PersistentStateComponent<DatabaseS
     public void addConnection(ConnectionConfig config) { updateConnection(config); }
     public synchronized void removeConnection(String id) {
         credentials.set(id, null);
+        com.vibe.ideadb.service.DatabaseConnectionManager.getInstance().removeConfiguration(id);
         state.connections.removeIf(c -> c.getId().equals(id));
     }
     public synchronized void updateConnection(ConnectionConfig config) {
         credentials.set(config.getId(), new Secret(config.getPassword(), config.getCustomUrl()));
         state.connections.removeIf(c -> c.getId().equals(config.getId()));
         state.connections.add(config.copy());
+        com.vibe.ideadb.service.DatabaseConnectionManager.getInstance().registerConfiguration(config);
     }
     public synchronized ConnectionConfig getConnection(String id) {
         return state.connections.stream().filter(c -> c.getId().equals(id)).findFirst().map(ConnectionConfig::copy).orElse(null);
