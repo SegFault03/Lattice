@@ -181,6 +181,7 @@ public class DataService {
             if (!conn.getAutoCommit()) throw new SQLException("A batch requires an exclusive connection without an existing transaction");
             conn.setAutoCommit(false);
             Throwable failure = null;
+            boolean restoreAutoCommit = true;
             try {
                 T result = operation.run(conn);
                 conn.commit();
@@ -188,12 +189,13 @@ public class DataService {
             } catch (Exception | Error e) {
                 failure = e;
                 try { conn.rollback(); } catch (SQLException rollback) {
+                    restoreAutoCommit = false; // enabling auto-commit could commit the unrolled-back writes
                     e.addSuppressed(rollback);
                     try { conn.close(); } catch (SQLException close) { e.addSuppressed(close); }
                 }
                 throw e;
             } finally {
-                try { if (!conn.isClosed()) conn.setAutoCommit(true); }
+                try { if (restoreAutoCommit && !conn.isClosed()) conn.setAutoCommit(true); }
                 catch (SQLException cleanup) {
                     if (failure != null) failure.addSuppressed(cleanup);
                     else logCleanup(cleanup); // commit returned successfully; preserve that outcome

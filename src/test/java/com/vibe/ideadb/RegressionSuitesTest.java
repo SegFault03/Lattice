@@ -44,6 +44,21 @@ public class RegressionSuitesTest {
         assertSame(original,error); assertEquals(1,error.getSuppressed().length);
         assertTrue(rolledBack.get()); assertFalse(committed.get()); assertTrue(closed.get());
     }
+    @Test void failedRollbackCannotEnableAutoCommit() {
+        var restored=new java.util.concurrent.atomic.AtomicBoolean();
+        var connection=(java.sql.Connection)java.lang.reflect.Proxy.newProxyInstance(java.sql.Connection.class.getClassLoader(),new Class[]{java.sql.Connection.class},(proxy,method,args) -> switch(method.getName()) {
+            case "getAutoCommit" -> true;
+            case "isClosed" -> false; // even a failed close must never allow implicit commit
+            case "setAutoCommit" -> { if(Boolean.TRUE.equals(args[0])) restored.set(true); yield null; }
+            case "rollback", "close" -> throw new java.sql.SQLException(method.getName() + " failed");
+            default -> throw new AssertionError("Unexpected call " + method.getName());
+        });
+        var original=new java.sql.SQLException("write failed");
+        var data=com.vibe.ideadb.service.DataService.getInstance();
+        var error=assertThrows(java.sql.SQLException.class,() -> data.withMutationConnection(connection,c -> data.inTransaction(c,unused -> { throw original; })));
+        assertSame(original,error); assertEquals(2,error.getSuppressed().length);
+        assertFalse(restored.get(),"Auto-commit could commit writes after rollback failed");
+    }
     @Test @Tag("integration") void existingDatabaseFlows() { PluginIntegrationTest.main(new String[0]); }
     @Test @Tag("integration") void liveFunctionalRegressions() throws Exception { FunctionalRegressionTest.main(new String[0]); }
 }
