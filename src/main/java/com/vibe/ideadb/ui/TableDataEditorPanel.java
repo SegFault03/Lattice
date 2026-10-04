@@ -19,6 +19,7 @@ import com.vibe.ideadb.model.QueryResult;
 import com.vibe.ideadb.model.TableMetadata;
 import com.vibe.ideadb.model.RowIdentity;
 import com.vibe.ideadb.model.RowDefaults;
+import com.vibe.ideadb.model.CellValueConverter;
 import com.vibe.ideadb.service.DataService;
 import com.vibe.ideadb.service.DatabaseConnectionManager;
 import com.vibe.ideadb.service.DdlService;
@@ -601,7 +602,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                                 continue; // Let database auto-generate
                             }
                         }
-                        filteredMap.put(colName, parseTypedValue(cm, val));
+                        filteredMap.put(colName, convertInput(cm, val));
                     }
                     inserts.add(Collections.unmodifiableMap(filteredMap));
                 }
@@ -616,7 +617,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     Object newVal = tableModel.getModifiedCells().get(coord);
                     String colName = tableModel.getRawColumnName(coord.col);
                     ColumnMetadata cm = tableMetadata.getColumn(colName);
-                    Object typedVal = parseTypedValue(cm, newVal);
+                    Object typedVal = convertInput(cm, newVal);
                     changedRows.computeIfAbsent(coord.row, row -> new LinkedHashMap<>()).put(colName, typedVal);
                 }
                 for (Map.Entry<Integer, Map<String, Object>> row : changedRows.entrySet()) {
@@ -748,222 +749,10 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         });
     }
 
-    public static String validateCellValue(ColumnMetadata cm, Object value) {
-        if (cm == null || value==RowDefaults.Value.USE_DEFAULT) return null;
-
-        // Auto-increment columns are handled by database
-        if (cm.isAutoIncrement()) return null;
-
-        if (value == null) {
-            if (!cm.isNullable()) {
-                return "Column '" + cm.getName() + "' cannot be NULL (" + cm.getFormattedType() + " required)";
-            }
-            return null;
-        }
-
-        String str = value.toString().trim();
-        String typeUpper = cm.getTypeName() != null ? cm.getTypeName().toUpperCase() : "";
-
-        // Empty string check
-        if (str.isEmpty()) {
-            boolean isText = isTextType(typeUpper);
-            if (!isText) {
-                if (!cm.isNullable()) {
-                    return "Column '" + cm.getName() + "' cannot be empty (" + cm.getFormattedType() + " required)";
-                }
-                return null;
-            }
-            return null;
-        }
-
-        // TINYINT
-        if (typeUpper.contains("TINYINT")) {
-            try {
-                int v = Integer.parseInt(str);
-                if (v < -128 || v > 255) {
-                    return "Expected TINYINT (-128 to 127 or 0 to 255). Got: '" + str + "'";
-                }
-            } catch (NumberFormatException e) {
-                return "Expected TINYINT integer. Got: '" + str + "'";
-            }
-            return null;
-        }
-
-        // SMALLINT
-        if (typeUpper.contains("SMALLINT")) {
-            try {
-                int v = Integer.parseInt(str);
-                if (v < -32768 || v > 65535) {
-                    return "Expected SMALLINT (-32,768 to 32,767). Got: '" + str + "'";
-                }
-            } catch (NumberFormatException e) {
-                return "Expected SMALLINT integer. Got: '" + str + "'";
-            }
-            return null;
-        }
-
-        // INTEGER / INT / MEDIUMINT
-        if (typeUpper.equals("INT") || typeUpper.equals("INTEGER") || typeUpper.contains("MEDIUMINT")
-                || cm.getDataType() == java.sql.Types.INTEGER) {
-            try {
-                Integer.parseInt(str);
-            } catch (NumberFormatException e) {
-                return "Expected INTEGER (e.g. 12345). Got: '" + str + "'";
-            }
-            return null;
-        }
-
-        // BIGINT
-        if (typeUpper.contains("BIGINT") || cm.getDataType() == java.sql.Types.BIGINT) {
-            try {
-                new BigInteger(str);
-            } catch (NumberFormatException e) {
-                return "Expected BIGINT (e.g. 1000000000). Got: '" + str + "'";
-            }
-            return null;
-        }
-
-        // FLOAT / REAL / DOUBLE
-        if (typeUpper.contains("FLOAT") || typeUpper.contains("REAL") || typeUpper.contains("DOUBLE")
-                || cm.getDataType() == java.sql.Types.FLOAT || cm.getDataType() == java.sql.Types.DOUBLE
-                || cm.getDataType() == java.sql.Types.REAL) {
-            try {
-                Double.parseDouble(str);
-            } catch (NumberFormatException e) {
-                return "Expected decimal/float (e.g. 12.34). Got: '" + str + "'";
-            }
-            return null;
-        }
-
-        // DECIMAL / NUMERIC
-        if (typeUpper.contains("DECIMAL") || typeUpper.contains("NUMERIC")
-                || cm.getDataType() == java.sql.Types.DECIMAL || cm.getDataType() == java.sql.Types.NUMERIC) {
-            try {
-                BigDecimal bd = new BigDecimal(str);
-                if (cm.getDecimalDigits() > 0 && bd.scale() > cm.getDecimalDigits()) {
-                    return "Decimal scale exceeds " + cm.getDecimalDigits() + " digits. Got: " + bd.scale();
-                }
-            } catch (NumberFormatException e) {
-                return "Expected DECIMAL number (e.g. 99.99). Got: '" + str + "'";
-            }
-            return null;
-        }
-
-        // BOOLEAN / BIT
-        if (typeUpper.contains("BOOL") || typeUpper.contains("BIT")
-                || cm.getDataType() == java.sql.Types.BOOLEAN || cm.getDataType() == java.sql.Types.BIT) {
-            String lower = str.toLowerCase();
-            if (!lower.equals("true") && !lower.equals("false") && !lower.equals("1") && !lower.equals("0")
-                    && !lower.equals("t") && !lower.equals("f") && !lower.equals("yes") && !lower.equals("no")) {
-                return "Expected BOOLEAN (true/false or 1/0). Got: '" + str + "'";
-            }
-            return null;
-        }
-
-        // DATE
-        if (typeUpper.equals("DATE") || cm.getDataType() == java.sql.Types.DATE) {
-            try {
-                LocalDate.parse(str);
-            } catch (Exception e) {
-                return "Expected DATE in format YYYY-MM-DD (e.g. 2026-10-04). Got: '" + str + "'";
-            }
-            return null;
-        }
-
-        // TIME
-        if (typeUpper.equals("TIME") || cm.getDataType() == java.sql.Types.TIME) {
-            try {
-                LocalTime.parse(str);
-            } catch (Exception e) {
-                return "Expected TIME in format HH:MM:SS (e.g. 14:30:00). Got: '" + str + "'";
-            }
-            return null;
-        }
-
-        // TIMESTAMP / DATETIME
-        if (typeUpper.contains("TIMESTAMP") || typeUpper.contains("DATETIME")
-                || cm.getDataType() == java.sql.Types.TIMESTAMP) {
-            boolean parsed = false;
-            String[] patterns = new String[]{
-                    "yyyy-MM-dd HH:mm:ss",
-                    "yyyy-MM-dd'T'HH:mm:ss",
-                    "yyyy-MM-dd HH:mm:ss.S",
-                    "yyyy-MM-dd HH:mm:ss.SS",
-                    "yyyy-MM-dd HH:mm:ss.SSS",
-                    "yyyy-MM-dd"
-            };
-            for (String p : patterns) {
-                try {
-                    DateTimeFormatter dtf = DateTimeFormatter.ofPattern(p);
-                    if (p.contains("HH")) {
-                        LocalDateTime.parse(str, dtf);
-                    } else {
-                        LocalDate.parse(str, dtf);
-                    }
-                    parsed = true;
-                    break;
-                } catch (Exception ignored) {
-                }
-            }
-            if (!parsed) {
-                return "Expected DATETIME/TIMESTAMP: YYYY-MM-DD HH:MM:SS. Got: '" + str + "'";
-            }
-            return null;
-        }
-
-        // String length check
-        if (cm.getColumnSize() > 0 && isTextType(typeUpper)) {
-            if (str.length() > cm.getColumnSize()) {
-                return "Length (" + str.length() + ") exceeds maximum limit of " + cm.getColumnSize() + " characters";
-            }
-        }
-
-        return null;
-    }
-
-    private static boolean isTextType(String typeUpper) {
-        return typeUpper.contains("CHAR") || typeUpper.contains("TEXT") || typeUpper.contains("CLOB") || typeUpper.contains("BLOB");
-    }
-
-    public static Object parseTypedValue(ColumnMetadata cm, Object val) {
-        if (val == null) return null;
-        if (cm == null || isTextType(cm.getTypeName()==null ? "" : cm.getTypeName().toUpperCase())) return val;
-        String str = val.toString().trim();
-
-        if (cm == null) return val;
-        String typeUpper = cm.getTypeName() != null ? cm.getTypeName().toUpperCase() : "";
-
-        try {
-            if (typeUpper.contains("TINYINT")) {
-                return Byte.parseByte(str);
-            }
-            if (typeUpper.contains("SMALLINT")) {
-                return Short.parseShort(str);
-            }
-            if (typeUpper.equals("INT") || typeUpper.equals("INTEGER") || typeUpper.contains("MEDIUMINT")
-                    || cm.getDataType() == java.sql.Types.INTEGER) {
-                return Integer.parseInt(str);
-            }
-            if (typeUpper.contains("BIGINT") || cm.getDataType() == java.sql.Types.BIGINT) {
-                return Long.parseLong(str);
-            }
-            if (typeUpper.contains("FLOAT") || typeUpper.contains("REAL") || cm.getDataType() == java.sql.Types.FLOAT || cm.getDataType() == java.sql.Types.REAL) {
-                return Float.parseFloat(str);
-            }
-            if (typeUpper.contains("DOUBLE") || cm.getDataType() == java.sql.Types.DOUBLE) {
-                return Double.parseDouble(str);
-            }
-            if (typeUpper.contains("DECIMAL") || typeUpper.contains("NUMERIC") || cm.getDataType() == java.sql.Types.DECIMAL || cm.getDataType() == java.sql.Types.NUMERIC) {
-                return new BigDecimal(str);
-            }
-            if (typeUpper.contains("BOOL") || typeUpper.contains("BIT") || cm.getDataType() == java.sql.Types.BOOLEAN || cm.getDataType() == java.sql.Types.BIT) {
-                String lower = str.toLowerCase();
-                return lower.equals("true") || lower.equals("1") || lower.equals("t") || lower.equals("yes");
-            }
-        } catch (Exception ignored) {
-        }
-        return val;
-    }
+    public static String validateCellValue(ColumnMetadata column,Object value) { return CellValueConverter.validate(DatabaseType.MYSQL,column,value); }
+    private String validateInput(ColumnMetadata column,Object value) { return CellValueConverter.validate(config.getType(),column,value); }
+    public static Object parseTypedValue(ColumnMetadata column,Object value) { return CellValueConverter.convert(DatabaseType.MYSQL,column,value); }
+    private Object convertInput(ColumnMetadata column,Object value) { return CellValueConverter.convert(config.getType(),column,value); }
 
     // Inner classes
     private static class CellCoord {
@@ -1027,7 +816,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 for (int col = 0; col < columns.size(); col++) {
                     if (!isRowNew(row) && !isCellModified(row,col)) continue;
                     if (!isRowNew(row) && !isCellModified(row,col)) continue;
-                    String error = validateCellValue(getColumnMeta(col), rows.get(row).get(col));
+                    String error = validateInput(getColumnMeta(col), rows.get(row).get(col));
                     if (error != null) validationErrors.put(new CellCoord(row,col),error);
                 }
             }
@@ -1068,7 +857,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 ColumnMetadata cm = (i < columnMetaList.size()) ? columnMetaList.get(i) : null;
                 Object value=RowDefaults.initialValue(cm);
                 blank.add(value); newRowMap.put(col,value);
-                String error=validateCellValue(cm,value);
+                String error=validateInput(cm,value);
                 if(error!=null) validationErrors.put(new CellCoord(newRowModelIndex,i),error);
             }
             rows.add(blank);
@@ -1127,7 +916,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             for (int row = 0; row < rows.size(); row++) {
                 for (int col = 0; col < columns.size(); col++) {
                     if (!isRowNew(row) && !isCellModified(row,col)) continue;
-                    String error = validateCellValue(getColumnMeta(col), rows.get(row).get(col));
+                    String error = validateInput(getColumnMeta(col), rows.get(row).get(col));
                     if (error != null) validationErrors.put(new CellCoord(row, col), error);
                 }
             }
@@ -1210,7 +999,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 CellCoord coord = new CellCoord(row, col);
 
                 // Type validation
-                String validationError = validateCellValue(cm, processedVal);
+                String validationError = validateInput(cm, processedVal);
                 if (validationError != null) {
                     validationErrors.put(coord, validationError);
                 } else {

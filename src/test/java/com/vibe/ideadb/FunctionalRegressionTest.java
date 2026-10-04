@@ -96,6 +96,7 @@ public class FunctionalRegressionTest {
             queryExecution(config, schema);
             metadata(config, schema);
             quotedIdentifiers(config, schema);
+            valueConversion(config, schema);
             defaultRows(config, schema);
             mutations(config, schema);
             columnAlterations(config, schema);
@@ -191,6 +192,33 @@ public class FunctionalRegressionTest {
             check(data.countRows(c,config,schema,renamed,null)==0,"Quoted identifiers must support rename/delete");
             ddl.alterTableDropColumn(c,config,schema,renamed,"extra value");
             ddl.dropTable(c,config,schema,renamed);
+        }
+    }
+    private static void valueConversion(ConnectionConfig config,String schema) throws Exception {
+        try(Connection c=manager.openConnection(config)) {
+            String table=DdlService.formatTable(config,schema,"VALUE_INPUT");
+            if(config.getType()==DatabaseType.MYSQL) sql(c,"CREATE TABLE " + table + " (ID INT PRIMARY KEY, U32 INT UNSIGNED, U64 BIGINT UNSIGNED, CLOCK TIME(6), MOMENT DATETIME(6), AMOUNT DECIMAL(5,2), SIGNED_BYTE TINYINT)");
+            else sql(c,"CREATE TABLE " + table + " (ID INT PRIMARY KEY, U32 BIGINT, U64 DECIMAL(20,0), CLOCK TIME(6), MOMENT TIMESTAMP(6), AMOUNT DECIMAL(5,2), SIGNED_BYTE TINYINT)");
+            var columns=MetadataService.getInstance().getColumns(c,config,schema,"VALUE_INPUT");
+            var raw=Map.of("ID","1","U32","4294967295","U64","18446744073709551615","CLOCK",config.getType()==DatabaseType.MYSQL ? "-12:34:56.123456" : "12:34:56.123456","MOMENT","2026-10-04 12:34:56.123456","AMOUNT","123.4500","SIGNED_BYTE","127");
+            var converted=new LinkedHashMap<String,Object>();
+            for(ColumnMetadata column:columns) {
+                String input=raw.get(column.getName());
+                check(CellValueConverter.validate(config.getType(),column,input)==null,"Valid engine input rejected: " + column.getName() + " " + column.getTypeName() + " scale=" + column.getDecimalDigits() + ": " + CellValueConverter.validate(config.getType(),column,input));
+                converted.put(column.getName(),CellValueConverter.convert(config.getType(),column,input));
+            }
+            data.insertRow(c,config,schema,"VALUE_INPUT",converted);
+            check(((Number)scalar(c,"SELECT U32 FROM " + table)).longValue()==4294967295L,"Unsigned INT boundary must bind without overflow");
+            check(scalar(c,"SELECT U64 FROM " + table).toString().equals("18446744073709551615"),"Unsigned BIGINT boundary must bind without overflow");
+            check(scalar(c,"SELECT CAST(CLOCK AS CHAR(30)) FROM " + table).toString().trim().equals(raw.get("CLOCK")),"TIME duration and microseconds must survive binding");
+            String moment=config.getType()==DatabaseType.MYSQL ? "SELECT DATE_FORMAT(MOMENT,'%Y-%m-%d %H:%i:%s.%f') FROM " + table : "SELECT CAST(MOMENT AS VARCHAR(50)) FROM " + table;
+            check(scalar(c,moment).toString().equals("2026-10-04 12:34:56.123456"),"Microsecond timestamp must survive binding");
+            ColumnMetadata integer=columns.stream().filter(col -> col.getName().equals("SIGNED_BYTE")).findFirst().orElseThrow();
+            check(CellValueConverter.validate(config.getType(),integer,"128")!=null,"Signed integer overflow must be rejected");
+            ColumnMetadata amount=columns.stream().filter(col -> col.getName().equals("AMOUNT")).findFirst().orElseThrow();
+            check(CellValueConverter.validate(config.getType(),amount,"1000.00")!=null && CellValueConverter.validate(config.getType(),amount,"1.234")!=null,"Decimal precision and scale must be enforced");
+            check(CellValueConverter.validate(config.getType(),new ColumnMetadata("F","DOUBLE",Types.DOUBLE,64,0,true,false,false,null),"NaN")!=null,"Non-finite numeric input must be rejected");
+            try { CellValueConverter.convert(config.getType(),integer,"bad"); throw new AssertionError("Invalid conversion returned the original text"); } catch(IllegalArgumentException expected) { check(true,"Conversion failure must be explicit"); }
         }
     }
     private static void defaultRows(ConnectionConfig config,String schema) throws Exception {

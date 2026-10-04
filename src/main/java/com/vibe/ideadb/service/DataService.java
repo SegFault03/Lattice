@@ -90,9 +90,9 @@ public class DataService {
         }
 
         try (PreparedStatement ps = conn.prepareStatement(sb.toString())) {
-            for (int i = 0; i < columns.size(); i++) ps.setObject(i + 1, changes.get(columns.get(i)));
+            for (int i = 0; i < columns.size(); i++) bind(ps,i + 1, changes.get(columns.get(i)));
             for (int i = 0; i < pkKeys.size(); i++) {
-                ps.setObject(i + columns.size() + 1, pkVals.get(pkKeys.get(i)));
+                bind(ps,i + columns.size() + 1, pkVals.get(pkKeys.get(i)));
             }
             requireOneRow(ps.executeUpdate());
         }
@@ -125,7 +125,7 @@ public class DataService {
 
         try (PreparedStatement ps = conn.prepareStatement(sb.toString())) {
             for (int i = 0; i < cols.size(); i++) {
-                ps.setObject(i + 1, values.get(cols.get(i)));
+                bind(ps,i + 1, values.get(cols.get(i)));
             }
             ps.executeUpdate();
         }
@@ -148,10 +148,15 @@ public class DataService {
 
         try (PreparedStatement ps = conn.prepareStatement(sb.toString())) {
             for (int i = 0; i < pkKeys.size(); i++) {
-                ps.setObject(i + 1, pkVals.get(pkKeys.get(i)));
+                bind(ps,i + 1, pkVals.get(pkKeys.get(i)));
             }
             requireOneRow(ps.executeUpdate());
         }
+    }
+
+    private static void bind(PreparedStatement statement,int index,Object value) throws SQLException {
+        // Connector/J maps BigInteger through signed BIGINT unless it is bound as DECIMAL.
+        statement.setObject(index,value instanceof java.math.BigInteger integer ? new java.math.BigDecimal(integer) : value);
     }
 
     private static void requireKeys(Map<String, Object> keys) throws SQLException {
