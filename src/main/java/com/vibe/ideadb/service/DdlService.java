@@ -98,14 +98,47 @@ public class DdlService {
             appendModifiedMysqlColumn(conn, config, dbName, tableName, sb, col);
             sb.append(";");
         } else {
-            sb.append("ALTER TABLE ").append(formatTable(config, dbName, tableName))
-                    .append(" ALTER COLUMN ").append(quoteIdentifier(config,col.getName())).append(" SET DATA TYPE ").append(col.getType());
-            if (col.getSize() > 0 && needsSize(col.getType())) {
-                sb.append("(").append(col.getSize()).append(")");
-            }
-            sb.append(";");
+            modifyHsqlColumn(conn,config,dbName,tableName,col);
+            return;
         }
         executeSql(conn, sb.toString());
+    }
+
+    private void modifyHsqlColumn(Connection conn, ConnectionConfig config, String db, String table, ColumnDefinition requested) throws Exception {
+        ColumnMetadata original=MetadataService.getInstance().getColumns(conn,config,db,table).stream().filter(c -> c.getName().equals(requested.getName())).findFirst().orElseThrow();
+        String target=formatTable(config,db,table), column=quoteIdentifier(config,requested.getName());
+        if (!requested.isNullable()) {
+            try(Statement statement=conn.createStatement(); ResultSet result=statement.executeQuery("SELECT 1 FROM " + target + " WHERE " + column + " IS NULL LIMIT 1")) {
+                if(result.next()) throw new java.sql.SQLException("Cannot set NOT NULL while existing values are NULL");
+            }
+        }
+        if (requested.isNullable() && original.isPrimaryKey()) throw new java.sql.SQLException("A primary-key column cannot allow NULL");
+        String defaultValue=requested.getDefaultValue().isBlank() ? null : formatDefault(DatabaseType.HSQLDB,requested);
+        if (original.isAutoIncrement() && defaultValue!=null) throw new java.sql.SQLException("An identity column cannot have a default expression");
+        String type=requested.getType();
+        if (requested.getSize()>0 && needsSize(type) && !type.contains("(")) type += "(" + requested.getSize() + ")";
+        if ((type.equalsIgnoreCase("DECIMAL") || type.equalsIgnoreCase("NUMERIC")) && requested.getSize()>0) type += "(" + requested.getSize() + "," + (requested.getDecimalDigits()<0 ? original.getDecimalDigits() : requested.getDecimalDigits()) + ")";
+        // Validate the target type and default without touching the persistent table.
+        String validation="SESSION." + quoteIdentifier(config,"LATTICE_VALIDATE_" + java.util.UUID.randomUUID().toString().replace("-",""));
+        executeSql(conn,"DECLARE LOCAL TEMPORARY TABLE " + validation + " (VALUE " + type + (defaultValue==null ? "" : " DEFAULT " + defaultValue) + ") ON COMMIT PRESERVE ROWS");
+        int expectedType;
+        try {
+            if(defaultValue!=null) executeSql(conn,"INSERT INTO " + validation + " DEFAULT VALUES");
+            try(Statement statement=conn.createStatement(); ResultSet result=statement.executeQuery("SELECT * FROM " + validation)) { expectedType=result.getMetaData().getColumnType(1); }
+        }
+        finally { executeSql(conn,"DROP TABLE " + validation); }
+        String prefix="ALTER TABLE " + target + " ALTER COLUMN " + column;
+        try {
+            executeSql(conn,prefix + " SET DATA TYPE " + type);
+            if(!original.isAutoIncrement()) executeSql(conn,prefix + (defaultValue==null ? " DROP DEFAULT" : " SET DEFAULT " + defaultValue));
+            if(requested.isNullable()!=original.isNullable()) executeSql(conn,prefix + (requested.isNullable() ? " SET NULL" : " SET NOT NULL"));
+            ColumnMetadata actual=MetadataService.getInstance().getColumns(conn,config,db,table).stream().filter(c -> c.getName().equals(requested.getName())).findFirst().orElseThrow();
+            boolean defaultMatches = original.isAutoIncrement() || java.util.Objects.equals(defaultValue,actual.getDefaultValue())
+                    || (defaultValue!=null && !defaultValue.startsWith("'") && defaultValue.equalsIgnoreCase(actual.getDefaultValue()));
+            if(actual.getDataType()!=expectedType || actual.isNullable()!=requested.isNullable() || !defaultMatches) throw new java.sql.SQLException("Requested column definition was not applied");
+        } catch(Exception failure) {
+            throw new java.sql.SQLException("Column alteration failed: " + failure.getMessage() + ". HSQLDB uses separate DDL statements; reload metadata before retrying.",failure);
+        }
     }
 
     private void appendModifiedMysqlColumn(Connection conn, ConnectionConfig config, String db, String table,
