@@ -4,7 +4,9 @@ plugins {
 }
 
 group = "com.vibe.lattice"
-version = "1.0.0"
+val pluginReleaseVersion = providers.gradleProperty("releaseVersion").orElse(providers.gradleProperty("pluginVersion")).get()
+require(pluginReleaseVersion.matches(Regex("(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)"))) { "Version must have the form 1.2.3: $pluginReleaseVersion" }
+version = pluginReleaseVersion
 
 repositories {
     mavenCentral()
@@ -18,6 +20,7 @@ dependencies {
         val localIde = providers.gradleProperty("lattice.ide.home").orNull
         if (localIde == null) intellijIdeaCommunity("2025.1") else local(localIde)
         bundledPlugins()
+        pluginVerifier("1.410")
     }
 
     implementation("org.hsqldb:hsqldb:2.7.3")
@@ -55,8 +58,16 @@ tasks.register<Test>("integrationTest") {
 
 // Keep Gradle and the standalone packager on the same IntelliJ 2025 / Java 21 baseline.
 tasks.withType<JavaCompile>().configureEach { options.release.set(21) }
+tasks.processResources {
+    from("LICENSE", "THIRD_PARTY_NOTICES.md")
+    from("licenses") { into("licenses") }
+}
 intellijPlatform {
-    pluginConfiguration { ideaVersion { sinceBuild.set("251") } }
+    pluginConfiguration {
+        version.set(project.version.toString())
+        ideaVersion { sinceBuild.set("251") }
+        providers.gradleProperty("releaseNotesFile").orNull?.let { changeNotes.set(file(it).readText()) }
+    }
     pluginVerification {
         ides {
             ide(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.IntellijIdeaCommunity, "2025.1")

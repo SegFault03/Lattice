@@ -1,0 +1,29 @@
+name: Bug report
+description: Report a reproducible Lattice problem
+title: '[Bug] '
+body:
+  - type: textarea
+    id: environment
+    attributes:
+      label: Versions and environment
+      description: Lattice, IntelliJ edition/build, OS/runtime, database and JDBC driver versions/source.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Steps and a minimal synthetic schema/query. Redact credentials, private hosts and data.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized logs or screenshots
+      description: Remove passwords, tokens, full production URLs and private data before sharing.

@@ -2,7 +2,7 @@
     <id>com.vibe.lattice</id>
     <name>Lattice</name>
     <version>1.0.0</version>
-    <vendor email="support@vibecoding.com" url="https://github.com/vibe-coding">Vibe Coding</vendor>
+    <vendor>Lattice contributors</vendor>
 
     <description><![CDATA[
     <h3>Lattice — In-App Database Manager for IntelliJ IDEA</h3>

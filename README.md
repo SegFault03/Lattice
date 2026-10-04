@@ -1,228 +1,146 @@
-# Lattice 💠
+# Lattice
 
-**Lattice** is a fast, lightweight, and unrestricted in-app database management plugin for **IntelliJ IDEA** (Community and Ultimate editions). Connect to, explore, query, design, and modify databases directly inside your IDE without requiring paid Ultimate licenses or external database clients.
+<img src="src/main/resources/icons/lattice_large.svg" alt="Lattice logo" width="80" height="80">
 
-> ⚡ **Entirely vibe-coded with Google Gemini 3.8 Flash.**
+Lattice is a database management plugin for IntelliJ IDEA. Connect to MySQL or HSQLDB, browse schemas, run SQL, edit table data, design tables and export results from your IDE.
 
-<p align="center">
-  <img src="src/main/resources/icons/lattice_large.svg" alt="Lattice Logo" width="96" height="96"/>
-</p>
+Built with help from **Gemini 3.8**, **GPT-6 Luna** and **GPT-6.1 Sol**.
 
----
+## Features
 
-## 🌟 Key Features
+- Database explorer for schemas, tables, views, columns and primary keys.
+- SQL console with results, history, row limits, timeouts and cancellation.
+- Editable table grids with pagination, filtering, batch saves, explicit NULL/default values and draft recovery.
+- Create/alter table dialogs and database/schema maintenance.
+- CSV, JSON, SQL INSERT and native CREATE TABLE exports.
+- Per-connection JDBC driver selection: bundled release, download from Maven Central, or a local JAR.
+- Server and JDBC driver version information through **Test Connection**.
+- Passwords and custom JDBC URLs stored through IntelliJ PasswordSafe.
 
-### 1. Multi-Engine Support
-- **MySQL (5.5+, with a compatible JDBC driver)**:
-  - Connect via Standard Host / Port / User / Password / Database
-  - Custom JDBC connection strings and SSL parameters
-  - Bundled with `mysql-connector-j-9.0.0.jar`
-- **HSQLDB (HyperSQL)**:
-  - **In-Memory (`mem:`)**: Ultra-fast zero-configuration ephemeral database for testing and prototyping
-  - **Embedded File (`file:`)**: Local persistent database file storage with file browser picker
-  - **Remote Server (`hsql://`)**: Network connection to standalone HSQLDB instances
-  - Bundled with `hsqldb-2.7.3.jar`
-- **Driver selection**: use bundled drivers, choose/download a release from Maven Central, or browse to a local JDBC JAR. HSQLDB Java 8 variants are identified by `-jdk8`. Driver choices are saved per connection.
-- **Server version detection**: Test Connection reports the actual database and JDBC driver versions after connecting.
+## Requirements and compatibility
 
-The plugin targets **IntelliJ IDEA 2025.1 and later**, with Java 21 bytecode. Java 8 compatibility applies to database servers and JDBC drivers, not the IDE plugin runtime. See [the tested compatibility matrix](review/compatibility-2026-10-04.md) for exact versions and limitations.
+**IntelliJ IDEA 2025.1 or later**, Community or Ultimate/unified editions, running the IDE's Java 21+ runtime. The plugin requires build 251 or later.
 
----
+| Database | Compatibility exercised |
+|---|---|
+| MySQL | 5.5.62, 5.6.51, 5.7.44 and 8.4.2 |
+| HSQLDB | 2.2.9 through 2.7.4; file, memory and server modes |
+| JDBC / Java 8 | Representative Connector/J 5.1, 6.0, 8.0, 8.4 and 9.0; matching HSQLDB releases and Java 8 classifiers |
 
-### 2. Database Explorer (Tool Window)
-- **Docked Tool Window**: Available on the right stripe labeled **Lattice** with a custom vector SVG icon designed for JetBrains New UI.
-- **Hierarchical Tree View**:
-  - **Data Sources**: Connected status indicators with distinct visual badges.
-  - **Catalogs & Databases**: Schemas and database namespaces.
-  - **Tables & Views**: Real-time table itemization.
-  - **Columns**: Detailed column type information, nullability tags, auto-increment badges, and **golden key icons for Primary Keys (`[PK]`)**.
-- **Context Menus**: Right-click actions on data sources, databases, and tables (Open Console, View Data, Create Table, Alter Table, Truncate Table, Drop Table, Export).
+Choose a JDBC driver compatible with the database server. For HSQLDB, match the server or database file format; Java 8 releases may use the `-jdk8` classifier. Java 8 support applies to drivers/database servers, while the IntelliJ plugin uses Java 21.
 
----
+The [compatibility report](review/compatibility-2026-10-04.md) records exact SDK builds and the 22 tested server/driver combinations. Every historical patch and arbitrary driver/server pairing has not been tested. IDE UI interaction and dynamic unload testing remain pending.
 
-### 3. Interactive Data Grid & Inline Editor
-- **Table Data Viewer**: Double-click any table in the explorer or open it in full editor tabs.
-- **Inline Cell Editing & Highlight**: Double-click cells to modify values directly in-place. Modified cells are highlighted in soft blue so uncommitted edits are instantly visible.
-- **Type Checking & Protection**:
-  - Early type checking prevents invalid data entry.
-  - Informative error indicators and commit safety checks.
-  - Automatic detection and editing protection for auto-generated / auto-increment primary keys.
-- **Periodic Auto-Refresh**: Configurable timer intervals (Off, 10s, 15s, 20s, 30s, 60s) for live monitoring of high-throughput tables.
-- **Batch Commits & Revert**: Review and commit all pending updates and insertions in one click or discard edits cleanly.
-- **Add & Delete Rows**: Add blank records or delete selected rows using primary key resolution.
-- **WHERE Clause Filter Bar**: Filter live table records using custom SQL conditions (e.g. `price > 100 AND status = 'ACTIVE'`).
-- **Pagination**: Configurable page sizes (50, 100, 250, 500, 1000) with compact page controls.
-- **Export Data**: Export table contents to **CSV**, **JSON**, or **SQL INSERT** scripts.
+## Install
 
----
+1. Download `Lattice-<version>.zip` from this repository's GitHub Releases.
+2. In IntelliJ, open **Settings → Plugins → gear menu → Install Plugin from Disk**.
+3. Select the ZIP and restart the IDE if prompted.
+4. Open the **Lattice** tool window and add a data source.
 
-### 4. Interactive SQL Console
-- **Scratchpad Editor**: Code editor with monospaced font, line numbers, and indentation.
-- **Shortcut Execution**: Press `Ctrl+Enter` (or `Cmd+Enter` on macOS) or click **Run**.
-- **Asynchronous Execution**: Queries execute on background threads without freezing the IDE.
-- **Dual Results Panel**:
-  - **Results Tab**: Interactive tabular grid for `SELECT` queries with row counts.
-  - **Messages Tab**: Execution time (ms), affected rows count for `INSERT`/`UPDATE`/`DELETE`, and formatted SQL errors.
-- **Query History**: Automatically preserves recent queries for quick recall.
-- **SQL Templates**: Quick snippet insertions for `SELECT * LIMIT 50`, `COUNT(*)`, `CREATE TABLE`, etc.
+This release setup publishes to GitHub Releases. JetBrains Marketplace publication is a separate step.
 
----
+## Connect
 
-### 5. Visual DDL Wizards (Create & Modify)
-- **Create Database / Schema**: Visual dialog to create new database namespaces.
-- **Visual Table Designer (`Create Table...`)**:
-  - Dynamic column editor: specify Column Name, Type, Size, Nullable, Primary Key, Auto Increment, and Default Value.
-  - Add, remove, and reorder columns (`Move Up`, `Move Down`).
-  - **Live DDL Preview**: Dynamically updates the exact `CREATE TABLE` SQL dialect in real time.
-- **Modify Table (`Alter Table...`)**:
-  - **Single-row scrollable tab interface** with optimized default dialog width.
-  - Add Column with type and constraint specifications.
-  - Modify column data types, sizes, nullability, and default values.
-  - Rename columns seamlessly across MySQL and HSQLDB.
-  - Drop columns with safe confirmation prompts.
-  - Rename table in place.
-- **Table Maintenance**: Quick actions to **Truncate Table** or **Drop Table** with confirmation dialogs.
+Choose MySQL or HSQLDB, then enter the server details or a custom JDBC URL.
 
----
+The **JDBC driver** selector offers:
 
-## 📁 Repository Structure
+- **Bundled**: MySQL Connector/J 9.0.0 or HSQLDB 2.7.3.
+- **Download**: choose or enter a release, optionally load **More versions**, then click **Download**.
+- **Local JAR**: browse to an existing JDBC driver.
 
-```
-Lattice/
-├── src/
-│   ├── main/
-│   │   ├── java/com/vibe/ideadb/
-│   │   │   ├── dialog/              # Connection, CreateTable, AlterTable, CreateDatabase dialogs
-│   │   │   │   ├── AlterTableDialog.java
-│   │   │   │   ├── ConnectionDialog.java
-│   │   │   │   ├── CreateDatabaseDialog.java
-│   │   │   │   └── CreateTableDialog.java
-│   │   │   ├── editor/              # Virtual files, editor providers, welcome panel
-│   │   │   │   ├── DatabaseEditorManager.java
-│   │   │   │   ├── DatabaseFileEditor.java
-│   │   │   │   ├── DatabaseFileEditorProvider.java
-│   │   │   │   ├── DatabaseFileTypes.java
-│   │   │   │   ├── DatabaseVirtualFile.java
-│   │   │   │   ├── SqlConsoleVirtualFile.java
-│   │   │   │   ├── TableDataVirtualFile.java
-│   │   │   │   ├── WelcomePanel.java
-│   │   │   │   └── WelcomeVirtualFile.java
-│   │   │   ├── model/               # Data structures, configs, metadata, query results
-│   │   │   │   ├── ColumnDefinition.java
-│   │   │   │   ├── ColumnMetadata.java
-│   │   │   │   ├── ConnectionConfig.java
-│   │   │   │   ├── ConnectionTestResult.java
-│   │   │   │   ├── DatabaseType.java
-│   │   │   │   ├── HsqlMode.java
-│   │   │   │   ├── QueryResult.java
-│   │   │   │   └── TableMetadata.java
-│   │   │   ├── service/             # JDBC drivers, connections, metadata, DDL & CRUD operations
-│   │   │   │   ├── DataService.java
-│   │   │   │   ├── DatabaseConnectionManager.java
-│   │   │   │   ├── DdlService.java
-│   │   │   │   ├── DriverRegistry.java
-│   │   │   │   ├── DriverShim.java
-│   │   │   │   ├── ExportService.java
-│   │   │   │   └── MetadataService.java
-│   │   │   ├── state/               # Persistent state component (saves connections across IDE sessions)
-│   │   │   │   └── DatabaseSettingsState.java
-│   │   │   └── ui/                  # ToolWindow factory, tree explorer, data grid, SQL console
-│   │   │       ├── DatabaseMainPanel.java
-│   │   │       ├── DatabaseToolWindowFactory.java
-│   │   │       ├── DatabaseTreeCellRenderer.java
-│   │   │       ├── Icons.java
-│   │   │       ├── OpenDatabaseManagerAction.java
-│   │   │       ├── SqlQueryConsolePanel.java
-│   │   │       ├── TableDataEditorPanel.java
-│   │   │       └── TreeNodeData.java
-│   │   └── resources/
-│   │       ├── META-INF/
-│   │       │   ├── plugin.xml             # IntelliJ plugin descriptor & extension points
-│   │       │   ├── pluginIcon.svg         # 40x40 vector Marketplace & Plugins dialog icon
-│   │       │   └── pluginIcon_dark.svg    # 40x40 vector Dark theme Marketplace icon
-│   │       └── icons/                     # Vector SVG icons
-│   │           ├── lattice.svg            # 16x16 side-panel tool window icon (Light)
-│   │           ├── lattice_dark.svg       # 16x16 side-panel tool window icon (Dark)
-│   │           ├── lattice_large.svg      # 48x48 Welcome panel icon (Light)
-│   │           ├── lattice_large_dark.svg # 48x48 Welcome panel icon (Dark)
-│   │           ├── column.svg
-│   │           ├── console.svg
-│   │           ├── database.svg
-│   │           ├── key.svg
-│   │           └── table.svg
-│   └── test/java/com/vibe/ideadb/
-│       └── PluginIntegrationTest.java       # Comprehensive integration test suite
-├── lib/                                   # Bundled JDBC drivers
-│   ├── hsqldb-2.7.3.jar
-│   └── mysql-connector-j-9.0.0.jar
-├── build-plugin.ps1                       # Windows PowerShell compiler & packager (generates .zip)
-├── build-plugin.sh                        # Linux & macOS Bash compiler & packager (generates .zip)
-├── test-plugin.sh                         # Linux & macOS Bash integration test runner
-├── build.gradle.kts                       # Standard Gradle IntelliJ Platform configuration
-├── settings.gradle.kts
-└── .gitignore
-```
+Downloads are explicit and checksum-verified. Driver artifacts are cached in the IDE system directory under `lattice/jdbc`. **Test Connection** shows the actual server product/version after authentication, plus the selected driver's version. A failed authentication/protocol negotiation may prevent version detection.
 
----
+Generated MySQL URLs use UTC for both the driver and server session. Custom URLs retain your options.
 
-## 🚀 How to Build and Package
+## Build from source
 
-Running either build script compiles the Java sources, bundles JDBC drivers, and generates the distributable archive `build/Lattice-1.0.0.zip` ready for installation.
+Use a **JDK 21** and the committed Gradle wrapper:
 
-For a distribution supporting 2025 IDEs, compile against a 2025.1 SDK. The Windows script accepts `-IdeaHome <SDK directory>`; the Bash script accepts `IDEA_HOME`. Both emit Java 21 bytecode and keep their intermediate outputs in `build/standalone/`.
-
-### Windows (PowerShell)
-```powershell
-powershell.exe -ExecutionPolicy Bypass -File .\build-plugin.ps1
-```
-
-### Linux / macOS (Bash)
 ```bash
-chmod +x ./build-plugin.sh
-./build-plugin.sh
+./gradlew test buildPlugin
 ```
 
-The script outputs:
-```
-build/Lattice-1.0.0.zip
-```
+Windows:
 
----
-
-## 🧪 Running Integration Tests
-
-The live regression suites expect the supplied local MySQL and HSQLDB fixtures to be running. Temporary test schemas are removed after each suite.
-
-### Windows
 ```powershell
-.\test-functional.ps1 -IdeaHome 'C:\path\to\idea-2025.1'
+.\gradlew.bat test buildPlugin
 ```
 
-### Gradle (Java 21)
+Gradle downloads the configured IntelliJ 2025.1 SDK and creates `build/distributions/Lattice-<version>.zip`. The default version is defined in `gradle.properties`. Use `-PreleaseVersion=1.0.1` to override it.
+
+To use a local SDK:
+
 ```powershell
-.\gradlew.bat test integrationTest buildPlugin '-Plattice.ide.home=C:/path/to/idea-2025.1'
+$env:JAVA_HOME = '/path/to/workspace/intellij-extension-test-binaries/ides/2025.1/jbr'
+.\gradlew.bat '-Plattice.ide.home=/path/to/workspace/intellij-extension-test-binaries/ides/2025.1' test buildPlugin
 ```
 
-`test` runs pure regressions; `integrationTest` opts into live databases. Omitting `lattice.ide.home` downloads the configured 2025.1 SDK. Gradle packages into `build/distributions/`.
+Standalone packagers are also available. Compile against a **2025.1 SDK** for the release baseline:
 
-For the Java 8 driver/server matrix and Plugin Verifier commands, see [compatibility validation](review/compatibility-2026-10-04.md).
+```powershell
+.\build-plugin.ps1 -IdeaHome 'C:/path/to/idea-2025.1'
+# Optional: -Version 1.0.1 -TestBinaries 'C:/path/to/shared-test-binaries'
+```
 
-### Linux / macOS
 ```bash
-chmod +x ./test-plugin.sh
-./test-plugin.sh
+JAVA_HOME=/path/to/jdk-21 IDEA_HOME=/path/to/idea-2025.1 ./build-plugin.sh
+# Optional: VERSION=1.0.1
 ```
 
----
+Standalone scripts create `build/Lattice-<version>.zip`. License notices are included by both build paths. See [release instructions](RELEASING.md) for distributing the corresponding MySQL source asset.
 
-## 📦 Installing into IntelliJ IDEA
-1. Open IntelliJ IDEA.
-2. Navigate to **Settings** (or **Preferences**) > **Plugins**.
-3. Click the gear icon ⚙️ > **Install Plugin from Disk...**.
-4. Select `build/Lattice-1.0.0.zip`.
-5. Restart IntelliJ IDEA. The **Lattice** tool window will appear on the right stripe!
+## Test assets and functional tests
 
----
+Reusable SDKs, database servers, JDBC versions and test tools are kept **outside the repository**, by default in the sibling folder:
 
-## 📄 License
-MIT License. Free and open source for everyone.
+```text
+/path/to/workspace\intellij-extension-test-binaries
+```
+
+That folder has its own inventory/startup README. Set `LATTICE_TEST_BINARIES` or pass `-TestBinaries` to use another location. `IDEA_HOME` / `-IdeaHome` override the SDK. Production driver JARs in `lib/` are deliberately retained for plugin distribution.
+
+The live suites require test-only fixtures:
+
+| Engine | Host/port | Database | User | Password |
+|---|---|---|---|---|
+| MySQL | localhost:3306 | shop_db | root | empty |
+| HSQLDB | localhost:9001 | testdb | SA | empty |
+
+These credentials are only for isolated local/CI fixtures. The suites create and remove temporary schemas.
+
+```powershell
+.\test-functional.ps1
+.\verify-idea-compatibility.ps1
+.\test-driver-compatibility.ps1 -Java8Home $env:JAVA8_HOME -Download
+```
+
+Gradle splits pure and live tests:
+
+```bash
+./gradlew test
+./gradlew integrationTest
+```
+
+Linux/macOS can run `IDEA_HOME=/path/to/idea ./test-plugin.sh` with the same fixtures. Release tooling uses Python 3.11+ (3.12 recommended):
+
+```bash
+python3 -m unittest discover -s scripts/tests -v
+```
+
+Temporary compiled classes, reports and logs go into ignored `build/`. [Contributing](CONTRIBUTING.md) covers fixtures, validation and limitations.
+
+## Releases and support
+
+Pushing a stable tag such as `v1.0.1` triggers [the release workflow](.github/workflows/release.yml). It builds and tests with fresh MySQL/HSQLDB fixtures, checks the exact ZIP against three IntelliJ 2025 releases, and publishes it with patch notes, commit history, checksums and corresponding MySQL sources. **Run workflow** performs a dry run without publishing.
+
+See [CHANGELOG](CHANGELOG.md), [RELEASING](RELEASING.md), [issue reporting](ISSUE.md) and [security reporting](SECURITY.md).
+
+## Known limits
+
+HSQLDB multi-statement DDL is not atomic. Stable pagination for a table without a primary key requires an explicit unique order. Partial CREATE reconstruction is labeled when native SCRIPT is unavailable. A connection failure during commit can leave an uncertain server outcome; verify persisted state before retrying.
+
+## License
+
+Lattice source is [MIT licensed](LICENSE). Bundled libraries retain their licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).

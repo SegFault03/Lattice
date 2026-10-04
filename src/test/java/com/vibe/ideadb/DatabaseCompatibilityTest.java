@@ -93,8 +93,10 @@ public final class DatabaseCompatibilityTest {
             for(String version:args.length > 3 ? List.of(args[3]) : HSQL) {
                 Path jar=DriverCatalog.downloadedJar(DatabaseType.HSQLDB,version);
                 int selectedPort=port++;
-                Process server=new ProcessBuilder(java8.toString(),"-cp",jar.toString(),"org.hsqldb.server.Server","--database.0","mem:compat","--dbname.0","compat","--port",String.valueOf(selectedPort),"--silent","true")
-                        .redirectErrorStream(true).redirectOutput(jar.getParent().resolve("server-"+version+".log").toFile()).start();
+                Path logs = Path.of(System.getProperty("lattice.test.output", "build/compatibility"));
+                Files.createDirectories(logs);
+                Process server=new ProcessBuilder(java8.toString(),"-cp",jar.toString(),"org.hsqldb.server.Server","--address","127.0.0.1","--database.0","mem:compat","--dbname.0","compat","--port",String.valueOf(selectedPort),"--silent","true")
+                        .redirectErrorStream(true).redirectOutput(logs.resolve("server-"+version+".log").toFile()).start();
                 try {
                     boolean ready=false;
                     for(int attempt=0;attempt<80;attempt++) {

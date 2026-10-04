@@ -28,3 +28,13 @@ Thumbs.db
 
 # IntelliJ Platform Gradle cache
 .intellijPlatform/
+
+# Local credentials, test data and Python outputs
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+__pycache__/
+*.pyc
+test-binaries/
