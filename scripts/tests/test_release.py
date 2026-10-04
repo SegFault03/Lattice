@@ -11,11 +11,15 @@ spec.loader.exec_module(release)
 
 class ReleaseTests(unittest.TestCase):
     def test_strict_versions(self):
-        for value in ("1.0.0", "10.2.34"):
+        for value in ("1.0.0", "10.2.34", "0.0.1-alpha", "1.0.0-rc.1", "1.0.0-alpha-beta"):
             self.assertEqual(value, release.validate_version(value))
-        for value in ("v1.0.0", "01.0.0", "1.0", "1.0.0\n", "1.0.0;echo injected"):
+        for value in ("v1.0.0", "01.0.0", "1.0", "1.0.0\n", "1.0.0;echo injected", "1.0.0-", "1.0.0-alpha..1", "1.0.0-01", "1.0.0-alpha.01", "1.0.0+metadata"):
             with self.assertRaises(ValueError):
                 release.validate_version(value)
+
+    def test_prerelease_precedence(self):
+        versions = ["0.0.1-alpha", "0.0.1-alpha.1", "0.0.1-alpha.beta", "0.0.1-beta", "0.0.1-beta.2", "0.0.1-beta.11", "0.0.1-rc.1", "0.0.1", "0.0.2-alpha"]
+        self.assertEqual(versions, sorted(reversed(versions), key=release.version_key))
 
     def test_patch_notes_choose_exact_release(self):
         changelog = "## [Unreleased]\n- Future fix\n## [1.0.0]\n- Released fix\n## [0.9.0]\n- Old fix\n"
@@ -50,6 +54,9 @@ class ReleaseTests(unittest.TestCase):
             self.assertIn("- New fix", plugin)
             with self.assertRaises(ValueError):
                 release.prepare(root, "1.0.0", "v1.0.0")
+            git("tag", "v1.0.2-alpha")
+            self.assertEqual("v1.0.2-alpha", release.previous_tag(root, "1.0.2-beta"))
+            self.assertEqual("v1.0.1", release.previous_tag(root, "1.0.2-alpha"))
 
 
 if __name__ == "__main__":

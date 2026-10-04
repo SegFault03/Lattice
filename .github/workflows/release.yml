@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Optional X.Y.Z for a dry run; manual runs never publish'
+        description: 'Optional X.Y.Z or X.Y.Z-alpha for a dry run; manual runs never publish'
         required: false
         type: string
 
@@ -23,6 +23,7 @@ jobs:
     timeout-minutes: 45
     outputs:
       version: ${{ steps.metadata.outputs.version }}
+      prerelease: ${{ steps.metadata.outputs.prerelease }}
     services:
       mysql:
         image: mysql:8.4
@@ -147,10 +148,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_VERSION: ${{ needs.build.outputs.version }}
+          RELEASE_PRERELEASE: ${{ needs.build.outputs.prerelease }}
         run: |
+          release_flags=()
+          if [[ "$RELEASE_PRERELEASE" == "true" ]]; then
+            release_flags+=(--prerelease --latest=false)
+          fi
           gh release create "$GITHUB_REF_NAME" \
             "build/distributions/Lattice-$RELEASE_VERSION.zip" \
             build/release/mysql-connector-j-9.0.0-source.tar.gz build/release/SHA256SUMS \
             --verify-tag --draft --title "Lattice $RELEASE_VERSION" \
-            --notes-file build/release/release-notes.md
+            --notes-file build/release/release-notes.md "${release_flags[@]}"
           gh release edit "$GITHUB_REF_NAME" --draft=false

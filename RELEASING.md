@@ -9,17 +9,17 @@ Run **Build, test and release → Run workflow** on the intended branch to valid
 ## Prepare a version
 
 1. Update `pluginVersion` in `gradle.properties` for ordinary local builds.
-2. Move relevant `CHANGELOG.md` entries into a `## [X.Y.Z]` section and keep an Unreleased section for future changes.
+2. Move relevant `CHANGELOG.md` entries into a matching version section, including any prerelease suffix, and keep an Unreleased section for future changes.
 3. Run `python scripts/test.py --live --mysql --hsqldb --build` with the isolated fixtures, plus the Python tooling tests and compatibility checks.
 4. Review the packaged plugin and commit the changes.
-5. Create and push a new annotated stable tag, for example:
+5. Create and push a new annotated tag, for example:
 
 ```bash
-git tag -a v1.0.0 -m "Lattice 1.0.0"
-git push origin v1.0.0
+git tag -a v0.0.1-alpha -m "Lattice 0.0.1-alpha"
+git push origin v0.0.1-alpha
 ```
 
-These are release commands for the maintainer; no tag is created by the preparation scripts. Tags must have the form `vX.Y.Z` without leading zeroes. Release builds derive the plugin/ZIP version from the tag, overriding the default property. Do not reuse a published tag.
+These are release commands for the maintainer; no tag is created by the preparation scripts. Tags use `vX.Y.Z` or a SemVer prerelease such as `vX.Y.Z-alpha` / `vX.Y.Z-rc.1`, without numeric leading zeroes. Build metadata suffixes are not supported. Release builds derive the plugin/ZIP version from the tag, overriding the default property. Prerelease suffixes set GitHub's prerelease flag and disable latest designation. Do not reuse a published tag.
 
 ## Automatic pipeline
 

@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.vibe.lattice</id>
     <name>Lattice</name>
-    <version>1.0.0</version>
+    <version>0.0.1-alpha</version>
     <vendor>Lattice contributors</vendor>
 
     <description><![CDATA[

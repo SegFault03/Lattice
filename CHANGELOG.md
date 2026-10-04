@@ -1,23 +1,23 @@
 # Changelog
 
-User-facing changes are recorded here. The tag workflow selects the matching version section, falling back to populated Unreleased notes for a new patch release.
+Patch notes are selected by the exact release version, including prerelease suffixes. The workflow appends commit history since the preceding reachable lower-version tag.
 
 ## [Unreleased]
 
-- Portable Gradle/Python build and test commands, OS user caches and owned disposable fixtures.
-- Cross-platform build/test CI for Windows, Linux and macOS; public docs contain no maintainer-specific setup.
-- Database connection failures no longer silently switch engines based on port numbers; unsupported-URL errors omit credentials.
-- SQL type handling and driver lookups use locale-independent casing.
-- Tag-triggered builds, functional tests, IntelliJ compatibility checks and GitHub release assets.
-- Release notes include patch notes and the commit history since the preceding release tag.
-- Public issue templates, contribution/release documentation and bundled third-party notices.
+## [0.0.1-alpha]
 
-## [1.0.0]
+- First public alpha of the MySQL/HSQLDB database management plugin for IntelliJ IDEA 2025.1+ / Java 21.
+- Database explorer, SQL console, editable table grids, schema/table design and CSV/JSON/SQL exports.
+- Per-connection JDBC versions: bundled drivers, checksum-verified downloads, manual JAR selection and authenticated server/driver version detection.
+- Representative MySQL 5.5–8.4 and HSQLDB 2.2.9–2.7.4 compatibility coverage, including 22 Java 8 driver probes.
+- Atomic edit batches, original-row identities, configuration/session isolation, stale-result protection, draft recovery and PasswordSafe credential storage.
+- Bounded asynchronous JDBC work, lifecycle cleanup, stable primary-key pagination, streaming exports, typed conversion and SQL export/reimport regression checks.
+- Failed connections preserve the selected database engine; URL rejection omits credentials and SQL/type handling uses locale-independent casing.
+- Portable Gradle/Python tooling and Windows/Linux/macOS build CI; tag releases include compatibility checks, patch notes, commit history, checksums and corresponding MySQL driver sources.
+- Contributor, issue, security and release documentation, bundled license notices and AGENTS.md guidance.
 
-- Database explorer, SQL console, table editor, schema/table design and CSV/JSON/SQL export for MySQL and HSQLDB.
-- IntelliJ IDEA 2025.1+ / Java 21 baseline, verified against 2025.1, 2025.2, 2025.3 and 2026.2.3.
-- Per-connection JDBC release downloads, manual JAR selection and detected server/driver versions.
-- Legacy database compatibility tested with MySQL 5.5–8.4 and HSQLDB 2.2.9–2.7.4, including Java 8 driver probes.
-- Atomic edit batches, correct original row identities, configuration/session isolation and stale-result protection.
-- PasswordSafe credential storage, draft recovery, bounded asynchronous work and JDBC lifecycle cleanup.
-- Stable primary-key pagination, streaming export, typed conversion and exact SQL export/reimport checks.
+### Alpha limits
+
+- Interactive IntelliJ UI, project-close and dynamic unload validation remains pending.
+- HSQLDB multi-statement DDL is not atomic. Stable pagination without a primary key requires an explicit unique order.
+- Connection loss during commit can leave an uncertain server outcome. Generated MySQL URLs disable TLS; use an explicit custom URL for remote/TLS-required connections.

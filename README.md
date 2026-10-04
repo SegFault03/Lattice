@@ -86,7 +86,7 @@ See [CONTRIBUTING](CONTRIBUTING.md) to use existing isolated fixtures. Generated
 
 ## Releases and support
 
-A stable tag such as `v1.0.1` triggers the [release workflow](.github/workflows/release.yml): live tests, ZIP validation, IntelliJ 2025.1–2025.3 compatibility checks, then a GitHub Release with patch notes, commit history, checksums and corresponding MySQL sources. Manual workflow runs never publish.
+A tag such as `v1.0.1` or `v0.0.1-alpha` triggers the [release workflow](.github/workflows/release.yml): live tests, ZIP validation, IntelliJ 2025.1–2025.3 compatibility checks, then a GitHub Release with patch notes, commit history, checksums and corresponding MySQL sources. Versions with prerelease suffixes are marked as GitHub prereleases and are not designated latest. Manual workflow runs never publish.
 
 See [CHANGELOG](CHANGELOG.md), [RELEASING](RELEASING.md), [issue reporting](ISSUE.md), [security reporting](SECURITY.md) and the [final review](docs/final-review.md). Marketplace publishing is a separate step.
 

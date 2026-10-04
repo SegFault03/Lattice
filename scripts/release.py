@@ -7,13 +7,21 @@ from pathlib import Path
 import re
 import subprocess
 
-VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\Z")
+VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?\Z")
 
 
 def validate_version(value):
-    if not VERSION.fullmatch(value):
-        raise ValueError("Release version must have the form 1.2.3")
+    match = VERSION.fullmatch(value)
+    if not match or (match[4] and any(part.isdigit() and len(part) > 1 and part.startswith("0") for part in match[4].split("."))):
+        raise ValueError("Release version must be X.Y.Z or X.Y.Z-prerelease without numeric leading zeroes")
     return value
+
+
+def version_key(value):
+    validate_version(value)
+    core, _, suffix = value.partition("-")
+    identifiers = tuple((0, int(part)) if part.isdigit() else (1, part) for part in suffix.split(".")) if suffix else ()
+    return tuple(map(int, core.split("."))) + (0 if suffix else 1, identifiers)
 
 
 def patch_notes(changelog, version):
@@ -39,11 +47,14 @@ def git(root, *args):
 
 
 def previous_tag(root, version):
-    target = tuple(map(int, version.split(".")))
+    target = version_key(version)
     candidates = []
     for tag in git(root, "tag", "--merged", "HEAD").splitlines():
         if tag.startswith("v") and VERSION.fullmatch(tag[1:]):
-            number = tuple(map(int, tag[1:].split(".")))
+            try:
+                number = version_key(tag[1:])
+            except ValueError:
+                continue
             if number < target:
                 candidates.append((number, tag))
     return max(candidates)[1] if candidates else None
@@ -101,6 +112,7 @@ def main():
     if os.environ.get("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
             stream.write(f"version={version}\n")
+            stream.write(f"prerelease={'true' if '-' in version else 'false'}\n")
     print(f"Prepared Lattice {version} release notes in {output}")
 
 
