@@ -531,17 +531,18 @@ public class ConnectionDialog extends DialogWrapper {
     }
 
     private void doTestConnection() {
+        if (!testButton.isEnabled() || isDisposed()) return;
+        ConnectionConfig temp = createTempConfig();
+        DatabaseType originalType = temp.getType();
         testStatusLabel.setText("Connecting...");
         testStatusLabel.setForeground(JBColor.GRAY);
         testButton.setEnabled(false);
 
-        SwingUtilities.invokeLater(() -> {
-            new Thread(() -> {
-                ConnectionConfig temp = createTempConfig();
-                DatabaseType originalType = temp.getType();
+        com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(() -> {
                 ConnectionTestResult result = DatabaseConnectionManager.getInstance().testConnection(temp);
 
                 SwingUtilities.invokeLater(() -> {
+                    if (isDisposed()) return;
                     testButton.setEnabled(true);
                     if (result.isSuccess()) {
                         // If the backend detected a database type mismatch (e.g. MySQL port was running HSQLDB)
@@ -566,7 +567,6 @@ public class ConnectionDialog extends DialogWrapper {
                         Messages.showErrorDialog(result.getSummaryMessage(), "Connection Failed");
                     }
                 });
-            }).start();
         });
     }
 
