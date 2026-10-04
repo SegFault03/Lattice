@@ -12,6 +12,8 @@ import com.intellij.ui.components.JBTextArea;
 import com.intellij.ui.table.JBTable;
 import com.vibe.ideadb.model.ConnectionConfig;
 import com.vibe.ideadb.model.QueryResult;
+import com.vibe.ideadb.model.QueryHistoryEntry;
+import com.vibe.ideadb.model.ReadOnlyResultModel;
 import com.vibe.ideadb.service.DataService;
 import com.vibe.ideadb.service.DatabaseConnectionManager;
 import com.vibe.ideadb.service.DatabaseSession;
@@ -44,7 +46,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     private JComboBox<String> databaseCombo;
     private JBTextArea editorArea;
     private JButton runBtn;
-    private JComboBox<String> historyCombo;
+    private JComboBox<QueryHistoryEntry> historyCombo;
     private JBTabbedPane resultsTabs;
     private JBTable resultsTable;
     private DefaultTableModel resultsModel;
@@ -103,11 +105,11 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         toolbar.add(new JSeparator(SwingConstants.VERTICAL));
 
         toolbar.add(new JBLabel("History:"));
-        historyCombo = new JComboBox<>(new String[]{"(Recent Queries)"});
+        historyCombo = new JComboBox<>(new QueryHistoryEntry[]{new QueryHistoryEntry(null)});
         historyCombo.addActionListener(e -> {
             if (historyCombo.getSelectedIndex() > 0) {
-                String q = (String) historyCombo.getSelectedItem();
-                if (q != null) editorArea.setText(q);
+                QueryHistoryEntry query = (QueryHistoryEntry) historyCombo.getSelectedItem();
+                if (query != null && query.sql()!=null) setSqlText(query.sql());
             }
         });
         toolbar.add(historyCombo);
@@ -159,7 +161,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         resultsTabs = new JBTabbedPane();
         resultsTabs.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
 
-        resultsModel = new DefaultTableModel();
+        resultsModel = new ReadOnlyResultModel();
         resultsTable = new JBTable(resultsModel);
         resultsTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         resultsTable.setRowHeight(24);
@@ -286,11 +288,9 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
 
     private void updateHistoryCombo() {
         historyCombo.removeAllItems();
-        historyCombo.addItem("(Recent Queries)");
+        historyCombo.addItem(new QueryHistoryEntry(null));
         for (String q : queryHistory) {
-            String preview = q.replaceAll("\\s+", " ");
-            if (preview.length() > 50) preview = preview.substring(0, 50) + "...";
-            historyCombo.addItem(preview);
+            historyCombo.addItem(new QueryHistoryEntry(q));
         }
     }
 
