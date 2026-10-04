@@ -2,6 +2,11 @@
 
 <img src="assets/icon.png" alt="Lattice logo" width="80" height="80">
 
+[![Version](https://img.shields.io/jetbrains/plugin/v/34772.svg?label=Marketplace)](https://plugins.jetbrains.com/plugin/34772)
+[![Downloads](https://img.shields.io/jetbrains/plugin/d/34772.svg)](https://plugins.jetbrains.com/plugin/34772)
+[![Rating](https://img.shields.io/jetbrains/plugin/r/rating/34772.svg)](https://plugins.jetbrains.com/plugin/34772)
+[![Get from JetBrains Marketplace](https://img.shields.io/badge/JetBrains%20Marketplace-Lattice-087CFA?logo=intellij-idea&logoColor=white)](https://plugins.jetbrains.com/plugin/34772)
+
 Lattice is a database management plugin for IntelliJ IDEA. Connect to MySQL or HSQLDB, browse schemas, run SQL, edit table data, design tables and export results from your IDE.
 
 Built with help from **Gemini 3.8**, **GPT-6 Luna** and **GPT-6.1 Sol**.
@@ -30,6 +35,12 @@ Choose a JDBC driver compatible with your server. HSQLDB requires a matching ser
 
 ## Install and connect
 
+### From JetBrains Marketplace (Recommended)
+1. Open IntelliJ IDEA, go to **Settings → Plugins**.
+2. Select the **Marketplace** tab, search for **Lattice**, and click **Install**.
+   *(Direct link: [JetBrains Marketplace — Lattice](https://plugins.jetbrains.com/plugin/34772))*.
+
+### From Disk (Offline / Release ZIP)
 1. Download `Lattice-<version>.zip` from this repository's GitHub Releases.
 2. Open **Settings → Plugins → gear menu → Install Plugin from Disk** in IntelliJ.
 3. Select the ZIP and restart if prompted.
