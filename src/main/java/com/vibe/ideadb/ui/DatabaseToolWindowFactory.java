@@ -17,6 +17,7 @@ public class DatabaseToolWindowFactory implements ToolWindowFactory, DumbAware {
         toolWindow.setIcon(Icons.LATTICE);
         DatabaseMainPanel panel = new DatabaseMainPanel(project);
         Content content = ContentFactory.getInstance().createContent(panel, "", false);
+        content.setDisposer(panel);
         toolWindow.getContentManager().addContent(content);
 
         if (DatabaseSettingsState.getInstance().isShowWelcomeScreen()) {

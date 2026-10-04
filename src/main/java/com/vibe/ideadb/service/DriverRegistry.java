@@ -11,12 +11,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class DriverRegistry {
-    private static final DriverRegistry INSTANCE = new DriverRegistry();
+public class DriverRegistry implements com.intellij.openapi.Disposable {
+    private static final class Standalone { private static final DriverRegistry INSTANCE=new DriverRegistry(); }
+    private final List<URLClassLoader> ownedLoaders=new ArrayList<>();
+    private boolean disposed;
     private final Map<DatabaseType, Driver> driverCache = new ConcurrentHashMap<>();
     private final List<File> searchDirectories = new ArrayList<>();
 
-    private DriverRegistry() {
+    public DriverRegistry() {
         // 1. Detect directory of current running class/jar
         try {
             File codeSourceFile = new File(DriverRegistry.class.getProtectionDomain().getCodeSource().getLocation().toURI());
@@ -35,28 +37,24 @@ public class DriverRegistry {
         } catch (Exception ignored) {
         }
 
-        // 2. Add local workspace plugin lib folder as fallback
-        File localLib = new File("/path/to/workspace/Lattice/lib");
-        if (localLib.exists() && localLib.isDirectory()) {
-            searchDirectories.add(localLib);
-        }
-        File legacyLib = new File("/path/to/workspace/proto/idea-2026.2.3.win/db-navigator-plugin/lib");
-        if (legacyLib.exists() && legacyLib.isDirectory()) {
-            searchDirectories.add(legacyLib);
-        }
+        File localLib = new File("lib");
+        if(localLib.isDirectory()) searchDirectories.add(localLib);
+
     }
 
     public static DriverRegistry getInstance() {
-        return INSTANCE;
+        var application=com.intellij.openapi.application.ApplicationManager.getApplication();
+        return application==null ? Standalone.INSTANCE : application.getService(DriverRegistry.class);
     }
 
-    public void addSearchDirectory(File dir) {
+    public synchronized void addSearchDirectory(File dir) {
         if (dir != null && dir.isDirectory() && !searchDirectories.contains(dir)) {
             searchDirectories.add(0, dir);
         }
     }
 
     public synchronized Driver getDriver(DatabaseType type) throws Exception {
+        if(disposed) throw new IllegalStateException("Driver registry is disposed");
         Driver cached = driverCache.get(type);
         if (cached != null) {
             return cached;
@@ -81,11 +79,35 @@ public class DriverRegistry {
         }
 
         URL jarUrl = driverJar.toURI().toURL();
-        URLClassLoader classLoader = new URLClassLoader(new URL[]{jarUrl}, DriverRegistry.class.getClassLoader());
-        Class<?> clazz = Class.forName(type.getDriverClassName(), true, classLoader);
-        Driver driver = (Driver) clazz.getDeclaredConstructor().newInstance();
-        driverCache.put(type, driver);
-        return driver;
+        URLClassLoader classLoader = new URLClassLoader(new URL[]{jarUrl}, DriverRegistry.class.getClassLoader()) {
+            @Override protected synchronized Class<?> loadClass(String name,boolean resolve) throws ClassNotFoundException {
+                if(!name.equals(JdbcDriverCleanup.class.getName())) return super.loadClass(name,resolve);
+                Class<?> loaded=findLoadedClass(name);
+                if(loaded==null) {
+                    try(var resource=DriverRegistry.class.getResourceAsStream("/" + name.replace('.','/') + ".class")) {
+                        if(resource==null) throw new ClassNotFoundException(name);
+                        byte[] bytes=resource.readAllBytes(); loaded=defineClass(name,bytes,0,bytes.length);
+                    } catch(java.io.IOException error) { throw new ClassNotFoundException(name,error); }
+                }
+                if(resolve) resolveClass(loaded); return loaded;
+            }
+        };
+        try {
+            Class<?> clazz=Class.forName(type.getDriverClassName(),true,classLoader);
+            Driver driver=(Driver)clazz.getDeclaredConstructor().newInstance();
+            ownedLoaders.add(classLoader); driverCache.put(type,driver); return driver;
+        } catch(Exception | Error failure) { classLoader.close(); throw failure; }
+    }
+
+    @Override public synchronized void dispose() {
+        disposed=true;
+        JdbcDriverCleanup.release(DriverRegistry.class.getClassLoader());
+        for(URLClassLoader loader:ownedLoaders) {
+            try { Class.forName(JdbcDriverCleanup.class.getName(),true,loader).getMethod("release",ClassLoader.class).invoke(null,loader); }
+            catch(ReflectiveOperationException ignored) { }
+            try { loader.close(); } catch(java.io.IOException ignored) { }
+        }
+        ownedLoaders.clear(); driverCache.clear(); searchDirectories.clear();
     }
 
     private File findJarFile(String keyword) {

@@ -16,13 +16,15 @@ public class DatabaseFileEditor extends UserDataHolderBase implements FileEditor
     private final Project project;
     private final DatabaseVirtualFile file;
     private final JComponent component;
+    private final PropertyChangeListener pendingListener;
     private final java.beans.PropertyChangeSupport changes = new java.beans.PropertyChangeSupport(this);
 
     public DatabaseFileEditor(@NotNull Project project, @NotNull DatabaseVirtualFile file) {
         this.project = project;
         this.file = file;
         this.component = file.createComponent(project);
-        component.addPropertyChangeListener("pendingChanges", event -> changes.firePropertyChange("modified", event.getOldValue(), event.getNewValue()));
+        pendingListener=event -> changes.firePropertyChange("modified",event.getOldValue(),event.getNewValue());
+        component.addPropertyChangeListener("pendingChanges",pendingListener);
     }
 
     @Override
@@ -71,6 +73,7 @@ public class DatabaseFileEditor extends UserDataHolderBase implements FileEditor
 
     @Override
     public void dispose() {
+        component.removePropertyChangeListener("pendingChanges",pendingListener);
         if (component instanceof AutoCloseable closeable) {
             try { closeable.close(); } catch (Exception e) {
                 com.intellij.openapi.diagnostic.Logger.getInstance(DatabaseFileEditor.class).warn(e);

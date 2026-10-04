@@ -538,7 +538,8 @@ public class ConnectionDialog extends DialogWrapper {
         testStatusLabel.setForeground(JBColor.GRAY);
         testButton.setEnabled(false);
 
-        com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(() -> {
+        com.vibe.ideadb.service.DatabaseTaskService.getInstance().submit(() -> {
+                if(isDisposed()) return;
                 ConnectionTestResult result = DatabaseConnectionManager.getInstance().testConnection(temp);
 
                 SwingUtilities.invokeLater(() -> {

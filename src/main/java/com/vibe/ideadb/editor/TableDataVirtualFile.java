@@ -37,9 +37,7 @@ public class TableDataVirtualFile extends DatabaseVirtualFile {
 
     @Override
     public JComponent createComponent(@NotNull Project project) {
-        if (panel == null) {
-            panel = new TableDataEditorPanel(project, config, databaseName, tableMetadata);
-        }
+        panel = new TableDataEditorPanel(project, config, databaseName, tableMetadata);
         return panel;
     }
 

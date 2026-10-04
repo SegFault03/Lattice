@@ -13,8 +13,9 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class DatabaseConnectionManager {
-    private static final DatabaseConnectionManager INSTANCE = new DatabaseConnectionManager();
+public class DatabaseConnectionManager implements com.intellij.openapi.Disposable {
+    private static final class Standalone { private static final DatabaseConnectionManager INSTANCE=new DatabaseConnectionManager(); }
+    private volatile boolean disposed;
     private final Map<String, ConnectionGroup> activeConnections = new ConcurrentHashMap<>();
 
     private static final class ConnectionGroup {
@@ -28,6 +29,7 @@ public class DatabaseConnectionManager {
         static Identity of(ConnectionConfig config) { return new Identity(config.buildJdbcUrl(), config.getUser(), config.getPassword(), config.isAutoCommit()); }
     }
     public void registerConfiguration(ConnectionConfig config) {
+        if(disposed) throw new IllegalStateException("Connection manager is disposed");
         ConnectionGroup group = activeConnections.computeIfAbsent(config.getId(), id -> new ConnectionGroup());
         synchronized (group) {
             if (group.configuration != null && !Identity.of(group.configuration).equals(Identity.of(config))) closeGroup(group);
@@ -39,6 +41,7 @@ public class DatabaseConnectionManager {
         synchronized (group) { closeGroup(group); group.removed = true; group.registered = true; }
     }
     private void validateConfiguration(ConnectionGroup group, ConnectionConfig config) throws SQLException {
+        if(disposed) throw new SQLException("Connection manager is disposed");
         if (group.removed) throw new SQLException("This connection was removed. Close this editor and choose an existing connection.");
         if (group.configuration != null && !Identity.of(group.configuration).equals(Identity.of(config))) {
             if (group.registered) throw new SQLException("Connection settings changed. Close and reopen this editor before accessing the database.");
@@ -51,11 +54,12 @@ public class DatabaseConnectionManager {
         group.connections.clear();
     }
 
-    private DatabaseConnectionManager() {
+    public DatabaseConnectionManager() {
     }
 
     public static DatabaseConnectionManager getInstance() {
-        return INSTANCE;
+        var application=com.intellij.openapi.application.ApplicationManager.getApplication();
+        return application==null ? Standalone.INSTANCE : application.getService(DatabaseConnectionManager.class);
     }
 
     public Connection getConnection(ConnectionConfig config) throws Exception {
@@ -102,6 +106,10 @@ public class DatabaseConnectionManager {
     }
 
     private static void closeQuietly(Connection conn) {
+        var application=com.intellij.openapi.application.ApplicationManager.getApplication();
+        if(conn!=null && application!=null && application.isDispatchThread()) {
+            application.executeOnPooledThread(() -> closeQuietly(conn)); return;
+        }
         if (conn != null) {
             try { conn.close(); } catch (SQLException ignored) { }
         }
@@ -218,7 +226,10 @@ public class DatabaseConnectionManager {
         }
     }
 
+    @Override public void dispose() { disposed=true; closeAll(); activeConnections.clear(); }
+
     private Connection createRawConnection(ConnectionConfig config) throws Exception {
+        if(disposed) throw new SQLException("Connection manager is disposed");
         DatabaseType type = config.getType();
         String url = config.buildJdbcUrl();
         if (url != null) {

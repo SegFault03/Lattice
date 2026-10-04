@@ -9,6 +9,7 @@ import java.util.concurrent.*;
 public final class DatabaseTaskService implements Disposable {
     private final ExecutorService workers = AppExecutorUtil.createBoundedApplicationPoolExecutor("Lattice JDBC",4);
     public static DatabaseTaskService getInstance() { return ApplicationManager.getApplication().getService(DatabaseTaskService.class); }
+    public DatabaseTaskScope newScope() { return new DatabaseTaskScope(workers); }
     public Future<?> submit(Runnable operation) { return workers.submit(operation); }
     @Override public void dispose() { workers.shutdownNow(); }
 }

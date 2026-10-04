@@ -45,6 +45,7 @@ import java.util.*;
 import java.util.List;
 
 public class TableDataEditorPanel extends JPanel implements AutoCloseable {
+    private final com.vibe.ideadb.service.DatabaseTaskScope tasks=com.vibe.ideadb.service.DatabaseTaskService.getInstance().newScope();
     private final Project project;
     private final ConnectionConfig config;
     private final String databaseName;
@@ -88,9 +89,9 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         else {
             tableModel.restoreDraft(draft);
             statusLabel.setText("Restored pending edits. Commit or Revert before reloading.");
-            com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(() -> {
-                try {
-                    Connection conn = DatabaseConnectionManager.getInstance().getConnection(config);
+            tasks.submit(() -> {
+                try (var read = tasks.openRead(config)) {
+                    Connection conn=read.connection();
                     List<ColumnMetadata> columns = MetadataService.getInstance().getColumns(conn, config, databaseName, tableMetadata.getName());
                     SwingUtilities.invokeLater(() -> {
                         if (disposed) return;
@@ -338,9 +339,9 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         String where = whereField.getText().trim();
         statusLabel.setText("Loading data...");
         statusLabel.setForeground(null);
-        new Thread(() -> {
-            try {
-                Connection conn = DatabaseConnectionManager.getInstance().getConnection(config);
+        tasks.submit(() -> {
+            try (var read = tasks.openRead(config)) {
+                Connection conn=read.connection();
 
                 // Keep table columns metadata up to date
                 List<ColumnMetadata> cols = MetadataService.getInstance().getColumns(conn, config, databaseName, tableMetadata.getName());
@@ -379,7 +380,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     Messages.showErrorDialog(project, "Error: " + ex.getMessage(), "Data Fetch Error");
                 });
             }
-        }).start();
+        });
     }
 
     private void updatePendingChangesState() {
@@ -434,9 +435,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
 
         setMutationRunning(true);
         statusLabel.setText("Truncating table '" + tableMetadata.getName() + "'...");
-        new Thread(() -> {
-            try {
-                Connection conn = DatabaseConnectionManager.getInstance().getConnection(config);
+        tasks.submitMutation(() -> {
+            try (Connection conn = DatabaseConnectionManager.getInstance().openConnection(config)) {
                 DdlService.getInstance().truncateTable(conn, config, databaseName, tableMetadata.getName());
                 SwingUtilities.invokeLater(() -> {
                     if (disposed) return;
@@ -452,7 +452,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     Messages.showErrorDialog(project, "Failed to truncate table: " + ex.getMessage(), "Truncate Error");
                 });
             }
-        }).start();
+        });
     }
 
     private void openSqlConsole() {
@@ -462,11 +462,12 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
 
     private void showCreateTableDialog() {
         statusLabel.setText("Fetching CREATE statement...");
-        new Thread(() -> {
-            try {
-                Connection conn = DatabaseConnectionManager.getInstance().getConnection(config);
+        tasks.submit(() -> {
+            try (var read=tasks.openRead(config)) {
+                Connection conn=read.connection();
                 String ddl = DdlService.getInstance().getCreateTableStatement(conn, config, databaseName, tableMetadata);
                 SwingUtilities.invokeLater(() -> {
+                    if(disposed) return;
                     Window owner = SwingUtilities.getWindowAncestor(this);
                     JDialog dialog = (owner instanceof Frame)
                             ? new JDialog((Frame) owner, "CREATE TABLE DDL - " + tableMetadata.getName(), true)
@@ -515,11 +516,12 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
+                    if(disposed) return;
                     statusLabel.setText("Failed to fetch CREATE DDL: " + ex.getMessage());
                     Messages.showErrorDialog(project, "Failed to fetch CREATE statement: " + ex.getMessage(), "DDL Error");
                 });
             }
-        }).start();
+        });
     }
 
     private void deleteSelectedRows() {
@@ -551,7 +553,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         TableDraftState draftStore = project == null ? null : TableDraftState.getInstance(project);
         TableDraftState.Draft remainingDraft = tableModel.captureDraft().withoutRows(modelRows);
         setMutationRunning(true);
-        new Thread(() -> {
+        tasks.submitMutation(() -> {
             try (Connection conn = DatabaseConnectionManager.getInstance().openConnection(config)) {
                 DataService.getInstance().deleteRows(conn, config, databaseName, tableMetadata.getName(), keys);
                 SwingUtilities.invokeLater(() -> {
@@ -571,7 +573,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     Messages.showErrorDialog(project, "No rows deleted: " + ex.getMessage(), "Delete Error");
                 });
             }
-        }).start();
+        });
     }
 
     private void commitChanges() {
@@ -628,7 +630,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         }
         TableDraftState draftStore = project == null ? null : TableDraftState.getInstance(project);
         setMutationRunning(true);
-        new Thread(() -> {
+        tasks.submitMutation(() -> {
             try (Connection conn = DatabaseConnectionManager.getInstance().openConnection(config)) {
                 DataService.getInstance().commitChanges(conn, config, databaseName, tableMetadata.getName(), inserts, updates);
                 SwingUtilities.invokeLater(() -> {
@@ -647,7 +649,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     Messages.showErrorDialog(project, "No changes committed: " + ex.getMessage(), "Commit Error");
                 });
             }
-        }).start();
+        });
     }
 
     private boolean finishCellEditing() {
@@ -660,6 +662,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         finishCellEditing();
         updatePendingChangesState();
         disposed = true; loadGeneration++;
+        tasks.cancelPending();
+        com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(tasks::close);
         if (autoRefreshTimer != null) autoRefreshTimer.stop();
     }
 
@@ -702,18 +706,16 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         if (targetWrapper == null) return;
 
         File targetFile = targetWrapper.getFile();
-        new Thread(() -> {
-            try {
-                Connection conn = DatabaseConnectionManager.getInstance().getConnection(config);
+        tasks.submit(() -> {
+            try (var read=tasks.openRead(config)) {
+                Connection conn=read.connection();
                 String ddl = DdlService.getInstance().getCreateTableStatement(conn, config, databaseName, tableMetadata);
                 ExportService.getInstance().exportCreateTable(ddl, targetFile);
-                SwingUtilities.invokeLater(() ->
-                        Messages.showInfoMessage(project, "Exported CREATE DDL successfully to " + targetFile.getName(), "Export Complete"));
+                SwingUtilities.invokeLater(() -> { if(!disposed) Messages.showInfoMessage(project,"Exported CREATE DDL to " + targetFile.getName(),"Export Complete"); });
             } catch (Exception ex) {
-                SwingUtilities.invokeLater(() ->
-                        Messages.showErrorDialog(project, "Export failed: " + ex.getMessage(), "Export Error"));
+                SwingUtilities.invokeLater(() -> { if(!disposed) Messages.showErrorDialog(project,"Export failed: " + ex.getMessage(),"Export Error"); });
             }
-        }).start();
+        });
     }
 
     private void exportData(String format,ExportScope scope) {
@@ -731,11 +733,12 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
 
         File targetFile = targetWrapper.getFile();
         QueryResult result = QueryResult.forResultSet(new ArrayList<>(tableModel.columns), new ArrayList<>(tableModel.types), rows, 0);
-        com.vibe.ideadb.service.DatabaseTaskService.getInstance().submit(() -> {
+        tasks.submit(() -> {
             try {
                 long count=result.getRows().size();
                 if(scope==ExportScope.ALL_PERSISTED) {
-                    try(Connection connection=DatabaseConnectionManager.getInstance().openConnection(config)) {
+                    try(var read=tasks.openRead(config)) {
+                        Connection connection=read.connection();
                         count=ExportService.getInstance().exportPersisted(connection,config,databaseName,tableMetadata.getName(),filter,format,targetFile);
                     }
                 } else if ("csv".equalsIgnoreCase(format)) ExportService.getInstance().exportToCsv(result,targetFile);

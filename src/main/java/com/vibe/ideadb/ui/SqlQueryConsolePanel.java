@@ -33,6 +33,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     private static final JBColor NORMAL_MSG_COLOR = new JBColor(new Color(40, 40, 40), new Color(200, 200, 200));
     private static final JBColor ERROR_MSG_COLOR = new JBColor(new Color(200, 40, 40), new Color(255, 107, 107));
     private static final JBColor SUCCESS_MSG_COLOR = new JBColor(new Color(30, 140, 60), new Color(98, 181, 67));
+    private final com.vibe.ideadb.service.DatabaseTaskScope tasks=com.vibe.ideadb.service.DatabaseTaskService.getInstance().newScope();
     private final Project project;
     private final ConnectionConfig config;
     private String activeDatabase;
@@ -225,7 +226,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
             updateHistoryCombo();
         }
 
-        new Thread(() -> {
+        tasks.submit(() -> {
             try {
                 QueryResult result = session.execute(conn -> DataService.getInstance().executeQuery(conn, database, finalSql, options, current));
 
@@ -274,7 +275,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
                     statusLabel.setText("Execution error: " + ex.getMessage());
                 });
             }
-        }).start();
+        });
     }
 
     private void cancelExecution() {
@@ -283,6 +284,8 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     }
     @Override public void close() {
         disposed = true; cancelExecution();
+        tasks.cancelPending();
+        com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(tasks::close);
         com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(session::close);
     }
 

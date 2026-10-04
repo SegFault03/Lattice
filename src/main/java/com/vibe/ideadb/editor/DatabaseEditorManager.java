@@ -17,14 +17,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class DatabaseEditorManager {
-    private static final Map<Project, DatabaseEditorManager> INSTANCES = new ConcurrentHashMap<>();
+public class DatabaseEditorManager implements com.intellij.openapi.Disposable {
+    private volatile boolean disposed;
+    private final com.vibe.ideadb.service.DatabaseTaskScope tasks=com.vibe.ideadb.service.DatabaseTaskService.getInstance().newScope();
     private final Project project;
     private final Map<String, DatabaseVirtualFile> openFiles = new ConcurrentHashMap<>();
 
-    private DatabaseEditorManager(Project project) {
+    public DatabaseEditorManager(Project project) {
         this.project = project;
-        project.getMessageBus().connect().subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER, new FileEditorManagerListener() {
+        project.getMessageBus().connect(this).subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER, new FileEditorManagerListener() {
             @Override
             public void fileClosed(@NotNull FileEditorManager source, @NotNull VirtualFile file) {
                 if (file instanceof DatabaseVirtualFile dbFile) {
@@ -35,12 +36,13 @@ public class DatabaseEditorManager {
     }
 
     public static DatabaseEditorManager getInstance(@NotNull Project project) {
-        return INSTANCES.computeIfAbsent(project, DatabaseEditorManager::new);
+        return project.getService(DatabaseEditorManager.class);
     }
 
     public void openTableData(ConnectionConfig config, String databaseName, TableMetadata tableMetadata) {
         String key = "table:" + config.getId() + ":" + databaseName + ":" + tableMetadata.getName();
         ApplicationManager.getApplication().invokeLater(() -> {
+            if(disposed || project.isDisposed()) return;
             DatabaseVirtualFile vf = openFiles.get(key);
             if (vf == null || !FileEditorManager.getInstance(project).isFileOpen(vf)) {
                 vf = new TableDataVirtualFile(config, databaseName, tableMetadata);
@@ -52,16 +54,18 @@ public class DatabaseEditorManager {
 
     public void openConsole(ConnectionConfig config, String initialDb, String initialSql) {
         String key = "console:" + config.getId() + ":" + (initialDb != null ? initialDb : "");
-        new Thread(() -> {
+        tasks.submit(() -> {
+            if(disposed || project.isDisposed()) return;
             List<String> dbs = new ArrayList<>();
-            try {
-                Connection conn = DatabaseConnectionManager.getInstance().getConnection(config);
+            try(var read=tasks.openRead(config)) {
+                Connection conn=read.connection();
                 dbs = MetadataService.getInstance().getDatabases(conn, config);
             } catch (Exception ignored) {
             }
 
             final List<String> allDbs = dbs;
             ApplicationManager.getApplication().invokeLater(() -> {
+                if(disposed || project.isDisposed()) return;
                 DatabaseVirtualFile vf = openFiles.get(key);
                 if (vf instanceof SqlConsoleVirtualFile consoleVf && FileEditorManager.getInstance(project).isFileOpen(consoleVf)) {
                     FileEditorManager.getInstance(project).openFile(consoleVf, true);
@@ -77,18 +81,25 @@ public class DatabaseEditorManager {
 
                 if (initialSql != null) {
                     ApplicationManager.getApplication().invokeLater(() -> {
+                if(disposed || project.isDisposed()) return;
                         if (newVf.getPanel() != null) {
                             newVf.getPanel().setSqlText(initialSql);
                         }
                     });
                 }
             });
-        }).start();
+        });
+    }
+
+    @Override public void dispose() {
+        disposed=true; openFiles.clear(); tasks.cancelPending();
+        ApplicationManager.getApplication().executeOnPooledThread(tasks::close);
     }
 
     public void openWelcome() {
         String key = "welcome:root";
         ApplicationManager.getApplication().invokeLater(() -> {
+            if(disposed || project.isDisposed()) return;
             DatabaseVirtualFile vf = openFiles.get(key);
             if (vf == null || !FileEditorManager.getInstance(project).isFileOpen(vf)) {
                 vf = new WelcomeVirtualFile();

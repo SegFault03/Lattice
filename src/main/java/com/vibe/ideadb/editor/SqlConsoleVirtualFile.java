@@ -33,9 +33,7 @@ public class SqlConsoleVirtualFile extends DatabaseVirtualFile {
 
     @Override
     public JComponent createComponent(@NotNull Project project) {
-        if (panel == null) {
-            panel = new SqlQueryConsolePanel(project, config, initialDb, allDatabases);
-        }
+        panel = new SqlQueryConsolePanel(project, config, initialDb, allDatabases);
         return panel;
     }
 

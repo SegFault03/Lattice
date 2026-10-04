@@ -32,7 +32,9 @@ import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.List;
 
-public class DatabaseMainPanel extends JPanel {
+public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Disposable {
+    private final com.vibe.ideadb.service.DatabaseTaskScope tasks=com.vibe.ideadb.service.DatabaseTaskService.getInstance().newScope();
+    private volatile boolean disposed;
     private final Project project;
 
     private DefaultTreeModel treeModel;
@@ -47,6 +49,10 @@ public class DatabaseMainPanel extends JPanel {
         loadConnectionsFromState();
     }
 
+    @Override public void dispose() {
+        disposed=true; tasks.cancelPending();
+        com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(tasks::close);
+    }
     private void initUI() {
         // Explorer Toolbar
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 2));
@@ -340,12 +346,13 @@ public class DatabaseMainPanel extends JPanel {
 
     private void loadDatabasesForConnectionNode(DefaultMutableTreeNode connNode, TreeNodeData data) {
         ConnectionConfig cfg = data.getConnectionConfig();
-        new Thread(() -> {
+        tasks.submit(() -> {
             try {
                 Connection conn = DatabaseConnectionManager.getInstance().getConnection(cfg);
                 List<String> dbs = MetadataService.getInstance().getDatabases(conn, cfg);
 
                 SwingUtilities.invokeLater(() -> {
+                    if(disposed || project.isDisposed()) return;
                     connNode.removeAllChildren();
                     data.setConnected(true);
                     data.setLoaded(true);
@@ -360,6 +367,7 @@ public class DatabaseMainPanel extends JPanel {
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
+                    if(disposed || project.isDisposed()) return;
                     connNode.removeAllChildren();
                     data.setConnected(false);
                     connNode.add(new DefaultMutableTreeNode(TreeNodeData.loading("Error: " + ex.getMessage())));
@@ -367,19 +375,20 @@ public class DatabaseMainPanel extends JPanel {
                     Messages.showErrorDialog(project, "Failed to connect: " + ex.getMessage(), "Connection Error");
                 });
             }
-        }).start();
+        });
     }
 
     private void loadTablesForDatabaseNode(DefaultMutableTreeNode dbNode, TreeNodeData data) {
         ConnectionConfig cfg = data.getConnectionConfig();
         String dbName = data.getDatabaseName();
 
-        new Thread(() -> {
+        tasks.submit(() -> {
             try {
                 Connection conn = DatabaseConnectionManager.getInstance().getConnection(cfg);
                 List<TableMetadata> tables = MetadataService.getInstance().getTables(conn, cfg, dbName);
 
                 SwingUtilities.invokeLater(() -> {
+                    if(disposed || project.isDisposed()) return;
                     dbNode.removeAllChildren();
                     data.setLoaded(true);
 
@@ -413,12 +422,13 @@ public class DatabaseMainPanel extends JPanel {
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
+                    if(disposed || project.isDisposed()) return;
                     dbNode.removeAllChildren();
                     dbNode.add(new DefaultMutableTreeNode(TreeNodeData.loading("Error: " + ex.getMessage())));
                     treeModel.nodeStructureChanged(dbNode);
                 });
             }
-        }).start();
+        });
     }
 
     private void loadColumnsForTableNode(DefaultMutableTreeNode tableNode, TreeNodeData data) {
@@ -426,7 +436,7 @@ public class DatabaseMainPanel extends JPanel {
         String dbName = data.getDatabaseName();
         TableMetadata tm = data.getTableMetadata();
 
-        new Thread(() -> {
+        tasks.submit(() -> {
             try {
                 Connection conn = DatabaseConnectionManager.getInstance().getConnection(cfg);
                 List<ColumnMetadata> cols = MetadataService.getInstance().getColumns(conn, cfg, dbName, tm.getName());
@@ -436,6 +446,7 @@ public class DatabaseMainPanel extends JPanel {
                 }
 
                 SwingUtilities.invokeLater(() -> {
+                    if(disposed || project.isDisposed()) return;
                     tableNode.removeAllChildren();
                     data.setLoaded(true);
 
@@ -450,12 +461,13 @@ public class DatabaseMainPanel extends JPanel {
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
+                    if(disposed || project.isDisposed()) return;
                     tableNode.removeAllChildren();
                     tableNode.add(new DefaultMutableTreeNode(TreeNodeData.loading("Error: " + ex.getMessage())));
                     treeModel.nodeStructureChanged(tableNode);
                 });
             }
-        }).start();
+        });
     }
 
     private void showAddConnectionMenu(Component invoker) {
@@ -563,11 +575,12 @@ public class DatabaseMainPanel extends JPanel {
         CreateDatabaseDialog dlg = new CreateDatabaseDialog(project, cfg);
         if (dlg.showAndGet()) {
             String dbName = dlg.getDatabaseName();
-            new Thread(() -> {
+            tasks.submitMutation(() -> {
                 try {
                     Connection conn = DatabaseConnectionManager.getInstance().getConnection(cfg);
                     DdlService.getInstance().createDatabase(conn, cfg, dbName);
                     SwingUtilities.invokeLater(() -> {
+                    if(disposed || project.isDisposed()) return;
                         Messages.showInfoMessage(project, "Database/Schema '" + dbName + "' created successfully!", "Success");
                         connData.setLoaded(false);
                         loadDatabasesForConnectionNode(connNode, connData);
@@ -575,7 +588,7 @@ public class DatabaseMainPanel extends JPanel {
                 } catch (Exception ex) {
                     SwingUtilities.invokeLater(() -> Messages.showErrorDialog(project, "Failed to create database: " + ex.getMessage(), "Error"));
                 }
-            }).start();
+            });
         }
     }
 
@@ -584,11 +597,12 @@ public class DatabaseMainPanel extends JPanel {
                 "Confirm Drop Database", Messages.getWarningIcon());
         if (confirm != Messages.YES) return;
 
-        new Thread(() -> {
+        tasks.submitMutation(() -> {
             try {
                 Connection conn = DatabaseConnectionManager.getInstance().getConnection(cfg);
                 DdlService.getInstance().dropDatabase(conn, cfg, dbName);
                 SwingUtilities.invokeLater(() -> {
+                    if(disposed || project.isDisposed()) return;
                     Messages.showInfoMessage(project, "Database '" + dbName + "' dropped successfully.", "Success");
                     DefaultMutableTreeNode parent = (DefaultMutableTreeNode) dbNode.getParent();
                     if (parent != null) {
@@ -600,7 +614,7 @@ public class DatabaseMainPanel extends JPanel {
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> Messages.showErrorDialog(project, "Failed to drop database: " + ex.getMessage(), "Error"));
             }
-        }).start();
+        });
     }
 
     private void doCreateTable(ConnectionConfig cfg, String dbName, DefaultMutableTreeNode dbNode) {
@@ -609,11 +623,12 @@ public class DatabaseMainPanel extends JPanel {
             String tableName = dlg.getTableName();
             List<ColumnDefinition> cols = dlg.getColumns();
 
-            new Thread(() -> {
+            tasks.submitMutation(() -> {
                 try {
                     Connection conn = DatabaseConnectionManager.getInstance().getConnection(cfg);
                     DdlService.getInstance().createTable(conn, cfg, dbName, tableName, cols);
                     SwingUtilities.invokeLater(() -> {
+                    if(disposed || project.isDisposed()) return;
                         Messages.showInfoMessage(project, "Table '" + tableName + "' created successfully!", "Success");
                         TreeNodeData data = (TreeNodeData) dbNode.getUserObject();
                         data.setLoaded(false);
@@ -622,7 +637,7 @@ public class DatabaseMainPanel extends JPanel {
                 } catch (Exception ex) {
                     SwingUtilities.invokeLater(() -> Messages.showErrorDialog(project, "Failed to create table: " + ex.getMessage(), "Error"));
                 }
-            }).start();
+            });
         }
     }
 
@@ -631,11 +646,12 @@ public class DatabaseMainPanel extends JPanel {
                 "Confirm Drop Table", Messages.getWarningIcon());
         if (confirm != Messages.YES) return;
 
-        new Thread(() -> {
+        tasks.submitMutation(() -> {
             try {
                 Connection conn = DatabaseConnectionManager.getInstance().getConnection(cfg);
                 DdlService.getInstance().dropTable(conn, cfg, dbName, tableName);
                 SwingUtilities.invokeLater(() -> {
+                    if(disposed || project.isDisposed()) return;
                     Messages.showInfoMessage(project, "Table '" + tableName + "' dropped.", "Success");
                     DefaultMutableTreeNode parent = (DefaultMutableTreeNode) tableNode.getParent();
                     if (parent != null) {
@@ -645,7 +661,7 @@ public class DatabaseMainPanel extends JPanel {
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> Messages.showErrorDialog(project, "Failed to drop table: " + ex.getMessage(), "Error"));
             }
-        }).start();
+        });
     }
 
     private void doTruncateTable(ConnectionConfig cfg, String dbName, String tableName) {
@@ -653,7 +669,7 @@ public class DatabaseMainPanel extends JPanel {
                 "Confirm Truncate Table", Messages.getWarningIcon());
         if (confirm != Messages.YES) return;
 
-        new Thread(() -> {
+        tasks.submitMutation(() -> {
             try {
                 Connection conn = DatabaseConnectionManager.getInstance().getConnection(cfg);
                 DdlService.getInstance().truncateTable(conn, cfg, dbName, tableName);
@@ -661,6 +677,6 @@ public class DatabaseMainPanel extends JPanel {
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> Messages.showErrorDialog(project, "Failed to truncate table: " + ex.getMessage(), "Error"));
             }
-        }).start();
+        });
     }
 }

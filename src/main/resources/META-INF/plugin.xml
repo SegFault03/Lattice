@@ -40,6 +40,9 @@
         <applicationService serviceImplementation="com.vibe.ideadb.state.DatabaseSettingsState"/>
         <projectService serviceImplementation="com.vibe.ideadb.state.TableDraftState"/>
         <applicationService serviceImplementation="com.vibe.ideadb.service.DatabaseTaskService"/>
+        <applicationService serviceImplementation="com.vibe.ideadb.service.DatabaseConnectionManager"/>
+        <applicationService serviceImplementation="com.vibe.ideadb.service.DriverRegistry"/>
+        <projectService serviceImplementation="com.vibe.ideadb.editor.DatabaseEditorManager"/>
     </extensions>
 
     <actions>

@@ -67,6 +67,26 @@ public class FunctionalRegressionTest {
             check(connections.size() == 1, "Concurrent browser acquisition leaked connections");
         } finally { executor.shutdownNow(); manager.closeConnection(fresh.getId()); }
     }
+    private static void lifecycle(ConnectionConfig source) throws Exception {
+        var owned=new DatabaseConnectionManager(); var config=source.copy(); config.setId(UUID.randomUUID().toString());
+        Connection browser=owned.getConnection(config);
+        try(var session=owned.createSession(config)) {
+            Connection console=session.execute(c -> c); owned.dispose();
+            check(browser.isClosed() && console.isClosed(),"Application service disposal must close owned sessions");
+            try { owned.getConnection(config); throw new AssertionError("Disposed manager reopened"); } catch(SQLException expected) { check(true,"Disposed manager rejects work"); }
+        }
+        var executor=Executors.newSingleThreadExecutor(); var scope=new DatabaseTaskScope(executor);
+        CountDownLatch started=new CountDownLatch(1), release=new CountDownLatch(1); java.util.concurrent.atomic.AtomicInteger writes=new java.util.concurrent.atomic.AtomicInteger();
+        try {
+            Future<?> running=scope.submitMutation(() -> { started.countDown(); try { release.await(); writes.incrementAndGet(); } catch(InterruptedException error) { throw new RuntimeException(error); } });
+            check(started.await(2,TimeUnit.SECONDS),"Mutation worker starts");
+            Future<?> queued=scope.submitMutation(writes::incrementAndGet);
+            var read=scope.openRead(source); scope.close();
+            check(read.connection().isClosed() && queued.isCancelled() && !running.isCancelled(),"Scope disposal closes reads, cancels queued writes and preserves running atomic writes");
+            release.countDown(); running.get(2,TimeUnit.SECONDS);
+            check(writes.get()==1,"Disposed scope must not execute queued writes");
+        } finally { release.countDown(); scope.close(); executor.shutdownNow(); }
+    }
     private static void configurationLifecycle(ConnectionConfig source) throws Exception {
         ConnectionConfig original=source.copy(); original.setId(UUID.randomUUID().toString());
         manager.registerConfiguration(original);
@@ -91,6 +111,7 @@ public class FunctionalRegressionTest {
         Connection connection = manager.getConnection(config);
         ddl.createDatabase(connection, config, schema);
         try {
+            lifecycle(config);
             sessions(config, schema);
             configurationLifecycle(config);
             queryExecution(config, schema);
