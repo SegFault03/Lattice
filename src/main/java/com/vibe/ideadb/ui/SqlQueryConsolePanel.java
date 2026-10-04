@@ -36,6 +36,9 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     private String activeDatabase;
     private final DatabaseSession session;
     private boolean running;
+    private volatile com.vibe.ideadb.service.QueryExecution execution;
+    private JButton cancelBtn;
+    private JComboBox<Integer> resultLimit;
     private volatile boolean disposed;
 
     private JComboBox<String> databaseCombo;
@@ -88,6 +91,10 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         runBtn = new JButton("Run (Ctrl+Enter)", AllIcons.Actions.Execute);
         runBtn.addActionListener(e -> executeCurrentSql());
         toolbar.add(runBtn);
+        cancelBtn = new JButton("Cancel"); cancelBtn.setEnabled(false);
+        cancelBtn.addActionListener(e -> cancelExecution()); toolbar.add(cancelBtn);
+        toolbar.add(new JBLabel("Rows:"));
+        resultLimit = new JComboBox<>(new Integer[]{100,1000,10000}); resultLimit.setSelectedItem(1000); toolbar.add(resultLimit);
 
         JButton clearBtn = new JButton("Clear");
         clearBtn.addActionListener(e -> editorArea.setText(""));
@@ -201,6 +208,10 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
 
         final String finalSql = sql;
         final String database = activeDatabase;
+        final DataService.QueryOptions options = new DataService.QueryOptions((Integer) resultLimit.getSelectedItem(),60,100);
+        final com.vibe.ideadb.service.QueryExecution current = new com.vibe.ideadb.service.QueryExecution();
+        execution = current;
+        cancelBtn.setEnabled(true);
         running = true;
         runBtn.setEnabled(false);
         statusLabel.setText("Executing query...");
@@ -214,10 +225,11 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
 
         new Thread(() -> {
             try {
-                QueryResult result = session.execute(conn -> DataService.getInstance().executeQuery(conn, database, finalSql));
+                QueryResult result = session.execute(conn -> DataService.getInstance().executeQuery(conn, database, finalSql, options, current));
 
                 SwingUtilities.invokeLater(() -> {
                     if (disposed) return;
+                    execution = null; cancelBtn.setEnabled(false);
                     running = false;
                     runBtn.setEnabled(true);
                     if (result.hasError()) {
@@ -230,11 +242,8 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
                         messagesArea.setForeground(NORMAL_MSG_COLOR);
 
                         // Populate results table
-                        resultsModel.setRowCount(0);
-                        resultsModel.setColumnIdentifiers(result.getColumnNames().toArray());
-                        for (List<Object> row : result.getRows()) {
-                            resultsModel.addRow(row.toArray());
-                        }
+                        Object[][] values = result.getRows().stream().map(List::toArray).toArray(Object[][]::new);
+                        resultsModel.setDataVector(values, result.getColumnNames().toArray());
 
                         for (int i = 0; i < resultsTable.getColumnCount(); i++) {
                             int headerWidth = resultsTable.getColumnModel().getColumn(i).getHeaderValue().toString().length() * 10 + 30;
@@ -254,6 +263,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
                     if (disposed) return;
+                    execution = null; cancelBtn.setEnabled(false);
                     running = false;
                     runBtn.setEnabled(true);
                     messagesArea.setText("Exception: " + ex.getMessage());
@@ -265,8 +275,12 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         }).start();
     }
 
+    private void cancelExecution() {
+        var current = execution;
+        if (current != null) com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(current::cancel);
+    }
     @Override public void close() {
-        disposed = true;
+        disposed = true; cancelExecution();
         com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(session::close);
     }
 

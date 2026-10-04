@@ -13,6 +13,7 @@ public class QueryResult {
     private final long executionTimeMs;
     private final String message;
     private final String error;
+    private boolean truncated;
 
     private QueryResult(boolean resultSet, List<String> columnNames, List<String> columnTypes,
                         List<List<Object>> rows, int affectedRows, long executionTimeMs,
@@ -32,6 +33,10 @@ public class QueryResult {
         return new QueryResult(true, columns, columnTypes, rows, 0, timeMs, msg, null);
     }
 
+    public static QueryResult forResultSet(List<String> columns, List<String> types, List<List<Object>> rows, long timeMs, boolean truncated) {
+        QueryResult result = forResultSet(columns, types, rows, timeMs); result.truncated = truncated; return result;
+    }
+    public boolean isTruncated() { return truncated; }
     public static QueryResult forUpdate(int affectedRows, long timeMs) {
         String msg = String.format("Query executed in %d ms. Affected rows: %d.", timeMs, affectedRows);
         return new QueryResult(false, null, null, null, affectedRows, timeMs, msg, null);
@@ -48,6 +53,6 @@ public class QueryResult {
     public List<List<Object>> getRows() { return rows; }
     public int getAffectedRows() { return affectedRows; }
     public long getExecutionTimeMs() { return executionTimeMs; }
-    public String getMessage() { return message; }
+    public String getMessage() { return truncated ? message + " Result limit reached; additional rows were omitted." : message; }
     public String getError() { return error; }
 }

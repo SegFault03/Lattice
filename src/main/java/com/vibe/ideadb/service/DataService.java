@@ -220,69 +220,73 @@ public class DataService {
         }
     }
 
+    public record QueryOptions(int maxRows, int timeoutSeconds, int fetchSize) {
+        public QueryOptions {
+            if (maxRows < 1 || maxRows > 1_000_000 || timeoutSeconds < 1 || fetchSize < 1) throw new IllegalArgumentException("Invalid query limits");
+        }
+        public static QueryOptions defaults() { return new QueryOptions(10000,60,100); }
+    }
     public QueryResult executeQuery(Connection conn, String dbName, String sql) {
-        synchronized (conn) {
-            return executeQueryLocked(conn, dbName, sql);
-        }
+        return executeQuery(conn, dbName, sql, QueryOptions.defaults(), new QueryExecution());
     }
-
-    private QueryResult executeQueryLocked(Connection conn, String dbName, String sql) {
-        long start = System.currentTimeMillis();
+    public QueryResult executeQuery(Connection conn, String dbName, String sql, QueryOptions options, QueryExecution execution) {
+        synchronized (conn) { return executeQueryLocked(conn, dbName, sql, options, execution); }
+    }
+    private QueryResult executeQueryLocked(Connection conn, String dbName, String sql, QueryOptions options, QueryExecution execution) {
+        long start = System.nanoTime();
         try {
+            execution.checkCancelled();
+            boolean mysql = conn.getMetaData().getDatabaseProductName().equalsIgnoreCase("MySQL");
             if (dbName != null && !dbName.trim().isEmpty()) {
-                if (conn.getMetaData().getDatabaseProductName().equalsIgnoreCase("MySQL")) {
-                    if (!dbName.equals(conn.getCatalog())) conn.setCatalog(dbName);
-                } else {
-                    if (!dbName.equals(conn.getSchema())) conn.setSchema(dbName);
-                }
+                if (mysql) { if (!dbName.equals(conn.getCatalog())) conn.setCatalog(dbName); }
+                else { if (!dbName.equals(conn.getSchema())) conn.setSchema(dbName); }
             }
-
             try (Statement stmt = conn.createStatement()) {
+                stmt.setQueryTimeout(options.timeoutSeconds());
+                stmt.setMaxRows(options.maxRows() + 1);
+                // Connector/J's streaming sentinel prevents buffering the whole result client-side.
+                stmt.setFetchSize(mysql ? Integer.MIN_VALUE : options.fetchSize());
+                execution.attach(stmt);
+                execution.checkCancelled();
                 boolean hasResultSet = stmt.execute(sql);
-                long elapsed = System.currentTimeMillis() - start;
-
-                if (hasResultSet) {
-                    try (ResultSet rs = stmt.getResultSet()) {
-                        ResultSetMetaData md = rs.getMetaData();
-                        int colCount = md.getColumnCount();
-                        List<String> cols = new ArrayList<>();
-                        List<String> types = new ArrayList<>();
-
-                        for (int i = 1; i <= colCount; i++) {
-                            cols.add(md.getColumnLabel(i));
-                            types.add(md.getColumnTypeName(i));
+                execution.checkCancelled();
+                if (!hasResultSet) return QueryResult.forUpdate(stmt.getUpdateCount(), elapsed(start));
+                try (ResultSet rs = stmt.getResultSet()) {
+                    ResultSetMetaData md = rs.getMetaData();
+                    int colCount = md.getColumnCount();
+                    List<String> cols = new ArrayList<>(), types = new ArrayList<>();
+                    for (int i=1;i<=colCount;i++) { cols.add(md.getColumnLabel(i)); types.add(md.getColumnTypeName(i)); }
+                    List<List<Object>> rows = new ArrayList<>();
+                    long bytes = 0;
+                    boolean truncated = false;
+                    while (rs.next()) {
+                        execution.checkCancelled();
+                        if (rows.size() >= options.maxRows()) { truncated=true; break; }
+                        List<Object> row = new ArrayList<>();
+                        for (int i=1;i<=colCount;i++) {
+                            Object value = detachValue(rs.getObject(i)); row.add(value);
+                            bytes += value instanceof byte[] binary ? binary.length : value instanceof String text ? text.length()*2L : 32;
                         }
-
-                        List<List<Object>> rows = new ArrayList<>();
-                        while (rs.next()) {
-                            List<Object> row = new ArrayList<>();
-                            for (int i = 1; i <= colCount; i++) {
-                                row.add(detachValue(rs.getObject(i)));
-                            }
-                            rows.add(row);
-                        }
-
-                        return QueryResult.forResultSet(cols, types, rows, elapsed);
+                        if (bytes > 16L * 1024 * 1024) { truncated=true; break; }
+                        rows.add(row);
                     }
-                } else {
-                    int affected = stmt.getUpdateCount();
-                    return QueryResult.forUpdate(affected, elapsed);
+                    return QueryResult.forResultSet(cols,types,rows,elapsed(start),truncated);
                 }
             }
-        } catch (Throwable t) {
-            long elapsed = System.currentTimeMillis() - start;
-            String msg = t.getMessage();
-            if (msg == null || msg.isEmpty()) msg = t.toString();
-            return QueryResult.forError(msg, elapsed);
-        }
+        } catch (Exception error) {
+            String message = error.getMessage();
+            return QueryResult.forError(message == null || message.isEmpty() ? error.toString() : message, elapsed(start));
+        } finally { execution.detach(); }
     }
+    private static long elapsed(long start) { return (System.nanoTime()-start)/1_000_000; }
+
     /** LOBs must remain usable after the ResultSet and Statement have been closed. */
     private static Object detachValue(Object value) throws SQLException {
         if (value instanceof Blob blob) {
-            try { return blob.getBytes(1, Math.toIntExact(blob.length())); } finally { blob.free(); }
+            try { if (blob.length()>2L*1024*1024) throw new SQLException("Binary value exceeds the 2 MiB display limit"); return blob.getBytes(1, Math.toIntExact(blob.length())); } finally { blob.free(); }
         }
         if (value instanceof Clob clob) {
-            try { return clob.getSubString(1, Math.toIntExact(clob.length())); } finally { clob.free(); }
+            try { if (clob.length()>1024*1024) throw new SQLException("Text value exceeds the 1 Mi-character display limit"); return clob.getSubString(1, Math.toIntExact(clob.length())); } finally { clob.free(); }
         }
         return value;
     }

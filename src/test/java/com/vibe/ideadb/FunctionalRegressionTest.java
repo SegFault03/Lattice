@@ -93,6 +93,7 @@ public class FunctionalRegressionTest {
         try {
             sessions(config, schema);
             configurationLifecycle(config);
+            queryExecution(config, schema);
             metadata(config, schema);
             mutations(config, schema);
             columnAlterations(config, schema);
@@ -104,6 +105,49 @@ public class FunctionalRegressionTest {
         System.out.println("PASS " + config.getType() + " functional regressions (temporary schema removed)");
     }
 
+    private static Object invoke(Object target, java.lang.reflect.Method method, Object[] args) throws Throwable {
+        try { return method.invoke(target,args); } catch (java.lang.reflect.InvocationTargetException error) { throw error.getCause(); }
+    }
+    private static void queryExecution(ConnectionConfig config, String schema) throws Exception {
+        try(Connection c=manager.openConnection(config)) {
+            String table=DdlService.formatTable(config,schema,"QUERY_ROWS");
+            sql(c,"CREATE TABLE " + table + " (ID INT)");
+            try(PreparedStatement insert=c.prepareStatement("INSERT INTO " + table + " VALUES (?)")) {
+                for(int i=0;i<200;i++) { insert.setInt(1,i); insert.addBatch(); } insert.executeBatch();
+            }
+            var options=new DataService.QueryOptions(25,5,10);
+            QueryResult capped=data.executeQuery(c,schema,"SELECT * FROM " + table,options,new QueryExecution());
+            check(!capped.hasError() && capped.getRows().size()==25 && capped.isTruncated() && capped.getMessage().contains("omitted"),"Query row limit must report truncation");
+            QueryResult exact=data.executeQuery(c,schema,"SELECT * FROM " + table + " WHERE ID<25",options,new QueryExecution());
+            check(exact.getRows().size()==25 && !exact.isTruncated(),"An exact-size result must not be marked truncated");
+            var cancelled=new QueryExecution(); cancelled.cancel();
+            check(data.executeQuery(c,schema,"SELECT * FROM " + table,options,cancelled).hasError(),"Cancellation before execution must stop the query");
+            Connection delayed=(Connection)java.lang.reflect.Proxy.newProxyInstance(Connection.class.getClassLoader(),new Class[]{Connection.class},(proxy,method,args) -> {
+                Object value=invoke(c,method,args);
+                if(!method.getName().equals("createStatement")) return value;
+                return java.lang.reflect.Proxy.newProxyInstance(Statement.class.getClassLoader(),new Class[]{Statement.class},(sp,sm,sa) -> {
+                    Object result=invoke(value,sm,sa);
+                    if(!sm.getName().equals("getResultSet")) return result;
+                    return java.lang.reflect.Proxy.newProxyInstance(ResultSet.class.getClassLoader(),new Class[]{ResultSet.class},(rp,rm,ra) -> { if(rm.getName().equals("next")) Thread.sleep(30); return invoke(result,rm,ra); });
+                });
+            });
+            QueryResult timed=data.executeQuery(delayed,schema,"SELECT * FROM " + table + " WHERE ID<3",options,new QueryExecution());
+            check(!timed.hasError() && timed.getExecutionTimeMs()>=100,"Elapsed time must include result fetching");
+            var active=new QueryExecution(); ExecutorService executor=Executors.newSingleThreadExecutor();
+            try {
+                Future<QueryResult> pending=executor.submit(() -> data.executeQuery(delayed,schema,"SELECT * FROM " + table,options,active));
+                long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(2);
+                while(!active.isRunning() && !pending.isDone() && System.nanoTime()<deadline) Thread.sleep(5);
+                Thread.sleep(50); active.cancel();
+                QueryResult result=pending.get(3,TimeUnit.SECONDS);
+                check(result.hasError() && !active.isRunning(),"In-flight cancellation must terminate and detach the statement");
+            } finally { executor.shutdownNow(); }
+            if(config.getType()==DatabaseType.MYSQL) {
+                QueryResult timeout=data.executeQuery(c,schema,"SELECT SLEEP(2)",new DataService.QueryOptions(25,1,10),new QueryExecution());
+                check(timeout.hasError() && timeout.getExecutionTimeMs()<4000,"Query timeout must interrupt a running MySQL statement");
+            }
+        }
+    }
     private static void metadata(ConnectionConfig config, String schema) throws Exception {
         try(Connection c=manager.openConnection(config)) {
             sql(c,"CREATE TABLE " + DdlService.formatTable(config,schema,"META_A") + " (ID INT PRIMARY KEY, EXACT_COL INT)");
