@@ -39,7 +39,16 @@ public class DatabaseSettingsState implements PersistentStateComponent<DatabaseS
     private State state = new State();
     private final CredentialStore credentials;
     public DatabaseSettingsState() { this(new SafeCredentials()); }
-    public DatabaseSettingsState(CredentialStore credentials) { this.credentials = Objects.requireNonNull(credentials); }
+    private final Runnable changed;
+    public DatabaseSettingsState(CredentialStore credentials) { this(credentials, DatabaseSettingsState::publishChange); }
+    public DatabaseSettingsState(CredentialStore credentials, Runnable changed) {
+        this.credentials = Objects.requireNonNull(credentials);
+        this.changed = Objects.requireNonNull(changed);
+    }
+    private static void publishChange() {
+        var application = ApplicationManager.getApplication();
+        if (application != null) application.getMessageBus().syncPublisher(DatabaseSettingsListener.TOPIC).connectionsChanged();
+    }
     public static DatabaseSettingsState getInstance() { return ApplicationManager.getApplication().getService(DatabaseSettingsState.class); }
 
     /** Only sanitized copies enter the IDE's XML persistence pipeline. */
@@ -70,6 +79,7 @@ public class DatabaseSettingsState implements PersistentStateComponent<DatabaseS
         }
         restored.connections.forEach(manager::registerConfiguration);
         state = restored;
+        changed.run();
     }
     public synchronized List<ConnectionConfig> getConnections() { return state.connections.stream().map(ConnectionConfig::copy).toList(); }
     public synchronized boolean isShowWelcomeScreen() { return state.showWelcomeScreen; }
@@ -79,12 +89,14 @@ public class DatabaseSettingsState implements PersistentStateComponent<DatabaseS
         credentials.set(id, null);
         com.vibe.ideadb.service.DatabaseConnectionManager.getInstance().removeConfiguration(id);
         state.connections.removeIf(c -> c.getId().equals(id));
+        changed.run();
     }
     public synchronized void updateConnection(ConnectionConfig config) {
         credentials.set(config.getId(), new Secret(config.getPassword(), config.getCustomUrl()));
         state.connections.removeIf(c -> c.getId().equals(config.getId()));
         state.connections.add(config.copy());
         com.vibe.ideadb.service.DatabaseConnectionManager.getInstance().registerConfiguration(config);
+        changed.run();
     }
     public synchronized ConnectionConfig getConnection(String id) {
         return state.connections.stream().filter(c -> c.getId().equals(id)).findFirst().map(ConnectionConfig::copy).orElse(null);

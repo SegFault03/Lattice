@@ -55,6 +55,10 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 }
             }
         });
+        com.intellij.openapi.application.ApplicationManager.getApplication().getMessageBus().connect(this)
+                .subscribe(com.vibe.ideadb.state.DatabaseSettingsListener.TOPIC, () -> SwingUtilities.invokeLater(() -> {
+                    if (!disposed && !project.isDisposed()) loadConnectionsFromState();
+                }));
         loadConnectionsFromState();
     }
 
@@ -499,7 +503,6 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         if (dlg.showAndGet()) {
             ConnectionConfig result = dlg.getResultConfig();
             DatabaseSettingsState.getInstance().addConnection(result);
-            loadConnectionsFromState();
         }
     }
 
@@ -520,8 +523,6 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         if (dlg.showAndGet()) {
             ConnectionConfig updated = dlg.getResultConfig();
             DatabaseSettingsState.getInstance().updateConnection(updated);
-            DatabaseConnectionManager.getInstance().closeConnection(cfg.getId());
-            loadConnectionsFromState();
         }
     }
 
@@ -540,9 +541,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     private void removeConnection(ConnectionConfig cfg) {
         int confirm = Messages.showYesNoDialog(project, "Remove connection '" + cfg.getName() + "'?", "Confirm Remove", Messages.getQuestionIcon());
         if (confirm == Messages.YES) {
-            DatabaseConnectionManager.getInstance().closeConnection(cfg.getId());
             DatabaseSettingsState.getInstance().removeConnection(cfg.getId());
-            loadConnectionsFromState();
         }
     }
 

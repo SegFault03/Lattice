@@ -453,12 +453,13 @@ public class FunctionalRegressionTest {
             public com.vibe.ideadb.state.DatabaseSettingsState.Secret get(String id) { return secrets.get(id); }
             public void set(String id, com.vibe.ideadb.state.DatabaseSettingsState.Secret secret) { if (secret==null) secrets.remove(id); else secrets.put(id,secret); }
         };
-        var settings = new com.vibe.ideadb.state.DatabaseSettingsState(vault);
+        var events = new java.util.concurrent.atomic.AtomicInteger();
+        var settings = new com.vibe.ideadb.state.DatabaseSettingsState(vault,events::incrementAndGet);
         var config = new ConnectionConfig(DatabaseType.MYSQL,"credentials"); config.setPassword("password-sentinel"); config.setCustomUrl("jdbc:mysql://localhost/shop_db?password=url-secret");
         settings.addConnection(config);
         String xml = com.intellij.openapi.util.JDOMUtil.writeElement(com.intellij.util.xmlb.XmlSerializer.serialize(settings.getState()));
         check(!xml.contains("password-sentinel") && !xml.contains("url-secret"),"Settings XML must not contain passwords or JDBC URL secrets");
-        var reloaded = new com.vibe.ideadb.state.DatabaseSettingsState(vault); reloaded.loadState(settings.getState());
+        var reloaded = new com.vibe.ideadb.state.DatabaseSettingsState(vault,events::incrementAndGet); reloaded.loadState(settings.getState());
         check(reloaded.getConnection(config.getId()).getPassword().equals("password-sentinel") && reloaded.getConnection(config.getId()).getCustomUrl().equals(config.getCustomUrl()),"Secure credentials must hydrate on reload");
         reloaded.getConnection(config.getId()).setPassword("external change");
         check(reloaded.getConnection(config.getId()).getPassword().equals("password-sentinel"),"Settings must not leak mutable configuration references");
@@ -469,6 +470,14 @@ public class FunctionalRegressionTest {
         check(secrets.get(config.getId()).password().equals("updated"),"Credential changes must replace the secure entry");
         reloaded.removeConnection(config.getId());
         check(secrets.isEmpty() && reloaded.getConnection(config.getId())==null,"Removing a connection must remove its secure entry");
+        check(events.get()==5,"Add, load, migration, update and remove must publish settings changes");
+        var failingVault = new com.vibe.ideadb.state.DatabaseSettingsState.CredentialStore() {
+            public com.vibe.ideadb.state.DatabaseSettingsState.Secret get(String id) { return null; }
+            public void set(String id,com.vibe.ideadb.state.DatabaseSettingsState.Secret secret) { throw new IllegalStateException("vault unavailable"); }
+        };
+        var failingSettings = new com.vibe.ideadb.state.DatabaseSettingsState(failingVault,events::incrementAndGet);
+        try { failingSettings.addConnection(config); throw new AssertionError("Expected secure-storage failure"); }
+        catch (IllegalStateException expected) { check(events.get()==5 && failingSettings.getConnections().isEmpty(),"Failed credential writes must not publish or change settings"); }
     }
     static void drafts() {
         var original = new ArrayList<Object>(Arrays.asList(1, new java.math.BigDecimal("12.30"), new byte[]{0, -1}, null, Timestamp.valueOf("2026-10-04 10:20:30.123456")));
