@@ -238,11 +238,15 @@ public class DdlService {
         return "'" + raw.replace("'", "''") + "'";
     }
 
-    public void alterTableRename(Connection conn, ConnectionConfig config, String dbName, String oldName, String newName) throws Exception {
+    public TableMetadata alterTableRename(Connection conn, ConnectionConfig config, String dbName, String oldName, String newName) throws Exception {
         String sql = config.getType()==DatabaseType.MYSQL
                 ? "RENAME TABLE " + formatTable(config,dbName,oldName) + " TO " + formatTable(config,dbName,newName) + ";"
                 : "ALTER TABLE " + formatTable(config,dbName,oldName) + " RENAME TO " + quoteIdentifier(config,newName) + ";";
         executeSql(conn, sql);
+        TableMetadata renamed=MetadataService.getInstance().getTables(conn,config,dbName).stream()
+                .filter(table -> config.getType()==DatabaseType.MYSQL ? table.getName().equalsIgnoreCase(newName) : table.getName().equals(newName)).findFirst().orElseThrow(() -> new java.sql.SQLException("Renamed table metadata unavailable"));
+        renamed.setColumns(MetadataService.getInstance().getColumns(conn,config,dbName,renamed.getName()));
+        return renamed;
     }
 
     public String buildCreateTableSql(ConnectionConfig config, String dbName, String tableName, List<ColumnDefinition> columns) {

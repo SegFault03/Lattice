@@ -46,6 +46,15 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         this.project = project;
 
         initUI();
+        project.getMessageBus().connect(this).subscribe(com.vibe.ideadb.editor.TableRenameListener.TOPIC,(config,database,oldName,renamed) -> {
+            var nodes=rootNode.depthFirstEnumeration();
+            while(nodes.hasMoreElements()) {
+                DefaultMutableTreeNode node=(DefaultMutableTreeNode)nodes.nextElement();
+                if(node.getUserObject() instanceof TreeNodeData data && data.getType()==TreeNodeData.NodeType.DATABASE && config.getId().equals(data.getConnectionConfig().getId()) && database.equals(data.getDatabaseName())) {
+                    data.setLoaded(false); loadTablesForDatabaseNode(node,data); break;
+                }
+            }
+        });
         loadConnectionsFromState();
     }
 
@@ -287,7 +296,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
 
                 JMenuItem consoleItem = new JMenuItem("Open in SQL Console", Icons.CONSOLE);
                 consoleItem.addActionListener(e -> {
-                    String query = "SELECT * FROM " + (cfg.getType() == DatabaseType.MYSQL ? "`" + dbName + "`.`" + tm.getName() + "`" : "\"" + dbName + "\".\"" + tm.getName() + "\"") + " LIMIT 100;";
+                    String query = "SELECT * FROM " + DdlService.formatTable(cfg,dbName,tm.getName()) + " LIMIT 100;";
                     DatabaseEditorManager.getInstance(project).openConsole(cfg, dbName, query);
                 });
                 menu.add(consoleItem);
@@ -299,8 +308,9 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                     alterItem.addActionListener(e -> {
                         AlterTableDialog dlg = new AlterTableDialog(project, cfg, dbName, tm);
                         if (dlg.showAndGet()) {
-                            data.setLoaded(false);
-                            loadColumnsForTableNode(node, data);
+                            if(node.getParent() instanceof DefaultMutableTreeNode parent && parent.getUserObject() instanceof TreeNodeData parentData) {
+                                parentData.setLoaded(false); loadTablesForDatabaseNode(parent,parentData);
+                            }
                         }
                     });
                     menu.add(alterItem);

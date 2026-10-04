@@ -25,6 +25,7 @@ public class DatabaseEditorManager implements com.intellij.openapi.Disposable {
 
     public DatabaseEditorManager(Project project) {
         this.project = project;
+        project.getMessageBus().connect(this).subscribe(TableRenameListener.TOPIC,this::tableRenamed);
         project.getMessageBus().connect(this).subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER, new FileEditorManagerListener() {
             @Override
             public void fileClosed(@NotNull FileEditorManager source, @NotNull VirtualFile file) {
@@ -37,6 +38,16 @@ public class DatabaseEditorManager implements com.intellij.openapi.Disposable {
 
     public static DatabaseEditorManager getInstance(@NotNull Project project) {
         return project.getService(DatabaseEditorManager.class);
+    }
+
+    private void tableRenamed(ConnectionConfig config,String database,String oldName,TableMetadata renamed) {
+        String oldKey=TableDataVirtualFile.key(config.getId(),database,oldName), newKey=TableDataVirtualFile.key(config.getId(),database,renamed.getName());
+        DatabaseVirtualFile oldFile=openFiles.remove(oldKey);
+        boolean reopen=oldFile!=null && FileEditorManager.getInstance(project).isFileOpen(oldFile);
+        if(reopen) FileEditorManager.getInstance(project).closeFile(oldFile);
+        boolean moved=com.vibe.ideadb.state.TableDraftState.getInstance(project).move(oldKey,newKey);
+        if(!moved) com.intellij.openapi.ui.Messages.showWarningDialog(project,"Pending edits for both table names were preserved. Resolve the existing destination draft before restoring the renamed table's draft.","Draft Conflict");
+        if(reopen && moved) openTableData(config,database,renamed);
     }
 
     public void openTableData(ConnectionConfig config, String databaseName, TableMetadata tableMetadata) {

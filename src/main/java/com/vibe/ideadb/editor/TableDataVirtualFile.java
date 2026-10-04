@@ -16,13 +16,14 @@ public class TableDataVirtualFile extends DatabaseVirtualFile {
 
     public TableDataVirtualFile(ConnectionConfig config, String databaseName, TableMetadata tableMetadata) {
         super(tableMetadata.getName() + " [" + config.getName() + "]",
-              "table:" + config.getId() + ":" + databaseName + ":" + tableMetadata.getName(),
+              key(config.getId(),databaseName,tableMetadata.getName()),
               DatabaseFileTypes.TABLE);
         this.config = config;
         this.databaseName = databaseName;
         this.tableMetadata = tableMetadata;
     }
 
+    public static String key(String id,String database,String table) { return "table:" + id + ":" + database + ":" + table; }
     public ConnectionConfig getConfig() {
         return config;
     }

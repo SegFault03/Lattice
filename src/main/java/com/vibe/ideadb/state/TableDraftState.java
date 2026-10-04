@@ -87,5 +87,10 @@ public final class TableDraftState implements PersistentStateComponent<TableDraf
     @Override public synchronized void loadState(State state) { this.state = state; }
     public synchronized Draft get(String key) { return state.drafts.get(key); }
     public synchronized void put(String key, Draft draft) { state.drafts.put(key, draft); }
+    public synchronized boolean move(String source,String target) {
+        if(source.equals(target)) return true;
+        if(state.drafts.containsKey(target)) return false;
+        Draft draft=state.drafts.remove(source); if(draft!=null) state.drafts.put(target,draft); return true;
+    }
     public synchronized void remove(String key) { state.drafts.remove(key); }
 }

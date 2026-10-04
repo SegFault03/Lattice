@@ -50,6 +50,7 @@ public class TableMetadata {
 
     public ColumnMetadata getColumn(String colName) {
         if (colName == null) return null;
+        for (ColumnMetadata col:columns) if(col.getName().equals(colName)) return col;
         for (ColumnMetadata col : columns) {
             if (col.getName().equalsIgnoreCase(colName)) {
                 return col;

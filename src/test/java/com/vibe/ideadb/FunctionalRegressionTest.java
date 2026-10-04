@@ -208,7 +208,11 @@ public class FunctionalRegressionTest {
             ddl.alterTableAddColumn(c,config,schema,table,new ColumnDefinition("extra value","INT",0,true,false,false,""));
             check(MetadataService.getInstance().getColumns(c,config,schema,table).size()==3,"Quoted identifiers must support add/rename DDL");
             String renamed="Renamed Table";
-            ddl.alterTableRename(c,config,schema,table,renamed);
+            TableMetadata renamedMetadata=ddl.alterTableRename(c,config,schema,table,renamed);
+            var originalMetadata=new TableMetadata(null,schema,table,"TABLE");
+            var oldFile=new com.vibe.ideadb.editor.TableDataVirtualFile(config,schema,originalMetadata);
+            var newFile=new com.vibe.ideadb.editor.TableDataVirtualFile(config,schema,renamedMetadata);
+            check(renamedMetadata.getName().equalsIgnoreCase(renamed) && !renamedMetadata.getColumns().isEmpty() && !oldFile.getFileKey().equals(newFile.getFileKey()) && newFile.getName().contains(renamedMetadata.getName()),"Rename must return current metadata and new editor identity/title");
             data.deleteRow(c,config,schema,renamed,Map.of("select",1));
             check(data.countRows(c,config,schema,renamed,null)==0,"Quoted identifiers must support rename/delete");
             ddl.alterTableDropColumn(c,config,schema,renamed,"extra value");
@@ -461,6 +465,8 @@ public class FunctionalRegressionTest {
         check(!restored.withoutRows(List.of(0,1)).hasChanges(),"Deleting all pending rows must clear draft");
         var store = new com.vibe.ideadb.state.TableDraftState(); store.put("test", restored); store.remove("test");
         check(store.get("test")==null,"Successful commit clears recovery draft");
+        store.put("old",restored); check(store.move("old","renamed") && store.get("old")==null && store.get("renamed")==restored,"Rename must migrate pending drafts without discarding edits");
+        store.put("conflict",draft); check(!store.move("renamed","conflict") && store.get("renamed")==restored,"Rename draft conflicts must preserve both drafts");
     }
     public static void main(String[] args) throws Exception {
         assertions.set(0);

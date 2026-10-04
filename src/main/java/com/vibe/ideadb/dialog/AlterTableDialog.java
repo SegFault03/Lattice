@@ -420,7 +420,7 @@ public class AlterTableDialog extends DialogWrapper {
             Messages.showErrorDialog(project, "Please enter a valid new column name.", "Validation Error");
             return;
         }
-        if (oldCol.equalsIgnoreCase(newCol)) {
+        if (oldCol.equals(newCol)) {
             Messages.showWarningDialog(project, "New column name is identical to the current column name.", "No Change");
             return;
         }
@@ -470,7 +470,12 @@ public class AlterTableDialog extends DialogWrapper {
             return;
         }
 
-        runAlter(conn -> DdlService.getInstance().alterTableRename(conn, config, databaseName, tableMetadata.getName(), newName), newName, "Table renamed to '" + newName + "' successfully!");
+        runAlter(conn -> {
+            TableMetadata renamed=DdlService.getInstance().alterTableRename(conn,config,databaseName,tableMetadata.getName(),newName);
+            SwingUtilities.invokeLater(() -> {
+                if(project!=null && !project.isDisposed()) project.getMessageBus().syncPublisher(com.vibe.ideadb.editor.TableRenameListener.TOPIC).tableRenamed(config,databaseName,tableMetadata.getName(),renamed);
+            });
+        }, newName, "Table renamed to '" + newName + "' successfully!");
     }
 
 }
