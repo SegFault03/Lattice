@@ -420,7 +420,7 @@ public class FunctionalRegressionTest {
             c.rollback(); c.setAutoCommit(true);
         }
     }
-    private static void credentials() {
+    static void credentials() {
         var secrets = new HashMap<String, com.vibe.ideadb.state.DatabaseSettingsState.Secret>();
         var vault = new com.vibe.ideadb.state.DatabaseSettingsState.CredentialStore() {
             public com.vibe.ideadb.state.DatabaseSettingsState.Secret get(String id) { return secrets.get(id); }
@@ -443,7 +443,7 @@ public class FunctionalRegressionTest {
         reloaded.removeConnection(config.getId());
         check(secrets.isEmpty() && reloaded.getConnection(config.getId())==null,"Removing a connection must remove its secure entry");
     }
-    private static void drafts() {
+    static void drafts() {
         var original = new ArrayList<Object>(Arrays.asList(1, new java.math.BigDecimal("12.30"), new byte[]{0, -1}, null, Timestamp.valueOf("2026-10-04 10:20:30.123456")));
         var edited = new ArrayList<Object>(original); edited.set(0, 2);
         var added = new ArrayList<Object>(original); added.set(0, 3);
@@ -463,6 +463,7 @@ public class FunctionalRegressionTest {
         check(store.get("test")==null,"Successful commit clears recovery draft");
     }
     public static void main(String[] args) throws Exception {
+        assertions.set(0);
         try {
             String historySql="SELECT 'text  with   spaces', ID FROM SOME_TABLE WHERE ID IN (1,2,3,4,5);\nSELECT 2;";
             var entry=new QueryHistoryEntry(historySql);

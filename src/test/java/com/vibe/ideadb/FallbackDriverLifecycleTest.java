@@ -8,6 +8,7 @@ import java.util.*;
 public final class FallbackDriverLifecycleTest {
     public static void main(String[] args) throws Exception {
         var registry=new DriverRegistry();
+        if(args.length>0) registry.addSearchDirectory(new java.io.File(args[0]));
         var cleanup=new ArrayList<Class<?>>();
         var loaders=new ArrayList<ClassLoader>();
         try {

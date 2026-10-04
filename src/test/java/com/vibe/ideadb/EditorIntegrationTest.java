@@ -24,7 +24,7 @@ public class EditorIntegrationTest {
         } catch (Throwable t) {
             System.err.println("EDITOR TEST FAILED:");
             t.printStackTrace();
-            System.exit(1);
+            throw new AssertionError("Integration suite failed",t);
         }
     }
 

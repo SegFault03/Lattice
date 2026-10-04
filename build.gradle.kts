@@ -33,6 +33,16 @@ java {
 
 tasks {
     test {
-        useJUnitPlatform()
+        useJUnitPlatform { excludeTags("integration") }
     }
+}
+
+// Live fixtures are opt-in; these tasks contain discoverable JUnit methods rather than main-only programs.
+tasks.register<Test>("integrationTest") {
+    description = "Run MySQL and HSQLDB functional integration suites"
+    group = "verification"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnitPlatform { includeTags("integration") }
+    shouldRunAfter(tasks.test)
 }

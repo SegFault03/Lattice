@@ -25,7 +25,7 @@ public class PluginIntegrationTest {
         } catch (Throwable t) {
             System.err.println("TEST FAILED:");
             t.printStackTrace();
-            System.exit(1);
+            throw new AssertionError("Integration suite failed",t);
         }
     }
 
