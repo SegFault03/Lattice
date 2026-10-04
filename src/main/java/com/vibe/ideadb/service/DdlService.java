@@ -50,7 +50,7 @@ public class DdlService {
     public void dropTable(Connection conn, ConnectionConfig config, String dbName, String tableName) throws Exception {
         String sql = (config.getType() == DatabaseType.MYSQL)
                 ? "DROP TABLE " + formatTable(config,dbName,tableName) + ";"
-                : "DROP TABLE " + formatTable(config, dbName, tableName) + " CASCADE;";
+                : "DROP TABLE " + formatTable(config, dbName, tableName) + " RESTRICT;";
         executeSql(conn, sql);
     }
 

@@ -99,6 +99,7 @@ public class FunctionalRegressionTest {
             mutations(config, schema);
             columnAlterations(config, schema);
             schemaExports(config, schema);
+            restrictiveDrop(config, schema);
         } finally {
             if (config.getType() == DatabaseType.MYSQL) connection.setCatalog("shop_db");
             else connection.setSchema("PUBLIC");
@@ -184,6 +185,19 @@ public class FunctionalRegressionTest {
             check(data.countRows(c,config,schema,renamed,null)==0,"Quoted identifiers must support rename/delete");
             ddl.alterTableDropColumn(c,config,schema,renamed,"extra value");
             ddl.dropTable(c,config,schema,renamed);
+        }
+    }
+    private static void restrictiveDrop(ConnectionConfig config,String schema) throws Exception {
+        if(config.getType()!=DatabaseType.HSQLDB) return;
+        try(Connection c=manager.openConnection(config)) {
+            String parent=DdlService.formatTable(config,schema,"DROP_PARENT"), child=DdlService.formatTable(config,schema,"DROP_CHILD"), view=DdlService.formatTable(config,schema,"DROP_VIEW");
+            sql(c,"CREATE TABLE " + parent + " (ID INT PRIMARY KEY)");
+            sql(c,"CREATE TABLE " + child + " (ID INT REFERENCES " + parent + "(ID))");
+            sql(c,"CREATE VIEW " + view + " AS SELECT * FROM " + parent);
+            try { ddl.dropTable(c,config,schema,"DROP_PARENT"); throw new AssertionError("Implicit cascade accepted"); } catch(SQLException expected) { check(true,"Dependent table drop must be rejected"); }
+            check(data.countRows(c,config,schema,"DROP_VIEW",null)==0,"Failed restrictive drop must preserve dependent view");
+            try { sql(c,"INSERT INTO " + child + " VALUES (999)"); throw new AssertionError("Dependent foreign key removed"); } catch(SQLException expected) { check(true,"Dependent foreign key remains"); }
+            sql(c,"DROP VIEW " + view); ddl.dropTable(c,config,schema,"DROP_CHILD"); ddl.dropTable(c,config,schema,"DROP_PARENT");
         }
     }
     private static void schemaExports(ConnectionConfig config,String schema) throws Exception {
