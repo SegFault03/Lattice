@@ -2,6 +2,8 @@ package com.vibe.ideadb.service;
 
 import com.vibe.ideadb.model.ConnectionConfig;
 import com.vibe.ideadb.model.ConnectionTestResult;
+import com.vibe.ideadb.model.DatabaseType;
+import com.vibe.ideadb.model.HsqlMode;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -38,7 +40,57 @@ public class DatabaseConnectionManager {
         long start = System.currentTimeMillis();
         Connection conn = null;
         try {
-            conn = createRawConnection(config);
+            try {
+                conn = createRawConnection(config);
+            } catch (Throwable t) {
+                String msg = t.getMessage() != null ? t.getMessage() : "";
+                // If MySQL was selected but server at port 9001 or returned HSQL handshake ('Packet for query is too large' / 5,329,736)
+                if (config.getType() == DatabaseType.MYSQL && (msg.contains("Packet for query is too large") || msg.contains("5329736") || msg.contains("5,329,736") || config.getPort() == 9001)) {
+                    ConnectionConfig fallback = config.copy();
+                    fallback.setType(DatabaseType.HSQLDB);
+                    fallback.setHsqlMode(HsqlMode.SERVER);
+                    fallback.setCustomUrl("");
+                    try {
+                        conn = createRawConnection(fallback);
+                        config.setType(DatabaseType.HSQLDB);
+                        config.setHsqlMode(HsqlMode.SERVER);
+                        config.setCustomUrl("");
+                        DatabaseMetaData meta = conn.getMetaData();
+                        long elapsed = System.currentTimeMillis() - start;
+                        return ConnectionTestResult.success(
+                                meta.getDatabaseProductName() + " (Auto-detected HSQLDB on port " + fallback.getPort() + ")",
+                                meta.getDatabaseProductVersion(),
+                                meta.getDriverName(),
+                                meta.getDriverVersion(),
+                                elapsed
+                        );
+                    } catch (Throwable fallbackErr) {
+                        throw t;
+                    }
+                } else if (config.getType() == DatabaseType.HSQLDB && config.getPort() == 3306) {
+                    ConnectionConfig fallback = config.copy();
+                    fallback.setType(DatabaseType.MYSQL);
+                    fallback.setCustomUrl("");
+                    try {
+                        conn = createRawConnection(fallback);
+                        config.setType(DatabaseType.MYSQL);
+                        config.setCustomUrl("");
+                        DatabaseMetaData meta = conn.getMetaData();
+                        long elapsed = System.currentTimeMillis() - start;
+                        return ConnectionTestResult.success(
+                                meta.getDatabaseProductName() + " (Auto-detected MySQL on port " + fallback.getPort() + ")",
+                                meta.getDatabaseProductVersion(),
+                                meta.getDriverName(),
+                                meta.getDriverVersion(),
+                                elapsed
+                        );
+                    } catch (Throwable fallbackErr) {
+                        throw t;
+                    }
+                }
+                throw t;
+            }
+
             DatabaseMetaData meta = conn.getMetaData();
             String dbProduct = meta.getDatabaseProductName();
             String dbVer = meta.getDatabaseProductVersion();
@@ -51,6 +103,11 @@ public class DatabaseConnectionManager {
             String msg = t.getMessage();
             if (msg == null || msg.isEmpty()) {
                 msg = t.getClass().getSimpleName();
+            }
+            if (msg.contains("Packet for query is too large") || (config.getType() == DatabaseType.MYSQL && config.getPort() == 9001)) {
+                msg = "Port " + config.getPort() + " appears to be running an HSQLDB server, but 'MySQL' was selected.\n\n"
+                        + "• To connect to HSQLDB: Select Database Type 'HSQLDB' (Remote Server mode, port 9001, db 'testdb', user 'SA').\n"
+                        + "• To connect to MySQL: Change Port to 3306 (user 'root', db 'shop_db').";
             }
             return ConnectionTestResult.failure(msg, elapsed);
         } finally {
@@ -91,8 +148,19 @@ public class DatabaseConnectionManager {
     }
 
     private Connection createRawConnection(ConnectionConfig config) throws Exception {
-        Driver driver = DriverRegistry.getInstance().getDriver(config.getType());
+        DatabaseType type = config.getType();
         String url = config.buildJdbcUrl();
+        if (url != null) {
+            String lower = url.trim().toLowerCase();
+            if (lower.startsWith("jdbc:hsqldb:")) {
+                type = DatabaseType.HSQLDB;
+                config.setType(DatabaseType.HSQLDB);
+            } else if (lower.startsWith("jdbc:mysql:")) {
+                type = DatabaseType.MYSQL;
+                config.setType(DatabaseType.MYSQL);
+            }
+        }
+        Driver driver = DriverRegistry.getInstance().getDriver(type);
 
         Properties props = new Properties();
         if (config.getUser() != null) {
@@ -102,10 +170,29 @@ public class DatabaseConnectionManager {
             props.setProperty("password", config.getPassword());
         }
 
-        Connection conn = driver.connect(url, props);
-        if (conn == null) {
-            throw new SQLException("Driver returned null connection for URL: " + url);
+        try {
+            Connection conn = driver.connect(url, props);
+            if (conn == null) {
+                throw new SQLException("Driver returned null connection for URL: " + url);
+            }
+            return conn;
+        } catch (Exception ex) {
+            String msg = ex.getMessage() != null ? ex.getMessage() : "";
+            if (type == DatabaseType.MYSQL && (msg.contains("Packet for query is too large") || msg.contains("5329736") || msg.contains("5,329,736") || config.getPort() == 9001)) {
+                ConnectionConfig fallback = config.copy();
+                fallback.setType(DatabaseType.HSQLDB);
+                fallback.setHsqlMode(HsqlMode.SERVER);
+                fallback.setCustomUrl("");
+                Driver hsqlDriver = DriverRegistry.getInstance().getDriver(DatabaseType.HSQLDB);
+                String hsqlUrl = fallback.buildJdbcUrl();
+                Connection conn = hsqlDriver.connect(hsqlUrl, props);
+                if (conn != null) {
+                    config.setType(DatabaseType.HSQLDB);
+                    config.setHsqlMode(HsqlMode.SERVER);
+                    return conn;
+                }
+            }
+            throw ex;
         }
-        return conn;
     }
 }

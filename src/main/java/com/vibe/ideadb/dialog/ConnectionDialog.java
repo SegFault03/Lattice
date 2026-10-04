@@ -6,7 +6,6 @@ import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.ui.TextFieldWithBrowseButton;
 import com.intellij.ui.JBColor;
-import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBTextField;
 import com.vibe.ideadb.model.ConnectionConfig;
@@ -25,10 +24,19 @@ import java.awt.event.ItemEvent;
 public class ConnectionDialog extends DialogWrapper {
     private final ConnectionConfig config;
 
+    // Header fields
     private JBTextField nameField;
     private JComboBox<DatabaseType> typeCombo;
-    private JPanel dynamicPanel;
-    private CardLayout cardLayout;
+    private JRadioButton standardRadio;
+    private JRadioButton customUrlRadio;
+
+    // Main Card switcher (Standard vs JDBC URL)
+    private JPanel mainCardPanel;
+    private CardLayout mainCardLayout;
+
+    // Standard sub-card switcher (MySQL vs HSQLDB)
+    private JPanel dbTypeCardPanel;
+    private CardLayout dbTypeCardLayout;
 
     // MySQL fields
     private JBTextField mysqlHostField;
@@ -49,12 +57,15 @@ public class ConnectionDialog extends DialogWrapper {
     private JPanel hsqlSubCardPanel;
     private CardLayout hsqlSubCardLayout;
 
-    // Custom URL & Preview
-    private JBCheckBox customUrlCheck;
+    // Custom JDBC URL fields
     private JBTextField customUrlField;
+    private JBTextField customUrlUserField;
+    private JPasswordField customUrlPasswordField;
+
+    // Preview and Action components
     private JBLabel urlPreviewLabel;
-    private JButton testButton;
-    private JBLabel testStatusLabel;
+    private final JButton testButton = new JButton("Test Connection");
+    private final JBLabel testStatusLabel = new JBLabel("");
 
     public ConnectionDialog(@Nullable Project project, ConnectionConfig config) {
         super(project, true);
@@ -73,76 +84,102 @@ public class ConnectionDialog extends DialogWrapper {
 
     @Override
     protected @Nullable JComponent createCenterPanel() {
-        JPanel root = new JPanel(new BorderLayout(10, 10));
-        root.setPreferredSize(new Dimension(550, 480));
+        JPanel root = new JPanel(new BorderLayout(0, 10));
+        root.setPreferredSize(new Dimension(530, 370));
 
-        JPanel headerPanel = new JPanel(new GridBagLayout());
+        // 1. Top Section: Name, Database Type, Connection Method
+        JPanel topPanel = new JPanel(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(4, 4, 4, 4);
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
-        gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0.2;
-        headerPanel.add(new JBLabel("Name:"), gbc);
-        gbc.gridx = 1; gbc.gridy = 0; gbc.weightx = 0.8;
+        // Name
+        gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0.22;
+        topPanel.add(new JBLabel("Name:"), gbc);
+        gbc.gridx = 1; gbc.gridy = 0; gbc.weightx = 0.78;
         nameField = new JBTextField();
-        headerPanel.add(nameField, gbc);
+        topPanel.add(nameField, gbc);
 
-        gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0.2;
-        headerPanel.add(new JBLabel("Database Type:"), gbc);
-        gbc.gridx = 1; gbc.gridy = 1; gbc.weightx = 0.8;
+        // Database Type
+        gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0.22;
+        topPanel.add(new JBLabel("Database Type:"), gbc);
+        gbc.gridx = 1; gbc.gridy = 1; gbc.weightx = 0.78;
         typeCombo = new JComboBox<>(DatabaseType.values());
-        headerPanel.add(typeCombo, gbc);
+        topPanel.add(typeCombo, gbc);
 
-        root.add(headerPanel, BorderLayout.NORTH);
+        // Connection Method Switcher (Radio Buttons)
+        gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 0.22;
+        topPanel.add(new JBLabel("Connect via:"), gbc);
+        gbc.gridx = 1; gbc.gridy = 2; gbc.weightx = 0.78;
+        JPanel radioPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
+        standardRadio = new JRadioButton("Standard (Host & Port)", true);
+        customUrlRadio = new JRadioButton("Custom JDBC URL", false);
+        ButtonGroup group = new ButtonGroup();
+        group.add(standardRadio);
+        group.add(customUrlRadio);
+        radioPanel.add(standardRadio);
+        radioPanel.add(customUrlRadio);
+        topPanel.add(radioPanel, gbc);
 
-        // Center card layout for type
-        cardLayout = new CardLayout();
-        dynamicPanel = new JPanel(cardLayout);
+        root.add(topPanel, BorderLayout.NORTH);
 
-        dynamicPanel.add(createMysqlPanel(), DatabaseType.MYSQL.name());
-        dynamicPanel.add(createHsqlPanel(), DatabaseType.HSQLDB.name());
+        // 2. Center Section: Switchable Cards (Standard vs JDBC URL)
+        mainCardLayout = new CardLayout();
+        mainCardPanel = new JPanel(mainCardLayout);
 
-        root.add(dynamicPanel, BorderLayout.CENTER);
+        // Standard Mode Card (contains MySQL or HSQLDB views)
+        JPanel standardCard = new JPanel(new BorderLayout());
+        dbTypeCardLayout = new CardLayout();
+        dbTypeCardPanel = new JPanel(dbTypeCardLayout);
+        dbTypeCardPanel.add(createMysqlPanel(), DatabaseType.MYSQL.name());
+        dbTypeCardPanel.add(createHsqlPanel(), DatabaseType.HSQLDB.name());
+        standardCard.add(dbTypeCardPanel, BorderLayout.CENTER);
 
-        // South: URL Preview & Test Connection
-        JPanel southPanel = new JPanel(new BorderLayout(5, 5));
-        southPanel.setBorder(BorderFactory.createTitledBorder("Connection String & Test"));
+        // Custom JDBC URL Card
+        JPanel customUrlCard = createCustomUrlPanel();
 
-        JPanel previewPanel = new JPanel(new GridBagLayout());
-        GridBagConstraints pgbc = new GridBagConstraints();
-        pgbc.insets = new Insets(2, 4, 2, 4);
-        pgbc.fill = GridBagConstraints.HORIZONTAL;
+        mainCardPanel.add(standardCard, "STANDARD");
+        mainCardPanel.add(customUrlCard, "JDBC_URL");
 
-        pgbc.gridx = 0; pgbc.gridy = 0;
-        customUrlCheck = new JBCheckBox("Custom JDBC URL:");
-        previewPanel.add(customUrlCheck, pgbc);
+        root.add(mainCardPanel, BorderLayout.CENTER);
 
-        pgbc.gridx = 1; pgbc.gridy = 0; pgbc.weightx = 1.0;
-        customUrlField = new JBTextField();
-        customUrlField.setEnabled(false);
-        previewPanel.add(customUrlField, pgbc);
+        // 3. Bottom Preview line (compact & clean)
+        JPanel previewPanel = new JPanel(new BorderLayout(8, 0));
+        previewPanel.setBorder(BorderFactory.createEmptyBorder(2, 6, 4, 6));
+        JBLabel prefixLabel = new JBLabel("Resolved URL:");
+        prefixLabel.setForeground(JBColor.GRAY);
+        previewPanel.add(prefixLabel, BorderLayout.WEST);
 
-        pgbc.gridx = 0; pgbc.gridy = 1; pgbc.weightx = 0.0;
-        previewPanel.add(new JBLabel("Resolved URL:"), pgbc);
-
-        pgbc.gridx = 1; pgbc.gridy = 1; pgbc.weightx = 1.0;
         urlPreviewLabel = new JBLabel();
-        urlPreviewLabel.setForeground(Color.GRAY);
-        previewPanel.add(urlPreviewLabel, pgbc);
+        urlPreviewLabel.setForeground(JBColor.GRAY);
+        urlPreviewLabel.setFont(urlPreviewLabel.getFont().deriveFont(Font.PLAIN, 12f));
+        previewPanel.add(urlPreviewLabel, BorderLayout.CENTER);
 
-        southPanel.add(previewPanel, BorderLayout.CENTER);
-
-        JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
-        testButton = new JButton("Test Connection");
-        testStatusLabel = new JBLabel("");
-        actionPanel.add(testButton);
-        actionPanel.add(testStatusLabel);
-
-        southPanel.add(actionPanel, BorderLayout.SOUTH);
-        root.add(southPanel, BorderLayout.SOUTH);
+        root.add(previewPanel, BorderLayout.SOUTH);
 
         setupListeners();
         return root;
+    }
+
+    @Override
+    protected JComponent createSouthPanel() {
+        JPanel south = new JPanel(new BorderLayout(10, 0));
+        south.setBorder(BorderFactory.createEmptyBorder(6, 4, 4, 4));
+
+        JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        testStatusLabel.setFont(testStatusLabel.getFont().deriveFont(Font.PLAIN, 12f));
+        left.add(testButton);
+        left.add(testStatusLabel);
+
+        testButton.addActionListener(e -> doTestConnection());
+
+        JComponent defaultButtons = super.createSouthPanel();
+
+        south.add(left, BorderLayout.WEST);
+        if (defaultButtons != null) {
+            south.add(defaultButtons, BorderLayout.EAST);
+        }
+        return south;
     }
 
     private JPanel createMysqlPanel() {
@@ -152,9 +189,10 @@ public class ConnectionDialog extends DialogWrapper {
         gbc.insets = new Insets(4, 4, 4, 4);
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
-        gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0.2;
+        // Host & Port
+        gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0.18;
         p.add(new JBLabel("Host:"), gbc);
-        gbc.gridx = 1; gbc.gridy = 0; gbc.weightx = 0.5;
+        gbc.gridx = 1; gbc.gridy = 0; gbc.weightx = 0.52;
         mysqlHostField = new JBTextField("localhost");
         p.add(mysqlHostField, gbc);
 
@@ -164,16 +202,18 @@ public class ConnectionDialog extends DialogWrapper {
         mysqlPortField = new JBTextField("3306");
         p.add(mysqlPortField, gbc);
 
-        gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0.2;
+        // Database
+        gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0.18;
         p.add(new JBLabel("Database:"), gbc);
-        gbc.gridx = 1; gbc.gridy = 1; gbc.gridwidth = 3; gbc.weightx = 0.8;
-        mysqlDatabaseField = new JBTextField("");
+        gbc.gridx = 1; gbc.gridy = 1; gbc.gridwidth = 3; gbc.weightx = 0.82;
+        mysqlDatabaseField = new JBTextField("shop_db");
         p.add(mysqlDatabaseField, gbc);
         gbc.gridwidth = 1;
 
-        gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 0.2;
+        // User & Password
+        gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 0.18;
         p.add(new JBLabel("User:"), gbc);
-        gbc.gridx = 1; gbc.gridy = 2; gbc.weightx = 0.5;
+        gbc.gridx = 1; gbc.gridy = 2; gbc.weightx = 0.52;
         mysqlUserField = new JBTextField("root");
         p.add(mysqlUserField, gbc);
 
@@ -187,7 +227,7 @@ public class ConnectionDialog extends DialogWrapper {
     }
 
     private JPanel createHsqlPanel() {
-        JPanel p = new JPanel(new BorderLayout(5, 5));
+        JPanel p = new JPanel(new BorderLayout(4, 4));
         p.setBorder(BorderFactory.createTitledBorder("HSQLDB Connection Settings"));
 
         JPanel top = new JPanel(new GridBagLayout());
@@ -195,10 +235,11 @@ public class ConnectionDialog extends DialogWrapper {
         gbc.insets = new Insets(4, 4, 4, 4);
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
-        gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0.2;
+        gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0.18;
         top.add(new JBLabel("Mode:"), gbc);
-        gbc.gridx = 1; gbc.gridy = 0; gbc.weightx = 0.8;
+        gbc.gridx = 1; gbc.gridy = 0; gbc.weightx = 0.82;
         hsqlModeCombo = new JComboBox<>(HsqlMode.values());
+        hsqlModeCombo.setSelectedItem(HsqlMode.SERVER);
         top.add(hsqlModeCombo, gbc);
 
         p.add(top, BorderLayout.NORTH);
@@ -206,39 +247,15 @@ public class ConnectionDialog extends DialogWrapper {
         hsqlSubCardLayout = new CardLayout();
         hsqlSubCardPanel = new JPanel(hsqlSubCardLayout);
 
-        // Subcard 1: MEM
-        JPanel memPanel = new JPanel(new GridBagLayout());
-        GridBagConstraints mgbc = new GridBagConstraints();
-        mgbc.insets = new Insets(4, 4, 4, 4);
-        mgbc.fill = GridBagConstraints.HORIZONTAL;
-        mgbc.gridx = 0; mgbc.gridy = 0; mgbc.weightx = 0.2;
-        memPanel.add(new JBLabel("Database Name:"), mgbc);
-        mgbc.gridx = 1; mgbc.gridy = 0; mgbc.weightx = 0.8;
-        hsqlMemNameField = new JBTextField("testdb");
-        memPanel.add(hsqlMemNameField, mgbc);
-        hsqlSubCardPanel.add(memPanel, HsqlMode.MEM.name());
-
-        // Subcard 2: FILE
-        JPanel filePanel = new JPanel(new GridBagLayout());
-        GridBagConstraints fgbc = new GridBagConstraints();
-        fgbc.insets = new Insets(4, 4, 4, 4);
-        fgbc.fill = GridBagConstraints.HORIZONTAL;
-        fgbc.gridx = 0; fgbc.gridy = 0; fgbc.weightx = 0.2;
-        filePanel.add(new JBLabel("File / Path:"), fgbc);
-        fgbc.gridx = 1; fgbc.gridy = 0; fgbc.weightx = 0.8;
-        hsqlFileField = new TextFieldWithBrowseButton();
-        hsqlFileField.addBrowseFolderListener(null, FileChooserDescriptorFactory.createSingleFileOrFolderDescriptor().withTitle("Select Database File"));
-        filePanel.add(hsqlFileField, fgbc);
-        hsqlSubCardPanel.add(filePanel, HsqlMode.FILE.name());
-
-        // Subcard 3: SERVER
+        // Subcard 1: SERVER (Default)
         JPanel srvPanel = new JPanel(new GridBagLayout());
         GridBagConstraints sgbc = new GridBagConstraints();
         sgbc.insets = new Insets(4, 4, 4, 4);
         sgbc.fill = GridBagConstraints.HORIZONTAL;
-        sgbc.gridx = 0; sgbc.gridy = 0; sgbc.weightx = 0.2;
+
+        sgbc.gridx = 0; sgbc.gridy = 0; sgbc.weightx = 0.18;
         srvPanel.add(new JBLabel("Host:"), sgbc);
-        sgbc.gridx = 1; sgbc.gridy = 0; sgbc.weightx = 0.5;
+        sgbc.gridx = 1; sgbc.gridy = 0; sgbc.weightx = 0.52;
         hsqlServerHostField = new JBTextField("localhost");
         srvPanel.add(hsqlServerHostField, sgbc);
 
@@ -248,12 +265,38 @@ public class ConnectionDialog extends DialogWrapper {
         hsqlServerPortField = new JBTextField("9001");
         srvPanel.add(hsqlServerPortField, sgbc);
 
-        sgbc.gridx = 0; sgbc.gridy = 1; sgbc.weightx = 0.2;
+        sgbc.gridx = 0; sgbc.gridy = 1; sgbc.weightx = 0.18;
         srvPanel.add(new JBLabel("Database:"), sgbc);
-        sgbc.gridx = 1; sgbc.gridy = 1; sgbc.gridwidth = 3; sgbc.weightx = 0.8;
+        sgbc.gridx = 1; sgbc.gridy = 1; sgbc.gridwidth = 3; sgbc.weightx = 0.82;
         hsqlServerDbField = new JBTextField("testdb");
         srvPanel.add(hsqlServerDbField, sgbc);
+
         hsqlSubCardPanel.add(srvPanel, HsqlMode.SERVER.name());
+
+        // Subcard 2: FILE
+        JPanel filePanel = new JPanel(new GridBagLayout());
+        GridBagConstraints fgbc = new GridBagConstraints();
+        fgbc.insets = new Insets(4, 4, 4, 4);
+        fgbc.fill = GridBagConstraints.HORIZONTAL;
+        fgbc.gridx = 0; fgbc.gridy = 0; fgbc.weightx = 0.18;
+        filePanel.add(new JBLabel("File / Path:"), fgbc);
+        fgbc.gridx = 1; fgbc.gridy = 0; fgbc.weightx = 0.82;
+        hsqlFileField = new TextFieldWithBrowseButton();
+        hsqlFileField.addBrowseFolderListener(null, FileChooserDescriptorFactory.createSingleFileOrFolderDescriptor().withTitle("Select Database File"));
+        filePanel.add(hsqlFileField, fgbc);
+        hsqlSubCardPanel.add(filePanel, HsqlMode.FILE.name());
+
+        // Subcard 3: MEM
+        JPanel memPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints mgbc = new GridBagConstraints();
+        mgbc.insets = new Insets(4, 4, 4, 4);
+        mgbc.fill = GridBagConstraints.HORIZONTAL;
+        mgbc.gridx = 0; mgbc.gridy = 0; mgbc.weightx = 0.18;
+        memPanel.add(new JBLabel("Database Name:"), mgbc);
+        mgbc.gridx = 1; mgbc.gridy = 0; mgbc.weightx = 0.82;
+        hsqlMemNameField = new JBTextField("testdb");
+        memPanel.add(hsqlMemNameField, mgbc);
+        hsqlSubCardPanel.add(memPanel, HsqlMode.MEM.name());
 
         p.add(hsqlSubCardPanel, BorderLayout.CENTER);
 
@@ -263,15 +306,15 @@ public class ConnectionDialog extends DialogWrapper {
         agbc.insets = new Insets(4, 4, 4, 4);
         agbc.fill = GridBagConstraints.HORIZONTAL;
 
-        agbc.gridx = 0; agbc.gridy = 0; agbc.weightx = 0.2;
+        agbc.gridx = 0; agbc.gridy = 0; agbc.weightx = 0.18;
         authPanel.add(new JBLabel("User:"), agbc);
-        agbc.gridx = 1; agbc.gridy = 0; agbc.weightx = 0.3;
+        agbc.gridx = 1; agbc.gridy = 0; agbc.weightx = 0.52;
         hsqlUserField = new JBTextField("SA");
         authPanel.add(hsqlUserField, agbc);
 
-        agbc.gridx = 2; agbc.gridy = 0; agbc.weightx = 0.2;
+        agbc.gridx = 2; agbc.gridy = 0; agbc.weightx = 0.1;
         authPanel.add(new JBLabel("Password:"), agbc);
-        agbc.gridx = 3; agbc.gridy = 0; agbc.weightx = 0.3;
+        agbc.gridx = 3; agbc.gridy = 0; agbc.weightx = 0.2;
         hsqlPasswordField = new JPasswordField();
         authPanel.add(hsqlPasswordField, agbc);
 
@@ -280,15 +323,95 @@ public class ConnectionDialog extends DialogWrapper {
         return p;
     }
 
+    private JPanel createCustomUrlPanel() {
+        JPanel p = new JPanel(new GridBagLayout());
+        p.setBorder(BorderFactory.createTitledBorder("Custom JDBC URL Connection"));
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(4, 4, 4, 4);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+
+        // URL
+        gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0.18;
+        p.add(new JBLabel("JDBC URL:"), gbc);
+        gbc.gridx = 1; gbc.gridy = 0; gbc.gridwidth = 3; gbc.weightx = 0.82;
+        customUrlField = new JBTextField();
+        p.add(customUrlField, gbc);
+        gbc.gridwidth = 1;
+
+        // User & Password
+        gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0.18;
+        p.add(new JBLabel("User:"), gbc);
+        gbc.gridx = 1; gbc.gridy = 1; gbc.weightx = 0.52;
+        customUrlUserField = new JBTextField("root");
+        p.add(customUrlUserField, gbc);
+
+        gbc.gridx = 2; gbc.gridy = 1; gbc.weightx = 0.1;
+        p.add(new JBLabel("Password:"), gbc);
+        gbc.gridx = 3; gbc.gridy = 1; gbc.weightx = 0.2;
+        customUrlPasswordField = new JPasswordField();
+        p.add(customUrlPasswordField, gbc);
+
+        // Helper Note
+        gbc.gridx = 1; gbc.gridy = 2; gbc.gridwidth = 3; gbc.weightx = 0.82;
+        JBLabel noteLabel = new JBLabel("Enter full JDBC connection string. Credentials entered above will be passed to the driver.");
+        noteLabel.setForeground(JBColor.GRAY);
+        noteLabel.setFont(noteLabel.getFont().deriveFont(Font.PLAIN, 11f));
+        p.add(noteLabel, gbc);
+
+        return p;
+    }
+
     private void setupListeners() {
+        // Toggle between Standard and Custom JDBC URL modes
+        standardRadio.addActionListener(e -> {
+            mainCardLayout.show(mainCardPanel, "STANDARD");
+            syncCredentialsToStandard();
+            updatePreview();
+        });
+
+        customUrlRadio.addActionListener(e -> {
+            mainCardLayout.show(mainCardPanel, "JDBC_URL");
+            syncCredentialsToCustomUrl();
+            if (customUrlField.getText().trim().isEmpty()) {
+                ConnectionConfig temp = createTempConfig();
+                customUrlField.setText(temp.buildJdbcUrl());
+            }
+            updatePreview();
+        });
+
+        // Database Type Switcher
         typeCombo.addItemListener(e -> {
             if (e.getStateChange() == ItemEvent.SELECTED) {
                 DatabaseType type = (DatabaseType) typeCombo.getSelectedItem();
-                cardLayout.show(dynamicPanel, type.name());
+                dbTypeCardLayout.show(dbTypeCardPanel, type.name());
+
+                // Smart default adaptations
+                if (type == DatabaseType.MYSQL) {
+                    if (mysqlPortField.getText().trim().equals("9001") || mysqlPortField.getText().trim().isEmpty()) {
+                        mysqlPortField.setText("3306");
+                    }
+                    if (mysqlUserField.getText().trim().equalsIgnoreCase("SA") || mysqlUserField.getText().trim().isEmpty()) {
+                        mysqlUserField.setText("root");
+                    }
+                    if (mysqlDatabaseField.getText().trim().equalsIgnoreCase("testdb") || mysqlDatabaseField.getText().trim().isEmpty()) {
+                        mysqlDatabaseField.setText("shop_db");
+                    }
+                } else if (type == DatabaseType.HSQLDB) {
+                    if (hsqlServerPortField.getText().trim().equals("3306") || hsqlServerPortField.getText().trim().isEmpty()) {
+                        hsqlServerPortField.setText("9001");
+                    }
+                    if (hsqlUserField.getText().trim().equalsIgnoreCase("root") || hsqlUserField.getText().trim().isEmpty()) {
+                        hsqlUserField.setText("SA");
+                    }
+                    if (hsqlServerDbField.getText().trim().equalsIgnoreCase("shop_db") || hsqlServerDbField.getText().trim().isEmpty()) {
+                        hsqlServerDbField.setText("testdb");
+                    }
+                }
                 updatePreview();
             }
         });
 
+        // HSQL Mode Switcher
         hsqlModeCombo.addItemListener(e -> {
             if (e.getStateChange() == ItemEvent.SELECTED) {
                 HsqlMode mode = (HsqlMode) hsqlModeCombo.getSelectedItem();
@@ -313,14 +436,45 @@ public class ConnectionDialog extends DialogWrapper {
         hsqlServerHostField.getDocument().addDocumentListener(dl);
         hsqlServerPortField.getDocument().addDocumentListener(dl);
         hsqlServerDbField.getDocument().addDocumentListener(dl);
+        hsqlUserField.getDocument().addDocumentListener(dl);
 
-        customUrlCheck.addActionListener(e -> {
-            customUrlField.setEnabled(customUrlCheck.isSelected());
-            updatePreview();
+        // Auto-detect type when typing custom JDBC URL
+        customUrlField.getDocument().addDocumentListener(new DocumentListener() {
+            public void insertUpdate(DocumentEvent e) { checkUrlPrefix(); updatePreview(); }
+            public void removeUpdate(DocumentEvent e) { checkUrlPrefix(); updatePreview(); }
+            public void changedUpdate(DocumentEvent e) { checkUrlPrefix(); updatePreview(); }
+
+            private void checkUrlPrefix() {
+                String u = customUrlField.getText().trim().toLowerCase();
+                if (u.startsWith("jdbc:hsqldb:") && typeCombo.getSelectedItem() != DatabaseType.HSQLDB) {
+                    typeCombo.setSelectedItem(DatabaseType.HSQLDB);
+                } else if (u.startsWith("jdbc:mysql:") && typeCombo.getSelectedItem() != DatabaseType.MYSQL) {
+                    typeCombo.setSelectedItem(DatabaseType.MYSQL);
+                }
+            }
         });
-        customUrlField.getDocument().addDocumentListener(dl);
 
-        testButton.addActionListener(e -> doTestConnection());
+        customUrlUserField.getDocument().addDocumentListener(dl);
+    }
+
+    private void syncCredentialsToCustomUrl() {
+        DatabaseType type = (DatabaseType) typeCombo.getSelectedItem();
+        if (type == DatabaseType.MYSQL) {
+            customUrlUserField.setText(mysqlUserField.getText().trim());
+            customUrlPasswordField.setText(new String(mysqlPasswordField.getPassword()));
+        } else {
+            customUrlUserField.setText(hsqlUserField.getText().trim());
+            customUrlPasswordField.setText(new String(hsqlPasswordField.getPassword()));
+        }
+    }
+
+    private void syncCredentialsToStandard() {
+        String u = customUrlUserField.getText().trim();
+        String p = new String(customUrlPasswordField.getPassword());
+        mysqlUserField.setText(u);
+        mysqlPasswordField.setText(p);
+        hsqlUserField.setText(u);
+        hsqlPasswordField.setText(p);
     }
 
     private void updatePreview() {
@@ -335,58 +489,75 @@ public class ConnectionDialog extends DialogWrapper {
         DatabaseType type = (DatabaseType) typeCombo.getSelectedItem();
         c.setType(type);
 
-        if (customUrlCheck.isSelected()) {
+        if (customUrlRadio.isSelected()) {
             c.setCustomUrl(customUrlField.getText().trim());
+            c.setUser(customUrlUserField.getText().trim());
+            c.setPassword(new String(customUrlPasswordField.getPassword()));
+            c.setHost("localhost");
+            c.setPort(type == DatabaseType.MYSQL ? 3306 : 9001);
         } else {
             c.setCustomUrl("");
-        }
-
-        if (type == DatabaseType.MYSQL) {
-            c.setHost(mysqlHostField.getText().trim());
-            try {
-                c.setPort(Integer.parseInt(mysqlPortField.getText().trim()));
-            } catch (Exception ignored) {
-                c.setPort(3306);
-            }
-            c.setDatabaseName(mysqlDatabaseField.getText().trim());
-            c.setUser(mysqlUserField.getText().trim());
-            c.setPassword(new String(mysqlPasswordField.getPassword()));
-        } else {
-            HsqlMode mode = (HsqlMode) hsqlModeCombo.getSelectedItem();
-            c.setHsqlMode(mode);
-            if (mode == HsqlMode.MEM) {
-                c.setDatabaseName(hsqlMemNameField.getText().trim());
-            } else if (mode == HsqlMode.FILE) {
-                c.setDatabaseName(hsqlFileField.getText().trim());
-            } else {
-                c.setHost(hsqlServerHostField.getText().trim());
+            if (type == DatabaseType.MYSQL) {
+                c.setHost(mysqlHostField.getText().trim());
                 try {
-                    c.setPort(Integer.parseInt(hsqlServerPortField.getText().trim()));
+                    c.setPort(Integer.parseInt(mysqlPortField.getText().trim()));
                 } catch (Exception ignored) {
-                    c.setPort(9001);
+                    c.setPort(3306);
                 }
-                c.setDatabaseName(hsqlServerDbField.getText().trim());
+                c.setDatabaseName(mysqlDatabaseField.getText().trim());
+                c.setUser(mysqlUserField.getText().trim());
+                c.setPassword(new String(mysqlPasswordField.getPassword()));
+            } else {
+                HsqlMode mode = (HsqlMode) hsqlModeCombo.getSelectedItem();
+                c.setHsqlMode(mode);
+                if (mode == HsqlMode.MEM) {
+                    c.setDatabaseName(hsqlMemNameField.getText().trim());
+                } else if (mode == HsqlMode.FILE) {
+                    c.setDatabaseName(hsqlFileField.getText().trim());
+                } else {
+                    c.setHost(hsqlServerHostField.getText().trim());
+                    try {
+                        c.setPort(Integer.parseInt(hsqlServerPortField.getText().trim()));
+                    } catch (Exception ignored) {
+                        c.setPort(9001);
+                    }
+                    c.setDatabaseName(hsqlServerDbField.getText().trim());
+                }
+                c.setUser(hsqlUserField.getText().trim());
+                c.setPassword(new String(hsqlPasswordField.getPassword()));
             }
-            c.setUser(hsqlUserField.getText().trim());
-            c.setPassword(new String(hsqlPasswordField.getPassword()));
         }
         return c;
     }
 
     private void doTestConnection() {
         testStatusLabel.setText("Connecting...");
-        testStatusLabel.setForeground(Color.GRAY);
+        testStatusLabel.setForeground(JBColor.GRAY);
         testButton.setEnabled(false);
 
         SwingUtilities.invokeLater(() -> {
             new Thread(() -> {
                 ConnectionConfig temp = createTempConfig();
+                DatabaseType originalType = temp.getType();
                 ConnectionTestResult result = DatabaseConnectionManager.getInstance().testConnection(temp);
 
                 SwingUtilities.invokeLater(() -> {
                     testButton.setEnabled(true);
                     if (result.isSuccess()) {
-                        testStatusLabel.setText("Connected! " + result.getDatabaseProductName() + " (" + result.getResponseTimeMs() + "ms)");
+                        // If the backend detected a database type mismatch (e.g. MySQL port was running HSQLDB)
+                        if (temp.getType() != originalType) {
+                            typeCombo.setSelectedItem(temp.getType());
+                            if (temp.getType() == DatabaseType.HSQLDB) {
+                                hsqlModeCombo.setSelectedItem(HsqlMode.SERVER);
+                                hsqlSubCardLayout.show(hsqlSubCardPanel, HsqlMode.SERVER.name());
+                                hsqlServerHostField.setText(temp.getHost());
+                                hsqlServerPortField.setText(String.valueOf(temp.getPort()));
+                                hsqlServerDbField.setText(temp.getDatabaseName());
+                                hsqlUserField.setText(temp.getUser());
+                            }
+                            updatePreview();
+                        }
+                        testStatusLabel.setText("Connected! (" + result.getResponseTimeMs() + "ms)");
                         testStatusLabel.setForeground(new JBColor(new Color(40, 160, 80), new Color(98, 181, 67)));
                         Messages.showInfoMessage(result.getSummaryMessage(), "Connection Successful");
                     } else {
@@ -402,7 +573,7 @@ public class ConnectionDialog extends DialogWrapper {
     private void loadValues() {
         nameField.setText(config.getName());
         typeCombo.setSelectedItem(config.getType());
-        cardLayout.show(dynamicPanel, config.getType().name());
+        dbTypeCardLayout.show(dbTypeCardPanel, config.getType().name());
 
         if (config.getType() == DatabaseType.MYSQL) {
             mysqlHostField.setText(config.getHost());
@@ -411,11 +582,12 @@ public class ConnectionDialog extends DialogWrapper {
             mysqlUserField.setText(config.getUser());
             mysqlPasswordField.setText(config.getPassword());
         } else {
-            hsqlModeCombo.setSelectedItem(config.getHsqlMode());
-            hsqlSubCardLayout.show(hsqlSubCardPanel, config.getHsqlMode().name());
-            if (config.getHsqlMode() == HsqlMode.FILE) {
+            HsqlMode mode = config.getHsqlMode() != null ? config.getHsqlMode() : HsqlMode.SERVER;
+            hsqlModeCombo.setSelectedItem(mode);
+            hsqlSubCardLayout.show(hsqlSubCardPanel, mode.name());
+            if (mode == HsqlMode.FILE) {
                 hsqlFileField.setText(config.getDatabaseName());
-            } else if (config.getHsqlMode() == HsqlMode.MEM) {
+            } else if (mode == HsqlMode.MEM) {
                 hsqlMemNameField.setText(config.getDatabaseName());
             } else {
                 hsqlServerHostField.setText(config.getHost());
@@ -426,10 +598,18 @@ public class ConnectionDialog extends DialogWrapper {
             hsqlPasswordField.setText(config.getPassword());
         }
 
+        // Custom URL or Standard mode
         if (config.getCustomUrl() != null && !config.getCustomUrl().isEmpty()) {
-            customUrlCheck.setSelected(true);
+            customUrlRadio.setSelected(true);
+            mainCardLayout.show(mainCardPanel, "JDBC_URL");
             customUrlField.setText(config.getCustomUrl());
-            customUrlField.setEnabled(true);
+            customUrlUserField.setText(config.getUser());
+            customUrlPasswordField.setText(config.getPassword());
+        } else {
+            standardRadio.setSelected(true);
+            mainCardLayout.show(mainCardPanel, "STANDARD");
+            customUrlUserField.setText(config.getUser());
+            customUrlPasswordField.setText(config.getPassword());
         }
     }
 

@@ -14,6 +14,7 @@ public class PluginIntegrationTest {
             System.out.println("Starting Lattice Plugin Integration Tests...");
 
             testDriverLoading();
+            testScreenshotCredsAndLiveConnections();
             testHsqlConnectionAndMetadata();
             testCrudAndInlineEdits();
             testExport();
@@ -37,6 +38,50 @@ public class PluginIntegrationTest {
         if (mysqlDriver == null) throw new AssertionError("MySQL driver null");
 
         System.out.println("PASSED! HSQLDB: " + hsqlDriver.getClass().getName() + ", MySQL: " + mysqlDriver.getClass().getName());
+    }
+
+    private static void testScreenshotCredsAndLiveConnections() throws Exception {
+        System.out.print("[TEST] Screenshot creds handling (MySQL on port 9001 -> HSQLDB auto-detect)... ");
+        ConnectionConfig screenshotCfg = new ConnectionConfig(DatabaseType.MYSQL, "Screenshot Config");
+        screenshotCfg.setHost("localhost");
+        screenshotCfg.setPort(9001);
+        screenshotCfg.setDatabaseName("testdb");
+        screenshotCfg.setUser("SA");
+        screenshotCfg.setPassword("");
+
+        ConnectionTestResult res = DatabaseConnectionManager.getInstance().testConnection(screenshotCfg);
+        if (!res.isSuccess()) {
+            throw new AssertionError("Test connection for screenshot creds failed: " + res.getErrorMessage());
+        }
+        if (screenshotCfg.getType() != DatabaseType.HSQLDB) {
+            throw new AssertionError("Expected auto-detect to switch type to HSQLDB, but was: " + screenshotCfg.getType());
+        }
+        System.out.println("PASSED! (Auto-detected: " + res.getDatabaseProductName() + ")");
+
+        System.out.print("[TEST] Live MySQL server on 3306... ");
+        ConnectionConfig mysqlLiveCfg = new ConnectionConfig(DatabaseType.MYSQL, "Live MySQL");
+        mysqlLiveCfg.setHost("localhost");
+        mysqlLiveCfg.setPort(3306);
+        mysqlLiveCfg.setDatabaseName("shop_db");
+        mysqlLiveCfg.setUser("root");
+        mysqlLiveCfg.setPassword("");
+
+        ConnectionTestResult resMysql = DatabaseConnectionManager.getInstance().testConnection(mysqlLiveCfg);
+        if (!resMysql.isSuccess()) {
+            throw new AssertionError("Live MySQL test connection failed: " + resMysql.getErrorMessage());
+        }
+        System.out.println("PASSED! (Connected to: " + resMysql.getDatabaseProductName() + ")");
+
+        System.out.print("[TEST] Custom JDBC URL mode with User & Password... ");
+        ConnectionConfig customCfg = new ConnectionConfig();
+        customCfg.setCustomUrl("jdbc:mysql://localhost:3306/shop_db");
+        customCfg.setUser("root");
+        customCfg.setPassword("");
+        ConnectionTestResult resCustom = DatabaseConnectionManager.getInstance().testConnection(customCfg);
+        if (!resCustom.isSuccess()) {
+            throw new AssertionError("Custom JDBC URL test failed: " + resCustom.getErrorMessage());
+        }
+        System.out.println("PASSED! (Custom URL connected to: " + resCustom.getDatabaseProductName() + ")");
     }
 
     private static void testHsqlConnectionAndMetadata() throws Exception {

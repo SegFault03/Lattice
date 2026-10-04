@@ -23,11 +23,14 @@ public class ConnectionConfig {
         this.type = type;
         this.name = name;
         if (type == DatabaseType.HSQLDB) {
+            this.hsqlMode = HsqlMode.SERVER;
+            this.host = "localhost";
             this.port = 9001;
             this.user = "SA";
             this.password = "";
             this.databaseName = "testdb";
         } else {
+            this.host = "localhost";
             this.port = 3306;
             this.user = "root";
             this.databaseName = "";
