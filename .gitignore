@@ -38,3 +38,6 @@ Thumbs.db
 __pycache__/
 *.pyc
 test-binaries/
+
+# Workstation-specific Git CLI instructions
+GIT-INSTRUCTIONS.md
