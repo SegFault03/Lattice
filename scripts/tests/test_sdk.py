@@ -6,6 +6,8 @@ from pathlib import Path
 import sys
 import tarfile
 import tempfile
+import os
+import stat
 import unittest
 from unittest.mock import patch
 
@@ -20,7 +22,11 @@ class SdkTests(unittest.TestCase):
         archive = cache / "archives/ides/idea-2025.1-linux.tar.gz"
         archive.parent.mkdir(parents=True)
         with tarfile.open(archive, "w:gz") as bundle:
-            for name in ("idea/product-info.json", "idea/lib/platform.jar", "../outside" if unsafe else "idea/NOTICE"):
+            directory = tarfile.TarInfo("idea/lib")
+            directory.type = tarfile.DIRTYPE
+            directory.mode = 0o755
+            bundle.addfile(directory)
+            for name in ("idea/product-info.json", "idea/lib/platform.jar", "idea/jbr/bin/java", "../outside" if unsafe else "idea/NOTICE"):
                 item = tarfile.TarInfo(name)
                 item.size = 2
                 bundle.addfile(item, io.BytesIO(b"{}"))
@@ -37,7 +43,10 @@ class SdkTests(unittest.TestCase):
             with patch.object(verifier.urllib.request, "urlopen", side_effect=self.sdk_archive(cache)):
                 sdk = verifier.ide_home(cache, "2025.1")
             self.assertTrue((sdk / "lib/platform.jar").is_file())
-            self.assertFalse((sdk / "jbr").exists())
+            self.assertTrue((sdk / "jbr/bin/java").is_file())
+            self.assertFalse((sdk / "jbr/lib/native-link").exists())
+            if os.name != "nt":
+                self.assertTrue((sdk / "lib").stat().st_mode & stat.S_IXUSR)
             with patch.object(verifier.urllib.request, "urlopen") as network:
                 self.assertEqual(sdk, verifier.ide_home(cache, "2025.1"))
                 network.assert_not_called()

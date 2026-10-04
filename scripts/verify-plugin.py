@@ -6,7 +6,6 @@ import json
 import os
 from pathlib import Path
 import subprocess
-import stat
 import tarfile
 import urllib.request
 import uuid
@@ -14,6 +13,7 @@ from common import ROOT, cache_directory, java_command
 
 VERIFIER_SHA256 = "59a5ef05cbdf0584cbfd6cb6ca802c74ecf340fdeadc5a73eac24af622c22010"
 VERIFIER_URL = "https://github.com/JetBrains/intellij-plugin-verifier/releases/download/1.410/verifier-cli-1.410-all.jar"
+SDK_LAYOUT = "Checksum-verified SDK extraction, layout 2\n"
 
 
 def digest(path):
@@ -24,7 +24,7 @@ def digest(path):
 def ide_home(cache, version):
     directory = cache / "ides" / version
     for candidate in [directory] + list((cache / "ides").glob(version + "-*")):
-        if (candidate / ".complete").exists():
+        if (candidate / ".complete").exists() and (candidate / ".complete").read_text(encoding="utf-8") == SDK_LAYOUT:
             existing = list(candidate.rglob("product-info.json"))
             if len(existing) != 1:
                 raise ValueError("Ambiguous IntelliJ SDK directory")
@@ -51,19 +51,18 @@ def ide_home(cache, version):
     # Python's data filter rejects path traversal and unsafe link targets.
     with tarfile.open(archive) as bundle:
         def safe_sdk_member(member, destination):
-            # Native binaries/JBR are unused by static verification. Skipping
-            # links also avoids Windows symlink privileges and extraction traps.
-            if member.issym() or member.islnk() or "jbr" in Path(member.name).parts:
+            # Keep regular runtime files: product-info references them when the
+            # verifier validates the IDE layout. Skip links for Windows portability.
+            if member.issym() or member.islnk():
                 return None
-            filtered = tarfile.data_filter(member, destination)
-            if filtered is not None:
-                filtered.mode = (filtered.mode or 0o644) | stat.S_IWUSR
-            return filtered
+            # Preserve data_filter's None directory mode; assigning 0644 here
+            # removes directory search permission on Linux/macOS.
+            return tarfile.data_filter(member, destination)
         bundle.extractall(directory, filter=safe_sdk_member)
     existing = list(directory.rglob("product-info.json"))
     if len(existing) != 1:
         raise ValueError("Official SDK has no unique product-info.json")
-    (directory / ".complete").write_text("Checksum-verified SDK extraction\n", encoding="utf-8")
+    (directory / ".complete").write_text(SDK_LAYOUT, encoding="utf-8")
     return existing[0].parent
 
 
