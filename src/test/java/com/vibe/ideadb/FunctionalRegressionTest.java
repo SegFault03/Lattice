@@ -144,6 +144,29 @@ public class FunctionalRegressionTest {
             c.rollback(); c.setAutoCommit(true);
         }
     }
+    private static void credentials() {
+        var secrets = new HashMap<String, com.vibe.ideadb.state.DatabaseSettingsState.Secret>();
+        var vault = new com.vibe.ideadb.state.DatabaseSettingsState.CredentialStore() {
+            public com.vibe.ideadb.state.DatabaseSettingsState.Secret get(String id) { return secrets.get(id); }
+            public void set(String id, com.vibe.ideadb.state.DatabaseSettingsState.Secret secret) { if (secret==null) secrets.remove(id); else secrets.put(id,secret); }
+        };
+        var settings = new com.vibe.ideadb.state.DatabaseSettingsState(vault);
+        var config = new ConnectionConfig(DatabaseType.MYSQL,"credentials"); config.setPassword("password-sentinel"); config.setCustomUrl("jdbc:mysql://localhost/shop_db?password=url-secret");
+        settings.addConnection(config);
+        String xml = com.intellij.openapi.util.JDOMUtil.writeElement(com.intellij.util.xmlb.XmlSerializer.serialize(settings.getState()));
+        check(!xml.contains("password-sentinel") && !xml.contains("url-secret"),"Settings XML must not contain passwords or JDBC URL secrets");
+        var reloaded = new com.vibe.ideadb.state.DatabaseSettingsState(vault); reloaded.loadState(settings.getState());
+        check(reloaded.getConnection(config.getId()).getPassword().equals("password-sentinel") && reloaded.getConnection(config.getId()).getCustomUrl().equals(config.getCustomUrl()),"Secure credentials must hydrate on reload");
+        reloaded.getConnection(config.getId()).setPassword("external change");
+        check(reloaded.getConnection(config.getId()).getPassword().equals("password-sentinel"),"Settings must not leak mutable configuration references");
+        var legacy = new com.vibe.ideadb.state.DatabaseSettingsState.State(); legacy.connections.add(config.copy());
+        reloaded.loadState(legacy);
+        check(reloaded.getState().connections.get(0).getPassword().isEmpty() && secrets.containsKey(config.getId()),"Legacy plaintext credentials must migrate before XML is saved");
+        config.setPassword("updated"); reloaded.updateConnection(config);
+        check(secrets.get(config.getId()).password().equals("updated"),"Credential changes must replace the secure entry");
+        reloaded.removeConnection(config.getId());
+        check(secrets.isEmpty() && reloaded.getConnection(config.getId())==null,"Removing a connection must remove its secure entry");
+    }
     private static void drafts() {
         var original = new ArrayList<Object>(Arrays.asList(1, new java.math.BigDecimal("12.30"), new byte[]{0, -1}, null, Timestamp.valueOf("2026-10-04 10:20:30.123456")));
         var edited = new ArrayList<Object>(original); edited.set(0, 2);
@@ -166,6 +189,7 @@ public class FunctionalRegressionTest {
     public static void main(String[] args) throws Exception {
         try {
             drafts();
+            credentials();
             ConnectionConfig mysql = new ConnectionConfig(DatabaseType.MYSQL, "regression MySQL"); mysql.setDatabaseName("shop_db");
             runEngine(mysql);
             runEngine(new ConnectionConfig(DatabaseType.HSQLDB, "regression HSQLDB"));
