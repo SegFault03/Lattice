@@ -70,24 +70,28 @@ public class WelcomePanel extends JPanel {
         // Quick Tips Card
         gbc.gridy++;
         gbc.insets = new Insets(0, 20, 20, 20);
-        JPanel tipsCard = new JPanel(new BorderLayout());
-        tipsCard.setPreferredSize(new Dimension(480, 180));
-        tipsCard.setMaximumSize(new Dimension(480, 180));
+        JPanel tipsCard = new JPanel();
+        tipsCard.setLayout(new BoxLayout(tipsCard, BoxLayout.Y_AXIS));
         tipsCard.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(new JBColor(new Color(210, 215, 220), new Color(75, 78, 82)), 1, true),
-                BorderFactory.createEmptyBorder(16, 20, 16, 20)
+                BorderFactory.createEmptyBorder(14, 18, 14, 18)
         ));
         tipsCard.setBackground(new JBColor(new Color(250, 252, 255), new Color(43, 45, 48)));
 
-        JBLabel tipsContent = new JBLabel("<html>"
-                + "<div style='font-family: sans-serif; font-size: 11px; line-height: 1.6;'>"
-                + "<div style='font-size: 13px; font-weight: bold; margin-bottom: 8px;'>Quick Tips:</div>"
-                + "<div style='margin-bottom: 6px;'>• <b>Double-click</b> any table in Database Explorer to view and edit data in a main editor tab.</div>"
-                + "<div style='margin-bottom: 6px;'>• <b>Right-click</b> nodes to create tables, alter columns, truncate, or run queries.</div>"
-                + "<div style='margin-bottom: 6px;'>• <b>Ctrl+Shift+D</b> to quickly toggle the Database Explorer tool window.</div>"
-                + "<div>• Includes built-in zero-setup <b>In-Memory HSQLDB demo</b> for immediate testing.</div>"
-                + "</div></html>");
-        tipsCard.add(tipsContent, BorderLayout.CENTER);
+        JBLabel tipsTitle = new JBLabel("Quick Tips:");
+        tipsTitle.setFont(tipsTitle.getFont().deriveFont(Font.BOLD, 13f));
+        tipsTitle.setAlignmentX(Component.LEFT_ALIGNMENT);
+        tipsCard.add(tipsTitle);
+        tipsCard.add(Box.createVerticalStrut(10));
+
+        tipsCard.add(createTipLabel("Double-click", "any table in Database Explorer to view and edit data in a main editor tab."));
+        tipsCard.add(Box.createVerticalStrut(6));
+        tipsCard.add(createTipLabel("Right-click", "nodes to create tables, alter columns, truncate, or run queries."));
+        tipsCard.add(Box.createVerticalStrut(6));
+        tipsCard.add(createTipLabel("Ctrl+Shift+D", "to quickly toggle the Lattice database tool window."));
+        tipsCard.add(Box.createVerticalStrut(6));
+        tipsCard.add(createTipLabel("Built-in Demo", "includes zero-setup In-Memory HSQLDB demo for immediate testing."));
+
         content.add(tipsCard, gbc);
 
         // "Do not show on startup" Checkbox
@@ -134,5 +138,12 @@ public class WelcomePanel extends JPanel {
         } else {
             showAddConnectionDialog(DatabaseType.HSQLDB);
         }
+    }
+
+    private static JBLabel createTipLabel(String boldPrefix, String text) {
+        JBLabel label = new JBLabel("<html>&#8226;&nbsp; <b>" + boldPrefix + "</b> " + text + "</html>");
+        label.setFont(label.getFont().deriveFont(12f));
+        label.setAlignmentX(Component.LEFT_ALIGNMENT);
+        return label;
     }
 }
