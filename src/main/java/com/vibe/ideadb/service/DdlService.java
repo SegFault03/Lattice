@@ -416,26 +416,53 @@ public class DdlService {
         }
     }
 
-    public String getCreateTableStatement(Connection conn, ConnectionConfig config, String dbName, TableMetadata tableMetadata) {
-        if (config.getType() == DatabaseType.MYSQL) {
-            try (Statement stmt = conn.createStatement()) {
-                String sql = "SHOW CREATE TABLE " + formatTable(config,dbName,tableMetadata.getName());
-                try (ResultSet rs = stmt.executeQuery(sql)) {
-                    if (rs.next()) {
-                        return rs.getString(2) + ";";
-                    }
-                }
-            } catch (Exception ignored) {
+    public String getCreateTableStatement(Connection conn, ConnectionConfig config, String dbName, TableMetadata tableMetadata) throws Exception {
+        if (config.getType()==DatabaseType.MYSQL) {
+            try (Statement statement=conn.createStatement(); ResultSet result=statement.executeQuery("SHOW CREATE TABLE " + formatTable(config,dbName,tableMetadata.getName()))) {
+                if(result.next()) return result.getString(2) + ";";
+                throw new java.sql.SQLException("CREATE statement unavailable");
             }
         }
-        return generateCreateTableSql(config, dbName, tableMetadata);
+        String schema=dbName==null || dbName.isBlank() ? conn.getSchema() : dbName;
+        String target=scriptIdentifier(schema) + "\\." + scriptIdentifier(tableMetadata.getName());
+        String anyIdentifier="(?:\"(?:[^\"]|\"\")*\"|[A-Z_][A-Z_0-9]*)";
+        var create=java.util.regex.Pattern.compile("^CREATE (?:MEMORY |CACHED |TEXT )?TABLE " + target + "(?=[ (])");
+        var alter=java.util.regex.Pattern.compile("^ALTER TABLE " + target + "(?= )");
+        var index=java.util.regex.Pattern.compile("^CREATE (?:UNIQUE )?INDEX " + anyIdentifier + " ON " + target + "(?=[ (])");
+        var trigger=java.util.regex.Pattern.compile("^CREATE TRIGGER " + anyIdentifier + " .*? ON " + target + "(?= )");
+        List<String> statements=new ArrayList<>();
+        try(Statement statement=conn.createStatement(); ResultSet result=statement.executeQuery("SCRIPT")) {
+            while(result.next()) {
+                String sql=result.getString(1);
+                if(create.matcher(sql).find() || alter.matcher(sql).find() || index.matcher(sql).find() || trigger.matcher(sql).find()) statements.add(sql + ";");
+            }
+        } catch(java.sql.SQLException failure) {
+            TableMetadata fallback=new TableMetadata(null,schema,tableMetadata.getName(),tableMetadata.getType());
+            fallback.setColumns(MetadataService.getInstance().getColumns(conn,config,schema,tableMetadata.getName()));
+            return "-- Partial reconstruction: SCRIPT unavailable (requires sufficient privileges).\n" + generateCreateTableSql(config,schema,fallback);
+        }
+        if(statements.isEmpty()) throw new java.sql.SQLException("No CREATE statement found for " + tableMetadata.getName());
+        return "-- Referenced tables, sequences and user-defined types must already exist.\n" + String.join("\n",statements);
+    }
+    private static String scriptIdentifier(String name) {
+        String quoted="\"" + name.replace("\"","\"\"") + "\"";
+        return name.matches("[A-Z_][A-Z_0-9]*") ? "(?:" + java.util.regex.Pattern.quote(name) + "|" + java.util.regex.Pattern.quote(quoted) + ")" : java.util.regex.Pattern.quote(quoted);
+    }
+    private static String ddlType(ColumnMetadata column) {
+        String type=column.getTypeName();
+        if(type.contains("(")) return type;
+        return switch(column.getDataType()) {
+            case java.sql.Types.CHAR,java.sql.Types.VARCHAR,java.sql.Types.NCHAR,java.sql.Types.NVARCHAR,java.sql.Types.BINARY,java.sql.Types.VARBINARY -> type + "(" + Math.max(1,column.getColumnSize()) + ")";
+            case java.sql.Types.NUMERIC,java.sql.Types.DECIMAL -> type + "(" + column.getColumnSize() + "," + column.getDecimalDigits() + ")";
+            default -> type;
+        };
     }
 
     public String generateCreateTableSql(ConnectionConfig config, String dbName, TableMetadata tableMetadata) {
         StringBuilder sb = new StringBuilder();
         boolean isMysql = config.getType() == DatabaseType.MYSQL;
 
-        sb.append("CREATE TABLE ");
+        sb.append("-- Partial reconstruction: only columns and primary keys; other constraints, indexes and identity state are omitted.\nCREATE TABLE ");
         sb.append(formatTable(config,dbName,tableMetadata.getName())).append(" (\n");
 
         List<ColumnMetadata> cols = tableMetadata.getColumns();
@@ -445,7 +472,7 @@ public class DdlService {
             ColumnMetadata col = cols.get(i);
             sb.append("  ");
             if (isMysql) {
-                sb.append(quoteIdentifier(DatabaseType.MYSQL,col.getName())).append(" ").append(col.getFormattedType());
+                sb.append(quoteIdentifier(DatabaseType.MYSQL,col.getName())).append(" ").append(ddlType(col));
                 if (!col.isNullable()) {
                     sb.append(" NOT NULL");
                 }
@@ -460,13 +487,9 @@ public class DdlService {
                 if (col.isAutoIncrement()) {
                     sb.append(col.getTypeName()).append(" GENERATED BY DEFAULT AS IDENTITY");
                 } else {
-                    sb.append(col.getFormattedType());
-                    if (!col.isNullable()) {
-                        sb.append(" NOT NULL");
-                    }
-                    if (col.getDefaultValue() != null && !col.getDefaultValue().trim().isEmpty()) {
-                        sb.append(" DEFAULT ").append(col.getDefaultValue().trim());
-                    }
+                    sb.append(ddlType(col));
+                    if (col.getDefaultValue() != null && !col.getDefaultValue().trim().isEmpty()) sb.append(" DEFAULT ").append(col.getDefaultValue().trim());
+                    if (!col.isNullable()) sb.append(" NOT NULL");
                 }
             }
 
