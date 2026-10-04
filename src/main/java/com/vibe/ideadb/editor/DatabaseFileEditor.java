@@ -67,5 +67,10 @@ public class DatabaseFileEditor extends UserDataHolderBase implements FileEditor
 
     @Override
     public void dispose() {
+        if (component instanceof AutoCloseable closeable) {
+            try { closeable.close(); } catch (Exception e) {
+                com.intellij.openapi.diagnostic.Logger.getInstance(DatabaseFileEditor.class).warn(e);
+            }
+        }
     }
 }

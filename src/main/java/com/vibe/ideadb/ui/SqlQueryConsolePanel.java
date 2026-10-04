@@ -14,6 +14,7 @@ import com.vibe.ideadb.model.ConnectionConfig;
 import com.vibe.ideadb.model.QueryResult;
 import com.vibe.ideadb.service.DataService;
 import com.vibe.ideadb.service.DatabaseConnectionManager;
+import com.vibe.ideadb.service.DatabaseSession;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableCellRenderer;
@@ -26,13 +27,16 @@ import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.List;
 
-public class SqlQueryConsolePanel extends JPanel {
+public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     private static final JBColor NORMAL_MSG_COLOR = new JBColor(new Color(40, 40, 40), new Color(200, 200, 200));
     private static final JBColor ERROR_MSG_COLOR = new JBColor(new Color(200, 40, 40), new Color(255, 107, 107));
     private static final JBColor SUCCESS_MSG_COLOR = new JBColor(new Color(30, 140, 60), new Color(98, 181, 67));
     private final Project project;
     private final ConnectionConfig config;
     private String activeDatabase;
+    private final DatabaseSession session;
+    private boolean running;
+    private volatile boolean disposed;
 
     private JComboBox<String> databaseCombo;
     private JBTextArea editorArea;
@@ -50,6 +54,7 @@ public class SqlQueryConsolePanel extends JPanel {
         super(new BorderLayout(0, 0));
         this.project = project;
         this.config = config;
+        this.session = DatabaseConnectionManager.getInstance().createSession(config);
         this.activeDatabase = initialDatabase != null ? initialDatabase : "";
 
         initUI(allDatabases);
@@ -69,6 +74,7 @@ public class SqlQueryConsolePanel extends JPanel {
         if (activeDatabase != null && !activeDatabase.isEmpty()) {
             databaseCombo.setSelectedItem(activeDatabase);
         }
+        if (databaseCombo.getSelectedItem() != null) activeDatabase = databaseCombo.getSelectedItem().toString();
         databaseCombo.addActionListener(e -> {
             Object selected = databaseCombo.getSelectedItem();
             if (selected != null) {
@@ -183,6 +189,7 @@ public class SqlQueryConsolePanel extends JPanel {
     }
 
     private void executeCurrentSql() {
+        if (running || disposed) return;
         String sql = editorArea.getSelectedText();
         if (sql == null || sql.trim().isEmpty()) {
             sql = editorArea.getText().trim();
@@ -193,6 +200,8 @@ public class SqlQueryConsolePanel extends JPanel {
         }
 
         final String finalSql = sql;
+        final String database = activeDatabase;
+        running = true;
         runBtn.setEnabled(false);
         statusLabel.setText("Executing query...");
 
@@ -205,10 +214,11 @@ public class SqlQueryConsolePanel extends JPanel {
 
         new Thread(() -> {
             try {
-                Connection conn = DatabaseConnectionManager.getInstance().getConnection(config);
-                QueryResult result = DataService.getInstance().executeQuery(conn, activeDatabase, finalSql);
+                QueryResult result = session.execute(conn -> DataService.getInstance().executeQuery(conn, database, finalSql));
 
                 SwingUtilities.invokeLater(() -> {
+                    if (disposed) return;
+                    running = false;
                     runBtn.setEnabled(true);
                     if (result.hasError()) {
                         messagesArea.setText("ERROR: " + result.getError() + "\nElapsed: " + result.getExecutionTimeMs() + " ms");
@@ -243,6 +253,8 @@ public class SqlQueryConsolePanel extends JPanel {
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
+                    if (disposed) return;
+                    running = false;
                     runBtn.setEnabled(true);
                     messagesArea.setText("Exception: " + ex.getMessage());
                     messagesArea.setForeground(ERROR_MSG_COLOR);
@@ -251,6 +263,11 @@ public class SqlQueryConsolePanel extends JPanel {
                 });
             }
         }).start();
+    }
+
+    @Override public void close() {
+        disposed = true;
+        com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(session::close);
     }
 
     private void updateHistoryCombo() {

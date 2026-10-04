@@ -144,15 +144,19 @@ public class DataService {
     }
 
     public QueryResult executeQuery(Connection conn, String dbName, String sql) {
+        synchronized (conn) {
+            return executeQueryLocked(conn, dbName, sql);
+        }
+    }
+
+    private QueryResult executeQueryLocked(Connection conn, String dbName, String sql) {
         long start = System.currentTimeMillis();
         try {
             if (dbName != null && !dbName.trim().isEmpty()) {
-                try {
-                    // Try setting schema/catalog if supported
-                    if (conn.getCatalog() != null && !dbName.equalsIgnoreCase(conn.getCatalog())) {
-                        conn.setCatalog(dbName);
-                    }
-                } catch (Exception ignored) {
+                if (conn.getMetaData().getDatabaseProductName().equalsIgnoreCase("MySQL")) {
+                    if (!dbName.equals(conn.getCatalog())) conn.setCatalog(dbName);
+                } else {
+                    if (!dbName.equals(conn.getSchema())) conn.setSchema(dbName);
                 }
             }
 

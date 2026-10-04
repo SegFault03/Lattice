@@ -15,7 +15,11 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class DatabaseConnectionManager {
     private static final DatabaseConnectionManager INSTANCE = new DatabaseConnectionManager();
-    private final Map<String, Connection> activeConnections = new ConcurrentHashMap<>();
+    private final Map<String, ConnectionGroup> activeConnections = new ConcurrentHashMap<>();
+
+    private static final class ConnectionGroup {
+        private final Map<String, Connection> connections = new java.util.HashMap<>();
+    }
 
     private DatabaseConnectionManager() {
     }
@@ -25,15 +29,40 @@ public class DatabaseConnectionManager {
     }
 
     public Connection getConnection(ConnectionConfig config) throws Exception {
-        Connection conn = activeConnections.get(config.getId());
-        if (conn != null && !conn.isClosed()) {
-            return conn;
-        }
+        return getConnection(config, "browser");
+    }
 
-        conn = createRawConnection(config);
-        conn.setAutoCommit(config.isAutoCommit());
-        activeConnections.put(config.getId(), conn);
-        return conn;
+    public DatabaseSession createSession(ConnectionConfig config) {
+        return new DatabaseSession(this, config);
+    }
+
+    Connection getConnection(ConnectionConfig config, String sessionId) throws Exception {
+        ConnectionGroup group = activeConnections.computeIfAbsent(config.getId(), id -> new ConnectionGroup());
+        synchronized (group) {
+            Connection conn = group.connections.get(sessionId);
+            if (conn != null && !conn.isClosed()) return conn;
+            conn = createRawConnection(config);
+            try {
+                conn.setAutoCommit(config.isAutoCommit());
+                group.connections.put(sessionId, conn);
+                return conn;
+            } catch (Exception e) {
+                conn.close();
+                throw e;
+            }
+        }
+    }
+
+    void closeSession(String connectionId, String sessionId) {
+        ConnectionGroup group = activeConnections.get(connectionId);
+        if (group == null) return;
+        synchronized (group) { closeQuietly(group.connections.remove(sessionId)); }
+    }
+
+    private static void closeQuietly(Connection conn) {
+        if (conn != null) {
+            try { conn.close(); } catch (SQLException ignored) { }
+        }
     }
 
     public ConnectionTestResult testConnection(ConnectionConfig config) {
@@ -121,22 +150,22 @@ public class DatabaseConnectionManager {
     }
 
     public boolean isConnected(String connectionId) {
-        Connection conn = activeConnections.get(connectionId);
-        try {
-            return conn != null && !conn.isClosed();
-        } catch (SQLException e) {
+        ConnectionGroup group = activeConnections.get(connectionId);
+        if (group == null) return false;
+        synchronized (group) {
+            for (Connection conn : group.connections.values()) {
+                try { if (!conn.isClosed()) return true; } catch (SQLException ignored) { }
+            }
             return false;
         }
     }
 
     public void closeConnection(String connectionId) {
-        Connection conn = activeConnections.remove(connectionId);
-        if (conn != null) {
-            try {
-                if (!conn.isClosed()) {
-                    conn.close();
-                }
-            } catch (SQLException ignored) {
+        ConnectionGroup group = activeConnections.get(connectionId);
+        if (group != null) {
+            synchronized (group) {
+                group.connections.values().forEach(DatabaseConnectionManager::closeQuietly);
+                group.connections.clear();
             }
         }
     }
