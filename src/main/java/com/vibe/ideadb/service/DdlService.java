@@ -25,9 +25,9 @@ public class DdlService {
     public void createDatabase(Connection conn, ConnectionConfig config, String dbName) throws Exception {
         String sql;
         if (config.getType() == DatabaseType.MYSQL) {
-            sql = "CREATE DATABASE `" + dbName + "` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;";
+            sql = "CREATE DATABASE " + quoteIdentifier(config,dbName) + " DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;";
         } else {
-            sql = "CREATE SCHEMA \"" + dbName.toUpperCase() + "\" AUTHORIZATION DBA;";
+            sql = "CREATE SCHEMA " + quoteIdentifier(config,dbName) + " AUTHORIZATION DBA;";
         }
         executeSql(conn, sql);
     }
@@ -35,9 +35,9 @@ public class DdlService {
     public void dropDatabase(Connection conn, ConnectionConfig config, String dbName) throws Exception {
         String sql;
         if (config.getType() == DatabaseType.MYSQL) {
-            sql = "DROP DATABASE `" + dbName + "`;";
+            sql = "DROP DATABASE " + quoteIdentifier(config,dbName) + ";";
         } else {
-            sql = "DROP SCHEMA \"" + dbName + "\" CASCADE;";
+            sql = "DROP SCHEMA " + quoteIdentifier(config,dbName) + " CASCADE;";
         }
         executeSql(conn, sql);
     }
@@ -49,7 +49,7 @@ public class DdlService {
 
     public void dropTable(Connection conn, ConnectionConfig config, String dbName, String tableName) throws Exception {
         String sql = (config.getType() == DatabaseType.MYSQL)
-                ? "DROP TABLE `" + dbName + "`.`" + tableName + "`;"
+                ? "DROP TABLE " + formatTable(config,dbName,tableName) + ";"
                 : "DROP TABLE " + formatTable(config, dbName, tableName) + " CASCADE;";
         executeSql(conn, sql);
     }
@@ -57,7 +57,7 @@ public class DdlService {
     public void truncateTable(Connection conn, ConnectionConfig config, String dbName, String tableName) throws Exception {
         String sql;
         if (config.getType() == DatabaseType.MYSQL) {
-            sql = "TRUNCATE TABLE `" + dbName + "`.`" + tableName + "`;";
+            sql = "TRUNCATE TABLE " + formatTable(config,dbName,tableName) + ";";
         } else {
             sql = "TRUNCATE TABLE " + formatTable(config, dbName, tableName) + " AND COMMIT;";
         }
@@ -67,7 +67,7 @@ public class DdlService {
     public void alterTableAddColumn(Connection conn, ConnectionConfig config, String dbName, String tableName, ColumnDefinition col) throws Exception {
         StringBuilder sb = new StringBuilder();
         if (config.getType() == DatabaseType.MYSQL) {
-            sb.append("ALTER TABLE `").append(dbName).append("`.`").append(tableName).append("` ADD COLUMN ");
+            sb.append("ALTER TABLE ").append(formatTable(config,dbName,tableName)).append(" ADD COLUMN ");
             appendMysqlColumnDef(sb, col);
             sb.append(";");
         } else {
@@ -79,17 +79,14 @@ public class DdlService {
     }
 
     public void alterTableDropColumn(Connection conn, ConnectionConfig config, String dbName, String tableName, String colName) throws Exception {
-        String sql = (config.getType() == DatabaseType.MYSQL)
-                ? "ALTER TABLE `" + dbName + "`.`" + tableName + "` DROP COLUMN `" + colName + "`;"
-                : "ALTER TABLE " + formatTable(config, dbName, tableName) + " DROP COLUMN " + colName + ";";
+        String sql = "ALTER TABLE " + formatTable(config,dbName,tableName) + " DROP COLUMN " + quoteIdentifier(config,colName) + ";";
         executeSql(conn, sql);
     }
 
     public void alterTableRenameColumn(Connection conn, ConnectionConfig config, String dbName, String tableName,
                                        String oldColName, String newColName) throws Exception {
-        String sql = (config.getType() == DatabaseType.MYSQL)
-                ? "ALTER TABLE `" + dbName + "`.`" + tableName + "` RENAME COLUMN `" + oldColName + "` TO `" + newColName + "`;"
-                : "ALTER TABLE " + formatTable(config, dbName, tableName) + " ALTER COLUMN " + oldColName + " RENAME TO " + newColName + ";";
+        String sql = "ALTER TABLE " + formatTable(config,dbName,tableName) + (config.getType()==DatabaseType.MYSQL ? " RENAME COLUMN " : " ALTER COLUMN ")
+                + quoteIdentifier(config,oldColName) + (config.getType()==DatabaseType.MYSQL ? " TO " : " RENAME TO ") + quoteIdentifier(config,newColName) + ";";
         executeSql(conn, sql);
     }
 
@@ -97,12 +94,12 @@ public class DdlService {
                                        ColumnDefinition col) throws Exception {
         StringBuilder sb = new StringBuilder();
         if (config.getType() == DatabaseType.MYSQL) {
-            sb.append("ALTER TABLE `").append(dbName).append("`.`").append(tableName).append("` MODIFY COLUMN ");
+            sb.append("ALTER TABLE ").append(formatTable(config,dbName,tableName)).append(" MODIFY COLUMN ");
             appendModifiedMysqlColumn(conn, config, dbName, tableName, sb, col);
             sb.append(";");
         } else {
             sb.append("ALTER TABLE ").append(formatTable(config, dbName, tableName))
-                    .append(" ALTER COLUMN ").append(col.getName()).append(" SET DATA TYPE ").append(col.getType());
+                    .append(" ALTER COLUMN ").append(quoteIdentifier(config,col.getName())).append(" SET DATA TYPE ").append(col.getType());
             if (col.getSize() > 0 && needsSize(col.getType())) {
                 sb.append("(").append(col.getSize()).append(")");
             }
@@ -195,9 +192,9 @@ public class DdlService {
     }
 
     public void alterTableRename(Connection conn, ConnectionConfig config, String dbName, String oldName, String newName) throws Exception {
-        String sql = (config.getType() == DatabaseType.MYSQL)
-                ? "RENAME TABLE `" + dbName + "`.`" + oldName + "` TO `" + dbName + "`.`" + newName + "`;"
-                : "ALTER TABLE " + formatTable(config, dbName, oldName) + " RENAME TO " + newName + ";";
+        String sql = config.getType()==DatabaseType.MYSQL
+                ? "RENAME TABLE " + formatTable(config,dbName,oldName) + " TO " + formatTable(config,dbName,newName) + ";"
+                : "ALTER TABLE " + formatTable(config,dbName,oldName) + " RENAME TO " + quoteIdentifier(config,newName) + ";";
         executeSql(conn, sql);
     }
 
@@ -205,11 +202,7 @@ public class DdlService {
         StringBuilder sb = new StringBuilder();
         boolean isMysql = config.getType() == DatabaseType.MYSQL;
 
-        if (isMysql) {
-            sb.append("CREATE TABLE `").append(dbName).append("`.`").append(tableName).append("` (\n");
-        } else {
-            sb.append("CREATE TABLE ").append(formatTable(config, dbName, tableName)).append(" (\n");
-        }
+        sb.append("CREATE TABLE ").append(formatTable(config,dbName,tableName)).append(" (\n");
 
         List<String> pkCols = new ArrayList<>();
         for (int i = 0; i < columns.size(); i++) {
@@ -233,11 +226,7 @@ public class DdlService {
         if (!pkCols.isEmpty()) {
             sb.append("  PRIMARY KEY (");
             for (int i = 0; i < pkCols.size(); i++) {
-                if (isMysql) {
-                    sb.append("`").append(pkCols.get(i)).append("`");
-                } else {
-                    sb.append(pkCols.get(i));
-                }
+                sb.append(quoteIdentifier(config,pkCols.get(i)));
                 if (i < pkCols.size() - 1) {
                     sb.append(", ");
                 }
@@ -262,17 +251,12 @@ public class DdlService {
             sb.append("*");
         } else {
             for (int i = 0; i < columns.size(); i++) {
-                if (isMysql) sb.append("`").append(columns.get(i)).append("`");
-                else sb.append(columns.get(i));
+                sb.append(quoteIdentifier(config,columns.get(i)));
                 if (i < columns.size() - 1) sb.append(", ");
             }
         }
         sb.append(" FROM ");
-        if (isMysql) {
-            sb.append("`").append(dbName).append("`.`").append(tableName).append("` LIMIT 100;");
-        } else {
-            sb.append(formatTable(config, dbName, tableName)).append(" LIMIT 100;");
-        }
+        sb.append(formatTable(config, dbName, tableName)).append(" LIMIT 100;");
         return sb.toString();
     }
 
@@ -282,8 +266,7 @@ public class DdlService {
         sb.append(formatTable(config, dbName, tableName)).append(" (");
 
         for (int i = 0; i < columns.size(); i++) {
-            if (isMysql) sb.append("`").append(columns.get(i)).append("`");
-            else sb.append(columns.get(i));
+            sb.append(quoteIdentifier(config,columns.get(i)));
             if (i < columns.size() - 1) sb.append(", ");
         }
         sb.append(") VALUES (");
@@ -301,16 +284,14 @@ public class DdlService {
         sb.append(formatTable(config, dbName, tableName)).append(" SET ");
 
         for (int i = 0; i < columns.size(); i++) {
-            if (isMysql) sb.append("`").append(columns.get(i)).append("` = ?");
-            else sb.append(columns.get(i)).append(" = ?");
+            sb.append(quoteIdentifier(config,columns.get(i))).append(" = ?");
             if (i < columns.size() - 1) sb.append(", ");
         }
 
         if (pkColumns != null && !pkColumns.isEmpty()) {
             sb.append(" WHERE ");
             for (int i = 0; i < pkColumns.size(); i++) {
-                if (isMysql) sb.append("`").append(pkColumns.get(i)).append("` = ?");
-                else sb.append(pkColumns.get(i)).append(" = ?");
+                sb.append(quoteIdentifier(config,pkColumns.get(i))).append(" = ?");
                 if (i < pkColumns.size() - 1) sb.append(" AND ");
             }
         }
@@ -326,8 +307,7 @@ public class DdlService {
         if (pkColumns != null && !pkColumns.isEmpty()) {
             sb.append(" WHERE ");
             for (int i = 0; i < pkColumns.size(); i++) {
-                if (isMysql) sb.append("`").append(pkColumns.get(i)).append("` = ?");
-                else sb.append(pkColumns.get(i)).append(" = ?");
+                sb.append(quoteIdentifier(config,pkColumns.get(i))).append(" = ?");
                 if (i < pkColumns.size() - 1) sb.append(" AND ");
             }
         }
@@ -335,22 +315,18 @@ public class DdlService {
         return sb.toString();
     }
 
+    public static String quoteIdentifier(ConnectionConfig config, String name) { return quoteIdentifier(config.getType(),name); }
+    public static String quoteIdentifier(DatabaseType type, String name) {
+        if (name==null || name.isEmpty()) throw new IllegalArgumentException("Identifier cannot be empty");
+        String quote=type==DatabaseType.MYSQL ? "`" : "\"";
+        return quote + name.replace(quote,quote+quote) + quote;
+    }
     public static String formatTable(ConnectionConfig config, String dbName, String tableName) {
-        if (config.getType() == DatabaseType.MYSQL) {
-            if (dbName != null && !dbName.isEmpty()) {
-                return "`" + dbName + "`.`" + tableName + "`";
-            }
-            return "`" + tableName + "`";
-        } else {
-            if (dbName != null && !dbName.isEmpty()) {
-                return dbName + "." + tableName;
-            }
-            return tableName;
-        }
+        return (dbName==null || dbName.isEmpty() ? "" : quoteIdentifier(config,dbName)+".") + quoteIdentifier(config,tableName);
     }
 
     private void appendMysqlColumnDef(StringBuilder sb, ColumnDefinition col) {
-        sb.append("`").append(col.getName()).append("` ").append(col.getType());
+        sb.append(quoteIdentifier(DatabaseType.MYSQL,col.getName())).append(" ").append(col.getType());
         if (col.getSize() > 0 && needsSize(col.getType())) {
             sb.append("(").append(col.getSize()).append(")");
         }
@@ -366,7 +342,7 @@ public class DdlService {
     }
 
     private void appendHsqlColumnDef(StringBuilder sb, ColumnDefinition col) {
-        sb.append(col.getName()).append(" ");
+        sb.append(quoteIdentifier(DatabaseType.HSQLDB,col.getName())).append(" ");
         if (col.isAutoIncrement()) {
             sb.append(col.getType()).append(" GENERATED BY DEFAULT AS IDENTITY");
         } else {
@@ -396,9 +372,7 @@ public class DdlService {
     public String getCreateTableStatement(Connection conn, ConnectionConfig config, String dbName, TableMetadata tableMetadata) {
         if (config.getType() == DatabaseType.MYSQL) {
             try (Statement stmt = conn.createStatement()) {
-                String sql = (dbName != null && !dbName.trim().isEmpty())
-                        ? "SHOW CREATE TABLE `" + dbName + "`.`" + tableMetadata.getName() + "`"
-                        : "SHOW CREATE TABLE `" + tableMetadata.getName() + "`";
+                String sql = "SHOW CREATE TABLE " + formatTable(config,dbName,tableMetadata.getName());
                 try (ResultSet rs = stmt.executeQuery(sql)) {
                     if (rs.next()) {
                         return rs.getString(2) + ";";
@@ -415,17 +389,7 @@ public class DdlService {
         boolean isMysql = config.getType() == DatabaseType.MYSQL;
 
         sb.append("CREATE TABLE ");
-        if (isMysql) {
-            if (dbName != null && !dbName.trim().isEmpty()) {
-                sb.append("`").append(dbName).append("`.");
-            }
-            sb.append("`").append(tableMetadata.getName()).append("` (\n");
-        } else {
-            if (dbName != null && !dbName.trim().isEmpty()) {
-                sb.append(dbName).append(".");
-            }
-            sb.append(tableMetadata.getName()).append(" (\n");
-        }
+        sb.append(formatTable(config,dbName,tableMetadata.getName())).append(" (\n");
 
         List<ColumnMetadata> cols = tableMetadata.getColumns();
         List<String> pkCols = new ArrayList<>();
@@ -434,7 +398,7 @@ public class DdlService {
             ColumnMetadata col = cols.get(i);
             sb.append("  ");
             if (isMysql) {
-                sb.append("`").append(col.getName()).append("` ").append(col.getFormattedType());
+                sb.append(quoteIdentifier(DatabaseType.MYSQL,col.getName())).append(" ").append(col.getFormattedType());
                 if (!col.isNullable()) {
                     sb.append(" NOT NULL");
                 }
@@ -445,7 +409,7 @@ public class DdlService {
                     sb.append(" DEFAULT ").append(col.getDefaultValue().trim());
                 }
             } else {
-                sb.append(col.getName()).append(" ");
+                sb.append(quoteIdentifier(DatabaseType.HSQLDB,col.getName())).append(" ");
                 if (col.isAutoIncrement()) {
                     sb.append(col.getTypeName()).append(" GENERATED BY DEFAULT AS IDENTITY");
                 } else {
@@ -473,11 +437,7 @@ public class DdlService {
         if (!pkCols.isEmpty()) {
             sb.append("  PRIMARY KEY (");
             for (int i = 0; i < pkCols.size(); i++) {
-                if (isMysql) {
-                    sb.append("`").append(pkCols.get(i)).append("`");
-                } else {
-                    sb.append(pkCols.get(i));
-                }
+                sb.append(quoteIdentifier(config,pkCols.get(i)));
                 if (i < pkCols.size() - 1) {
                     sb.append(", ");
                 }

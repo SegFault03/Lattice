@@ -95,6 +95,7 @@ public class FunctionalRegressionTest {
             configurationLifecycle(config);
             queryExecution(config, schema);
             metadata(config, schema);
+            quotedIdentifiers(config, schema);
             mutations(config, schema);
             columnAlterations(config, schema);
         } finally {
@@ -161,6 +162,27 @@ public class FunctionalRegressionTest {
             var broken = (Connection) java.lang.reflect.Proxy.newProxyInstance(Connection.class.getClassLoader(),new Class[]{Connection.class},(proxy,method,args) -> { throw new SQLException("metadata unavailable"); });
             try { MetadataService.getInstance().getColumns(broken,config,schema,"META_A"); throw new AssertionError("Metadata errors swallowed"); }
             catch(SQLException expected) { check(expected.getMessage().equals("metadata unavailable"),"Metadata failures must reach callers"); }
+        }
+    }
+    private static void quotedIdentifiers(ConnectionConfig config,String schema) throws Exception {
+        try(Connection c=manager.openConnection(config)) {
+            String table="Case Table" + (config.getType()==DatabaseType.MYSQL ? "`" : "\"");
+            String value="value " + (config.getType()==DatabaseType.MYSQL ? "`" : "\"");
+            ddl.createTable(c,config,schema,table,List.of(new ColumnDefinition("select","INT",0,false,true,false,""),new ColumnDefinition(value,"VARCHAR",100,true,false,false,"")));
+            data.insertRow(c,config,schema,table,Map.of("select",1,value,"before"));
+            QueryResult result=data.fetchData(c,config,schema,table,null,null,10,0);
+            check(!result.hasError() && result.getRows().size()==1,"Quoted table and reserved column must support fetch");
+            data.updateRow(c,config,schema,table,Map.of(value,"after"),Map.of("select",1));
+            check("after".equals(scalar(c,ddl.buildSelectSql(config,schema,table,List.of(value)))),"Generated SELECT must escape embedded identifier quotes");
+            ddl.alterTableRenameColumn(c,config,schema,table,value,"new value");
+            ddl.alterTableAddColumn(c,config,schema,table,new ColumnDefinition("extra value","INT",0,true,false,false,""));
+            check(MetadataService.getInstance().getColumns(c,config,schema,table).size()==3,"Quoted identifiers must support add/rename DDL");
+            String renamed="Renamed Table";
+            ddl.alterTableRename(c,config,schema,table,renamed);
+            data.deleteRow(c,config,schema,renamed,Map.of("select",1));
+            check(data.countRows(c,config,schema,renamed,null)==0,"Quoted identifiers must support rename/delete");
+            ddl.alterTableDropColumn(c,config,schema,renamed,"extra value");
+            ddl.dropTable(c,config,schema,renamed);
         }
     }
     private static void columnAlterations(ConnectionConfig config, String schema) throws Exception {

@@ -77,7 +77,7 @@ public class DataService {
         List<String> columns = new ArrayList<>(changes.keySet());
         for (int i = 0; i < columns.size(); i++) {
             String column = columns.get(i);
-            sb.append(isMysql ? "`" + column.replace("`", "``") + "`" : column).append(" = ?");
+            sb.append(DdlService.quoteIdentifier(config,column)).append(" = ?");
             if (i < columns.size() - 1) sb.append(", ");
         }
 
@@ -85,8 +85,7 @@ public class DataService {
         List<String> pkKeys = new ArrayList<>(pkVals.keySet());
         for (int i = 0; i < pkKeys.size(); i++) {
             String k = pkKeys.get(i);
-            if (isMysql) sb.append("`").append(k).append("` = ?");
-            else sb.append(k).append(" = ?");
+            sb.append(DdlService.quoteIdentifier(config,k)).append(" = ?");
             if (i < pkKeys.size() - 1) sb.append(" AND ");
         }
 
@@ -110,8 +109,7 @@ public class DataService {
         List<String> cols = new ArrayList<>(values.keySet());
         for (int i = 0; i < cols.size(); i++) {
             String col = cols.get(i);
-            if (isMysql) sb.append("`").append(col).append("`");
-            else sb.append(col);
+            sb.append(DdlService.quoteIdentifier(config,col));
             if (i < cols.size() - 1) sb.append(", ");
         }
         sb.append(") VALUES (");
@@ -140,8 +138,7 @@ public class DataService {
         List<String> pkKeys = new ArrayList<>(pkVals.keySet());
         for (int i = 0; i < pkKeys.size(); i++) {
             String k = pkKeys.get(i);
-            if (isMysql) sb.append("`").append(k).append("` = ?");
-            else sb.append(k).append(" = ?");
+            sb.append(DdlService.quoteIdentifier(config,k)).append(" = ?");
             if (i < pkKeys.size() - 1) sb.append(" AND ");
         }
 
