@@ -3,7 +3,7 @@ plugins {
     id("org.jetbrains.intellij.platform") version "2.6.0"
 }
 
-group = "com.vibe.lattice"
+group = "com.segfault03.lattice"
 val pluginReleaseVersion = providers.gradleProperty("releaseVersion").orElse(providers.gradleProperty("pluginVersion")).get()
 require(pluginReleaseVersion.matches(Regex("(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)(-[0-9A-Za-z-]+([.][0-9A-Za-z-]+)*)?")) &&
     pluginReleaseVersion.substringAfter('-', "").split('.').none { it.length > 1 && it.all(Char::isDigit) && it.startsWith('0') }) {
@@ -70,7 +70,7 @@ tasks.register<JavaExec>("fallbackDriverTest") {
     description = "Check JDBC loading and disposal without drivers on the application classpath"
     group = "verification"
     dependsOn(tasks.testClasses)
-    mainClass.set("com.vibe.ideadb.FallbackDriverLifecycleTest")
+    mainClass.set("com.segfault03.ideadb.FallbackDriverLifecycleTest")
     classpath = sourceSets["main"].output + sourceSets["test"].output +
         sourceSets["main"].compileClasspath.filter {
             !it.name.startsWith("mysql-connector-") && !it.name.startsWith("hsqldb-")

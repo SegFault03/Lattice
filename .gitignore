@@ -41,3 +41,6 @@ test-binaries/
 
 # Workstation-specific Git CLI instructions
 GIT-INSTRUCTIONS.md
+TESTING-INSTRUCTIONS.md
+AGENTS.md
+AGENTS
