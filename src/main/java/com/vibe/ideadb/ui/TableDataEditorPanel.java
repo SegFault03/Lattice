@@ -66,6 +66,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     private int currentPage = 1;
     private int pageSize = 100;
     private int totalRowCount = -1;
+    private String appliedWhere = "";
+    private enum ExportScope { PAGE, SELECTED, ALL_PERSISTED }
     private boolean mutationRunning;
     private long loadGeneration;
     private volatile boolean disposed;
@@ -218,7 +220,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
 
         JButton exportBtn = new JButton("Export...", AllIcons.ToolbarDecorator.Export);
         makeCompactButton(exportBtn);
-        exportBtn.setToolTipText("Export table data (CSV, JSON, SQL INSERTs, DDL)");
+        exportBtn.setToolTipText("Choose current page, selected rows, or all persisted rows for export");
         exportBtn.addActionListener(e -> showExportMenu(exportBtn));
         toolbar.add(exportBtn);
 
@@ -325,6 +327,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     if (disposed || generation != loadGeneration || mutationRunning || dataTable.isEditing() || tableModel.hasPendingChanges()) return;
                     tableMetadata.setColumns(cols);
                     totalRowCount = count;
+                    appliedWhere = where;
                     currentPage = requestedPage;
                     pageSize = requestedSize;
                     tableModel.setData(result.getColumnNames(), result.getColumnTypes(), result.getRows());
@@ -643,21 +646,9 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     private void showExportMenu(Component invoker) {
         JPopupMenu menu = new JPopupMenu();
 
-        JMenuItem csvItem = new JMenuItem("Export to CSV...");
-        csvItem.addActionListener(e -> exportData("csv"));
-        menu.add(csvItem);
-
-        JMenuItem jsonItem = new JMenuItem("Export to JSON...");
-        jsonItem.addActionListener(e -> exportData("json"));
-        menu.add(jsonItem);
-
-        JMenuItem sqlItem = new JMenuItem("Export as SQL INSERTs...");
-        sqlItem.addActionListener(e -> exportData("sql"));
-        menu.add(sqlItem);
-
-        JMenuItem createItem = new JMenuItem("Export CREATE TABLE (DDL)...");
-        createItem.addActionListener(e -> exportCreateTable());
-        menu.add(createItem);
+        addExportFormats(menu,"Current page (includes pending edits)",ExportScope.PAGE);
+        addExportFormats(menu,"Selected rows (includes pending edits)",ExportScope.SELECTED);
+        addExportFormats(menu,"All persisted rows (current filter)",ExportScope.ALL_PERSISTED);
 
         menu.addSeparator();
 
@@ -666,6 +657,15 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         menu.add(viewCreateItem);
 
         menu.show(invoker, 0, invoker.getHeight());
+    }
+
+    private void addExportFormats(JPopupMenu menu,String label,ExportScope scope) {
+        JMenu submenu=new JMenu(label);
+        for(String format:new String[]{"csv","json","sql"}) {
+            JMenuItem item=new JMenuItem(format.toUpperCase() + "...");
+            item.addActionListener(event -> exportData(format,scope)); submenu.add(item);
+        }
+        menu.add(submenu);
     }
 
     private void exportCreateTable() {
@@ -689,20 +689,33 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         }).start();
     }
 
-    private void exportData(String format) {
-        FileSaverDescriptor descriptor = new FileSaverDescriptor("Export Table Data", "Save table data as ." + format, format);
+    private void exportData(String format,ExportScope scope) {
+        if(disposed || !finishCellEditing()) return;
+        List<List<Object>> rows = new ArrayList<>();
+        if(scope==ExportScope.SELECTED) {
+            for(int selected:dataTable.getSelectedRows()) rows.add(new ArrayList<>(tableModel.rows.get(dataTable.convertRowIndexToModel(selected))));
+            if(rows.isEmpty()) { statusLabel.setText("Select rows to export."); return; }
+        } else if(scope==ExportScope.PAGE) for(List<Object> row:tableModel.rows) rows.add(new ArrayList<>(row));
+        String filter=appliedWhere;
+        FileSaverDescriptor descriptor = new FileSaverDescriptor("Export " + (scope==ExportScope.ALL_PERSISTED ? "All Persisted Rows" : "Displayed Rows Including Pending Edits"), "Save as ." + format, format);
         VirtualFileWrapper targetWrapper = FileChooserFactory.getInstance().createSaveFileDialog(descriptor, project)
                 .save((com.intellij.openapi.vfs.VirtualFile) null, tableMetadata.getName() + "." + format);
         if (targetWrapper == null) return;
 
         File targetFile = targetWrapper.getFile();
-        QueryResult result = QueryResult.forResultSet(new ArrayList<>(tableModel.columns), new ArrayList<>(tableModel.types), tableModel.rows.stream().map(row -> (List<Object>)new ArrayList<>(row)).toList(), 0);
+        QueryResult result = QueryResult.forResultSet(new ArrayList<>(tableModel.columns), new ArrayList<>(tableModel.types), rows, 0);
         com.vibe.ideadb.service.DatabaseTaskService.getInstance().submit(() -> {
             try {
-                if ("csv".equalsIgnoreCase(format)) ExportService.getInstance().exportToCsv(result,targetFile);
+                long count=result.getRows().size();
+                if(scope==ExportScope.ALL_PERSISTED) {
+                    try(Connection connection=DatabaseConnectionManager.getInstance().openConnection(config)) {
+                        count=ExportService.getInstance().exportPersisted(connection,config,databaseName,tableMetadata.getName(),filter,format,targetFile);
+                    }
+                } else if ("csv".equalsIgnoreCase(format)) ExportService.getInstance().exportToCsv(result,targetFile);
                 else if ("json".equalsIgnoreCase(format)) ExportService.getInstance().exportToJson(result,targetFile);
                 else ExportService.getInstance().exportToSqlInsert(config,databaseName,tableMetadata.getName(),result,targetFile);
-                SwingUtilities.invokeLater(() -> { if (!disposed) Messages.showInfoMessage(project,"Exported data to " + targetFile.getName(),"Export Complete"); });
+                long exported=count;
+                SwingUtilities.invokeLater(() -> { if (!disposed) Messages.showInfoMessage(project,"Exported " + exported + " row(s) to " + targetFile.getName(),"Export Complete"); });
             } catch(Exception error) {
                 SwingUtilities.invokeLater(() -> { if (!disposed) Messages.showErrorDialog(project,"Export failed: " + error.getMessage(),"Export Error"); });
             }

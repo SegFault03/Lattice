@@ -278,7 +278,7 @@ public class DataService {
     private static long elapsed(long start) { return (System.nanoTime()-start)/1_000_000; }
 
     /** LOBs must remain usable after the ResultSet and Statement have been closed. */
-    private static Object detachValue(Object value) throws SQLException {
+    static Object detachValue(Object value) throws SQLException {
         if (value instanceof Blob blob) {
             try { if (blob.length()>2L*1024*1024) throw new SQLException("Binary value exceeds the 2 MiB display limit"); return blob.getBytes(1, Math.toIntExact(blob.length())); } finally { blob.free(); }
         }

@@ -107,6 +107,47 @@ public class ExportService {
         return "'" + text.replace("'","''") + "'";
     }
 
+    /** A fresh persisted query streams all matching rows; page size and dirty grid values do not participate. */
+    public long exportPersisted(java.sql.Connection connection,ConnectionConfig config,String schema,String table,String where,String format,File file) throws Exception {
+        String query="SELECT * FROM " + DdlService.formatTable(config,schema,table) + (where==null || where.isBlank() ? "" : " WHERE " + where);
+        java.nio.file.Path target=file.toPath().toAbsolutePath();
+        java.nio.file.Path temporary=java.nio.file.Files.createTempFile(target.getParent(),".lattice-export-",".part");
+        long count=0;
+        try {
+            try(java.sql.Statement statement=connection.createStatement()) {
+                statement.setQueryTimeout(60); statement.setFetchSize(config.getType()==DatabaseType.MYSQL ? Integer.MIN_VALUE : 100);
+                try(java.sql.ResultSet rows=statement.executeQuery(query); BufferedWriter writer=java.nio.file.Files.newBufferedWriter(temporary,StandardCharsets.UTF_8)) {
+                    var metadata=rows.getMetaData(); List<String> columns=new java.util.ArrayList<>(), types=new java.util.ArrayList<>();
+                    for(int col=1;col<=metadata.getColumnCount();col++) { columns.add(metadata.getColumnLabel(col)); types.add(metadata.getColumnTypeName(col)); }
+                    if("csv".equals(format)) { for(int col=0;col<columns.size();col++) { if(col>0) writer.write(","); writer.write(escapeCsv(columns.get(col))); } writer.newLine(); }
+                    else if("json".equals(format)) writer.write("[\n");
+                    else if(!"sql".equals(format)) throw new IllegalArgumentException("Unknown export format");
+                    while(rows.next()) {
+                        if(Thread.currentThread().isInterrupted()) throw new java.io.InterruptedIOException("Export cancelled");
+                        List<Object> row=new java.util.ArrayList<>();
+                        for(int col=1;col<=columns.size();col++) row.add(DataService.detachValue(rows.getObject(col)));
+                        if("sql".equals(format)) writeInsert(writer,config,schema,table,columns,types,row);
+                        else if("csv".equals(format)) {
+                            for(int col=0;col<row.size();col++) { if(col>0) writer.write(","); writer.write(escapeCsv(row.get(col)==null ? "" : textValue(row.get(col)))); } writer.newLine();
+                        } else {
+                            if(count>0) writer.write(",\n"); writer.write("  {");
+                            for(int col=0;col<columns.size();col++) {
+                                if(col>0) writer.write(", "); writer.write("\"" + escapeJson(columns.get(col)) + "\": ");
+                                Object value=row.get(col);
+                                writer.write(value==null ? "null" : (value instanceof Number && finite(value)) || value instanceof Boolean ? value.toString() : "\"" + escapeJson(textValue(value)) + "\"");
+                            }
+                            writer.write("}");
+                        }
+                        count++;
+                    }
+                    if("json".equals(format)) writer.write("\n]\n");
+                }
+            }
+            java.nio.file.Files.move(temporary,target,java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            return count;
+        } finally { java.nio.file.Files.deleteIfExists(temporary); }
+    }
+
     public void exportCreateTable(String ddl, File file) throws Exception {
         try (BufferedWriter bw = new BufferedWriter(new FileWriter(file, StandardCharsets.UTF_8))) {
             bw.write(ddl);

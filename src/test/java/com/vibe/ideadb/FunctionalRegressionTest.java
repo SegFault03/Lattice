@@ -119,6 +119,10 @@ public class FunctionalRegressionTest {
             try(PreparedStatement insert=c.prepareStatement("INSERT INTO " + table + " VALUES (?)")) {
                 for(int i=0;i<200;i++) { insert.setInt(1,i); insert.addBatch(); } insert.executeBatch();
             }
+            java.io.File full=java.io.File.createTempFile("lattice-full-export-",".json"); full.deleteOnExit();
+            long exported=ExportService.getInstance().exportPersisted(c,config,schema,"QUERY_ROWS",null,"json",full);
+            check(exported==200 && com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(full.toPath())).getAsJsonArray().size()==200,"Persisted export must stream the complete table beyond page limits");
+            check(ExportService.getInstance().exportPersisted(c,config,schema,"QUERY_ROWS","ID<12","csv",full)==12 && java.nio.file.Files.readAllLines(full.toPath()).size()==13,"Persisted export must respect applied filters and include CSV header");
             var options=new DataService.QueryOptions(25,5,10);
             QueryResult capped=data.executeQuery(c,schema,"SELECT * FROM " + table,options,new QueryExecution());
             check(!capped.hasError() && capped.getRows().size()==25 && capped.isTruncated() && capped.getMessage().contains("omitted"),"Query row limit must report truncation");
