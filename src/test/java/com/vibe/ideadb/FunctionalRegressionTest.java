@@ -196,6 +196,11 @@ public class FunctionalRegressionTest {
         try(Connection c=manager.openConnection(config)) {
             String table=DdlService.formatTable(config,schema,"EXPORT_DATA");
             sql(c,"CREATE TABLE " + table + " (ID INT PRIMARY KEY, TEXT_VALUE VARCHAR(200), BYTES_VALUE VARBINARY(100), NULL_VALUE VARCHAR(10), ACTIVE BOOLEAN, MOMENT TIMESTAMP(6))");
+            ColumnMetadata textColumn=new ColumnMetadata("TEXT_VALUE","VARCHAR",Types.VARCHAR,200,0,false,false,false,null);
+            for(String text:List.of("null","<null>"," NULL ","")) {
+                Object converted=com.vibe.ideadb.ui.TableDataEditorPanel.parseTypedValue(textColumn,text);
+                check(text.equals(converted) && com.vibe.ideadb.ui.TableDataEditorPanel.validateCellValue(textColumn,text)==null,"Text entry must preserve NULL-like words and whitespace");
+            }
             var values=new LinkedHashMap<String,Object>(); values.put("ID",1); values.put("TEXT_VALUE","O'Reilly C:\\new\\test \u0001 \uD83D\uDE80"); values.put("BYTES_VALUE",new byte[]{0,1,127,-1}); values.put("NULL_VALUE",null); values.put("ACTIVE",true); values.put("MOMENT",Timestamp.valueOf("2026-10-04 12:34:56.123456"));
             data.insertRow(c,config,schema,"EXPORT_DATA",values);
             QueryResult before=data.fetchData(c,config,schema,"EXPORT_DATA",null,null,10,0);

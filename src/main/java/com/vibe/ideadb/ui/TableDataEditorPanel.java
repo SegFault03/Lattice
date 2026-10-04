@@ -197,6 +197,17 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         delRowBtn.setToolTipText("Delete selected row(s)");
         delRowBtn.addActionListener(e -> deleteSelectedRows());
         toolbar.add(delRowBtn);
+        JButton nullBtn=new JButton("Set NULL"); makeCompactButton(nullBtn);
+        nullBtn.setToolTipText("Set the selected column to SQL NULL for selected rows");
+        nullBtn.addActionListener(event -> {
+            if(mutationRunning || disposed || !finishCellEditing()) return;
+            int selectedColumn=dataTable.getSelectedColumn(); if(selectedColumn<0) return;
+            int column=dataTable.convertColumnIndexToModel(selectedColumn);
+            for(int selected:dataTable.getSelectedRows()) {
+                int row=dataTable.convertRowIndexToModel(selected);
+                if(tableModel.isCellEditable(row,column)) tableModel.setValueAt(null,row,column);
+            }
+        }); toolbar.add(nullBtn);
 
         saveBtn = new JButton("Commit", AllIcons.Actions.Commit);
         makeCompactButton(saveBtn);
@@ -736,13 +747,6 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         }
 
         String str = value.toString().trim();
-        if (str.equalsIgnoreCase("<null>") || str.equalsIgnoreCase("null")) {
-            if (!cm.isNullable()) {
-                return "Column '" + cm.getName() + "' cannot be NULL";
-            }
-            return null;
-        }
-
         String typeUpper = cm.getTypeName() != null ? cm.getTypeName().toUpperCase() : "";
 
         // Empty string check
@@ -906,17 +910,10 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         return typeUpper.contains("CHAR") || typeUpper.contains("TEXT") || typeUpper.contains("CLOB") || typeUpper.contains("BLOB");
     }
 
-    private Object parseTypedValue(ColumnMetadata cm, Object val) {
+    public static Object parseTypedValue(ColumnMetadata cm, Object val) {
         if (val == null) return null;
+        if (cm == null || isTextType(cm.getTypeName()==null ? "" : cm.getTypeName().toUpperCase())) return val;
         String str = val.toString().trim();
-        if (str.equalsIgnoreCase("<null>") || str.equalsIgnoreCase("null") || str.isEmpty()) {
-            if (cm != null && !isTextType(cm.getTypeName() != null ? cm.getTypeName().toUpperCase() : "")) {
-                return null;
-            }
-            if (str.equalsIgnoreCase("<null>") || str.equalsIgnoreCase("null")) {
-                return null;
-            }
-        }
 
         if (cm == null) return val;
         String typeUpper = cm.getTypeName() != null ? cm.getTypeName().toUpperCase() : "";
@@ -1200,13 +1197,6 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 }
 
                 Object processedVal = val;
-                if (val instanceof String) {
-                    String strVal = ((String) val).trim();
-                    if (strVal.equalsIgnoreCase("<null>") || strVal.equalsIgnoreCase("null")) {
-                        processedVal = null;
-                    }
-                }
-
                 rows.get(row).set(col, processedVal);
 
                 CellCoord coord = new CellCoord(row, col);
