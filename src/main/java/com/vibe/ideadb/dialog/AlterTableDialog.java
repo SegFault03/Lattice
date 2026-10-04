@@ -123,6 +123,7 @@ public class AlterTableDialog extends DialogWrapper {
         addPanel.add(new JBLabel("Default Value:"), gbc);
         gbc.gridx = 1; gbc.gridy = 4; gbc.weightx = 0.7;
         addColDefaultField = new JBTextField();
+        addColDefaultField.setToolTipText("Use TEXT: for a literal, SQL: for an expression; blank removes the default.");
         addPanel.add(addColDefaultField, gbc);
 
         JButton executeAddBtn = new JButton("Add Column Now");
@@ -195,6 +196,7 @@ public class AlterTableDialog extends DialogWrapper {
         modifyColPanel.add(new JBLabel("Default Value:"), mcgbc);
         mcgbc.gridx = 1; mcgbc.gridy = 4; mcgbc.weightx = 0.7;
         modifyColDefaultField = new JBTextField();
+        modifyColDefaultField.setToolTipText("Use TEXT: for a literal, SQL: for an expression; blank removes the default.");
         modifyColPanel.add(modifyColDefaultField, mcgbc);
 
         modifyColCombo.addActionListener(e -> {

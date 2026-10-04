@@ -151,6 +151,7 @@ public class DdlService {
             suffix = suffix.substring(0, boundary).replace(" NOT NULL", "").replace(" NULL", "") + suffix.substring(boundary);
             suffix = (requested.isNullable() ? " NULL" : " NOT NULL") + suffix;
         }
+        if (!requested.isNullable() && original.getDefaultValue()==null && requested.getDefaultValue().isBlank()) suffix = suffix.replace(" DEFAULT NULL", "");
         String currentDefault = original.getDefaultValue() == null ? "" : original.getDefaultValue();
         if (!requested.getDefaultValue().equals(currentDefault)) {
             int start = suffix.indexOf(" DEFAULT ");
@@ -158,7 +159,7 @@ public class DdlService {
                 int end = sqlTokenEnd(suffix, start + 9);
                 suffix = suffix.substring(0, start) + suffix.substring(end);
             }
-            if (!requested.getDefaultValue().isBlank()) suffix = " DEFAULT " + formatDefault(requested) + suffix;
+            if (!requested.getDefaultValue().isBlank()) suffix = " DEFAULT " + formatDefault(DatabaseType.MYSQL,requested) + suffix;
         }
         // AUTO_INCREMENT, collation, ON UPDATE and comments remain in the original suffix.
         sql.append(name).append(' ').append(type).append(typeAttributes).append(suffix);
@@ -182,13 +183,26 @@ public class DdlService {
         return sql.length();
     }
 
-    private static String formatDefault(ColumnDefinition column) {
-        String value = column.getDefaultValue().trim();
-        String type = column.getType().toUpperCase(java.util.Locale.ROOT);
-        if ((type.contains("TIME") || type.equals("DATE")) && value.matches("(?i)CURRENT_(TIMESTAMP|TIME|DATE)(\\(\\d*\\))?")) return value;
-        if (value.equalsIgnoreCase("NULL") || value.equalsIgnoreCase("TRUE") || value.equalsIgnoreCase("FALSE")) return value;
-        if (value.startsWith("'") && value.endsWith("'")) return value;
-        return "'" + value.replace("'", "''") + "'";
+    private static String formatDefault(DatabaseType dialect, ColumnDefinition column) {
+        String raw=column.getDefaultValue(), value=raw.trim();
+        ColumnDefinition.DefaultKind kind=column.getDefaultKind();
+        if (kind==ColumnDefinition.DefaultKind.AUTO && value.startsWith("SQL:")) { kind=ColumnDefinition.DefaultKind.EXPRESSION; value=value.substring(4).trim(); }
+        if (kind==ColumnDefinition.DefaultKind.AUTO && value.startsWith("TEXT:")) { kind=ColumnDefinition.DefaultKind.LITERAL; raw=value.substring(5); value=raw; }
+        if (kind==ColumnDefinition.DefaultKind.EXPRESSION) {
+            if (value.isEmpty() || value.contains(";") || value.contains("--") || value.contains("/*")) throw new IllegalArgumentException("Enter one SQL default expression");
+            return value;
+        }
+        if (kind==ColumnDefinition.DefaultKind.AUTO) {
+            String type=column.getType().toUpperCase(java.util.Locale.ROOT);
+            if ((type.contains("TIME") || type.equals("DATE")) && value.matches("(?i)CURRENT_(TIMESTAMP|TIME|DATE)(\\(\\d*\\))?")) return value;
+            if (value.equalsIgnoreCase("NULL") || value.equalsIgnoreCase("TRUE") || value.equalsIgnoreCase("FALSE") || value.matches("[+-]?\\d+(\\.\\d+)?")) return value;
+            if (value.startsWith("'") && value.endsWith("'")) raw=value.substring(1,value.length()-1).replace("''","'");
+        }
+        // Hex expressions preserve backslashes under either MySQL SQL mode.
+        if (dialect==DatabaseType.MYSQL && raw.indexOf('\\')>=0) {
+            return "(CONVERT(X'" + java.util.HexFormat.of().formatHex(raw.getBytes(java.nio.charset.StandardCharsets.UTF_8)) + "' USING utf8mb4))";
+        }
+        return "'" + raw.replace("'", "''") + "'";
     }
 
     public void alterTableRename(Connection conn, ConnectionConfig config, String dbName, String oldName, String newName) throws Exception {
@@ -337,7 +351,7 @@ public class DdlService {
             sb.append(" AUTO_INCREMENT");
         }
         if (col.getDefaultValue() != null && !col.getDefaultValue().trim().isEmpty()) {
-            sb.append(" DEFAULT ").append(formatDefault(col));
+            sb.append(" DEFAULT ").append(formatDefault(DatabaseType.MYSQL,col));
         }
     }
 
@@ -351,7 +365,7 @@ public class DdlService {
                 sb.append("(").append(col.getSize()).append(")");
             }
             if (col.getDefaultValue() != null && !col.getDefaultValue().trim().isEmpty()) {
-                sb.append(" DEFAULT ").append(formatDefault(col));
+                sb.append(" DEFAULT ").append(formatDefault(DatabaseType.HSQLDB,col));
             }
             if (!col.isNullable()) sb.append(" NOT NULL");
         }

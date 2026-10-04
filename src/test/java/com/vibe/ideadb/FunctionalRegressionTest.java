@@ -187,6 +187,13 @@ public class FunctionalRegressionTest {
     }
     private static void columnAlterations(ConnectionConfig config, String schema) throws Exception {
         try (Connection c = manager.openConnection(config)) {
+            var literal=new ColumnDefinition("VALUE","VARCHAR",100,true,false,false,"NULL"); literal.setDefaultKind(ColumnDefinition.DefaultKind.LITERAL);
+            var path=new ColumnDefinition("PATH","VARCHAR",100,true,false,false,"C:\\new\\test"); path.setDefaultKind(ColumnDefinition.DefaultKind.LITERAL);
+            ddl.createTable(c,config,schema,"LITERAL_DEFAULTS",List.of(literal,path));
+            String literals=DdlService.formatTable(config,schema,"LITERAL_DEFAULTS");
+            sql(c,config.getType()==DatabaseType.MYSQL ? "INSERT INTO " + literals + " () VALUES ()" : "INSERT INTO " + literals + " DEFAULT VALUES");
+            check("NULL".equals(scalar(c,"SELECT " + DdlService.quoteIdentifier(config,"VALUE") + " FROM " + literals)),"Explicit literal NULL default must remain text");
+            check("C:\\new\\test".equals(scalar(c,"SELECT " + DdlService.quoteIdentifier(config,"PATH") + " FROM " + literals)),"Backslash defaults must round-trip");
             String table = DdlService.formatTable(config,schema,"ALTER_RECORDS");
             if (config.getType()==DatabaseType.MYSQL) {
                 sql(c,"CREATE TABLE " + table + " (ID INT AUTO_INCREMENT PRIMARY KEY, AMOUNT DECIMAL(12,2), KIND ENUM('a','b') DEFAULT 'a', MODIFIED TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, LABEL VARCHAR(100) COLLATE utf8mb4_unicode_ci COMMENT 'keep me')");
@@ -194,6 +201,8 @@ public class FunctionalRegressionTest {
                 ddl.alterTableModifyColumn(c,config,schema,"ALTER_RECORDS",new ColumnDefinition("AMOUNT","DECIMAL",12,true,false,false,""));
                 ddl.alterTableModifyColumn(c,config,schema,"ALTER_RECORDS",new ColumnDefinition("KIND","ENUM",1,true,false,false,"a"));
                 ddl.alterTableModifyColumn(c,config,schema,"ALTER_RECORDS",new ColumnDefinition("MODIFIED","TIMESTAMP",0,true,false,false,"CURRENT_TIMESTAMP"));
+                ddl.alterTableModifyColumn(c,config,schema,"ALTER_RECORDS",new ColumnDefinition("LABEL","VARCHAR",200,false,false,false,""));
+                check(!MetadataService.getInstance().getColumns(c,config,schema,"ALTER_RECORDS").stream().filter(col -> col.getName().equals("LABEL")).findFirst().orElseThrow().isNullable(),"Removing nullability must remove implicit DEFAULT NULL");
                 ddl.alterTableModifyColumn(c,config,schema,"ALTER_RECORDS",new ColumnDefinition("LABEL","VARCHAR",200,true,false,false,""));
                 ddl.alterTableModifyColumn(c,config,schema,"ALTER_RECORDS",new ColumnDefinition("LABEL","VARCHAR",200,false,false,false,"O'Reilly"));
                 List<ColumnMetadata> cols = MetadataService.getInstance().getColumns(c,config,schema,"ALTER_RECORDS");

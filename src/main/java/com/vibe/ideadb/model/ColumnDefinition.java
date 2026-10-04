@@ -9,6 +9,8 @@ public class ColumnDefinition {
     private boolean autoIncrement = false;
     private String defaultValue = "";
     private int decimalDigits = -1;
+    public enum DefaultKind { AUTO, LITERAL, EXPRESSION }
+    private DefaultKind defaultKind = DefaultKind.AUTO;
 
     public ColumnDefinition() {
     }
@@ -43,6 +45,8 @@ public class ColumnDefinition {
 
     public String getDefaultValue() { return defaultValue; }
     public void setDefaultValue(String defaultValue) { this.defaultValue = defaultValue; }
+    public DefaultKind getDefaultKind() { return defaultKind; }
+    public void setDefaultKind(DefaultKind kind) { defaultKind = kind; }
     public int getDecimalDigits() { return decimalDigits; }
     public void setDecimalDigits(int decimalDigits) { this.decimalDigits = decimalDigits; }
 }
