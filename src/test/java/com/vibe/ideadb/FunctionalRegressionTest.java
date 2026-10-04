@@ -74,12 +74,39 @@ public class FunctionalRegressionTest {
         try {
             sessions(config, schema);
             mutations(config, schema);
+            columnAlterations(config, schema);
         } finally {
             if (config.getType() == DatabaseType.MYSQL) connection.setCatalog("shop_db");
             else connection.setSchema("PUBLIC");
             ddl.dropDatabase(connection, config, schema);
         }
         System.out.println("PASS " + config.getType() + " functional regressions (temporary schema removed)");
+    }
+
+    private static void columnAlterations(ConnectionConfig config, String schema) throws Exception {
+        try (Connection c = manager.openConnection(config)) {
+            String table = DdlService.formatTable(config,schema,"ALTER_RECORDS");
+            if (config.getType()==DatabaseType.MYSQL) {
+                sql(c,"CREATE TABLE " + table + " (ID INT AUTO_INCREMENT PRIMARY KEY, AMOUNT DECIMAL(12,2), KIND ENUM('a','b') DEFAULT 'a', MODIFIED TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, LABEL VARCHAR(100) COLLATE utf8mb4_unicode_ci COMMENT 'keep me')");
+                ddl.alterTableModifyColumn(c,config,schema,"ALTER_RECORDS",new ColumnDefinition("ID","BIGINT",0,false,false,false,""));
+                ddl.alterTableModifyColumn(c,config,schema,"ALTER_RECORDS",new ColumnDefinition("AMOUNT","DECIMAL",12,true,false,false,""));
+                ddl.alterTableModifyColumn(c,config,schema,"ALTER_RECORDS",new ColumnDefinition("KIND","ENUM",1,true,false,false,"a"));
+                ddl.alterTableModifyColumn(c,config,schema,"ALTER_RECORDS",new ColumnDefinition("MODIFIED","TIMESTAMP",0,true,false,false,"CURRENT_TIMESTAMP"));
+                ddl.alterTableModifyColumn(c,config,schema,"ALTER_RECORDS",new ColumnDefinition("LABEL","VARCHAR",200,true,false,false,""));
+                ddl.alterTableModifyColumn(c,config,schema,"ALTER_RECORDS",new ColumnDefinition("LABEL","VARCHAR",200,false,false,false,"O'Reilly"));
+                List<ColumnMetadata> cols = MetadataService.getInstance().getColumns(c,config,schema,"ALTER_RECORDS");
+                check(cols.stream().filter(col->col.getName().equals("ID")).findFirst().orElseThrow().isAutoIncrement(),"Modify must retain identity");
+                check(cols.stream().filter(col->col.getName().equals("AMOUNT")).findFirst().orElseThrow().getDecimalDigits()==2,"Modify must retain decimal scale");
+                String create = ddl.getCreateTableStatement(c,config,schema,new TableMetadata(schema,null,"ALTER_RECORDS","TABLE"));
+                check(create.toLowerCase(Locale.ROOT).contains("enum('a','b')"),"Modify must retain ENUM values");
+                check(create.toLowerCase(Locale.ROOT).contains("on update current_timestamp"),"Modify must retain ON UPDATE");
+                check(create.contains("keep me") && create.contains("utf8mb4_unicode_ci"),"Modify must retain comment/collation");
+                check(cols.stream().filter(col->col.getName().equals("LABEL")).findFirst().orElseThrow().isNullable()==false,"Modify must apply nullability with collation");
+            }
+            ddl.createTable(c,config,schema,"DEFAULT_RECORDS",List.of(new ColumnDefinition("LABEL","VARCHAR",100,false,false,false,"O'Reilly"),new ColumnDefinition("CREATED","TIMESTAMP",0,true,false,false,"CURRENT_TIMESTAMP")));
+            sql(c,"INSERT INTO " + DdlService.formatTable(config,schema,"DEFAULT_RECORDS") + " (CREATED) VALUES (CURRENT_TIMESTAMP)");
+            check("O'Reilly".equals(scalar(c,"SELECT LABEL FROM " + DdlService.formatTable(config,schema,"DEFAULT_RECORDS"))),"String default must round-trip");
+        }
     }
 
     private static void expectFailure(DatabaseSession.Operation<?> operation, Connection conn) throws Exception {

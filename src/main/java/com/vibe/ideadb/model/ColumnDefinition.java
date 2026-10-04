@@ -8,6 +8,7 @@ public class ColumnDefinition {
     private boolean primaryKey = false;
     private boolean autoIncrement = false;
     private String defaultValue = "";
+    private int decimalDigits = -1;
 
     public ColumnDefinition() {
     }
@@ -42,4 +43,6 @@ public class ColumnDefinition {
 
     public String getDefaultValue() { return defaultValue; }
     public void setDefaultValue(String defaultValue) { this.defaultValue = defaultValue; }
+    public int getDecimalDigits() { return decimalDigits; }
+    public void setDecimalDigits(int decimalDigits) { this.decimalDigits = decimalDigits; }
 }

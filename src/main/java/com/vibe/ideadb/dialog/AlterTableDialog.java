@@ -182,6 +182,7 @@ public class AlterTableDialog extends DialogWrapper {
         modifyColPanel.add(new JBLabel("Type:"), mcgbc);
         mcgbc.gridx = 1; mcgbc.gridy = 1; mcgbc.weightx = 0.7;
         modifyColTypeCombo = new JComboBox<>(DATA_TYPES);
+        modifyColTypeCombo.setEditable(true);
         modifyColPanel.add(modifyColTypeCombo, mcgbc);
 
         mcgbc.gridx = 0; mcgbc.gridy = 2; mcgbc.weightx = 0.3;
@@ -324,12 +325,7 @@ public class AlterTableDialog extends DialogWrapper {
         if (cm != null) {
             String typeName = cm.getTypeName();
             if (typeName != null) {
-                for (int i = 0; i < DATA_TYPES.length; i++) {
-                    if (DATA_TYPES[i].equalsIgnoreCase(typeName)) {
-                        modifyColTypeCombo.setSelectedIndex(i);
-                        break;
-                    }
-                }
+                modifyColTypeCombo.setSelectedItem(typeName);
             }
             modifyColSizeField.setText(cm.getColumnSize() > 0 ? String.valueOf(cm.getColumnSize()) : "255");
             modifyColNullableCheck.setSelected(cm.isNullable());
@@ -430,6 +426,11 @@ public class AlterTableDialog extends DialogWrapper {
 
         ColumnDefinition col = new ColumnDefinition(colName, (String) modifyColTypeCombo.getSelectedItem(), size,
                 modifyColNullableCheck.isSelected(), false, false, modifyColDefaultField.getText().trim());
+        ColumnMetadata original = tableMetadata.getColumn(colName);
+        if (original != null) {
+            col.setAutoIncrement(original.isAutoIncrement());
+            col.setDecimalDigits(original.getDecimalDigits());
+        }
 
         try {
             Connection conn = DatabaseConnectionManager.getInstance().getConnection(config);
