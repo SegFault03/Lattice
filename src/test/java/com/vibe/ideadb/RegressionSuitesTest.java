@@ -22,6 +22,28 @@ public class RegressionSuitesTest {
         assertNotNull(CellValueConverter.validate(DatabaseType.MYSQL,unsigned,"4294967296"));
         assertNotNull(CellValueConverter.validate(DatabaseType.MYSQL,unsigned,"-1"));
     }
+    @Test void mutationCleanupPreservesOutcome() throws Exception {
+        var closed=new java.util.concurrent.atomic.AtomicBoolean();
+        var committed=new java.util.concurrent.atomic.AtomicBoolean();
+        var rolledBack=new java.util.concurrent.atomic.AtomicBoolean();
+        var connection=(java.sql.Connection)java.lang.reflect.Proxy.newProxyInstance(java.sql.Connection.class.getClassLoader(),new Class[]{java.sql.Connection.class},(proxy,method,args) -> switch(method.getName()) {
+            case "getAutoCommit" -> true;
+            case "isClosed" -> closed.get();
+            case "setAutoCommit" -> { if(Boolean.TRUE.equals(args[0])) throw new java.sql.SQLException("reset failed"); yield null; }
+            case "commit" -> { committed.set(true); yield null; }
+            case "rollback" -> { rolledBack.set(true); yield null; }
+            case "close" -> { closed.set(true); throw new java.sql.SQLException("close failed"); }
+            default -> throw new AssertionError("Unexpected call " + method.getName());
+        });
+        var data=com.vibe.ideadb.service.DataService.getInstance();
+        assertEquals("saved",data.withMutationConnection(connection,c -> data.inTransaction(c,unused -> "saved")));
+        assertTrue(committed.get()); assertFalse(rolledBack.get()); assertTrue(closed.get());
+        closed.set(false); committed.set(false);
+        var original=new java.sql.SQLException("write failed");
+        var error=assertThrows(java.sql.SQLException.class,() -> data.withMutationConnection(connection,c -> data.inTransaction(c,unused -> { throw original; })));
+        assertSame(original,error); assertEquals(1,error.getSuppressed().length);
+        assertTrue(rolledBack.get()); assertFalse(committed.get()); assertTrue(closed.get());
+    }
     @Test @Tag("integration") void existingDatabaseFlows() { PluginIntegrationTest.main(new String[0]); }
     @Test @Tag("integration") void liveFunctionalRegressions() throws Exception { FunctionalRegressionTest.main(new String[0]); }
 }

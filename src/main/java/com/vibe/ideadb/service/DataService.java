@@ -161,21 +161,45 @@ public class DataService {
         }
     }
 
+    /** Takes ownership; cleanup errors must never turn an acknowledged mutation into a retry. */
+    public <T> T withMutationConnection(Connection conn, DatabaseSession.Operation<T> operation) throws Exception {
+        try { return operation.run(conn); }
+        finally { discardConnection(conn); }
+    }
+
+    private static void discardConnection(Connection conn) {
+        try { conn.close(); }
+        catch (SQLException cleanup) { logCleanup(cleanup); }
+    }
+
+    private static void logCleanup(SQLException cleanup) {
+        java.util.logging.Logger.getLogger(DataService.class.getName()).warning("JDBC cleanup failed; connection discarded: " + cleanup.getMessage());
+    }
+
     public <T> T inTransaction(Connection conn, DatabaseSession.Operation<T> operation) throws Exception {
         synchronized (conn) {
             if (!conn.getAutoCommit()) throw new SQLException("A batch requires an exclusive connection without an existing transaction");
             conn.setAutoCommit(false);
+            Throwable failure = null;
             try {
                 T result = operation.run(conn);
                 conn.commit();
                 return result;
             } catch (Exception | Error e) {
+                failure = e;
                 try { conn.rollback(); } catch (SQLException rollback) {
                     e.addSuppressed(rollback);
                     try { conn.close(); } catch (SQLException close) { e.addSuppressed(close); }
                 }
                 throw e;
-            } finally { if (!conn.isClosed()) conn.setAutoCommit(true); }
+            } finally {
+                try { if (!conn.isClosed()) conn.setAutoCommit(true); }
+                catch (SQLException cleanup) {
+                    if (failure != null) failure.addSuppressed(cleanup);
+                    else logCleanup(cleanup); // commit returned successfully; preserve that outcome
+                    discardConnection(conn);
+                }
+            }
         }
     }
 

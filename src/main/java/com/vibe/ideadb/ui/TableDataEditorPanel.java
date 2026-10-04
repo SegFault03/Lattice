@@ -468,8 +468,11 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         setMutationRunning(true);
         statusLabel.setText("Truncating table '" + tableMetadata.getName() + "'...");
         tasks.submitMutation(() -> {
-            try (Connection conn = DatabaseConnectionManager.getInstance().openConnection(config)) {
-                DdlService.getInstance().truncateTable(conn, config, databaseName, tableMetadata.getName());
+            try {
+                DataService.getInstance().withMutationConnection(DatabaseConnectionManager.getInstance().openConnection(config), conn -> {
+                    DdlService.getInstance().truncateTable(conn, config, databaseName, tableMetadata.getName());
+                    return null;
+                });
                 SwingUtilities.invokeLater(() -> {
                     if (disposed) return;
                     setMutationRunning(false);
@@ -586,8 +589,11 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         TableDraftState.Draft remainingDraft = tableModel.captureDraft().withoutRows(modelRows);
         setMutationRunning(true);
         tasks.submitMutation(() -> {
-            try (Connection conn = DatabaseConnectionManager.getInstance().openConnection(config)) {
-                DataService.getInstance().deleteRows(conn, config, databaseName, tableMetadata.getName(), keys);
+            try {
+                DataService.getInstance().withMutationConnection(DatabaseConnectionManager.getInstance().openConnection(config), conn -> {
+                    DataService.getInstance().deleteRows(conn, config, databaseName, tableMetadata.getName(), keys);
+                    return null;
+                });
                 SwingUtilities.invokeLater(() -> {
                     if (draftStore != null) {
                         if (remainingDraft.hasChanges()) draftStore.put(draftKey(), remainingDraft);
@@ -602,7 +608,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 SwingUtilities.invokeLater(() -> {
                     if (disposed) return;
                     setMutationRunning(false);
-                    Messages.showErrorDialog(project, "No rows deleted: " + ex.getMessage(), "Delete Error");
+                    Messages.showErrorDialog(project, "Delete failed: " + ex.getMessage() + "\nIf the connection failed, verify database state before retrying.", "Delete Error");
                 });
             }
         });
@@ -663,8 +669,11 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         TableDraftState draftStore = project == null ? null : TableDraftState.getInstance(project);
         setMutationRunning(true);
         tasks.submitMutation(() -> {
-            try (Connection conn = DatabaseConnectionManager.getInstance().openConnection(config)) {
-                DataService.getInstance().commitChanges(conn, config, databaseName, tableMetadata.getName(), inserts, updates);
+            try {
+                DataService.getInstance().withMutationConnection(DatabaseConnectionManager.getInstance().openConnection(config), conn -> {
+                    DataService.getInstance().commitChanges(conn, config, databaseName, tableMetadata.getName(), inserts, updates);
+                    return null;
+                });
                 SwingUtilities.invokeLater(() -> {
                     if (draftStore != null) draftStore.remove(draftKey());
                     if (disposed) return;
@@ -678,7 +687,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 SwingUtilities.invokeLater(() -> {
                     if (disposed) return;
                     setMutationRunning(false);
-                    Messages.showErrorDialog(project, "No changes committed: " + ex.getMessage(), "Commit Error");
+                    Messages.showErrorDialog(project, "Save failed: " + ex.getMessage() + "\nIf the connection failed, verify database state before retrying.", "Commit Error");
                 });
             }
         });
@@ -849,7 +858,6 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             validationErrors.clear();
             for (int row = 0; row < rows.size(); row++) {
                 for (int col = 0; col < columns.size(); col++) {
-                    if (!isRowNew(row) && !isCellModified(row,col)) continue;
                     if (!isRowNew(row) && !isCellModified(row,col)) continue;
                     String error = validateInput(getColumnMeta(col), rows.get(row).get(col));
                     if (error != null) validationErrors.put(new CellCoord(row,col),error);
