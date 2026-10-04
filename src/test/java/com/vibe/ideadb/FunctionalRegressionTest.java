@@ -100,6 +100,7 @@ public class FunctionalRegressionTest {
             columnAlterations(config, schema);
             schemaExports(config, schema);
             restrictiveDrop(config, schema);
+            dataExports(config, schema);
         } finally {
             if (config.getType() == DatabaseType.MYSQL) connection.setCatalog("shop_db");
             else connection.setSchema("PUBLIC");
@@ -185,6 +186,30 @@ public class FunctionalRegressionTest {
             check(data.countRows(c,config,schema,renamed,null)==0,"Quoted identifiers must support rename/delete");
             ddl.alterTableDropColumn(c,config,schema,renamed,"extra value");
             ddl.dropTable(c,config,schema,renamed);
+        }
+    }
+    private static void dataExports(ConnectionConfig config,String schema) throws Exception {
+        try(Connection c=manager.openConnection(config)) {
+            String table=DdlService.formatTable(config,schema,"EXPORT_DATA");
+            sql(c,"CREATE TABLE " + table + " (ID INT PRIMARY KEY, TEXT_VALUE VARCHAR(200), BYTES_VALUE VARBINARY(100), NULL_VALUE VARCHAR(10), ACTIVE BOOLEAN, MOMENT TIMESTAMP(6))");
+            var values=new LinkedHashMap<String,Object>(); values.put("ID",1); values.put("TEXT_VALUE","O'Reilly C:\\new\\test \u0001 \uD83D\uDE80"); values.put("BYTES_VALUE",new byte[]{0,1,127,-1}); values.put("NULL_VALUE",null); values.put("ACTIVE",true); values.put("MOMENT",Timestamp.valueOf("2026-10-04 12:34:56.123456"));
+            data.insertRow(c,config,schema,"EXPORT_DATA",values);
+            QueryResult before=data.fetchData(c,config,schema,"EXPORT_DATA",null,null,10,0);
+            java.io.File exported=java.io.File.createTempFile("lattice-export-",".sql"); exported.deleteOnExit();
+            ExportService.getInstance().exportToSqlInsert(config,schema,"EXPORT_DATA",before,exported);
+            sql(c,"DELETE FROM " + table);
+            sql(c,java.nio.file.Files.readString(exported.toPath()));
+            QueryResult after=data.fetchData(c,config,schema,"EXPORT_DATA",null,null,10,0);
+            for(int col=0;col<before.getColumnNames().size();col++) check(Objects.deepEquals(before.getRows().get(0).get(col),after.getRows().get(0).get(col)),"SQL export must round-trip typed cell " + before.getColumnNames().get(col));
+            java.io.File json=java.io.File.createTempFile("lattice-export-",".json"); json.deleteOnExit();
+            ExportService.getInstance().exportToJson(before,json);
+            var parsed=com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(json.toPath())).getAsJsonArray().get(0).getAsJsonObject();
+            check(parsed.get("TEXT_VALUE").getAsString().equals(values.get("TEXT_VALUE")),"JSON controls/unicode must parse and round-trip");
+            check(parsed.get("BYTES_VALUE").getAsString().equals("base64:AAF//w=="),"JSON binary representation must be explicit");
+            var nonfinite=QueryResult.forResultSet(List.of("VALUE"),List.of("DOUBLE"),List.of(List.of(Double.NaN)),0);
+            ExportService.getInstance().exportToJson(nonfinite,json);
+            check(com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(json.toPath())).getAsJsonArray().get(0).getAsJsonObject().get("VALUE").getAsString().equals("NaN"),"Non-finite JSON values must be valid strings");
+            try { ExportService.getInstance().exportToJson(QueryResult.forResultSet(List.of("VALUE","VALUE"),List.of("INT","INT"),List.of(List.of(1,2)),0),json); throw new AssertionError("Duplicate labels accepted"); } catch(IllegalArgumentException expected) { check(true,"Duplicate JSON labels rejected"); }
         }
     }
     private static void restrictiveDrop(ConnectionConfig config,String schema) throws Exception {

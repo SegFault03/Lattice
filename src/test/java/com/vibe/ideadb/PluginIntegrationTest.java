@@ -196,7 +196,7 @@ public class PluginIntegrationTest {
         }
 
         String sqlText = Files.readString(sql.toPath());
-        if (!sqlText.contains("INSERT INTO products")) {
+        if (!sqlText.contains("INSERT INTO \"products\"")) {
             throw new AssertionError("SQL export invalid:\n" + sqlText);
         }
 

@@ -1,6 +1,6 @@
 package com.vibe.ideadb.service;
 
-import com.vibe.ideadb.model.QueryResult;
+import com.vibe.ideadb.model.*;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -30,7 +30,7 @@ public class ExportService {
             for (List<Object> row : result.getRows()) {
                 for (int i = 0; i < row.size(); i++) {
                     Object val = row.get(i);
-                    bw.write(escapeCsv(val != null ? val.toString() : ""));
+                    bw.write(escapeCsv(val != null ? textValue(val) : ""));
                     if (i < row.size() - 1) bw.write(",");
                 }
                 bw.newLine();
@@ -39,6 +39,7 @@ public class ExportService {
     }
 
     public void exportToJson(QueryResult result, File file) throws Exception {
+        if (new java.util.HashSet<>(result.getColumnNames()).size()!=result.getColumnNames().size()) throw new IllegalArgumentException("JSON objects require unique column labels. Alias duplicate columns before exporting.");
         try (BufferedWriter bw = new BufferedWriter(new FileWriter(file, StandardCharsets.UTF_8))) {
             bw.write("[\n");
             List<String> cols = result.getColumnNames();
@@ -52,10 +53,10 @@ public class ExportService {
                     Object val = row.get(c);
                     if (val == null) {
                         bw.write("null");
-                    } else if (val instanceof Number || val instanceof Boolean) {
+                    } else if ((val instanceof Number && finite(val)) || val instanceof Boolean) {
                         bw.write(val.toString());
                     } else {
-                        bw.write("\"" + escapeJson(val.toString()) + "\"");
+                        bw.write("\"" + escapeJson(textValue(val)) + "\"");
                     }
                     if (c < cols.size() - 1) bw.write(",");
                     bw.newLine();
@@ -69,31 +70,41 @@ public class ExportService {
     }
 
     public void exportToSqlInsert(String tableName, QueryResult result, File file) throws Exception {
-        try (BufferedWriter bw = new BufferedWriter(new FileWriter(file, StandardCharsets.UTF_8))) {
-            List<String> cols = result.getColumnNames();
-            List<List<Object>> rows = result.getRows();
-
-            for (List<Object> row : rows) {
-                bw.write("INSERT INTO " + tableName + " (");
-                for (int i = 0; i < cols.size(); i++) {
-                    bw.write(cols.get(i));
-                    if (i < cols.size() - 1) bw.write(", ");
-                }
-                bw.write(") VALUES (");
-                for (int i = 0; i < row.size(); i++) {
-                    Object val = row.get(i);
-                    if (val == null) {
-                        bw.write("NULL");
-                    } else if (val instanceof Number) {
-                        bw.write(val.toString());
-                    } else {
-                        bw.write("'" + escapeSql(val.toString()) + "'");
-                    }
-                    if (i < row.size() - 1) bw.write(", ");
-                }
-                bw.write(");\n");
-            }
+        exportToSqlInsert(new ConnectionConfig(DatabaseType.HSQLDB,"export"),null,tableName,result,file);
+    }
+    public void exportToSqlInsert(ConnectionConfig config,String schema,String tableName,QueryResult result,File file) throws Exception {
+        try(BufferedWriter writer=new BufferedWriter(new FileWriter(file,StandardCharsets.UTF_8))) {
+            for(List<Object> row:result.getRows()) writeInsert(writer,config,schema,tableName,result.getColumnNames(),result.getColumnTypes(),row);
         }
+    }
+    private void writeInsert(BufferedWriter writer, ConnectionConfig config,String schema,String table,List<String> columns,List<String> types,List<Object> row) throws Exception {
+        writer.write("INSERT INTO " + DdlService.formatTable(config,schema,table) + " (");
+        for(int col=0;col<columns.size();col++) {
+            if(col>0) writer.write(", "); writer.write(DdlService.quoteIdentifier(config,columns.get(col)));
+        }
+        writer.write(") VALUES (");
+        for(int col=0;col<row.size();col++) { if(col>0) writer.write(", "); writer.write(sqlLiteral(config,row.get(col),types.get(col))); }
+        writer.write(");\n");
+    }
+    private static boolean finite(Object value) {
+        return !(value instanceof Double number && !Double.isFinite(number)) && !(value instanceof Float single && !Float.isFinite(single));
+    }
+    private static String textValue(Object value) {
+        return value instanceof byte[] bytes ? "base64:" + java.util.Base64.getEncoder().encodeToString(bytes) : value.toString();
+    }
+    private static String sqlLiteral(ConnectionConfig config,Object value,String type) {
+        if(value==null) return "NULL";
+        if(value instanceof byte[] bytes) return "X'" + java.util.HexFormat.of().formatHex(bytes) + "'";
+        if(value instanceof Boolean bool) return bool ? "TRUE" : "FALSE";
+        if(value instanceof Number) { if(!finite(value)) throw new IllegalArgumentException("Non-finite numbers cannot be exported as SQL literals"); return value.toString(); }
+        if(config.getType()==DatabaseType.MYSQL && value instanceof java.sql.Timestamp timestamp && type.toUpperCase(java.util.Locale.ROOT).contains("TIMESTAMP")) {
+            java.time.Instant instant=timestamp.toInstant();
+            java.math.BigDecimal seconds=java.math.BigDecimal.valueOf(instant.getEpochSecond()).add(java.math.BigDecimal.valueOf(instant.getNano(),9));
+            return "FROM_UNIXTIME(" + seconds.toPlainString() + ")";
+        }
+        String text=value.toString();
+        if(config.getType()==DatabaseType.MYSQL) return "CONVERT(X'" + java.util.HexFormat.of().formatHex(text.getBytes(StandardCharsets.UTF_8)) + "' USING utf8mb4)";
+        return "'" + text.replace("'","''") + "'";
     }
 
     public void exportCreateTable(String ddl, File file) throws Exception {
@@ -113,19 +124,16 @@ public class ExportService {
         return value;
     }
 
-    private String escapeJson(String s) {
-        if (s == null) return "";
-        return s.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\b", "\\b")
-                .replace("\f", "\\f")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
-    }
-
-    private String escapeSql(String s) {
-        if (s == null) return "";
-        return s.replace("'", "''");
+    private String escapeJson(String value) {
+        if(value==null) return "";
+        StringBuilder escaped=new StringBuilder();
+        for(int i=0;i<value.length();i++) {
+            char ch=value.charAt(i);
+            if(ch=='\\') escaped.append("\\\\");
+            else if(ch=='\"') escaped.append("\\\"");
+            else if(ch<0x20 || Character.isSurrogate(ch)) escaped.append(String.format("\\u%04x",(int)ch));
+            else escaped.append(ch);
+        }
+        return escaped.toString();
     }
 }

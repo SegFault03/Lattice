@@ -701,7 +701,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             try {
                 if ("csv".equalsIgnoreCase(format)) ExportService.getInstance().exportToCsv(result,targetFile);
                 else if ("json".equalsIgnoreCase(format)) ExportService.getInstance().exportToJson(result,targetFile);
-                else ExportService.getInstance().exportToSqlInsert(tableMetadata.getName(),result,targetFile);
+                else ExportService.getInstance().exportToSqlInsert(config,databaseName,tableMetadata.getName(),result,targetFile);
                 SwingUtilities.invokeLater(() -> { if (!disposed) Messages.showInfoMessage(project,"Exported data to " + targetFile.getName(),"Export Complete"); });
             } catch(Exception error) {
                 SwingUtilities.invokeLater(() -> { if (!disposed) Messages.showErrorDialog(project,"Export failed: " + error.getMessage(),"Export Error"); });
