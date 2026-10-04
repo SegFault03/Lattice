@@ -93,6 +93,7 @@ public class FunctionalRegressionTest {
         try {
             sessions(config, schema);
             configurationLifecycle(config);
+            metadata(config, schema);
             mutations(config, schema);
             columnAlterations(config, schema);
         } finally {
@@ -103,6 +104,21 @@ public class FunctionalRegressionTest {
         System.out.println("PASS " + config.getType() + " functional regressions (temporary schema removed)");
     }
 
+    private static void metadata(ConnectionConfig config, String schema) throws Exception {
+        try(Connection c=manager.openConnection(config)) {
+            sql(c,"CREATE TABLE " + DdlService.formatTable(config,schema,"META_A") + " (ID INT PRIMARY KEY, EXACT_COL INT)");
+            sql(c,"CREATE TABLE " + DdlService.formatTable(config,schema,"METAXA") + " (WRONG_COL INT)");
+            var columns=MetadataService.getInstance().getColumns(c,config,schema,"META_A");
+            check(columns.size()==2 && columns.get(0).isPrimaryKey() && columns.stream().noneMatch(col -> col.getName().equals("WRONG_COL")),"Underscore metadata lookup must target only the exact table");
+            String quote = config.getType()==DatabaseType.MYSQL ? "`" : "\"";
+            sql(c,"CREATE TABLE " + quote + schema + quote + "." + quote + "Meta%Case" + quote + " (EXACT_COL INT)");
+            var percent=MetadataService.getInstance().getColumns(c,config,schema,"Meta%Case");
+            check(percent.size()==1 && percent.get(0).getName().equals("EXACT_COL"),"Percent and mixed-case metadata names must remain literal");
+            var broken = (Connection) java.lang.reflect.Proxy.newProxyInstance(Connection.class.getClassLoader(),new Class[]{Connection.class},(proxy,method,args) -> { throw new SQLException("metadata unavailable"); });
+            try { MetadataService.getInstance().getColumns(broken,config,schema,"META_A"); throw new AssertionError("Metadata errors swallowed"); }
+            catch(SQLException expected) { check(expected.getMessage().equals("metadata unavailable"),"Metadata failures must reach callers"); }
+        }
+    }
     private static void columnAlterations(ConnectionConfig config, String schema) throws Exception {
         try (Connection c = manager.openConnection(config)) {
             String table = DdlService.formatTable(config,schema,"ALTER_RECORDS");

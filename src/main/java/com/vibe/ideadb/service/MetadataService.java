@@ -62,9 +62,9 @@ public class MetadataService {
         DatabaseMetaData meta = conn.getMetaData();
 
         String catalog = (config.getType() == DatabaseType.MYSQL) ? database : null;
-        String schema = (config.getType() == DatabaseType.HSQLDB) ? database : null;
+        String schema = (config.getType() == DatabaseType.HSQLDB) ? resolveSchema(meta, database) : null;
 
-        try (ResultSet rs = meta.getTables(catalog, schema, "%", new String[]{"TABLE", "VIEW"})) {
+        try (ResultSet rs = meta.getTables(catalog, literalPattern(meta, schema), "%", new String[]{"TABLE", "VIEW"})) {
             while (rs.next()) {
                 String tableName = rs.getString("TABLE_NAME");
                 String tableType = rs.getString("TABLE_TYPE");
@@ -82,43 +82,25 @@ public class MetadataService {
         DatabaseMetaData meta = conn.getMetaData();
 
         String catalog = (config.getType() == DatabaseType.MYSQL) ? database : null;
-        String schema = (config.getType() == DatabaseType.HSQLDB) ? (database != null ? database.toUpperCase() : null) : null;
-        String lookupTable = (config.getType() == DatabaseType.HSQLDB && tableName != null) ? tableName.toUpperCase() : tableName;
-
-        // Fetch Primary Keys
+        String schema = config.getType() == DatabaseType.HSQLDB ? resolveSchema(meta, database) : null;
+        String lookupTable = tableName;
+        if (config.getType() == DatabaseType.HSQLDB) {
+            lookupTable = resolveTable(meta, schema, tableName);
+        }
         Set<String> pkNames = new HashSet<>();
         try (ResultSet rs = meta.getPrimaryKeys(catalog, schema, lookupTable)) {
-            while (rs.next()) {
-                String pkCol = rs.getString("COLUMN_NAME");
-                if (pkCol != null) {
-                    pkNames.add(pkCol.toLowerCase());
-                }
-            }
-        } catch (Exception ignored) {
+            while (rs.next()) pkNames.add(rs.getString("COLUMN_NAME"));
         }
-        if (pkNames.isEmpty() && tableName != null && !lookupTable.equals(tableName)) {
-            try (ResultSet rs = meta.getPrimaryKeys(catalog, schema, tableName)) {
-                while (rs.next()) {
-                    String pkCol = rs.getString("COLUMN_NAME");
-                    if (pkCol != null) pkNames.add(pkCol.toLowerCase());
-                }
-            } catch (Exception ignored) {
-            }
-        }
-
-        // Fetch Columns
         fetchColumnsInto(meta, catalog, schema, lookupTable, pkNames, columns);
-        if (columns.isEmpty() && tableName != null && !lookupTable.equals(tableName)) {
-            fetchColumnsInto(meta, catalog, schema, tableName, pkNames, columns);
-        }
 
         return columns;
     }
 
     private void fetchColumnsInto(DatabaseMetaData meta, String catalog, String schema, String tablePattern,
-                                  Set<String> pkNames, List<ColumnMetadata> columns) {
-        try (ResultSet rs = meta.getColumns(catalog, schema, tablePattern, "%")) {
+                                  Set<String> pkNames, List<ColumnMetadata> columns) throws java.sql.SQLException {
+        try (ResultSet rs = meta.getColumns(catalog, literalPattern(meta, schema), literalPattern(meta, tablePattern), "%")) {
             while (rs.next()) {
+                if (!tablePattern.equals(rs.getString("TABLE_NAME")) && !(meta.storesLowerCaseIdentifiers() && tablePattern.equalsIgnoreCase(rs.getString("TABLE_NAME")))) continue;
                 String colName = rs.getString("COLUMN_NAME");
                 String typeName = rs.getString("TYPE_NAME");
                 int dataType = rs.getInt("DATA_TYPE");
@@ -161,13 +143,41 @@ public class MetadataService {
                     }
                 }
 
-                boolean isPk = pkNames.contains(colName.toLowerCase());
+                boolean isPk = pkNames.contains(colName);
 
                 ColumnMetadata col = new ColumnMetadata(colName, typeName, dataType, colSize, decDigits,
                         nullable, isPk, autoInc, defVal);
                 columns.add(col);
             }
-        } catch (Exception ignored) {
         }
+    }
+    private static String literalPattern(DatabaseMetaData meta, String value) throws java.sql.SQLException {
+        if (value == null) return null;
+        String escape = meta.getSearchStringEscape();
+        if (escape == null || escape.isEmpty()) return value;
+        return value.replace(escape, escape + escape).replace("_", escape + "_").replace("%", escape + "%");
+    }
+    private static String resolveSchema(DatabaseMetaData meta, String requested) throws java.sql.SQLException {
+        if (requested == null) return null;
+        String folded = requested.toUpperCase(Locale.ROOT), fallback = null;
+        try (ResultSet rs = meta.getSchemas()) {
+            while (rs.next()) {
+                String name = rs.getString("TABLE_SCHEM");
+                if (requested.equals(name)) return name;
+                if (folded.equals(name)) fallback = name;
+            }
+        }
+        return fallback == null ? requested : fallback;
+    }
+    private static String resolveTable(DatabaseMetaData meta, String schema, String requested) throws java.sql.SQLException {
+        String folded = requested.toUpperCase(Locale.ROOT), fallback = null;
+        try (ResultSet rs = meta.getTables(null, literalPattern(meta,schema), "%", null)) {
+            while (rs.next()) {
+                String name = rs.getString("TABLE_NAME");
+                if (requested.equals(name)) return name;
+                if (folded.equals(name)) fallback = name;
+            }
+        }
+        return fallback == null ? requested : fallback;
     }
 }
