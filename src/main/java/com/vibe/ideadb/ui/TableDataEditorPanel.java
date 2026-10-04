@@ -17,6 +17,7 @@ import com.vibe.ideadb.model.ConnectionConfig;
 import com.vibe.ideadb.model.DatabaseType;
 import com.vibe.ideadb.model.QueryResult;
 import com.vibe.ideadb.model.TableMetadata;
+import com.vibe.ideadb.model.RowIdentity;
 import com.vibe.ideadb.service.DataService;
 import com.vibe.ideadb.service.DatabaseConnectionManager;
 import com.vibe.ideadb.service.DdlService;
@@ -64,6 +65,8 @@ public class TableDataEditorPanel extends JPanel {
     private int currentPage = 1;
     private int pageSize = 100;
     private int totalRowCount = -1;
+    private boolean mutationRunning;
+    private long loadGeneration;
 
     public TableDataEditorPanel(Project project, ConnectionConfig config, String databaseName, TableMetadata tableMetadata) {
         super(new BorderLayout(0, 0));
@@ -164,7 +167,7 @@ public class TableDataEditorPanel extends JPanel {
         JButton addRowBtn = new JButton("Add Row", AllIcons.General.Add);
         makeCompactButton(addRowBtn);
         addRowBtn.addActionListener(e -> {
-            if (tableModel != null) {
+            if (tableModel != null && !mutationRunning) {
                 tableModel.addNewRow();
                 updatePendingChangesState();
             }
@@ -274,6 +277,8 @@ public class TableDataEditorPanel extends JPanel {
     }
 
     public void loadData() {
+        if (mutationRunning) return;
+        long generation = ++loadGeneration;
         statusLabel.setText("Loading data...");
         statusLabel.setForeground(null);
         new Thread(() -> {
@@ -291,6 +296,7 @@ public class TableDataEditorPanel extends JPanel {
                 QueryResult result = DataService.getInstance().fetchData(conn, config, databaseName, tableMetadata.getName(), where, null, pageSize, offset);
 
                 SwingUtilities.invokeLater(() -> {
+                    if (generation != loadGeneration || mutationRunning) return;
                     tableModel.setData(result.getColumnNames(), result.getColumnTypes(), result.getRows());
                     for (int i = 0; i < dataTable.getColumnCount(); i++) {
                         int headerWidth = dataTable.getColumnModel().getColumn(i).getHeaderValue().toString().length() * 10 + 30;
@@ -309,6 +315,7 @@ public class TableDataEditorPanel extends JPanel {
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
+                    if (generation != loadGeneration || mutationRunning) return;
                     statusLabel.setText("Error loading data: " + ex.getMessage());
                     Messages.showErrorDialog(project, "Error: " + ex.getMessage(), "Data Fetch Error");
                 });
@@ -321,7 +328,7 @@ public class TableDataEditorPanel extends JPanel {
         Map<CellCoord, String> errors = tableModel.getValidationErrors();
         boolean hasErrors = !errors.isEmpty();
 
-        revertBtn.setEnabled(hasPending);
+        revertBtn.setEnabled(hasPending && !mutationRunning);
 
         if (hasErrors) {
             saveBtn.setEnabled(false);
@@ -331,7 +338,7 @@ public class TableDataEditorPanel extends JPanel {
             saveBtn.setToolTipText("Commit disabled: Please fix " + errors.size() + " validation error(s).");
             saveBtn.setText("Commit");
         } else {
-            saveBtn.setEnabled(hasPending);
+            saveBtn.setEnabled(hasPending && !mutationRunning);
             saveBtn.setToolTipText(null);
             statusLabel.setForeground(null);
             if (hasPending) {
@@ -344,6 +351,7 @@ public class TableDataEditorPanel extends JPanel {
     }
 
     private void truncateCurrentTable() {
+        if (mutationRunning) return;
         int confirm = Messages.showYesNoDialog(
                 project,
                 "Are you sure you want to TRUNCATE table '" + tableMetadata.getName() + "'?\n" +
@@ -439,12 +447,24 @@ public class TableDataEditorPanel extends JPanel {
     }
 
     private void deleteSelectedRows() {
+        if (mutationRunning || !finishCellEditing()) return;
         int[] rows = dataTable.getSelectedRows();
         if (rows.length == 0) return;
-
         List<String> pkNames = tableMetadata.getPrimaryKeyColumnNames();
-        if (pkNames.isEmpty()) {
-            Messages.showWarningDialog(project, "Cannot delete row: Table has no primary key defined.", "No Primary Key");
+        List<Integer> modelRows = new ArrayList<>();
+        List<Map<String, Object>> keys = new ArrayList<>();
+        try {
+            for (int viewRow : rows) {
+                int row = dataTable.convertRowIndexToModel(viewRow);
+                modelRows.add(row);
+                if (!tableModel.isRowNew(row)) keys.add(tableModel.getRowOriginalPkValues(row, pkNames));
+            }
+        } catch (IllegalStateException e) {
+            Messages.showWarningDialog(project, e.getMessage(), "Cannot Delete"); return;
+        }
+        if (keys.isEmpty()) {
+            tableModel.removeRows(modelRows);
+            updatePendingChangesState();
             return;
         }
 
@@ -452,25 +472,26 @@ public class TableDataEditorPanel extends JPanel {
                 "Confirm Delete", Messages.getWarningIcon());
         if (confirm != Messages.YES) return;
 
+        setMutationRunning(true);
         new Thread(() -> {
-            try {
-                Connection conn = DatabaseConnectionManager.getInstance().getConnection(config);
-                for (int viewRow : rows) {
-                    int modelRow = dataTable.convertRowIndexToModel(viewRow);
-                    Map<String, Object> pkVals = tableModel.getRowPkValues(modelRow, pkNames);
-                    DataService.getInstance().deleteRow(conn, config, databaseName, tableMetadata.getName(), pkVals);
-                }
+            try (Connection conn = DatabaseConnectionManager.getInstance().openConnection(config)) {
+                DataService.getInstance().deleteRows(conn, config, databaseName, tableMetadata.getName(), keys);
                 SwingUtilities.invokeLater(() -> {
-                    Messages.showInfoMessage(project, "Deleted " + rows.length + " row(s) successfully.", "Success");
-                    loadData();
+                    tableModel.removeRows(modelRows);
+                    setMutationRunning(false);
+                    statusLabel.setText("Deleted " + keys.size() + " persisted row(s)");
                 });
             } catch (Exception ex) {
-                SwingUtilities.invokeLater(() -> Messages.showErrorDialog(project, "Failed to delete: " + ex.getMessage(), "Delete Error"));
+                SwingUtilities.invokeLater(() -> {
+                    setMutationRunning(false);
+                    Messages.showErrorDialog(project, "No rows deleted: " + ex.getMessage(), "Delete Error");
+                });
             }
         }).start();
     }
 
     private void commitChanges() {
+        if (mutationRunning || !finishCellEditing()) return;
         if (!tableModel.hasPendingChanges()) return;
 
         Map<CellCoord, String> errors = tableModel.getValidationErrors();
@@ -482,11 +503,9 @@ public class TableDataEditorPanel extends JPanel {
 
         List<String> pkNames = tableMetadata.getPrimaryKeyColumnNames();
 
-        new Thread(() -> {
-            try {
-                Connection conn = DatabaseConnectionManager.getInstance().getConnection(config);
-
-                // 1. Process inserts
+        List<Map<String, Object>> inserts = new ArrayList<>();
+        List<DataService.RowUpdate> updates = new ArrayList<>();
+        try {
                 for (Map<String, Object> insertRow : tableModel.getNewRows()) {
                     Map<String, Object> filteredMap = new LinkedHashMap<>();
                     for (Map.Entry<String, Object> entry : insertRow.entrySet()) {
@@ -500,7 +519,7 @@ public class TableDataEditorPanel extends JPanel {
                         }
                         filteredMap.put(colName, parseTypedValue(cm, val));
                     }
-                    DataService.getInstance().insertRow(conn, config, databaseName, tableMetadata.getName(), filteredMap);
+                    inserts.add(Collections.unmodifiableMap(filteredMap));
                 }
 
                 // 2. Process updates
@@ -508,23 +527,49 @@ public class TableDataEditorPanel extends JPanel {
                     throw new IllegalStateException("Cannot update records: Table has no primary key defined.");
                 }
 
+                Map<Integer, Map<String, Object>> changedRows = new LinkedHashMap<>();
                 for (CellCoord coord : tableModel.getModifiedCells().keySet()) {
                     Object newVal = tableModel.getModifiedCells().get(coord);
                     String colName = tableModel.getRawColumnName(coord.col);
                     ColumnMetadata cm = tableMetadata.getColumn(colName);
                     Object typedVal = parseTypedValue(cm, newVal);
-                    Map<String, Object> pkVals = tableModel.getRowOriginalPkValues(coord.row, pkNames);
-                    DataService.getInstance().updateCell(conn, config, databaseName, tableMetadata.getName(), colName, typedVal, pkVals);
+                    changedRows.computeIfAbsent(coord.row, row -> new LinkedHashMap<>()).put(colName, typedVal);
                 }
-
+                for (Map.Entry<Integer, Map<String, Object>> row : changedRows.entrySet()) {
+                    updates.add(new DataService.RowUpdate(row.getValue(), tableModel.getRowOriginalPkValues(row.getKey(), pkNames)));
+                }
+        } catch (Exception e) {
+            Messages.showErrorDialog(project, e.getMessage(), "Cannot Commit"); return;
+        }
+        setMutationRunning(true);
+        new Thread(() -> {
+            try (Connection conn = DatabaseConnectionManager.getInstance().openConnection(config)) {
+                DataService.getInstance().commitChanges(conn, config, databaseName, tableMetadata.getName(), inserts, updates);
                 SwingUtilities.invokeLater(() -> {
+                    tableModel.modifiedCells.clear();
+                    tableModel.newRows.clear();
+                    setMutationRunning(false);
                     Messages.showInfoMessage(project, "All changes committed successfully!", "Changes Saved");
                     loadData();
                 });
             } catch (Exception ex) {
-                SwingUtilities.invokeLater(() -> Messages.showErrorDialog(project, "Failed to commit changes: " + ex.getMessage(), "Commit Error"));
+                SwingUtilities.invokeLater(() -> {
+                    setMutationRunning(false);
+                    Messages.showErrorDialog(project, "No changes committed: " + ex.getMessage(), "Commit Error");
+                });
             }
         }).start();
+    }
+
+    private boolean finishCellEditing() {
+        return !dataTable.isEditing() || dataTable.getCellEditor().stopCellEditing();
+    }
+
+    private void setMutationRunning(boolean running) {
+        if (running) loadGeneration++;
+        mutationRunning = running;
+        dataTable.setEnabled(!running);
+        updatePendingChangesState();
     }
 
     private void showExportMenu(Component invoker) {
@@ -942,14 +987,33 @@ public class TableDataEditorPanel extends JPanel {
         }
 
         public Map<String, Object> getRowOriginalPkValues(int row, List<String> pkNames) {
-            Map<String, Object> map = new HashMap<>();
-            for (String pk : pkNames) {
-                int colIdx = getColumnIndex(pk);
-                if (colIdx >= 0 && row < originalRows.size()) {
-                    map.put(pk, originalRows.get(row).get(colIdx));
+            return RowIdentity.originalKeys(columns, originalRows.get(row), pkNames);
+        }
+
+        public void removeRows(List<Integer> selected) {
+            List<Integer> sorted = selected.stream().distinct().sorted().toList();
+            Map<CellCoord, Object> remaining = new HashMap<>();
+            modifiedCells.forEach((coord, value) -> {
+                if (!sorted.contains(coord.row)) {
+                    int shift = (int) sorted.stream().filter(row -> row < coord.row).count();
+                    remaining.put(new CellCoord(coord.row - shift, coord.col), value);
+                }
+            });
+            for (int i = sorted.size() - 1; i >= 0; i--) {
+                int row = sorted.get(i);
+                if (row >= originalRows.size()) newRows.remove(row - originalRows.size());
+                else originalRows.remove(row);
+                rows.remove(row);
+            }
+            modifiedCells.clear(); modifiedCells.putAll(remaining);
+            validationErrors.clear();
+            for (int row = 0; row < rows.size(); row++) {
+                for (int col = 0; col < columns.size(); col++) {
+                    String error = validateCellValue(getColumnMeta(col), rows.get(row).get(col));
+                    if (error != null) validationErrors.put(new CellCoord(row, col), error);
                 }
             }
-            return map;
+            fireTableDataChanged();
         }
 
         public int getColumnIndex(String name) {

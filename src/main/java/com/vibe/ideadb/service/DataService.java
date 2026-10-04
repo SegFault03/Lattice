@@ -62,13 +62,23 @@ public class DataService {
 
     public void updateCell(Connection conn, ConnectionConfig config, String dbName, String tableName,
                            String colName, Object newVal, Map<String, Object> pkVals) throws Exception {
+        Map<String, Object> changes = new java.util.LinkedHashMap<>();
+        changes.put(colName, newVal);
+        updateRow(conn, config, dbName, tableName, changes, pkVals);
+    }
+
+    public void updateRow(Connection conn, ConnectionConfig config, String dbName, String tableName,
+                          Map<String, Object> changes, Map<String, Object> pkVals) throws Exception {
+        requireKeys(pkVals);
+        if (changes.isEmpty()) return;
         boolean isMysql = config.getType() == DatabaseType.MYSQL;
         StringBuilder sb = new StringBuilder("UPDATE ");
         sb.append(DdlService.formatTable(config, dbName, tableName)).append(" SET ");
-        if (isMysql) {
-            sb.append("`").append(colName).append("` = ?");
-        } else {
-            sb.append(colName).append(" = ?");
+        List<String> columns = new ArrayList<>(changes.keySet());
+        for (int i = 0; i < columns.size(); i++) {
+            String column = columns.get(i);
+            sb.append(isMysql ? "`" + column.replace("`", "``") + "`" : column).append(" = ?");
+            if (i < columns.size() - 1) sb.append(", ");
         }
 
         sb.append(" WHERE ");
@@ -81,11 +91,11 @@ public class DataService {
         }
 
         try (PreparedStatement ps = conn.prepareStatement(sb.toString())) {
-            ps.setObject(1, newVal);
+            for (int i = 0; i < columns.size(); i++) ps.setObject(i + 1, changes.get(columns.get(i)));
             for (int i = 0; i < pkKeys.size(); i++) {
-                ps.setObject(i + 2, pkVals.get(pkKeys.get(i)));
+                ps.setObject(i + columns.size() + 1, pkVals.get(pkKeys.get(i)));
             }
-            ps.executeUpdate();
+            requireOneRow(ps.executeUpdate());
         }
     }
 
@@ -121,7 +131,7 @@ public class DataService {
 
     public void deleteRow(Connection conn, ConnectionConfig config, String dbName, String tableName,
                           Map<String, Object> pkVals) throws Exception {
-        if (pkVals.isEmpty()) return;
+        requireKeys(pkVals);
 
         boolean isMysql = config.getType() == DatabaseType.MYSQL;
         StringBuilder sb = new StringBuilder("DELETE FROM ");
@@ -139,7 +149,74 @@ public class DataService {
             for (int i = 0; i < pkKeys.size(); i++) {
                 ps.setObject(i + 1, pkVals.get(pkKeys.get(i)));
             }
-            ps.executeUpdate();
+            requireOneRow(ps.executeUpdate());
+        }
+    }
+
+    private static void requireKeys(Map<String, Object> keys) throws SQLException {
+        if (keys.isEmpty() || keys.values().stream().anyMatch(java.util.Objects::isNull)) {
+            throw new SQLException("Cannot modify a row without its complete original primary key");
+        }
+    }
+
+    private static void requireOneRow(int affected) throws SQLException {
+        if (affected != 1) throw new SQLException("Row conflict: expected one row, affected " + affected + ". Refresh and retry.");
+    }
+
+    public record RowUpdate(Map<String, Object> changes, Map<String, Object> originalKeys) {
+        public RowUpdate {
+            changes = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(changes));
+            originalKeys = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(originalKeys));
+        }
+    }
+
+    public <T> T inTransaction(Connection conn, DatabaseSession.Operation<T> operation) throws Exception {
+        synchronized (conn) {
+            if (!conn.getAutoCommit()) throw new SQLException("A batch requires an exclusive connection without an existing transaction");
+            conn.setAutoCommit(false);
+            try {
+                T result = operation.run(conn);
+                conn.commit();
+                return result;
+            } catch (Exception | Error e) {
+                try { conn.rollback(); } catch (SQLException rollback) {
+                    e.addSuppressed(rollback);
+                    try { conn.close(); } catch (SQLException close) { e.addSuppressed(close); }
+                }
+                throw e;
+            } finally { if (!conn.isClosed()) conn.setAutoCommit(true); }
+        }
+    }
+
+    public void commitChanges(Connection conn, ConnectionConfig config, String db, String table,
+                              List<Map<String, Object>> inserts, List<RowUpdate> updates) throws Exception {
+        requireTransactionalTable(conn, config, db, table);
+        inTransaction(conn, connection -> {
+            for (Map<String, Object> row : inserts) insertRow(connection, config, db, table, row);
+            for (RowUpdate row : updates) updateRow(connection, config, db, table, row.changes(), row.originalKeys());
+            return null;
+        });
+    }
+
+    public void deleteRows(Connection conn, ConnectionConfig config, String db, String table,
+                           List<Map<String, Object>> originalKeys) throws Exception {
+        requireTransactionalTable(conn, config, db, table);
+        inTransaction(conn, connection -> {
+            for (Map<String, Object> keys : originalKeys) deleteRow(connection, config, db, table, keys);
+            return null;
+        });
+    }
+
+    private void requireTransactionalTable(Connection conn, ConnectionConfig config, String db, String table) throws SQLException {
+        if (config.getType() != DatabaseType.MYSQL) return;
+        try (PreparedStatement statement = conn.prepareStatement(
+                "SELECT ENGINE FROM information_schema.tables WHERE table_schema=COALESCE(?,DATABASE()) AND table_name=?")) {
+            statement.setString(1, db); statement.setString(2, table);
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next() || !"InnoDB".equalsIgnoreCase(result.getString(1))) {
+                    throw new SQLException("Atomic grid changes require an InnoDB table");
+                }
+            }
         }
     }
 

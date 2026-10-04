@@ -36,6 +36,13 @@ public class DatabaseConnectionManager {
         return new DatabaseSession(this, config);
     }
 
+    /** Exclusive short-lived connection for a transaction; caller closes it. */
+    public Connection openConnection(ConnectionConfig config) throws Exception {
+        Connection connection = createRawConnection(config);
+        try { connection.setAutoCommit(true); return connection; }
+        catch (Exception e) { connection.close(); throw e; }
+    }
+
     Connection getConnection(ConnectionConfig config, String sessionId) throws Exception {
         ConnectionGroup group = activeConnections.computeIfAbsent(config.getId(), id -> new ConnectionGroup());
         synchronized (group) {

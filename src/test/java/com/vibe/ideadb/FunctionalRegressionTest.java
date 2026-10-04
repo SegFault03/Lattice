@@ -73,12 +73,49 @@ public class FunctionalRegressionTest {
         ddl.createDatabase(connection, config, schema);
         try {
             sessions(config, schema);
+            mutations(config, schema);
         } finally {
             if (config.getType() == DatabaseType.MYSQL) connection.setCatalog("shop_db");
             else connection.setSchema("PUBLIC");
             ddl.dropDatabase(connection, config, schema);
         }
         System.out.println("PASS " + config.getType() + " functional regressions (temporary schema removed)");
+    }
+
+    private static void expectFailure(DatabaseSession.Operation<?> operation, Connection conn) throws Exception {
+        boolean failed = false;
+        try { operation.run(conn); } catch (SQLException expected) { failed = true; }
+        check(failed, "Invalid/stale mutation must fail");
+    }
+
+    private static void mutations(ConnectionConfig config, String schema) throws Exception {
+        String table = DdlService.formatTable(config, schema, "GRID_RECORDS");
+        try (Connection c = manager.openConnection(config)) {
+            sql(c, "CREATE TABLE " + table + " (ID INT, TENANT INT, VAL VARCHAR(100), PRIMARY KEY(ID,TENANT))");
+            data.insertRow(c, config, schema, "GRID_RECORDS", Map.of("ID",1,"TENANT",7,"VAL","original"));
+            data.insertRow(c, config, schema, "GRID_RECORDS", Map.of("ID",2,"TENANT",7,"VAL","unrelated"));
+            Map<String, Object> original = RowIdentity.originalKeys(List.of("ID","TENANT","VAL"), List.of(1,7,"original"), List.of("ID","TENANT"));
+            LinkedHashMap<String,Object> changes = new LinkedHashMap<>(); changes.put("ID",3); changes.put("VAL","edited");
+            data.commitChanges(c, config, schema, "GRID_RECORDS", List.of(), List.of(new DataService.RowUpdate(changes, original)));
+            check("edited".equals(scalar(c,"SELECT VAL FROM " + table + " WHERE ID=3 AND TENANT=7")), "Key and value must update together");
+            Map<String,Object> originalAfterLoad = RowIdentity.originalKeys(List.of("ID","TENANT","VAL"), List.of(3,7,"edited"), List.of("ID","TENANT"));
+            data.deleteRows(c, config, schema, "GRID_RECORDS", List.of(originalAfterLoad));
+            check("unrelated".equals(scalar(c,"SELECT VAL FROM " + table + " WHERE ID=2 AND TENANT=7")), "Delete must preserve unrelated row");
+            expectFailure(conn -> { data.commitChanges(conn,config,schema,"GRID_RECORDS",List.of(Map.of("ID",9,"TENANT",7),Map.of("ID",9,"TENANT",7)),List.of()); return null; }, c);
+            check(((Number)scalar(c,"SELECT COUNT(*) FROM " + table + " WHERE ID=9")).intValue()==0,"Failed inserts must roll back");
+            data.commitChanges(c,config,schema,"GRID_RECORDS",List.of(Map.of("ID",9,"TENANT",7),Map.of("ID",10,"TENANT",7)),List.of());
+            check(((Number)scalar(c,"SELECT COUNT(*) FROM " + table + " WHERE ID IN (9,10)")).intValue()==2,"Retry must persist each insert once");
+            expectFailure(conn -> { data.commitChanges(conn,config,schema,"GRID_RECORDS",List.of(Map.of("ID",11,"TENANT",7)),List.of(new DataService.RowUpdate(Map.of("VAL","missing"),Map.of("ID",99,"TENANT",7)))); return null; },c);
+            check(((Number)scalar(c,"SELECT COUNT(*) FROM " + table + " WHERE ID=11")).intValue()==0,"Stale update must roll back inserts");
+            expectFailure(conn -> { data.deleteRows(conn,config,schema,"GRID_RECORDS",List.of(Map.of("ID",9,"TENANT",7),Map.of("ID",99,"TENANT",7))); return null; },c);
+            check(((Number)scalar(c,"SELECT COUNT(*) FROM " + table + " WHERE ID=9")).intValue()==1,"Failed delete batch must roll back");
+            expectFailure(conn -> { data.deleteRow(conn,config,schema,"GRID_RECORDS",Map.of()); return null; },c);
+            check(c.getAutoCommit(),"Transaction must restore auto-commit after success/failure");
+            c.setAutoCommit(false);
+            expectFailure(conn -> data.inTransaction(conn, unused -> null),c);
+            check(!c.getAutoCommit(),"Existing transactions must not be changed or committed");
+            c.rollback(); c.setAutoCommit(true);
+        }
     }
     public static void main(String[] args) throws Exception {
         try {
