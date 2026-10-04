@@ -299,6 +299,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             autoRefreshTimer.stop();
             autoRefreshTimer = null;
         }
+        if (disposed || !isDisplayable()) return;
         String sel = (String) autoRefreshCombo.getSelectedItem();
         if (sel == null || sel.contains("Off")) {
             return;
@@ -321,6 +322,12 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             autoRefreshTimer.setRepeats(true);
             autoRefreshTimer.start();
         }
+    }
+
+    @Override
+    public void addNotify() {
+        super.addNotify();
+        if (autoRefreshCombo != null) onAutoRefreshChanged();
     }
 
     @Override
