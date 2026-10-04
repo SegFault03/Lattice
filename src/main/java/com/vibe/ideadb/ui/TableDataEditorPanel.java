@@ -1,0 +1,1241 @@
+package com.vibe.ideadb.ui;
+
+import com.intellij.icons.AllIcons;
+import com.intellij.openapi.fileChooser.FileChooserFactory;
+import com.intellij.openapi.fileChooser.FileSaverDescriptor;
+import com.intellij.openapi.project.Project;
+import com.intellij.openapi.ui.Messages;
+import com.intellij.openapi.vfs.VirtualFileWrapper;
+import com.intellij.ui.JBColor;
+import com.intellij.ui.components.JBLabel;
+import com.intellij.ui.components.JBScrollPane;
+import com.intellij.ui.components.JBTextField;
+import com.intellij.ui.table.JBTable;
+import com.vibe.ideadb.editor.DatabaseEditorManager;
+import com.vibe.ideadb.model.ColumnMetadata;
+import com.vibe.ideadb.model.ConnectionConfig;
+import com.vibe.ideadb.model.DatabaseType;
+import com.vibe.ideadb.model.QueryResult;
+import com.vibe.ideadb.model.TableMetadata;
+import com.vibe.ideadb.service.DataService;
+import com.vibe.ideadb.service.DatabaseConnectionManager;
+import com.vibe.ideadb.service.DdlService;
+import com.vibe.ideadb.service.ExportService;
+import com.vibe.ideadb.service.MetadataService;
+
+import javax.swing.*;
+import javax.swing.table.AbstractTableModel;
+import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.JTableHeader;
+import java.awt.*;
+import java.awt.datatransfer.StringSelection;
+import java.io.File;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.sql.Connection;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+import java.util.List;
+
+public class TableDataEditorPanel extends JPanel {
+    private final Project project;
+    private final ConnectionConfig config;
+    private final String databaseName;
+    private final TableMetadata tableMetadata;
+
+    private JBTextField whereField;
+    private JComboBox<String> pageSizeCombo;
+    private JComboBox<String> autoRefreshCombo;
+    private javax.swing.Timer autoRefreshTimer;
+
+    private JButton prevPageBtn;
+    private JButton nextPageBtn;
+    private JBLabel pageLabel;
+    private JBLabel statusLabel;
+    private JButton saveBtn;
+    private JButton revertBtn;
+
+    private JBTable dataTable;
+    private EditableTableModel tableModel;
+
+    private int currentPage = 1;
+    private int pageSize = 100;
+    private int totalRowCount = -1;
+
+    public TableDataEditorPanel(Project project, ConnectionConfig config, String databaseName, TableMetadata tableMetadata) {
+        super(new BorderLayout(0, 0));
+        this.project = project;
+        this.config = config;
+        this.databaseName = databaseName;
+        this.tableMetadata = tableMetadata;
+
+        initUI();
+        loadData();
+    }
+
+    private void makeCompactButton(AbstractButton btn) {
+        btn.setMargin(new Insets(1, 5, 1, 5));
+        btn.setFocusable(false);
+    }
+
+    private void initUI() {
+        // Toolbar with WrapLayout to prevent overflow/clipping on any screen size
+        JPanel toolbar = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 3));
+
+        JButton refreshBtn = new JButton("Refresh", AllIcons.Actions.Refresh);
+        makeCompactButton(refreshBtn);
+        refreshBtn.addActionListener(e -> loadData());
+        toolbar.add(refreshBtn);
+
+        autoRefreshCombo = new JComboBox<>(new String[]{"Auto: Off", "10s", "15s", "20s", "30s", "60s"});
+        autoRefreshCombo.setToolTipText("Periodic auto-refresh interval");
+        autoRefreshCombo.setFocusable(false);
+        autoRefreshCombo.addActionListener(e -> onAutoRefreshChanged());
+        toolbar.add(autoRefreshCombo);
+
+        toolbar.add(new JSeparator(SwingConstants.VERTICAL));
+
+        toolbar.add(new JBLabel("WHERE:"));
+        whereField = new JBTextField(8);
+        whereField.addActionListener(e -> {
+            currentPage = 1;
+            loadData();
+        });
+        toolbar.add(whereField);
+
+        JButton filterBtn = new JButton("Filter");
+        makeCompactButton(filterBtn);
+        filterBtn.addActionListener(e -> {
+            currentPage = 1;
+            loadData();
+        });
+        toolbar.add(filterBtn);
+
+        toolbar.add(new JSeparator(SwingConstants.VERTICAL));
+
+        toolbar.add(new JBLabel("Limit:"));
+        pageSizeCombo = new JComboBox<>(new String[]{"50", "100", "250", "500", "1000"});
+        pageSizeCombo.setSelectedItem("100");
+        pageSizeCombo.setFocusable(false);
+        pageSizeCombo.addActionListener(e -> {
+            pageSize = Integer.parseInt((String) pageSizeCombo.getSelectedItem());
+            currentPage = 1;
+            loadData();
+        });
+        toolbar.add(pageSizeCombo);
+
+        prevPageBtn = new JButton("<");
+        prevPageBtn.setEnabled(false);
+        prevPageBtn.setPreferredSize(new Dimension(26, 24));
+        prevPageBtn.setMaximumSize(new Dimension(26, 24));
+        prevPageBtn.setMargin(new Insets(1, 2, 1, 2));
+        prevPageBtn.setFont(prevPageBtn.getFont().deriveFont(Font.BOLD, 12f));
+        prevPageBtn.setToolTipText("Previous Page");
+        prevPageBtn.setFocusable(false);
+        prevPageBtn.addActionListener(e -> {
+            if (currentPage > 1) {
+                currentPage--;
+                loadData();
+            }
+        });
+        toolbar.add(prevPageBtn);
+
+        pageLabel = new JBLabel("Page 1");
+        toolbar.add(pageLabel);
+
+        nextPageBtn = new JButton(">");
+        nextPageBtn.setPreferredSize(new Dimension(26, 24));
+        nextPageBtn.setMaximumSize(new Dimension(26, 24));
+        nextPageBtn.setMargin(new Insets(1, 2, 1, 2));
+        nextPageBtn.setFont(nextPageBtn.getFont().deriveFont(Font.BOLD, 12f));
+        nextPageBtn.setToolTipText("Next Page");
+        nextPageBtn.setFocusable(false);
+        nextPageBtn.addActionListener(e -> {
+            currentPage++;
+            loadData();
+        });
+        toolbar.add(nextPageBtn);
+
+        toolbar.add(new JSeparator(SwingConstants.VERTICAL));
+
+        JButton addRowBtn = new JButton("Add Row", AllIcons.General.Add);
+        makeCompactButton(addRowBtn);
+        addRowBtn.addActionListener(e -> {
+            if (tableModel != null) {
+                tableModel.addNewRow();
+                updatePendingChangesState();
+            }
+        });
+        toolbar.add(addRowBtn);
+
+        JButton delRowBtn = new JButton("Delete", AllIcons.General.Remove);
+        makeCompactButton(delRowBtn);
+        delRowBtn.setToolTipText("Delete selected row(s)");
+        delRowBtn.addActionListener(e -> deleteSelectedRows());
+        toolbar.add(delRowBtn);
+
+        saveBtn = new JButton("Commit", AllIcons.Actions.Commit);
+        makeCompactButton(saveBtn);
+        saveBtn.setEnabled(false);
+        saveBtn.addActionListener(e -> commitChanges());
+        toolbar.add(saveBtn);
+
+        revertBtn = new JButton("Revert", AllIcons.Actions.Rollback);
+        makeCompactButton(revertBtn);
+        revertBtn.setEnabled(false);
+        revertBtn.addActionListener(e -> loadData());
+        toolbar.add(revertBtn);
+
+        toolbar.add(new JSeparator(SwingConstants.VERTICAL));
+
+        JButton exportBtn = new JButton("Export...", AllIcons.ToolbarDecorator.Export);
+        makeCompactButton(exportBtn);
+        exportBtn.setToolTipText("Export table data (CSV, JSON, SQL INSERTs, DDL)");
+        exportBtn.addActionListener(e -> showExportMenu(exportBtn));
+        toolbar.add(exportBtn);
+
+        JButton truncateBtn = new JButton("Truncate", AllIcons.Actions.GC);
+        makeCompactButton(truncateBtn);
+        truncateBtn.setToolTipText("Truncate table (permanently delete all rows)");
+        truncateBtn.addActionListener(e -> truncateCurrentTable());
+        toolbar.add(truncateBtn);
+
+        JButton consoleBtn = new JButton("Console", Icons.CONSOLE);
+        makeCompactButton(consoleBtn);
+        consoleBtn.setToolTipText("Open interactive query console for " + (databaseName != null ? databaseName : "this database"));
+        consoleBtn.addActionListener(e -> openSqlConsole());
+        toolbar.add(consoleBtn);
+
+        add(toolbar, BorderLayout.NORTH);
+
+        // Center Table
+        tableModel = new EditableTableModel();
+        dataTable = new JBTable(tableModel);
+        dataTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        dataTable.setRowHeight(24);
+        dataTable.setShowGrid(true);
+        dataTable.setGridColor(new JBColor(new Color(230, 230, 230), new Color(60, 63, 65)));
+        dataTable.setDefaultRenderer(Object.class, new CellHighlightRenderer());
+
+        JTableHeader header = dataTable.getTableHeader();
+        header.setReorderingAllowed(false);
+        header.setPreferredSize(new Dimension(header.getPreferredSize().width, 28));
+        header.setDefaultRenderer(new TableHeaderRenderer());
+
+        add(new JBScrollPane(dataTable), BorderLayout.CENTER);
+
+        // Bottom Status
+        JPanel statusPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
+        statusPanel.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+        statusLabel = new JBLabel("Ready");
+        statusPanel.add(statusLabel);
+        add(statusPanel, BorderLayout.SOUTH);
+    }
+
+    private void onAutoRefreshChanged() {
+        if (autoRefreshTimer != null) {
+            autoRefreshTimer.stop();
+            autoRefreshTimer = null;
+        }
+        String sel = (String) autoRefreshCombo.getSelectedItem();
+        if (sel == null || sel.contains("Off")) {
+            return;
+        }
+        int seconds = 0;
+        if (sel.contains("10")) seconds = 10;
+        else if (sel.contains("15")) seconds = 15;
+        else if (sel.contains("20")) seconds = 20;
+        else if (sel.contains("30")) seconds = 30;
+        else if (sel.contains("60")) seconds = 60;
+
+        if (seconds > 0) {
+            autoRefreshTimer = new javax.swing.Timer(seconds * 1000, e -> {
+                if (tableModel.hasPendingChanges()) {
+                    statusLabel.setText("Auto-refresh paused: pending changes exist");
+                } else {
+                    loadData();
+                }
+            });
+            autoRefreshTimer.setRepeats(true);
+            autoRefreshTimer.start();
+        }
+    }
+
+    @Override
+    public void removeNotify() {
+        super.removeNotify();
+        if (autoRefreshTimer != null) {
+            autoRefreshTimer.stop();
+            autoRefreshTimer = null;
+        }
+    }
+
+    public void loadData() {
+        statusLabel.setText("Loading data...");
+        statusLabel.setForeground(null);
+        new Thread(() -> {
+            try {
+                Connection conn = DatabaseConnectionManager.getInstance().getConnection(config);
+
+                // Keep table columns metadata up to date
+                List<ColumnMetadata> cols = MetadataService.getInstance().getColumns(conn, config, databaseName, tableMetadata.getName());
+                tableMetadata.setColumns(cols);
+
+                int offset = (currentPage - 1) * pageSize;
+                String where = whereField.getText().trim();
+
+                totalRowCount = DataService.getInstance().countRows(conn, config, databaseName, tableMetadata.getName(), where);
+                QueryResult result = DataService.getInstance().fetchData(conn, config, databaseName, tableMetadata.getName(), where, null, pageSize, offset);
+
+                SwingUtilities.invokeLater(() -> {
+                    tableModel.setData(result.getColumnNames(), result.getColumnTypes(), result.getRows());
+                    for (int i = 0; i < dataTable.getColumnCount(); i++) {
+                        int headerWidth = dataTable.getColumnModel().getColumn(i).getHeaderValue().toString().length() * 10 + 30;
+                        dataTable.getColumnModel().getColumn(i).setPreferredWidth(Math.max(headerWidth, 100));
+                    }
+                    updatePendingChangesState();
+
+                    int maxPage = totalRowCount > 0 ? (int) Math.ceil((double) totalRowCount / pageSize) : 1;
+                    prevPageBtn.setEnabled(currentPage > 1);
+                    nextPageBtn.setEnabled(totalRowCount < 0 || currentPage < maxPage);
+                    pageLabel.setText("Page " + currentPage + (maxPage > 0 ? " of " + maxPage : ""));
+
+                    statusLabel.setText(String.format("Loaded %d row(s) in %d ms | Total rows: %s",
+                            result.getRows().size(), result.getExecutionTimeMs(),
+                            totalRowCount >= 0 ? String.valueOf(totalRowCount) : "unknown"));
+                });
+            } catch (Exception ex) {
+                SwingUtilities.invokeLater(() -> {
+                    statusLabel.setText("Error loading data: " + ex.getMessage());
+                    Messages.showErrorDialog(project, "Error: " + ex.getMessage(), "Data Fetch Error");
+                });
+            }
+        }).start();
+    }
+
+    private void updatePendingChangesState() {
+        boolean hasPending = tableModel.hasPendingChanges();
+        Map<CellCoord, String> errors = tableModel.getValidationErrors();
+        boolean hasErrors = !errors.isEmpty();
+
+        revertBtn.setEnabled(hasPending);
+
+        if (hasErrors) {
+            saveBtn.setEnabled(false);
+            String firstError = errors.values().iterator().next();
+            statusLabel.setText("⚠️ " + firstError + " — Commit is disabled until fixed.");
+            statusLabel.setForeground(new JBColor(new Color(210, 40, 40), new Color(255, 110, 110)));
+            saveBtn.setToolTipText("Commit disabled: Please fix " + errors.size() + " validation error(s).");
+            saveBtn.setText("Commit");
+        } else {
+            saveBtn.setEnabled(hasPending);
+            saveBtn.setToolTipText(null);
+            statusLabel.setForeground(null);
+            if (hasPending) {
+                saveBtn.setText("Commit (" + tableModel.getPendingChangesCount() + ")");
+                statusLabel.setText("Pending changes: " + tableModel.getPendingChangesCount() + " (Ready to commit)");
+            } else {
+                saveBtn.setText("Commit");
+            }
+        }
+    }
+
+    private void truncateCurrentTable() {
+        int confirm = Messages.showYesNoDialog(
+                project,
+                "Are you sure you want to TRUNCATE table '" + tableMetadata.getName() + "'?\n" +
+                "All rows in this table will be permanently deleted.",
+                "Truncate Table",
+                Messages.getWarningIcon()
+        );
+        if (confirm != Messages.YES) return;
+
+        statusLabel.setText("Truncating table '" + tableMetadata.getName() + "'...");
+        new Thread(() -> {
+            try {
+                Connection conn = DatabaseConnectionManager.getInstance().getConnection(config);
+                DdlService.getInstance().truncateTable(conn, config, databaseName, tableMetadata.getName());
+                SwingUtilities.invokeLater(() -> {
+                    Messages.showInfoMessage(project, "Table '" + tableMetadata.getName() + "' truncated successfully.", "Table Truncated");
+                    loadData();
+                });
+            } catch (Exception ex) {
+                SwingUtilities.invokeLater(() -> {
+                    statusLabel.setText("Truncate failed: " + ex.getMessage());
+                    Messages.showErrorDialog(project, "Failed to truncate table: " + ex.getMessage(), "Truncate Error");
+                });
+            }
+        }).start();
+    }
+
+    private void openSqlConsole() {
+        String sampleSql = "SELECT * FROM " + DdlService.formatTable(config, databaseName, tableMetadata.getName()) + " LIMIT 100;\n";
+        DatabaseEditorManager.getInstance(project).openConsole(config, databaseName, sampleSql);
+    }
+
+    private void showCreateTableDialog() {
+        statusLabel.setText("Fetching CREATE statement...");
+        new Thread(() -> {
+            try {
+                Connection conn = DatabaseConnectionManager.getInstance().getConnection(config);
+                String ddl = DdlService.getInstance().getCreateTableStatement(conn, config, databaseName, tableMetadata);
+                SwingUtilities.invokeLater(() -> {
+                    Window owner = SwingUtilities.getWindowAncestor(this);
+                    JDialog dialog = (owner instanceof Frame)
+                            ? new JDialog((Frame) owner, "CREATE TABLE DDL - " + tableMetadata.getName(), true)
+                            : new JDialog(JOptionPane.getRootFrame(), "CREATE TABLE DDL - " + tableMetadata.getName(), true);
+                    dialog.setLayout(new BorderLayout(8, 8));
+                    dialog.setSize(640, 420);
+                    dialog.setLocationRelativeTo(this);
+
+                    JTextArea textArea = new JTextArea(ddl);
+                    textArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+                    textArea.setEditable(false);
+                    textArea.setCaretPosition(0);
+                    textArea.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+
+                    JBScrollPane scrollPane = new JBScrollPane(textArea);
+                    dialog.add(scrollPane, BorderLayout.CENTER);
+
+                    JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 6));
+                    JButton copyBtn = new JButton("Copy to Clipboard", AllIcons.Actions.Copy);
+                    makeCompactButton(copyBtn);
+                    copyBtn.addActionListener(e -> {
+                        StringSelection sel = new StringSelection(ddl);
+                        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(sel, null);
+                        copyBtn.setText("Copied!");
+                        javax.swing.Timer t = new javax.swing.Timer(1500, evt -> copyBtn.setText("Copy to Clipboard"));
+                        t.setRepeats(false);
+                        t.start();
+                    });
+                    btnPanel.add(copyBtn);
+
+                    JButton consoleItem = new JButton("Open in SQL Console", Icons.CONSOLE);
+                    makeCompactButton(consoleItem);
+                    consoleItem.addActionListener(e -> {
+                        dialog.dispose();
+                        DatabaseEditorManager.getInstance(project).openConsole(config, databaseName, ddl + "\n");
+                    });
+                    btnPanel.add(consoleItem);
+
+                    JButton closeBtn = new JButton("Close");
+                    makeCompactButton(closeBtn);
+                    closeBtn.addActionListener(e -> dialog.dispose());
+                    btnPanel.add(closeBtn);
+
+                    dialog.add(btnPanel, BorderLayout.SOUTH);
+                    dialog.setVisible(true);
+                });
+            } catch (Exception ex) {
+                SwingUtilities.invokeLater(() -> {
+                    statusLabel.setText("Failed to fetch CREATE DDL: " + ex.getMessage());
+                    Messages.showErrorDialog(project, "Failed to fetch CREATE statement: " + ex.getMessage(), "DDL Error");
+                });
+            }
+        }).start();
+    }
+
+    private void deleteSelectedRows() {
+        int[] rows = dataTable.getSelectedRows();
+        if (rows.length == 0) return;
+
+        List<String> pkNames = tableMetadata.getPrimaryKeyColumnNames();
+        if (pkNames.isEmpty()) {
+            Messages.showWarningDialog(project, "Cannot delete row: Table has no primary key defined.", "No Primary Key");
+            return;
+        }
+
+        int confirm = Messages.showYesNoDialog(project, "Are you sure you want to delete " + rows.length + " selected row(s)?",
+                "Confirm Delete", Messages.getWarningIcon());
+        if (confirm != Messages.YES) return;
+
+        new Thread(() -> {
+            try {
+                Connection conn = DatabaseConnectionManager.getInstance().getConnection(config);
+                for (int viewRow : rows) {
+                    int modelRow = dataTable.convertRowIndexToModel(viewRow);
+                    Map<String, Object> pkVals = tableModel.getRowPkValues(modelRow, pkNames);
+                    DataService.getInstance().deleteRow(conn, config, databaseName, tableMetadata.getName(), pkVals);
+                }
+                SwingUtilities.invokeLater(() -> {
+                    Messages.showInfoMessage(project, "Deleted " + rows.length + " row(s) successfully.", "Success");
+                    loadData();
+                });
+            } catch (Exception ex) {
+                SwingUtilities.invokeLater(() -> Messages.showErrorDialog(project, "Failed to delete: " + ex.getMessage(), "Delete Error"));
+            }
+        }).start();
+    }
+
+    private void commitChanges() {
+        if (!tableModel.hasPendingChanges()) return;
+
+        Map<CellCoord, String> errors = tableModel.getValidationErrors();
+        if (!errors.isEmpty()) {
+            String firstError = errors.values().iterator().next();
+            Messages.showWarningDialog(project, "Cannot commit: please resolve validation errors first.\n\n" + firstError, "Validation Error");
+            return;
+        }
+
+        List<String> pkNames = tableMetadata.getPrimaryKeyColumnNames();
+
+        new Thread(() -> {
+            try {
+                Connection conn = DatabaseConnectionManager.getInstance().getConnection(config);
+
+                // 1. Process inserts
+                for (Map<String, Object> insertRow : tableModel.getNewRows()) {
+                    Map<String, Object> filteredMap = new LinkedHashMap<>();
+                    for (Map.Entry<String, Object> entry : insertRow.entrySet()) {
+                        String colName = entry.getKey();
+                        Object val = entry.getValue();
+                        ColumnMetadata cm = tableMetadata.getColumn(colName);
+                        if (cm != null && cm.isAutoIncrement()) {
+                            if (val == null || "(Auto)".equalsIgnoreCase(String.valueOf(val))) {
+                                continue; // Let database auto-generate
+                            }
+                        }
+                        filteredMap.put(colName, parseTypedValue(cm, val));
+                    }
+                    DataService.getInstance().insertRow(conn, config, databaseName, tableMetadata.getName(), filteredMap);
+                }
+
+                // 2. Process updates
+                if (!tableModel.getModifiedCells().isEmpty() && pkNames.isEmpty()) {
+                    throw new IllegalStateException("Cannot update records: Table has no primary key defined.");
+                }
+
+                for (CellCoord coord : tableModel.getModifiedCells().keySet()) {
+                    Object newVal = tableModel.getModifiedCells().get(coord);
+                    String colName = tableModel.getRawColumnName(coord.col);
+                    ColumnMetadata cm = tableMetadata.getColumn(colName);
+                    Object typedVal = parseTypedValue(cm, newVal);
+                    Map<String, Object> pkVals = tableModel.getRowOriginalPkValues(coord.row, pkNames);
+                    DataService.getInstance().updateCell(conn, config, databaseName, tableMetadata.getName(), colName, typedVal, pkVals);
+                }
+
+                SwingUtilities.invokeLater(() -> {
+                    Messages.showInfoMessage(project, "All changes committed successfully!", "Changes Saved");
+                    loadData();
+                });
+            } catch (Exception ex) {
+                SwingUtilities.invokeLater(() -> Messages.showErrorDialog(project, "Failed to commit changes: " + ex.getMessage(), "Commit Error"));
+            }
+        }).start();
+    }
+
+    private void showExportMenu(Component invoker) {
+        JPopupMenu menu = new JPopupMenu();
+
+        JMenuItem csvItem = new JMenuItem("Export to CSV...");
+        csvItem.addActionListener(e -> exportData("csv"));
+        menu.add(csvItem);
+
+        JMenuItem jsonItem = new JMenuItem("Export to JSON...");
+        jsonItem.addActionListener(e -> exportData("json"));
+        menu.add(jsonItem);
+
+        JMenuItem sqlItem = new JMenuItem("Export as SQL INSERTs...");
+        sqlItem.addActionListener(e -> exportData("sql"));
+        menu.add(sqlItem);
+
+        JMenuItem createItem = new JMenuItem("Export CREATE TABLE (DDL)...");
+        createItem.addActionListener(e -> exportCreateTable());
+        menu.add(createItem);
+
+        menu.addSeparator();
+
+        JMenuItem viewCreateItem = new JMenuItem("View CREATE TABLE (DDL)...", AllIcons.Actions.ShowAsTree);
+        viewCreateItem.addActionListener(e -> showCreateTableDialog());
+        menu.add(viewCreateItem);
+
+        menu.show(invoker, 0, invoker.getHeight());
+    }
+
+    private void exportCreateTable() {
+        FileSaverDescriptor descriptor = new FileSaverDescriptor("Export CREATE TABLE DDL", "Save table DDL as .sql", "sql");
+        VirtualFileWrapper targetWrapper = FileChooserFactory.getInstance().createSaveFileDialog(descriptor, project)
+                .save((com.intellij.openapi.vfs.VirtualFile) null, tableMetadata.getName() + "_create.sql");
+        if (targetWrapper == null) return;
+
+        File targetFile = targetWrapper.getFile();
+        new Thread(() -> {
+            try {
+                Connection conn = DatabaseConnectionManager.getInstance().getConnection(config);
+                String ddl = DdlService.getInstance().getCreateTableStatement(conn, config, databaseName, tableMetadata);
+                ExportService.getInstance().exportCreateTable(ddl, targetFile);
+                SwingUtilities.invokeLater(() ->
+                        Messages.showInfoMessage(project, "Exported CREATE DDL successfully to " + targetFile.getName(), "Export Complete"));
+            } catch (Exception ex) {
+                SwingUtilities.invokeLater(() ->
+                        Messages.showErrorDialog(project, "Export failed: " + ex.getMessage(), "Export Error"));
+            }
+        }).start();
+    }
+
+    private void exportData(String format) {
+        FileSaverDescriptor descriptor = new FileSaverDescriptor("Export Table Data", "Save table data as ." + format, format);
+        VirtualFileWrapper targetWrapper = FileChooserFactory.getInstance().createSaveFileDialog(descriptor, project)
+                .save((com.intellij.openapi.vfs.VirtualFile) null, tableMetadata.getName() + "." + format);
+        if (targetWrapper == null) return;
+
+        File targetFile = targetWrapper.getFile();
+        QueryResult result = QueryResult.forResultSet(tableModel.columns, tableModel.types, tableModel.rows, 0);
+
+        try {
+            if ("csv".equalsIgnoreCase(format)) {
+                ExportService.getInstance().exportToCsv(result, targetFile);
+            } else if ("json".equalsIgnoreCase(format)) {
+                ExportService.getInstance().exportToJson(result, targetFile);
+            } else {
+                ExportService.getInstance().exportToSqlInsert(tableMetadata.getName(), result, targetFile);
+            }
+            Messages.showInfoMessage(project, "Exported data successfully to " + targetFile.getName(), "Export Complete");
+        } catch (Exception ex) {
+            Messages.showErrorDialog(project, "Export failed: " + ex.getMessage(), "Export Error");
+        }
+    }
+
+    public static String validateCellValue(ColumnMetadata cm, Object value) {
+        if (cm == null) return null;
+
+        // Auto-increment columns are handled by database
+        if (cm.isAutoIncrement()) return null;
+
+        if (value == null) {
+            if (!cm.isNullable()) {
+                return "Column '" + cm.getName() + "' cannot be NULL (" + cm.getFormattedType() + " required)";
+            }
+            return null;
+        }
+
+        String str = value.toString().trim();
+        if (str.equalsIgnoreCase("<null>") || str.equalsIgnoreCase("null")) {
+            if (!cm.isNullable()) {
+                return "Column '" + cm.getName() + "' cannot be NULL";
+            }
+            return null;
+        }
+
+        String typeUpper = cm.getTypeName() != null ? cm.getTypeName().toUpperCase() : "";
+
+        // Empty string check
+        if (str.isEmpty()) {
+            boolean isText = isTextType(typeUpper);
+            if (!isText) {
+                if (!cm.isNullable()) {
+                    return "Column '" + cm.getName() + "' cannot be empty (" + cm.getFormattedType() + " required)";
+                }
+                return null;
+            }
+            return null;
+        }
+
+        // TINYINT
+        if (typeUpper.contains("TINYINT")) {
+            try {
+                int v = Integer.parseInt(str);
+                if (v < -128 || v > 255) {
+                    return "Expected TINYINT (-128 to 127 or 0 to 255). Got: '" + str + "'";
+                }
+            } catch (NumberFormatException e) {
+                return "Expected TINYINT integer. Got: '" + str + "'";
+            }
+            return null;
+        }
+
+        // SMALLINT
+        if (typeUpper.contains("SMALLINT")) {
+            try {
+                int v = Integer.parseInt(str);
+                if (v < -32768 || v > 65535) {
+                    return "Expected SMALLINT (-32,768 to 32,767). Got: '" + str + "'";
+                }
+            } catch (NumberFormatException e) {
+                return "Expected SMALLINT integer. Got: '" + str + "'";
+            }
+            return null;
+        }
+
+        // INTEGER / INT / MEDIUMINT
+        if (typeUpper.equals("INT") || typeUpper.equals("INTEGER") || typeUpper.contains("MEDIUMINT")
+                || cm.getDataType() == java.sql.Types.INTEGER) {
+            try {
+                Integer.parseInt(str);
+            } catch (NumberFormatException e) {
+                return "Expected INTEGER (e.g. 12345). Got: '" + str + "'";
+            }
+            return null;
+        }
+
+        // BIGINT
+        if (typeUpper.contains("BIGINT") || cm.getDataType() == java.sql.Types.BIGINT) {
+            try {
+                new BigInteger(str);
+            } catch (NumberFormatException e) {
+                return "Expected BIGINT (e.g. 1000000000). Got: '" + str + "'";
+            }
+            return null;
+        }
+
+        // FLOAT / REAL / DOUBLE
+        if (typeUpper.contains("FLOAT") || typeUpper.contains("REAL") || typeUpper.contains("DOUBLE")
+                || cm.getDataType() == java.sql.Types.FLOAT || cm.getDataType() == java.sql.Types.DOUBLE
+                || cm.getDataType() == java.sql.Types.REAL) {
+            try {
+                Double.parseDouble(str);
+            } catch (NumberFormatException e) {
+                return "Expected decimal/float (e.g. 12.34). Got: '" + str + "'";
+            }
+            return null;
+        }
+
+        // DECIMAL / NUMERIC
+        if (typeUpper.contains("DECIMAL") || typeUpper.contains("NUMERIC")
+                || cm.getDataType() == java.sql.Types.DECIMAL || cm.getDataType() == java.sql.Types.NUMERIC) {
+            try {
+                BigDecimal bd = new BigDecimal(str);
+                if (cm.getDecimalDigits() > 0 && bd.scale() > cm.getDecimalDigits()) {
+                    return "Decimal scale exceeds " + cm.getDecimalDigits() + " digits. Got: " + bd.scale();
+                }
+            } catch (NumberFormatException e) {
+                return "Expected DECIMAL number (e.g. 99.99). Got: '" + str + "'";
+            }
+            return null;
+        }
+
+        // BOOLEAN / BIT
+        if (typeUpper.contains("BOOL") || typeUpper.contains("BIT")
+                || cm.getDataType() == java.sql.Types.BOOLEAN || cm.getDataType() == java.sql.Types.BIT) {
+            String lower = str.toLowerCase();
+            if (!lower.equals("true") && !lower.equals("false") && !lower.equals("1") && !lower.equals("0")
+                    && !lower.equals("t") && !lower.equals("f") && !lower.equals("yes") && !lower.equals("no")) {
+                return "Expected BOOLEAN (true/false or 1/0). Got: '" + str + "'";
+            }
+            return null;
+        }
+
+        // DATE
+        if (typeUpper.equals("DATE") || cm.getDataType() == java.sql.Types.DATE) {
+            try {
+                LocalDate.parse(str);
+            } catch (Exception e) {
+                return "Expected DATE in format YYYY-MM-DD (e.g. 2026-10-04). Got: '" + str + "'";
+            }
+            return null;
+        }
+
+        // TIME
+        if (typeUpper.equals("TIME") || cm.getDataType() == java.sql.Types.TIME) {
+            try {
+                LocalTime.parse(str);
+            } catch (Exception e) {
+                return "Expected TIME in format HH:MM:SS (e.g. 14:30:00). Got: '" + str + "'";
+            }
+            return null;
+        }
+
+        // TIMESTAMP / DATETIME
+        if (typeUpper.contains("TIMESTAMP") || typeUpper.contains("DATETIME")
+                || cm.getDataType() == java.sql.Types.TIMESTAMP) {
+            boolean parsed = false;
+            String[] patterns = new String[]{
+                    "yyyy-MM-dd HH:mm:ss",
+                    "yyyy-MM-dd'T'HH:mm:ss",
+                    "yyyy-MM-dd HH:mm:ss.S",
+                    "yyyy-MM-dd HH:mm:ss.SS",
+                    "yyyy-MM-dd HH:mm:ss.SSS",
+                    "yyyy-MM-dd"
+            };
+            for (String p : patterns) {
+                try {
+                    DateTimeFormatter dtf = DateTimeFormatter.ofPattern(p);
+                    if (p.contains("HH")) {
+                        LocalDateTime.parse(str, dtf);
+                    } else {
+                        LocalDate.parse(str, dtf);
+                    }
+                    parsed = true;
+                    break;
+                } catch (Exception ignored) {
+                }
+            }
+            if (!parsed) {
+                return "Expected DATETIME/TIMESTAMP: YYYY-MM-DD HH:MM:SS. Got: '" + str + "'";
+            }
+            return null;
+        }
+
+        // String length check
+        if (cm.getColumnSize() > 0 && isTextType(typeUpper)) {
+            if (str.length() > cm.getColumnSize()) {
+                return "Length (" + str.length() + ") exceeds maximum limit of " + cm.getColumnSize() + " characters";
+            }
+        }
+
+        return null;
+    }
+
+    private static boolean isTextType(String typeUpper) {
+        return typeUpper.contains("CHAR") || typeUpper.contains("TEXT") || typeUpper.contains("CLOB") || typeUpper.contains("BLOB");
+    }
+
+    private Object parseTypedValue(ColumnMetadata cm, Object val) {
+        if (val == null) return null;
+        String str = val.toString().trim();
+        if (str.equalsIgnoreCase("<null>") || str.equalsIgnoreCase("null") || str.isEmpty()) {
+            if (cm != null && !isTextType(cm.getTypeName() != null ? cm.getTypeName().toUpperCase() : "")) {
+                return null;
+            }
+            if (str.equalsIgnoreCase("<null>") || str.equalsIgnoreCase("null")) {
+                return null;
+            }
+        }
+
+        if (cm == null) return val;
+        String typeUpper = cm.getTypeName() != null ? cm.getTypeName().toUpperCase() : "";
+
+        try {
+            if (typeUpper.contains("TINYINT")) {
+                return Byte.parseByte(str);
+            }
+            if (typeUpper.contains("SMALLINT")) {
+                return Short.parseShort(str);
+            }
+            if (typeUpper.equals("INT") || typeUpper.equals("INTEGER") || typeUpper.contains("MEDIUMINT")
+                    || cm.getDataType() == java.sql.Types.INTEGER) {
+                return Integer.parseInt(str);
+            }
+            if (typeUpper.contains("BIGINT") || cm.getDataType() == java.sql.Types.BIGINT) {
+                return Long.parseLong(str);
+            }
+            if (typeUpper.contains("FLOAT") || typeUpper.contains("REAL") || cm.getDataType() == java.sql.Types.FLOAT || cm.getDataType() == java.sql.Types.REAL) {
+                return Float.parseFloat(str);
+            }
+            if (typeUpper.contains("DOUBLE") || cm.getDataType() == java.sql.Types.DOUBLE) {
+                return Double.parseDouble(str);
+            }
+            if (typeUpper.contains("DECIMAL") || typeUpper.contains("NUMERIC") || cm.getDataType() == java.sql.Types.DECIMAL || cm.getDataType() == java.sql.Types.NUMERIC) {
+                return new BigDecimal(str);
+            }
+            if (typeUpper.contains("BOOL") || typeUpper.contains("BIT") || cm.getDataType() == java.sql.Types.BOOLEAN || cm.getDataType() == java.sql.Types.BIT) {
+                String lower = str.toLowerCase();
+                return lower.equals("true") || lower.equals("1") || lower.equals("t") || lower.equals("yes");
+            }
+        } catch (Exception ignored) {
+        }
+        return val;
+    }
+
+    // Inner classes
+    private static class CellCoord {
+        final int row;
+        final int col;
+        CellCoord(int r, int c) { this.row = r; this.col = c; }
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            CellCoord that = (CellCoord) o;
+            return row == that.row && col == that.col;
+        }
+        @Override
+        public int hashCode() { return Objects.hash(row, col); }
+    }
+
+    private class EditableTableModel extends AbstractTableModel {
+        private List<String> columns = new ArrayList<>();
+        private List<String> types = new ArrayList<>();
+        private List<ColumnMetadata> columnMetaList = new ArrayList<>();
+        private List<List<Object>> originalRows = new ArrayList<>();
+        private List<List<Object>> rows = new ArrayList<>();
+
+        private final Map<CellCoord, Object> modifiedCells = new HashMap<>();
+        private final List<Map<String, Object>> newRows = new ArrayList<>();
+        private final Map<CellCoord, String> validationErrors = new HashMap<>();
+
+        public void setData(List<String> cols, List<String> typs, List<List<Object>> r) {
+            this.columns = new ArrayList<>(cols);
+            this.types = new ArrayList<>(typs);
+            this.columnMetaList = new ArrayList<>();
+            for (int i = 0; i < cols.size(); i++) {
+                String c = cols.get(i);
+                ColumnMetadata cm = tableMetadata.getColumn(c);
+                if (cm == null) {
+                    String t = (i < typs.size()) ? typs.get(i) : "VARCHAR";
+                    cm = new ColumnMetadata(c, t, java.sql.Types.VARCHAR, 0, 0, true, false, false, null);
+                }
+                columnMetaList.add(cm);
+            }
+
+            this.originalRows = new ArrayList<>();
+            this.rows = new ArrayList<>();
+            for (List<Object> row : r) {
+                this.originalRows.add(new ArrayList<>(row));
+                this.rows.add(new ArrayList<>(row));
+            }
+            this.modifiedCells.clear();
+            this.newRows.clear();
+            this.validationErrors.clear();
+            fireTableStructureChanged();
+        }
+
+        public ColumnMetadata getColumnMeta(int col) {
+            if (col >= 0 && col < columnMetaList.size()) {
+                return columnMetaList.get(col);
+            }
+            return null;
+        }
+
+        public void addNewRow() {
+            List<Object> blank = new ArrayList<>();
+            Map<String, Object> newRowMap = new HashMap<>();
+            int newRowModelIndex = rows.size();
+            for (int i = 0; i < columns.size(); i++) {
+                String col = columns.get(i);
+                ColumnMetadata cm = (i < columnMetaList.size()) ? columnMetaList.get(i) : null;
+                if (cm != null && cm.isAutoIncrement()) {
+                    blank.add("(Auto)");
+                    newRowMap.put(col, "(Auto)");
+                } else {
+                    blank.add(null);
+                    newRowMap.put(col, null);
+                    String err = validateCellValue(cm, null);
+                    if (err != null) {
+                        validationErrors.put(new CellCoord(newRowModelIndex, i), err);
+                    }
+                }
+            }
+            rows.add(blank);
+            newRows.add(newRowMap);
+            fireTableRowsInserted(rows.size() - 1, rows.size() - 1);
+        }
+
+        public boolean hasPendingChanges() {
+            return !modifiedCells.isEmpty() || !newRows.isEmpty();
+        }
+
+        public int getPendingChangesCount() {
+            return modifiedCells.size() + newRows.size();
+        }
+
+        public Map<CellCoord, Object> getModifiedCells() { return modifiedCells; }
+        public List<Map<String, Object>> getNewRows() { return newRows; }
+        public Map<CellCoord, String> getValidationErrors() { return validationErrors; }
+
+        public String getValidationError(CellCoord coord) {
+            return validationErrors.get(coord);
+        }
+
+        public Map<String, Object> getRowPkValues(int row, List<String> pkNames) {
+            Map<String, Object> map = new HashMap<>();
+            for (String pk : pkNames) {
+                int colIdx = getColumnIndex(pk);
+                if (colIdx >= 0) {
+                    map.put(pk, rows.get(row).get(colIdx));
+                }
+            }
+            return map;
+        }
+
+        public Map<String, Object> getRowOriginalPkValues(int row, List<String> pkNames) {
+            Map<String, Object> map = new HashMap<>();
+            for (String pk : pkNames) {
+                int colIdx = getColumnIndex(pk);
+                if (colIdx >= 0 && row < originalRows.size()) {
+                    map.put(pk, originalRows.get(row).get(colIdx));
+                }
+            }
+            return map;
+        }
+
+        public int getColumnIndex(String name) {
+            for (int i = 0; i < columns.size(); i++) {
+                if (columns.get(i).equalsIgnoreCase(name)) return i;
+            }
+            return -1;
+        }
+
+        public String getRawColumnName(int col) {
+            if (col >= 0 && col < columns.size()) {
+                return columns.get(col);
+            }
+            return "";
+        }
+
+        @Override public int getRowCount() { return rows.size(); }
+        @Override public int getColumnCount() { return columns.size(); }
+
+        @Override public String getColumnName(int col) {
+            String colName = columns.get(col);
+            ColumnMetadata cm = (col < columnMetaList.size()) ? columnMetaList.get(col) : tableMetadata.getColumn(colName);
+            if (cm != null) {
+                if (cm.isPrimaryKey() && cm.isAutoIncrement()) {
+                    return colName + " [PK, AI]";
+                } else if (cm.isPrimaryKey()) {
+                    return colName + " [PK]";
+                } else if (cm.isAutoIncrement()) {
+                    return colName + " [AI]";
+                }
+            }
+            return colName;
+        }
+
+        @Override
+        public boolean isCellEditable(int row, int col) {
+            ColumnMetadata cm = getColumnMeta(col);
+            if (cm != null && cm.isAutoIncrement()) {
+                return false; // Auto-generated keys are read-only!
+            }
+            return true;
+        }
+
+        @Override public Object getValueAt(int row, int col) {
+            if (row < rows.size() && col < rows.get(row).size()) {
+                return rows.get(row).get(col);
+            }
+            return null;
+        }
+
+        public boolean isCellModified(int row, int col) {
+            return modifiedCells.containsKey(new CellCoord(row, col));
+        }
+
+        public boolean isRowNew(int row) {
+            return row >= originalRows.size();
+        }
+
+        public Object getOriginalValue(int row, int col) {
+            if (row < originalRows.size() && col < originalRows.get(row).size()) {
+                return originalRows.get(row).get(col);
+            }
+            return null;
+        }
+
+        @Override public void setValueAt(Object val, int row, int col) {
+            if (row < rows.size() && col < rows.get(row).size()) {
+                ColumnMetadata cm = getColumnMeta(col);
+                if (cm != null && cm.isAutoIncrement()) {
+                    return; // Protected
+                }
+
+                Object processedVal = val;
+                if (val instanceof String) {
+                    String strVal = ((String) val).trim();
+                    if (strVal.equalsIgnoreCase("<null>") || strVal.equalsIgnoreCase("null")) {
+                        processedVal = null;
+                    }
+                }
+
+                rows.get(row).set(col, processedVal);
+
+                CellCoord coord = new CellCoord(row, col);
+
+                // Type validation
+                String validationError = validateCellValue(cm, processedVal);
+                if (validationError != null) {
+                    validationErrors.put(coord, validationError);
+                } else {
+                    validationErrors.remove(coord);
+                }
+
+                int originalCount = originalRows.size();
+                if (row < originalCount) {
+                    Object origVal = originalRows.get(row).get(col);
+                    if (Objects.equals(processedVal, origVal)) {
+                        modifiedCells.remove(coord);
+                    } else {
+                        modifiedCells.put(coord, processedVal);
+                    }
+                } else {
+                    int newRowIdx = row - originalCount;
+                    if (newRowIdx < newRows.size()) {
+                        newRows.get(newRowIdx).put(columns.get(col), processedVal);
+                    }
+                }
+                fireTableCellUpdated(row, col);
+                updatePendingChangesState();
+            }
+        }
+    }
+
+    private class CellHighlightRenderer extends DefaultTableCellRenderer {
+        private final JBColor oddBg = new JBColor(new Color(245, 247, 250), new Color(43, 45, 48));
+
+        // Modified existing cell (UPDATE): Ocean / Cyan highlight
+        private final JBColor modifiedBg = new JBColor(new Color(205, 232, 255), new Color(24, 72, 115));
+        private final JBColor modifiedFg = new JBColor(new Color(0, 45, 120), new Color(175, 225, 255));
+        private final JBColor modifiedBorder = new JBColor(new Color(28, 125, 225), new Color(65, 155, 250));
+        private final JBColor modifiedSelBg = new JBColor(new Color(175, 215, 250), new Color(36, 96, 152));
+
+        // New inserted row cell (INSERT): Mint / Emerald highlight
+        private final JBColor newRowBg = new JBColor(new Color(220, 245, 225), new Color(24, 70, 44));
+        private final JBColor newRowFg = new JBColor(new Color(15, 90, 40), new Color(145, 240, 175));
+        private final JBColor newRowBorder = new JBColor(new Color(38, 155, 78), new Color(72, 190, 118));
+        private final JBColor newRowSelBg = new JBColor(new Color(195, 235, 205), new Color(34, 92, 60));
+
+        // Validation Error: Rose / Red highlight
+        private final JBColor errorBg = new JBColor(new Color(255, 225, 225), new Color(90, 25, 30));
+        private final JBColor errorFg = new JBColor(new Color(180, 20, 20), new Color(255, 130, 130));
+        private final JBColor errorBorder = new JBColor(new Color(220, 40, 40), new Color(240, 70, 70));
+        private final JBColor errorSelBg = new JBColor(new Color(255, 200, 200), new Color(115, 35, 40));
+
+        private final JBColor nullFg = new JBColor(new Color(150, 150, 150), new Color(125, 125, 125));
+        private final JBColor autoFg = new JBColor(new Color(120, 120, 120), new Color(155, 155, 155));
+
+        @Override
+        public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+                                                       boolean hasFocus, int row, int column) {
+            Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+
+            int modelRow = table.convertRowIndexToModel(row);
+            int modelCol = table.convertColumnIndexToModel(column);
+            CellCoord coord = new CellCoord(modelRow, modelCol);
+
+            String errorMsg = tableModel.getValidationError(coord);
+            boolean isModified = tableModel.isCellModified(modelRow, modelCol);
+            boolean isNewRow = tableModel.isRowNew(modelRow);
+            ColumnMetadata cm = tableModel.getColumnMeta(modelCol);
+            boolean isAuto = cm != null && cm.isAutoIncrement();
+
+            if (errorMsg != null) {
+                c.setBackground(isSelected ? errorSelBg : errorBg);
+                c.setForeground(errorFg);
+                setFont(getFont().deriveFont(Font.BOLD));
+                setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(errorBorder, 2),
+                        BorderFactory.createEmptyBorder(1, 4, 1, 4)
+                ));
+                setToolTipText("Validation Error: " + errorMsg);
+            } else if (isNewRow) {
+                c.setBackground(isSelected ? newRowSelBg : newRowBg);
+                c.setForeground(newRowFg);
+                setFont(getFont().deriveFont(Font.BOLD));
+                setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(newRowBorder, isSelected ? 2 : 1),
+                        BorderFactory.createEmptyBorder(1, 4, 1, 4)
+                ));
+                if (isAuto && "(Auto)".equals(value)) {
+                    c.setForeground(autoFg);
+                    setFont(getFont().deriveFont(Font.ITALIC));
+                    setToolTipText("Auto-generated identity key (assigned by database on commit)");
+                } else {
+                    setToolTipText("New row (not yet committed)");
+                }
+            } else if (isModified) {
+                c.setBackground(isSelected ? modifiedSelBg : modifiedBg);
+                c.setForeground(modifiedFg);
+                setFont(getFont().deriveFont(Font.BOLD));
+                setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(modifiedBorder, isSelected ? 2 : 1),
+                        BorderFactory.createEmptyBorder(1, 4, 1, 4)
+                ));
+                Object origVal = tableModel.getOriginalValue(modelRow, modelCol);
+                setToolTipText("Modified (Original: " + (origVal != null ? origVal : "<null>") + " -> Current: " + (value != null ? value : "<null>") + ")");
+            } else {
+                if (isSelected) {
+                    c.setBackground(table.getSelectionBackground());
+                    c.setForeground(table.getSelectionForeground());
+                    setFont(getFont().deriveFont(Font.PLAIN));
+                } else {
+                    c.setBackground(row % 2 == 0 ? table.getBackground() : oddBg);
+                    if (value == null) {
+                        c.setForeground(nullFg);
+                        setFont(getFont().deriveFont(Font.ITALIC));
+                    } else if (isAuto) {
+                        c.setForeground(table.getForeground());
+                        setFont(getFont().deriveFont(Font.PLAIN));
+                    } else {
+                        c.setForeground(table.getForeground());
+                        setFont(getFont().deriveFont(Font.PLAIN));
+                    }
+                }
+                if (isAuto) {
+                    setToolTipText("Auto-generated identity key: " + value + " (read-only)");
+                } else {
+                    setToolTipText(value != null ? value.toString() : "<null>");
+                }
+            }
+
+            if (value == null) {
+                setText("<null>");
+            }
+            return c;
+        }
+    }
+
+    private static class TableHeaderRenderer extends DefaultTableCellRenderer {
+        private final JBColor headerBg = new JBColor(new Color(232, 236, 242), new Color(48, 51, 56));
+        private final JBColor headerFg = new JBColor(new Color(30, 32, 36), new Color(220, 224, 230));
+        private final JBColor headerBorder = new JBColor(new Color(205, 210, 216), new Color(70, 73, 78));
+
+        @Override
+        public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+                                                       boolean hasFocus, int row, int column) {
+            Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+            c.setBackground(headerBg);
+            c.setForeground(headerFg);
+            setFont(getFont().deriveFont(Font.BOLD, 12f));
+            setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createMatteBorder(0, 0, 2, 1, headerBorder),
+                    BorderFactory.createEmptyBorder(4, 8, 4, 8)
+            ));
+            return c;
+        }
+    }
+
+    private static class WrapLayout extends FlowLayout {
+        public WrapLayout(int align, int hgap, int vgap) {
+            super(align, hgap, vgap);
+        }
+
+        @Override
+        public Dimension preferredLayoutSize(Container target) {
+            return layoutSize(target, true);
+        }
+
+        @Override
+        public Dimension minimumLayoutSize(Container target) {
+            return layoutSize(target, false);
+        }
+
+        private Dimension layoutSize(Container target, boolean preferred) {
+            synchronized (target.getTreeLock()) {
+                int targetWidth = target.getWidth();
+                if (targetWidth <= 0) targetWidth = Integer.MAX_VALUE;
+                int hgap = getHgap();
+                int vgap = getVgap();
+                Insets insets = target.getInsets();
+                int maxWidth = targetWidth - (insets.left + insets.right + hgap * 2);
+                if (maxWidth <= 0) maxWidth = Integer.MAX_VALUE;
+
+                Dimension dim = new Dimension(0, 0);
+                int rowWidth = 0;
+                int rowHeight = 0;
+                int count = target.getComponentCount();
+
+                for (int i = 0; i < count; i++) {
+                    Component m = target.getComponent(i);
+                    if (m.isVisible()) {
+                        Dimension d = preferred ? m.getPreferredSize() : m.getMinimumSize();
+                        if (rowWidth + d.width > maxWidth && rowWidth > 0) {
+                            dim.width = Math.max(dim.width, rowWidth);
+                            dim.height += rowHeight + vgap;
+                            rowWidth = 0;
+                            rowHeight = 0;
+                        }
+                        if (rowWidth > 0) rowWidth += hgap;
+                        rowWidth += d.width;
+                        rowHeight = Math.max(rowHeight, d.height);
+                    }
+                }
+                dim.width = Math.max(dim.width, rowWidth);
+                dim.height += rowHeight + insets.top + insets.bottom + vgap * 2;
+                return dim;
+            }
+        }
+    }
+}

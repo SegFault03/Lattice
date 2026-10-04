@@ -1,0 +1,26 @@
+# Gradle
+.gradle/
+build/
+
+# Distribution
+dist/
+out/
+
+# IntelliJ IDEA / JetBrains
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Java / Compilation
+*.class
+*.jar
+!lib/*.jar
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Temporary & Log files
+*.log
+*.tmp
