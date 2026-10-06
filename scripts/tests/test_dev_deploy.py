@@ -146,7 +146,8 @@ class DeploymentTests(unittest.TestCase):
             actual_config, plugins = deploy.ide_paths(ide, [])
             self.assertEqual(home / "custom-config", actual_config)
             self.assertEqual(actual_config / "plugins", plugins)
-            vm_file = ide.home / ide.launch["vmOptionsFilePath"]
+            info_dir = ide.home / "Resources" if ide.app else ide.home
+            vm_file = deploy.installed_path(ide.home, info_dir, ide.launch["vmOptionsFilePath"])
             vm_file.write_text(f"-Didea.plugins.path={home.as_posix()}/vm-plugins\n", encoding="utf-8")
             self.assertEqual(home / "vm-plugins", deploy.ide_paths(ide, [])[1])
             active = deploy.Process(5, ide.launcher, ())
@@ -312,7 +313,7 @@ class DeploymentTests(unittest.TestCase):
         kill.assert_not_called()
 
     def test_launch_uses_same_installation_and_project_and_checks_process_start(self):
-        for system in (deploy.platform_name(), "macOS"):
+        for system in dict.fromkeys((deploy.platform_name(), "macOS")):
             with self.subTest(system=system):
                 ide = self.ide("launch " + system + (".app" if system == "macOS" else ""), system=system)
                 process = deploy.Process(999, ide.launcher, ())
