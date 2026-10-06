@@ -499,6 +499,8 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
 
     private void showAddConnectionDialog(DatabaseType defaultType) {
         ConnectionConfig newCfg = new ConnectionConfig(defaultType, "New " + defaultType.getDisplayName());
+        newCfg.setDatabaseName("");
+        newCfg.setUser("");
         ConnectionDialog dlg = new ConnectionDialog(project, newCfg);
         if (dlg.showAndGet()) {
             ConnectionConfig result = dlg.getResultConfig();

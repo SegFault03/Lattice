@@ -99,7 +99,7 @@ public class ConnectionDialog extends DialogWrapper {
     @Override
     protected @Nullable JComponent createCenterPanel() {
         JPanel root = new JPanel(new BorderLayout(0, 10));
-        root.setPreferredSize(new Dimension(620, 520));
+        root.setPreferredSize(new Dimension(520, 460));
 
         // 1. Top Section: Name, Database Type, Connection Method
         JPanel topPanel = new JPanel(new GridBagLayout());
@@ -230,37 +230,37 @@ public class ConnectionDialog extends DialogWrapper {
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
         // Host & Port
-        gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0.18;
+        gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0;
         p.add(new JBLabel("Host:"), gbc);
-        gbc.gridx = 1; gbc.gridy = 0; gbc.weightx = 0.52;
-        mysqlHostField = new JBTextField("localhost");
+        gbc.gridx = 1; gbc.gridy = 0; gbc.weightx = 0.7;
+        mysqlHostField = new JBTextField("localhost", 18);
         p.add(mysqlHostField, gbc);
 
-        gbc.gridx = 2; gbc.gridy = 0; gbc.weightx = 0.1;
+        gbc.gridx = 2; gbc.gridy = 0; gbc.weightx = 0;
         p.add(new JBLabel("Port:"), gbc);
-        gbc.gridx = 3; gbc.gridy = 0; gbc.weightx = 0.2;
-        mysqlPortField = new JBTextField("3306");
+        gbc.gridx = 3; gbc.gridy = 0; gbc.weightx = 0.3;
+        mysqlPortField = new JBTextField("3306", 6);
         p.add(mysqlPortField, gbc);
 
         // Database
-        gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0.18;
+        gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0;
         p.add(new JBLabel("Database:"), gbc);
-        gbc.gridx = 1; gbc.gridy = 1; gbc.gridwidth = 3; gbc.weightx = 0.82;
-        mysqlDatabaseField = new JBTextField("shop_db");
+        gbc.gridx = 1; gbc.gridy = 1; gbc.gridwidth = 3; gbc.weightx = 1;
+        mysqlDatabaseField = new JBTextField("", 22);
         p.add(mysqlDatabaseField, gbc);
         gbc.gridwidth = 1;
 
         // User & Password
-        gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 0.18;
+        gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 0;
         p.add(new JBLabel("User:"), gbc);
-        gbc.gridx = 1; gbc.gridy = 2; gbc.weightx = 0.52;
-        mysqlUserField = new JBTextField("root");
+        gbc.gridx = 1; gbc.gridy = 2; gbc.weightx = 0.7;
+        mysqlUserField = new JBTextField("", 16);
         p.add(mysqlUserField, gbc);
 
-        gbc.gridx = 2; gbc.gridy = 2; gbc.weightx = 0.1;
+        gbc.gridx = 2; gbc.gridy = 2; gbc.weightx = 0;
         p.add(new JBLabel("Password:"), gbc);
-        gbc.gridx = 3; gbc.gridy = 2; gbc.weightx = 0.2;
-        mysqlPasswordField = new JPasswordField();
+        gbc.gridx = 3; gbc.gridy = 2; gbc.weightx = 0.3;
+        mysqlPasswordField = new JPasswordField(12);
         p.add(mysqlPasswordField, gbc);
 
         return p;
@@ -293,22 +293,22 @@ public class ConnectionDialog extends DialogWrapper {
         sgbc.insets = new Insets(4, 4, 4, 4);
         sgbc.fill = GridBagConstraints.HORIZONTAL;
 
-        sgbc.gridx = 0; sgbc.gridy = 0; sgbc.weightx = 0.18;
+        sgbc.gridx = 0; sgbc.gridy = 0; sgbc.weightx = 0;
         srvPanel.add(new JBLabel("Host:"), sgbc);
-        sgbc.gridx = 1; sgbc.gridy = 0; sgbc.weightx = 0.52;
-        hsqlServerHostField = new JBTextField("localhost");
+        sgbc.gridx = 1; sgbc.gridy = 0; sgbc.weightx = 0.7;
+        hsqlServerHostField = new JBTextField("localhost", 18);
         srvPanel.add(hsqlServerHostField, sgbc);
 
-        sgbc.gridx = 2; sgbc.gridy = 0; sgbc.weightx = 0.1;
+        sgbc.gridx = 2; sgbc.gridy = 0; sgbc.weightx = 0;
         srvPanel.add(new JBLabel("Port:"), sgbc);
-        sgbc.gridx = 3; sgbc.gridy = 0; sgbc.weightx = 0.2;
-        hsqlServerPortField = new JBTextField("9001");
+        sgbc.gridx = 3; sgbc.gridy = 0; sgbc.weightx = 0.3;
+        hsqlServerPortField = new JBTextField("9001", 6);
         srvPanel.add(hsqlServerPortField, sgbc);
 
-        sgbc.gridx = 0; sgbc.gridy = 1; sgbc.weightx = 0.18;
+        sgbc.gridx = 0; sgbc.gridy = 1; sgbc.weightx = 0;
         srvPanel.add(new JBLabel("Database:"), sgbc);
-        sgbc.gridx = 1; sgbc.gridy = 1; sgbc.gridwidth = 3; sgbc.weightx = 0.82;
-        hsqlServerDbField = new JBTextField("testdb");
+        sgbc.gridx = 1; sgbc.gridy = 1; sgbc.gridwidth = 3; sgbc.weightx = 1;
+        hsqlServerDbField = new JBTextField("", 22);
         srvPanel.add(hsqlServerDbField, sgbc);
 
         hsqlSubCardPanel.add(srvPanel, HsqlMode.SERVER.name());
@@ -334,7 +334,7 @@ public class ConnectionDialog extends DialogWrapper {
         mgbc.gridx = 0; mgbc.gridy = 0; mgbc.weightx = 0.18;
         memPanel.add(new JBLabel("Database Name:"), mgbc);
         mgbc.gridx = 1; mgbc.gridy = 0; mgbc.weightx = 0.82;
-        hsqlMemNameField = new JBTextField("testdb");
+        hsqlMemNameField = new JBTextField("", 22);
         memPanel.add(hsqlMemNameField, mgbc);
         hsqlSubCardPanel.add(memPanel, HsqlMode.MEM.name());
 
@@ -346,16 +346,16 @@ public class ConnectionDialog extends DialogWrapper {
         agbc.insets = new Insets(4, 4, 4, 4);
         agbc.fill = GridBagConstraints.HORIZONTAL;
 
-        agbc.gridx = 0; agbc.gridy = 0; agbc.weightx = 0.18;
+        agbc.gridx = 0; agbc.gridy = 0; agbc.weightx = 0;
         authPanel.add(new JBLabel("User:"), agbc);
-        agbc.gridx = 1; agbc.gridy = 0; agbc.weightx = 0.52;
-        hsqlUserField = new JBTextField("SA");
+        agbc.gridx = 1; agbc.gridy = 0; agbc.weightx = 0.7;
+        hsqlUserField = new JBTextField("", 16);
         authPanel.add(hsqlUserField, agbc);
 
-        agbc.gridx = 2; agbc.gridy = 0; agbc.weightx = 0.1;
+        agbc.gridx = 2; agbc.gridy = 0; agbc.weightx = 0;
         authPanel.add(new JBLabel("Password:"), agbc);
-        agbc.gridx = 3; agbc.gridy = 0; agbc.weightx = 0.2;
-        hsqlPasswordField = new JPasswordField();
+        agbc.gridx = 3; agbc.gridy = 0; agbc.weightx = 0.3;
+        hsqlPasswordField = new JPasswordField(12);
         authPanel.add(hsqlPasswordField, agbc);
 
         p.add(authPanel, BorderLayout.SOUTH);
@@ -374,7 +374,7 @@ public class ConnectionDialog extends DialogWrapper {
         gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0.18;
         p.add(new JBLabel("JDBC URL:"), gbc);
         gbc.gridx = 1; gbc.gridy = 0; gbc.gridwidth = 3; gbc.weightx = 0.82;
-        customUrlField = new JBTextField();
+        customUrlField = new JBTextField("", 36);
         p.add(customUrlField, gbc);
         gbc.gridwidth = 1;
 
@@ -382,13 +382,13 @@ public class ConnectionDialog extends DialogWrapper {
         gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0.18;
         p.add(new JBLabel("User:"), gbc);
         gbc.gridx = 1; gbc.gridy = 1; gbc.weightx = 0.52;
-        customUrlUserField = new JBTextField("root");
+        customUrlUserField = new JBTextField("", 16);
         p.add(customUrlUserField, gbc);
 
         gbc.gridx = 2; gbc.gridy = 1; gbc.weightx = 0.1;
         p.add(new JBLabel("Password:"), gbc);
         gbc.gridx = 3; gbc.gridy = 1; gbc.weightx = 0.2;
-        customUrlPasswordField = new JPasswordField();
+        customUrlPasswordField = new JPasswordField(12);
         p.add(customUrlPasswordField, gbc);
 
         // Helper Note
@@ -405,17 +405,11 @@ public class ConnectionDialog extends DialogWrapper {
         // Toggle between Standard and Custom JDBC URL modes
         standardRadio.addActionListener(e -> {
             mainCardLayout.show(mainCardPanel, "STANDARD");
-            syncCredentialsToStandard();
             updatePreview();
         });
 
         customUrlRadio.addActionListener(e -> {
             mainCardLayout.show(mainCardPanel, "JDBC_URL");
-            syncCredentialsToCustomUrl();
-            if (customUrlField.getText().trim().isEmpty()) {
-                ConnectionConfig temp = createTempConfig();
-                customUrlField.setText(temp.buildJdbcUrl());
-            }
             updatePreview();
         });
 
@@ -430,21 +424,9 @@ public class ConnectionDialog extends DialogWrapper {
                     if (mysqlPortField.getText().trim().equals("9001") || mysqlPortField.getText().trim().isEmpty()) {
                         mysqlPortField.setText("3306");
                     }
-                    if (mysqlUserField.getText().trim().equalsIgnoreCase("SA") || mysqlUserField.getText().trim().isEmpty()) {
-                        mysqlUserField.setText("root");
-                    }
-                    if (mysqlDatabaseField.getText().trim().equalsIgnoreCase("testdb") || mysqlDatabaseField.getText().trim().isEmpty()) {
-                        mysqlDatabaseField.setText("shop_db");
-                    }
                 } else if (type == DatabaseType.HSQLDB) {
                     if (hsqlServerPortField.getText().trim().equals("3306") || hsqlServerPortField.getText().trim().isEmpty()) {
                         hsqlServerPortField.setText("9001");
-                    }
-                    if (hsqlUserField.getText().trim().equalsIgnoreCase("root") || hsqlUserField.getText().trim().isEmpty()) {
-                        hsqlUserField.setText("SA");
-                    }
-                    if (hsqlServerDbField.getText().trim().equalsIgnoreCase("shop_db") || hsqlServerDbField.getText().trim().isEmpty()) {
-                        hsqlServerDbField.setText("testdb");
                     }
                 }
                 refillDriverVersions();
@@ -498,27 +480,11 @@ public class ConnectionDialog extends DialogWrapper {
         customUrlUserField.getDocument().addDocumentListener(dl);
     }
 
-    private void syncCredentialsToCustomUrl() {
-        DatabaseType type = (DatabaseType) typeCombo.getSelectedItem();
-        if (type == DatabaseType.MYSQL) {
-            customUrlUserField.setText(mysqlUserField.getText().trim());
-            customUrlPasswordField.setText(new String(mysqlPasswordField.getPassword()));
-        } else {
-            customUrlUserField.setText(hsqlUserField.getText().trim());
-            customUrlPasswordField.setText(new String(hsqlPasswordField.getPassword()));
-        }
-    }
-
-    private void syncCredentialsToStandard() {
-        String u = customUrlUserField.getText().trim();
-        String p = new String(customUrlPasswordField.getPassword());
-        mysqlUserField.setText(u);
-        mysqlPasswordField.setText(p);
-        hsqlUserField.setText(u);
-        hsqlPasswordField.setText(p);
-    }
-
     private void updatePreview() {
+        if (customUrlRadio.isSelected() && customUrlField.getText().trim().isEmpty()) {
+            urlPreviewLabel.setText("Enter a JDBC URL");
+            return;
+        }
         ConnectionConfig temp = createTempConfig();
         urlPreviewLabel.setText(temp.buildJdbcUrl());
     }
@@ -617,6 +583,9 @@ public class ConnectionDialog extends DialogWrapper {
     }
     @Override protected @Nullable ValidationInfo doValidate() {
         if (driverBusy) return new ValidationInfo("Wait for the driver download to finish", driverSourceCombo);
+        if (customUrlRadio.isSelected() && customUrlField.getText().trim().isEmpty()) {
+            return new ValidationInfo("Enter a JDBC URL", customUrlField);
+        }
         ConnectionConfig candidate = createTempConfig();
         try {
             if (candidate.getDriverSource() == DriverSource.DOWNLOAD) {
@@ -644,6 +613,10 @@ public class ConnectionDialog extends DialogWrapper {
 
     private void doTestConnection() {
         if (driverBusy || !testButton.isEnabled() || isDisposed()) return;
+        if (customUrlRadio.isSelected() && customUrlField.getText().trim().isEmpty()) {
+            Messages.showErrorDialog("Enter a JDBC URL before testing the connection.", "Invalid Connection");
+            return;
+        }
         ConnectionConfig temp = createTempConfig();
         DatabaseType originalType = temp.getType();
         ConnectionConfig requested = temp.copy();
@@ -732,8 +705,6 @@ public class ConnectionDialog extends DialogWrapper {
         } else {
             standardRadio.setSelected(true);
             mainCardLayout.show(mainCardPanel, "STANDARD");
-            customUrlUserField.setText(config.getUser());
-            customUrlPasswordField.setText(config.getPassword());
         }
     }
 
