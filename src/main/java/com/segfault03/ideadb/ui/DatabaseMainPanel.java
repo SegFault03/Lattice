@@ -1,10 +1,9 @@
 package com.segfault03.ideadb.ui;
 
 import com.intellij.icons.AllIcons;
+import com.intellij.util.ui.JBUI;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
-import com.intellij.ui.JBColor;
-import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.treeStructure.Tree;
 import com.segfault03.ideadb.dialog.AlterTableDialog;
@@ -40,6 +39,10 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     private DefaultTreeModel treeModel;
     private DefaultMutableTreeNode rootNode;
     private Tree databaseTree;
+    private DatabaseExplorerToolbar toolbar;
+    private final DatabaseExplorerHint selectionHint = new DatabaseExplorerHint();
+    private final CardLayout explorerLayout = new CardLayout();
+    private final JPanel explorerCards = new JPanel(explorerLayout);
 
     public DatabaseMainPanel(Project project) {
         super(new BorderLayout(0, 0));
@@ -67,44 +70,12 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(tasks::close);
     }
     private void initUI() {
-        // Explorer Toolbar
-        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 2));
-
-        JButton addBtn = new JButton(AllIcons.General.Add);
-        addBtn.setToolTipText("Add Database Connection");
-        addBtn.addActionListener(e -> showAddConnectionMenu(addBtn));
-        toolbar.add(addBtn);
-
-        JButton editBtn = new JButton(AllIcons.Actions.Edit);
-        editBtn.setToolTipText("Edit Connection Properties");
-        editBtn.addActionListener(e -> editSelectedConnection());
-        toolbar.add(editBtn);
-
-        JButton removeBtn = new JButton(AllIcons.General.Remove);
-        removeBtn.setToolTipText("Remove Connection");
-        removeBtn.addActionListener(e -> removeSelectedConnection());
-        toolbar.add(removeBtn);
-
-        toolbar.add(new JSeparator(SwingConstants.VERTICAL));
-
-        JButton refreshBtn = new JButton(AllIcons.Actions.Refresh);
-        refreshBtn.setToolTipText("Refresh");
-        refreshBtn.addActionListener(e -> refreshSelectedNode());
-        toolbar.add(refreshBtn);
-
-        JButton consoleBtn = new JButton(Icons.CONSOLE);
-        consoleBtn.setToolTipText("Open SQL Console");
-        consoleBtn.addActionListener(e -> openConsoleForSelected());
-        toolbar.add(consoleBtn);
-
-        toolbar.add(new JSeparator(SwingConstants.VERTICAL));
-
-        JButton helpBtn = new JButton(AllIcons.General.ContextHelp);
-        helpBtn.setToolTipText("Lattice Welcome & Tips");
-        helpBtn.addActionListener(e -> DatabaseEditorManager.getInstance(project).openWelcome());
-        toolbar.add(helpBtn);
-
+        toolbar = new DatabaseExplorerToolbar(this::showAddConnectionMenu,
+                this::editSelectedConnection, this::removeSelectedConnection,
+                this::refreshSelectedNode, this::openConsoleForSelected,
+                () -> DatabaseEditorManager.getInstance(project).openWelcome());
         add(toolbar, BorderLayout.NORTH);
+        setPreferredSize(JBUI.size(260, 400));
 
         // Database Tree
         rootNode = new DefaultMutableTreeNode(TreeNodeData.root());
@@ -114,27 +85,26 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         databaseTree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
         databaseTree.setRootVisible(true);
         databaseTree.setShowsRootHandles(true);
+        databaseTree.setBorder(JBUI.Borders.empty(6, 8));
 
         setupTreeListeners();
 
-        add(new JBScrollPane(databaseTree), BorderLayout.CENTER);
+        JBScrollPane treeScrollPane = new JBScrollPane(databaseTree);
+        treeScrollPane.setBorder(JBUI.Borders.empty());
+        explorerCards.add(treeScrollPane, "tree");
+        explorerCards.add(new EmptyConnectionPanel(
+                () -> showAddConnectionDialog(DatabaseType.MYSQL)), "empty");
+        add(explorerCards, BorderLayout.CENTER);
 
-        // Subtle bottom hint bar
-        JPanel hintBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
-        hintBar.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
-        JBLabel hintLabel = new JBLabel("Double-click table to open in editor tab");
-        hintLabel.setFont(hintLabel.getFont().deriveFont(10.5f));
-        hintLabel.setForeground(new JBColor(new Color(130, 130, 130), new Color(150, 150, 150)));
-        hintBar.add(hintLabel);
-        add(hintBar, BorderLayout.SOUTH);
+        add(selectionHint, BorderLayout.SOUTH);
     }
 
     public void loadConnectionsFromState() {
         rootNode.removeAllChildren();
         List<ConnectionConfig> configs = DatabaseSettingsState.getInstance().getConnections();
-        if (configs.isEmpty()) {
-            rootNode.add(new DefaultMutableTreeNode(TreeNodeData.loading("Click '+' to add MySQL or HSQLDB connection...")));
-        } else {
+        toolbar.setHasConnections(!configs.isEmpty());
+        explorerLayout.show(explorerCards, configs.isEmpty() ? "empty" : "tree");
+        if (!configs.isEmpty()) {
             for (ConnectionConfig cfg : configs) {
                 boolean connected = DatabaseConnectionManager.getInstance().isConnected(cfg.getId());
                 DefaultMutableTreeNode connNode = new DefaultMutableTreeNode(TreeNodeData.connection(cfg, connected));
@@ -144,9 +114,11 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         }
         treeModel.reload();
         databaseTree.expandPath(new TreePath(rootNode.getPath()));
+        updateSelectionActions();
     }
 
     private void setupTreeListeners() {
+        databaseTree.addTreeSelectionListener(event -> updateSelectionActions());
         databaseTree.addTreeExpansionListener(new TreeExpansionListener() {
             @Override
             public void treeExpanded(TreeExpansionEvent event) {
@@ -182,6 +154,17 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 }
             }
         });
+    }
+
+    private void updateSelectionActions() {
+        TreeNodeData selection = null;
+        TreePath path = databaseTree.getSelectionPath();
+        if (path != null && path.getLastPathComponent() instanceof DefaultMutableTreeNode node
+                && node.getUserObject() instanceof TreeNodeData data) {
+            selection = data;
+        }
+        toolbar.setSelection(selection);
+        selectionHint.setSelection(selection);
     }
 
     private void handleNodeExpansion(DefaultMutableTreeNode node) {
@@ -499,6 +482,8 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
 
     private void showAddConnectionDialog(DatabaseType defaultType) {
         ConnectionConfig newCfg = new ConnectionConfig(defaultType, "New " + defaultType.getDisplayName());
+        newCfg.setDatabaseName("");
+        newCfg.setUser("");
         ConnectionDialog dlg = new ConnectionDialog(project, newCfg);
         if (dlg.showAndGet()) {
             ConnectionConfig result = dlg.getResultConfig();
@@ -554,6 +539,10 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
         if (node.getUserObject() instanceof TreeNodeData) {
             TreeNodeData data = (TreeNodeData) node.getUserObject();
+            if (data.getType() == TreeNodeData.NodeType.ROOT) {
+                loadConnectionsFromState();
+                return;
+            }
             data.setLoaded(false);
             handleNodeExpansion(node);
         }

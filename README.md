@@ -83,6 +83,18 @@ python -m unittest discover -s scripts/tests -v
 
 Use `python3` if that is your system's Python command. All optional development/release helpers live in [scripts/](scripts/README.md). Only the conventional Gradle launchers remain in the repository root.
 
+### Quick local UI testing
+
+To run the tooling and pure Java tests, build the ZIP, find an installed IntelliJ IDEA, and deploy the freshly built plugin:
+
+```text
+python scripts/dev-deploy.py
+```
+
+The cross-platform helper shows each step in the terminal. It prefers a running IDEA installation, validates the archive, replaces only Lattice, and restarts the selected IDE if it was running. A closed IDE stays closed. Save your IDE work first and respond to any exit prompts; the helper waits for shutdown and never force-kills the process. On Linux it uses `wmctrl` if available, otherwise SIGTERM.
+
+Use `--dry-run` to inspect the target without making changes, `--list-ides` to list installations, or `--ide-home`, `--plugins-dir` and `--java-home` for explicit paths. Java 21 and an installed IDEA 2025.1+ are required; Gradle still compiles against the pinned 2025.1 SDK. See the [deployment helper reference](scripts/README.md#quick-local-ide-deployment) for discovery, recovery, custom profiles and restart options.
+
 ## Functional tests
 
 The live suites use disposable test schemas and require isolated fixtures. With JDK 21, Python 3.11+ and a running Docker engine:

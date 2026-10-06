@@ -124,6 +124,8 @@ public class WelcomePanel extends JPanel {
 
     private void showAddConnectionDialog(DatabaseType defaultType) {
         ConnectionConfig newCfg = new ConnectionConfig(defaultType, "New " + defaultType.getDisplayName());
+        newCfg.setDatabaseName("");
+        newCfg.setUser("");
         ConnectionDialog dlg = new ConnectionDialog(project, newCfg);
         if (dlg.showAndGet()) {
             ConnectionConfig result = dlg.getResultConfig();
