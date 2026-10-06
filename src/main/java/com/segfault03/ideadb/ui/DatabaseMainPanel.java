@@ -4,8 +4,6 @@ import com.intellij.icons.AllIcons;
 import com.intellij.util.ui.JBUI;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
-import com.intellij.ui.JBColor;
-import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.treeStructure.Tree;
 import com.segfault03.ideadb.dialog.AlterTableDialog;
@@ -42,6 +40,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     private DefaultMutableTreeNode rootNode;
     private Tree databaseTree;
     private DatabaseExplorerToolbar toolbar;
+    private final DatabaseExplorerHint selectionHint = new DatabaseExplorerHint();
     private final CardLayout explorerLayout = new CardLayout();
     private final JPanel explorerCards = new JPanel(explorerLayout);
 
@@ -86,22 +85,18 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         databaseTree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
         databaseTree.setRootVisible(true);
         databaseTree.setShowsRootHandles(true);
+        databaseTree.setBorder(JBUI.Borders.empty(6, 8));
 
         setupTreeListeners();
 
-        explorerCards.add(new JBScrollPane(databaseTree), "tree");
+        JBScrollPane treeScrollPane = new JBScrollPane(databaseTree);
+        treeScrollPane.setBorder(JBUI.Borders.empty());
+        explorerCards.add(treeScrollPane, "tree");
         explorerCards.add(new EmptyConnectionPanel(
                 () -> showAddConnectionDialog(DatabaseType.MYSQL)), "empty");
         add(explorerCards, BorderLayout.CENTER);
 
-        // Subtle bottom hint bar
-        JPanel hintBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
-        hintBar.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
-        JBLabel hintLabel = new JBLabel("Double-click table to open in editor tab");
-        hintLabel.setFont(hintLabel.getFont().deriveFont(10.5f));
-        hintLabel.setForeground(new JBColor(new Color(130, 130, 130), new Color(150, 150, 150)));
-        hintBar.add(hintLabel);
-        add(hintBar, BorderLayout.SOUTH);
+        add(selectionHint, BorderLayout.SOUTH);
     }
 
     public void loadConnectionsFromState() {
@@ -119,9 +114,11 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         }
         treeModel.reload();
         databaseTree.expandPath(new TreePath(rootNode.getPath()));
+        updateSelectionActions();
     }
 
     private void setupTreeListeners() {
+        databaseTree.addTreeSelectionListener(event -> updateSelectionActions());
         databaseTree.addTreeExpansionListener(new TreeExpansionListener() {
             @Override
             public void treeExpanded(TreeExpansionEvent event) {
@@ -157,6 +154,17 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 }
             }
         });
+    }
+
+    private void updateSelectionActions() {
+        TreeNodeData selection = null;
+        TreePath path = databaseTree.getSelectionPath();
+        if (path != null && path.getLastPathComponent() instanceof DefaultMutableTreeNode node
+                && node.getUserObject() instanceof TreeNodeData data) {
+            selection = data;
+        }
+        toolbar.setSelection(selection);
+        selectionHint.setSelection(selection);
     }
 
     private void handleNodeExpansion(DefaultMutableTreeNode node) {
@@ -531,6 +539,10 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
         if (node.getUserObject() instanceof TreeNodeData) {
             TreeNodeData data = (TreeNodeData) node.getUserObject();
+            if (data.getType() == TreeNodeData.NodeType.ROOT) {
+                loadConnectionsFromState();
+                return;
+            }
             data.setLoaded(false);
             handleNodeExpansion(node);
         }
