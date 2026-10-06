@@ -28,6 +28,8 @@ class DeploymentTests(unittest.TestCase):
     def ide(self, name="IDE with spaces", system=None, build="251.100.1", product="IC"):
         system = system or deploy.platform_name()
         directory = self.root / name
+        if system == "macOS" and directory.suffix != ".app":
+            directory = directory.with_name(directory.name + ".app")
         home = directory / "Contents" if system == "macOS" else directory
         info_dir = home / "Resources" if system == "macOS" else home
         launcher = "../MacOS/idea" if system == "macOS" else "bin/idea64.exe" if system == "Windows" else "bin/idea.sh"
