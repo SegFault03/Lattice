@@ -100,6 +100,7 @@ public class ConnectionDialog extends DialogWrapper {
     @Override
     protected @Nullable JComponent createCenterPanel() {
         JPanel root = new JPanel(new BorderLayout(0, 10));
+        root.setBorder(JBUI.Borders.empty(0, 8, 0, 0));
 
         ConnectionFormPanel topPanel = new ConnectionFormPanel();
         nameField = ConnectionFormPanel.width(new JBTextField(), 360);
@@ -121,7 +122,27 @@ public class ConnectionDialog extends DialogWrapper {
 
         driverSourceCombo = ConnectionFormPanel.width(new JComboBox<>(DriverSource.values()), 220);
         topPanel.addRow(3, "JDBC driver:", driverSourceCombo, false);
-        driverCards = new JPanel(driverLayout);
+        driverCards = new JPanel(driverLayout) {
+            private Dimension cardSize(Dimension layoutSize, boolean minimum) {
+                for (Component card : getComponents()) {
+                    if (card.isVisible()) {
+                        Dimension visibleSize = minimum ? card.getMinimumSize() : card.getPreferredSize();
+                        Insets insets = getInsets();
+                        layoutSize.height = visibleSize.height + insets.top + insets.bottom + driverLayout.getVgap();
+                        break;
+                    }
+                }
+                return layoutSize;
+            }
+
+            @Override public Dimension getPreferredSize() {
+                return cardSize(super.getPreferredSize(), false);
+            }
+
+            @Override public Dimension getMinimumSize() {
+                return cardSize(super.getMinimumSize(), true);
+            }
+        };
         driverCards.add(new JBLabel("MySQL 9.0.0 / HSQLDB 2.7.3 included"), DriverSource.BUNDLED.name());
         JPanel versionPanel = new JPanel(new BorderLayout(0, JBUI.scale(4)));
         JPanel versionRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
@@ -143,7 +164,7 @@ public class ConnectionDialog extends DialogWrapper {
         driverCards.add(driverJarField, DriverSource.LOCAL_JAR.name());
         topPanel.addRow(4, "", driverCards, false);
         topPanel.addRow(5, "", driverStatusLabel, false);
-        driverSourceCombo.addActionListener(e -> { driverLayout.show(driverCards, ((DriverSource)driverSourceCombo.getSelectedItem()).name()); updateDriverStatus(); });
+        driverSourceCombo.addActionListener(e -> { showDriverCard((DriverSource) driverSourceCombo.getSelectedItem()); updateDriverStatus(); });
         driverVersionCombo.addActionListener(e -> updateDriverStatus());
         downloadDriverButton.addActionListener(e -> runDriverAction(false));
         listVersionsButton.addActionListener(e -> runDriverAction(true));
@@ -195,7 +216,7 @@ public class ConnectionDialog extends DialogWrapper {
     @Override
     protected JComponent createSouthPanel() {
         JPanel south = new JPanel(new BorderLayout(10, 0));
-        south.setBorder(JBUI.Borders.empty(6, 0, 0, 0));
+        south.setBorder(JBUI.Borders.empty(6, 8, 0, 0));
 
         JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         testStatusLabel.setFont(testStatusLabel.getFont().deriveFont(Font.PLAIN, 12f));
@@ -227,6 +248,14 @@ public class ConnectionDialog extends DialogWrapper {
         mysqlPasswordField = ConnectionFormPanel.width(new JPasswordField(), 220);
         form.addRow(4, "Password:", mysqlPasswordField, false);
         return form;
+    }
+
+    private void showDriverCard(DriverSource source) {
+        if (source == null || driverCards == null) return;
+        driverLayout.show(driverCards, source.name());
+        driverCards.revalidate();
+        driverCards.repaint();
+        if (driverCards.getParent() != null) driverCards.getParent().revalidate();
     }
 
     private JPanel createHsqlPanel() {
@@ -585,7 +614,7 @@ public class ConnectionDialog extends DialogWrapper {
         if (!config.getDriverVersion().isBlank()) driverVersionCombo.setSelectedItem(config.getDriverVersion());
         driverJarField.setText(config.getDriverJarPath());
         driverSourceCombo.setSelectedItem(config.getDriverSource());
-        driverLayout.show(driverCards, config.getDriverSource().name());
+        showDriverCard(config.getDriverSource());
         updateDriverStatus();
 
         // Custom URL or Standard mode

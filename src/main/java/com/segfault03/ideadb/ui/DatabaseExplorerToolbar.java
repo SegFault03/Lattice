@@ -17,7 +17,8 @@ final class DatabaseExplorerToolbar extends JPanel {
     DatabaseExplorerToolbar(Consumer<Component> addConnection, Runnable editConnection,
                             Runnable removeConnection, Runnable refreshConnection,
                             Runnable openConsole, Runnable showHelp) {
-        super(new FlowLayout(FlowLayout.LEFT, JBUI.scale(2), JBUI.scale(2)));
+        super(new GridBagLayout());
+        setBorder(JBUI.Borders.empty(2, 8, 2, 2));
         JButton add = button(AllIcons.General.Add, "Add Database Connection", null);
         add.addActionListener(e -> addConnection.accept(add));
         edit = button(AllIcons.Actions.Edit, "Edit Connection Properties", editConnection);
@@ -43,15 +44,25 @@ final class DatabaseExplorerToolbar extends JPanel {
         button.setMargin(JBUI.insets(2));
         button.setPreferredSize(JBUI.size(26, 26));
         button.setMinimumSize(JBUI.size(26, 26));
-        button.setMaximumSize(JBUI.size(26, 26));
         if (action != null) button.addActionListener(e -> action.run());
-        add(button);
+        GridBagConstraints constraints = new GridBagConstraints();
+        constraints.gridx = getComponentCount();
+        constraints.gridy = 0;
+        constraints.weightx = 1;
+        constraints.fill = GridBagConstraints.HORIZONTAL;
+        constraints.insets = JBUI.insets(0, 2, 0, 2);
+        add(button, constraints);
         return button;
     }
 
     private void separator() {
         JSeparator separator = new JSeparator(SwingConstants.VERTICAL);
         separator.setPreferredSize(JBUI.size(1, 20));
-        add(separator);
+        GridBagConstraints constraints = new GridBagConstraints();
+        constraints.gridx = getComponentCount();
+        constraints.gridy = 0;
+        constraints.fill = GridBagConstraints.VERTICAL;
+        constraints.insets = JBUI.insets(0, 2);
+        add(separator, constraints);
     }
 }
