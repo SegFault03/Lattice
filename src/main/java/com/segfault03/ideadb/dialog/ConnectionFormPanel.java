@@ -52,6 +52,7 @@ final class ConnectionFormPanel extends JPanel {
     }
 
     static <T extends JComponent> T width(T component, int width) {
+        if (component instanceof JTextField) component.setBorder(new RoundedInputBorder());
         Dimension size = component.getPreferredSize();
         size.width = JBUI.scale(width);
         component.setPreferredSize(size);
@@ -59,15 +60,4 @@ final class ConnectionFormPanel extends JPanel {
         return component;
     }
 
-    static JPanel hostAndPort(JTextField host, JTextField port) {
-        JPanel row = new JPanel(new BorderLayout(JBUI.scale(10), 0));
-        row.add(host, BorderLayout.CENTER);
-        JPanel portGroup = new JPanel(new BorderLayout(JBUI.scale(6), 0));
-        JLabel portLabel = new JLabel("Port:");
-        portLabel.setLabelFor(port);
-        portGroup.add(portLabel, BorderLayout.WEST);
-        portGroup.add(width(port, 76), BorderLayout.CENTER);
-        row.add(portGroup, BorderLayout.EAST);
-        return row;
-    }
 }

@@ -1,6 +1,7 @@
 package com.segfault03.ideadb.ui;
 
 import com.intellij.icons.AllIcons;
+import com.intellij.util.ui.JBUI;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.ui.JBColor;
@@ -40,6 +41,9 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     private DefaultTreeModel treeModel;
     private DefaultMutableTreeNode rootNode;
     private Tree databaseTree;
+    private DatabaseExplorerToolbar toolbar;
+    private final CardLayout explorerLayout = new CardLayout();
+    private final JPanel explorerCards = new JPanel(explorerLayout);
 
     public DatabaseMainPanel(Project project) {
         super(new BorderLayout(0, 0));
@@ -67,44 +71,12 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(tasks::close);
     }
     private void initUI() {
-        // Explorer Toolbar
-        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 2));
-
-        JButton addBtn = new JButton(AllIcons.General.Add);
-        addBtn.setToolTipText("Add Database Connection");
-        addBtn.addActionListener(e -> showAddConnectionMenu(addBtn));
-        toolbar.add(addBtn);
-
-        JButton editBtn = new JButton(AllIcons.Actions.Edit);
-        editBtn.setToolTipText("Edit Connection Properties");
-        editBtn.addActionListener(e -> editSelectedConnection());
-        toolbar.add(editBtn);
-
-        JButton removeBtn = new JButton(AllIcons.General.Remove);
-        removeBtn.setToolTipText("Remove Connection");
-        removeBtn.addActionListener(e -> removeSelectedConnection());
-        toolbar.add(removeBtn);
-
-        toolbar.add(new JSeparator(SwingConstants.VERTICAL));
-
-        JButton refreshBtn = new JButton(AllIcons.Actions.Refresh);
-        refreshBtn.setToolTipText("Refresh");
-        refreshBtn.addActionListener(e -> refreshSelectedNode());
-        toolbar.add(refreshBtn);
-
-        JButton consoleBtn = new JButton(Icons.CONSOLE);
-        consoleBtn.setToolTipText("Open SQL Console");
-        consoleBtn.addActionListener(e -> openConsoleForSelected());
-        toolbar.add(consoleBtn);
-
-        toolbar.add(new JSeparator(SwingConstants.VERTICAL));
-
-        JButton helpBtn = new JButton(AllIcons.General.ContextHelp);
-        helpBtn.setToolTipText("Lattice Welcome & Tips");
-        helpBtn.addActionListener(e -> DatabaseEditorManager.getInstance(project).openWelcome());
-        toolbar.add(helpBtn);
-
+        toolbar = new DatabaseExplorerToolbar(this::showAddConnectionMenu,
+                this::editSelectedConnection, this::removeSelectedConnection,
+                this::refreshSelectedNode, this::openConsoleForSelected,
+                () -> DatabaseEditorManager.getInstance(project).openWelcome());
         add(toolbar, BorderLayout.NORTH);
+        setPreferredSize(JBUI.size(260, 400));
 
         // Database Tree
         rootNode = new DefaultMutableTreeNode(TreeNodeData.root());
@@ -117,7 +89,10 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
 
         setupTreeListeners();
 
-        add(new JBScrollPane(databaseTree), BorderLayout.CENTER);
+        explorerCards.add(new JBScrollPane(databaseTree), "tree");
+        explorerCards.add(new EmptyConnectionPanel(
+                () -> showAddConnectionDialog(DatabaseType.MYSQL)), "empty");
+        add(explorerCards, BorderLayout.CENTER);
 
         // Subtle bottom hint bar
         JPanel hintBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
@@ -132,9 +107,9 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     public void loadConnectionsFromState() {
         rootNode.removeAllChildren();
         List<ConnectionConfig> configs = DatabaseSettingsState.getInstance().getConnections();
-        if (configs.isEmpty()) {
-            rootNode.add(new DefaultMutableTreeNode(TreeNodeData.loading("Click '+' to add MySQL or HSQLDB connection...")));
-        } else {
+        toolbar.setHasConnections(!configs.isEmpty());
+        explorerLayout.show(explorerCards, configs.isEmpty() ? "empty" : "tree");
+        if (!configs.isEmpty()) {
             for (ConnectionConfig cfg : configs) {
                 boolean connected = DatabaseConnectionManager.getInstance().isConnected(cfg.getId());
                 DefaultMutableTreeNode connNode = new DefaultMutableTreeNode(TreeNodeData.connection(cfg, connected));

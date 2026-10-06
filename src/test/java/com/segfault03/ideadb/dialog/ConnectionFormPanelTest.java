@@ -18,16 +18,19 @@ class ConnectionFormPanelTest {
             root.add(header, BorderLayout.NORTH);
 
             ConnectionFormPanel hsql = new ConnectionFormPanel();
-            JComboBox<String> mode = ConnectionFormPanel.width(new JComboBox<>(new String[]{"Remote Server (hsql://)"}), 280);
+            JComboBox<String> mode = ConnectionFormPanel.width(new JComboBox<>(new String[]{"Remote Server (hsql://)"}), 220);
             hsql.addRow(0, "Mode:", mode, false);
             CardLayout cards = new CardLayout();
             JPanel subforms = new JPanel(cards);
             JTextField[] modeInputs = new JTextField[3];
             for (int i = 0; i < modeInputs.length; i++) {
                 ConnectionFormPanel subform = new ConnectionFormPanel();
-                modeInputs[i] = ConnectionFormPanel.width(new JTextField(), 280);
+                modeInputs[i] = ConnectionFormPanel.width(new JTextField(), 220);
                 subform.addRow(0, new String[]{"Host:", "File / Path:", "Database Name:"}[i], modeInputs[i], false);
-                if (i == 0) subform.addRow(1, "Database:", new JTextField(), true);
+                if (i == 0) {
+                    subform.addRow(1, "Port:", ConnectionFormPanel.width(new JTextField(), 76), false);
+                    subform.addRow(2, "Database:", ConnectionFormPanel.width(new JTextField(), 220), false);
+                }
                 subforms.add(subform, String.valueOf(i));
             }
             hsql.addFullWidthRow(1, subforms);
@@ -37,7 +40,7 @@ class ConnectionFormPanelTest {
             hsql.addRow(3, "Password:", password, false);
             root.add(hsql, BorderLayout.CENTER);
 
-            for (int width : new int[]{600, 800}) {
+            for (int width : new int[]{520, 800}) {
                 root.setSize(width, 500);
                 for (int selected = 0; selected < modeInputs.length; selected++) {
                     cards.show(subforms, String.valueOf(selected));
@@ -57,19 +60,30 @@ class ConnectionFormPanelTest {
     }
 
     @Test
-    void hostUsesAvailableWidthWhilePortRemainsReadable() throws Exception {
+    void fieldsKeepTheirWidthsAndPortStaysBelowHostWhenResized() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
-            JTextField host = new JTextField("localhost");
-            JTextField port = new JTextField("9001");
-            JPanel row = ConnectionFormPanel.hostAndPort(host, port);
-            for (int width : new int[]{350, 550}) {
-                row.setSize(width, row.getPreferredSize().height);
-                layout(row);
-                Point portPosition = SwingUtilities.convertPoint(port, 0, 0, row);
-                assertEquals(port.getPreferredSize().width, port.getWidth());
-                assertTrue(host.getWidth() >= 200, "Host should remain usable");
-                assertTrue(host.getX() + host.getWidth() < portPosition.x, "Host must not overlap the port group");
-                assertTrue(portPosition.x + port.getWidth() <= width, "Port must remain inside the form");
+            ConnectionFormPanel form = new ConnectionFormPanel();
+            String[] labels = {"Name:", "Host:", "Port:", "Database:", "User:", "Password:", "JDBC URL:"};
+            int[] widths = {360, 220, 76, 220, 220, 220, 360};
+            JTextField[] fields = new JTextField[labels.length];
+            for (int i = 0; i < fields.length; i++) {
+                fields[i] = ConnectionFormPanel.width(new JTextField(), widths[i]);
+                form.addRow(i, labels[i], fields[i], false);
+            }
+            for (int width : new int[]{520, 800}) {
+                form.setSize(width, 500);
+                layout(form);
+                for (int i = 0; i < fields.length; i++) {
+                    assertEquals(fields[0].getX(), fields[i].getX());
+                    assertEquals(fields[i].getPreferredSize().width, fields[i].getWidth());
+                    assertTrue(fields[i].getX() + fields[i].getWidth() <= width);
+                    if (i > 0) assertTrue(fields[i].getY() > fields[i-1].getY() + fields[i-1].getHeight());
+                }
+                assertTrue(fields[0].getWidth() > fields[1].getWidth());
+                assertTrue(fields[2].getWidth() < fields[1].getWidth());
+                for (Component child : form.getComponents()) {
+                    if (child instanceof JLabel) assertEquals(0, child.getX());
+                }
             }
         });
     }
