@@ -28,7 +28,7 @@ To test against fixtures you manage yourself, omit `--mysql` and/or `--hsqldb`. 
 
 These are test fixture credentials, not recommendations for deployed servers. Use `python scripts/test.py --live` or Gradle `test integrationTest fallbackDriverTest` after starting equivalent fixtures.
 
-The historical Java 8/legacy-driver matrix is documented in [compatibility](docs/compatibility.md). Its environment-specific orchestration is not part of the public repository; `DatabaseCompatibilityTest` and `Java8DriverProbe` retain the reusable Java checks.
+The historical Java 8/legacy-driver matrix is documented in [compatibility](compatibility.md). Its environment-specific orchestration is not part of the public repository; `DatabaseCompatibilityTest` and `Java8DriverProbe` retain the reusable Java checks.
 
 ## Validation and changes
 

@@ -62,7 +62,7 @@ tasks.register<Test>("integrationTest") {
 // Keep Gradle and the standalone packager on the same IntelliJ 2025 / Java 21 baseline.
 tasks.withType<JavaCompile>().configureEach { options.release.set(21) }
 tasks.processResources {
-    from("LICENSE", "THIRD_PARTY_NOTICES.md")
+    from("LICENSE", "docs/THIRD_PARTY_NOTICES.md")
     from("licenses") { into("licenses") }
 }
 

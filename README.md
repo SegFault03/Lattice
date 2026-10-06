@@ -81,7 +81,19 @@ python scripts/test.py --build
 python -m unittest discover -s scripts/tests -v
 ```
 
-Use `python3` if that is your system's Python command. All optional development/release helpers live in [scripts/](scripts/README.md). Only the conventional Gradle launchers remain in the repository root.
+Use `python3` if that is your system's Python command. All optional development/release helpers live in `scripts/`; see the [script reference](docs/SCRIPTS.md). Only the conventional Gradle launchers remain in the repository root.
+
+### Quick local UI testing
+
+To run the tooling and pure Java tests, build the ZIP, find an installed IntelliJ IDEA, and deploy the freshly built plugin:
+
+```text
+python scripts/dev-deploy.py
+```
+
+The cross-platform helper shows each step in the terminal. It prefers a running IDEA installation, validates the archive, replaces only Lattice, and restarts the selected IDE if it was running. A closed IDE stays closed. Save your IDE work first and respond to any exit prompts; the helper waits for shutdown and never force-kills the process. On Linux it uses `wmctrl` if available, otherwise SIGTERM.
+
+Use `--dry-run` to inspect the target without making changes, `--list-ides` to list installations, or `--ide-home`, `--plugins-dir` and `--java-home` for explicit paths. Java 21 and an installed IDEA 2025.1+ are required; Gradle still compiles against the pinned 2025.1 SDK. See the [deployment helper reference](docs/SCRIPTS.md#quick-local-ide-deployment) for discovery, recovery, custom profiles and restart options.
 
 ## Functional tests
 
@@ -93,13 +105,26 @@ python scripts/test.py --live --mysql --hsqldb --build
 
 The runner starts a temporary MySQL 8.4 container and an in-memory HSQLDB server, runs pure/integration/fallback-driver checks, and stops its owned fixtures even on test failure. Ports 3306 and 9001 must be free. No existing user database is used by this command.
 
-See [CONTRIBUTING](CONTRIBUTING.md) to use existing isolated fixtures. Generated classes, logs and reports stay in ignored `build/`. Downloads use your operating system's user cache, overridable with `LATTICE_DEV_CACHE`.
+See [CONTRIBUTING](docs/CONTRIBUTING.md) to use existing isolated fixtures. Generated classes, logs and reports stay in ignored `build/`. Downloads use your operating system's user cache, overridable with `LATTICE_DEV_CACHE`.
+
+## Project layout
+
+| Location | Contents |
+|---|---|
+| `src/` | Plugin source, resources and Java tests |
+| [docs/](docs/README.md) | Development, release, support and compatibility guides |
+| `scripts/` | Portable development and release helpers; tooling tests in `scripts/tests/` |
+| `.github/` | GitHub issue forms, pull request template and workflows |
+| `assets/`, `licenses/`, `lib/` | Branding, dependency license texts and fallback-test JDBC JARs |
+| `build/` | Ignored generated output, distribution ZIPs and validation reports |
+
+Workstation-only helpers and notes live in locally excluded `scripts/local/` and `docs/local/`. README, LICENSE, agent instructions and the Gradle wrapper launchers retain their root entry points.
 
 ## Releases and support
 
 A tag such as `v1.0.1` or `v0.0.1-alpha` triggers the [release workflow](.github/workflows/release.yml): live tests, ZIP validation, IntelliJ 2025.1–2025.3 compatibility checks, then a GitHub Release with patch notes, commit history, checksums and corresponding MySQL sources. Versions with prerelease suffixes are marked as GitHub prereleases and are not designated latest. Manual workflow runs never publish.
 
-See [CHANGELOG](CHANGELOG.md), [RELEASING](RELEASING.md), [issue reporting](ISSUE.md), [security reporting](SECURITY.md) and the [final review](docs/final-review.md). Marketplace publishing is a separate step.
+See [CHANGELOG](docs/CHANGELOG.md), [RELEASING](docs/RELEASING.md), [issue reporting](docs/ISSUE.md), [security reporting](docs/SECURITY.md) and the [final review](docs/final-review.md). Marketplace publishing is a separate step.
 
 ## Known limits
 
@@ -107,4 +132,4 @@ HSQLDB multi-statement DDL is not atomic. Stable pagination without a primary ke
 
 ## License
 
-Lattice source is [MIT licensed](LICENSE). Bundled libraries retain their licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).
+Lattice source is [MIT licensed](LICENSE). Bundled libraries retain their licenses; see [third-party notices](docs/THIRD_PARTY_NOTICES.md).

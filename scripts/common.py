@@ -39,5 +39,5 @@ def gradle_command():
     if os.name == "nt":
         # Callers set cwd=ROOT. A relative batch name prevents cmd.exe from
         # stripping the first pair of quotes when the checkout has spaces.
-        return [os.environ.get("COMSPEC", "cmd.exe"), "/d", "/c", "gradlew.bat"]
+        return [os.environ.get("COMSPEC", "cmd.exe"), "/d", "/c", r".\gradlew.bat"]
     return [str(ROOT / "gradlew")]

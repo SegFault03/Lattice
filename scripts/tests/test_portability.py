@@ -64,7 +64,7 @@ class PortabilityTests(unittest.TestCase):
                 wrapper = root / "gradlew"
                 wrapper.write_text('#!/bin/sh\nprintf "%s\\n" "$1"\n', encoding="ascii")
                 wrapper.chmod(0o755)
-            with patch.object(common, "ROOT", root):
+            with patch.object(common, "ROOT", root), patch.dict(os.environ, {"NoDefaultCurrentDirectoryInExePath": "1"}):
                 result = subprocess.check_output(common.gradle_command() + ["argument with spaces"], cwd=root, text=True)
             self.assertEqual("argument with spaces", result.strip())
 

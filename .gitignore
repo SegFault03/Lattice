@@ -39,8 +39,7 @@ __pycache__/
 *.pyc
 test-binaries/
 
-# Workstation-specific Git CLI instructions
-GIT-INSTRUCTIONS.md
+# Workstation-specific instructions
 TESTING-INSTRUCTIONS.md
 AGENTS.md
 AGENTS

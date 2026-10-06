@@ -4,4 +4,4 @@ Validation performed (tests, database/driver versions, compatibility or UI check
 
 Remaining limits or follow-up work:
 
-Add user-facing changes to CHANGELOG.md. Keep fixtures, generated binaries and credentials out of the PR.
+Add user-facing changes to docs/CHANGELOG.md. Keep fixtures, generated binaries and credentials out of the PR.
