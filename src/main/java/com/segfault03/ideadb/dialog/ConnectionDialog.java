@@ -8,6 +8,7 @@ import com.intellij.openapi.ui.TextFieldWithBrowseButton;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBTextField;
+import com.intellij.util.ui.JBUI;
 import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.model.ConnectionTestResult;
 import com.segfault03.ideadb.model.DatabaseType;
@@ -99,65 +100,44 @@ public class ConnectionDialog extends DialogWrapper {
     @Override
     protected @Nullable JComponent createCenterPanel() {
         JPanel root = new JPanel(new BorderLayout(0, 10));
-        root.setPreferredSize(new Dimension(440, 430));
 
-        // 1. Top Section: Name, Database Type, Connection Method
-        JPanel topPanel = new JPanel(new GridBagLayout());
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(3, 3, 3, 3);
-        gbc.fill = GridBagConstraints.NONE;
-        gbc.anchor = GridBagConstraints.WEST;
-
-        // Name
-        gbc.gridx = 0; gbc.gridy = 0;
-        topPanel.add(new JBLabel("Name:"), gbc);
-        gbc.gridx = 1; gbc.gridy = 0;
+        ConnectionFormPanel topPanel = new ConnectionFormPanel();
         nameField = new JBTextField("", 26);
-        topPanel.add(nameField, gbc);
+        topPanel.addRow(0, "Name:", nameField, true);
 
-        // Database Type
-        gbc.gridx = 0; gbc.gridy = 1;
-        topPanel.add(new JBLabel("Database Type:"), gbc);
-        gbc.gridx = 1; gbc.gridy = 1;
-        typeCombo = new JComboBox<>(DatabaseType.values());
-        topPanel.add(typeCombo, gbc);
+        typeCombo = ConnectionFormPanel.width(new JComboBox<>(DatabaseType.values()), 220);
+        topPanel.addRow(1, "Database Type:", typeCombo, false);
 
-        // Connection Method Switcher (Radio Buttons)
-        gbc.gridx = 0; gbc.gridy = 2;
-        topPanel.add(new JBLabel("Connect via:"), gbc);
-        gbc.gridx = 1; gbc.gridy = 2;
-        JPanel radioPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
+        JPanel radioPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         standardRadio = new JRadioButton("Standard (Host & Port)", true);
         customUrlRadio = new JRadioButton("Custom JDBC URL", false);
         ButtonGroup group = new ButtonGroup();
         group.add(standardRadio);
         group.add(customUrlRadio);
         radioPanel.add(standardRadio);
+        radioPanel.add(Box.createHorizontalStrut(JBUI.scale(12)));
         radioPanel.add(customUrlRadio);
-        topPanel.add(radioPanel, gbc);
+        topPanel.addRow(2, "Connect via:", radioPanel, false);
 
-        gbc.gridx = 0; gbc.gridy = 3;
-        topPanel.add(new JBLabel("JDBC driver:"), gbc);
-        gbc.gridx = 1;
-        driverSourceCombo = new JComboBox<>(DriverSource.values());
-        topPanel.add(driverSourceCombo, gbc);
-        gbc.gridx = 1; gbc.gridy = 4;
+        driverSourceCombo = ConnectionFormPanel.width(new JComboBox<>(DriverSource.values()), 220);
+        topPanel.addRow(3, "JDBC driver:", driverSourceCombo, false);
         driverCards = new JPanel(driverLayout);
         driverCards.add(new JBLabel("MySQL 9.0.0 / HSQLDB 2.7.3 included"), DriverSource.BUNDLED.name());
-        JPanel versionPanel = new JPanel(new BorderLayout(6, 0));
-        driverVersionCombo = new JComboBox<>(); driverVersionCombo.setEditable(true);
-        versionPanel.add(driverVersionCombo, BorderLayout.CENTER);
-        JPanel downloadActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
-        downloadActions.add(listVersionsButton); downloadActions.add(downloadDriverButton);
-        versionPanel.add(downloadActions, BorderLayout.EAST);
+        JPanel versionPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, JBUI.scale(6), 0));
+        driverVersionCombo = new JComboBox<>();
+        driverVersionCombo.setEditable(true);
+        ConnectionFormPanel.width(driverVersionCombo, 120);
+        versionPanel.add(driverVersionCombo);
+        versionPanel.add(listVersionsButton);
+        versionPanel.add(downloadDriverButton);
         driverCards.add(versionPanel, DriverSource.DOWNLOAD.name());
         driverJarField = new TextFieldWithBrowseButton();
         driverJarField.getTextField().setColumns(24);
         driverJarField.setToolTipText("Choose the driver matching the server or HSQLDB file format.");
         driverJarField.addBrowseFolderListener(null, FileChooserDescriptorFactory.createSingleFileDescriptor("jar").withTitle("Select JDBC Driver JAR"));
         driverCards.add(driverJarField, DriverSource.LOCAL_JAR.name());
-        topPanel.add(driverCards, gbc);
-        gbc.gridy = 5; topPanel.add(driverStatusLabel, gbc);
+        topPanel.addRow(4, "", driverCards, true);
+        topPanel.addRow(5, "", driverStatusLabel, false);
         driverSourceCombo.addActionListener(e -> { driverLayout.show(driverCards, ((DriverSource)driverSourceCombo.getSelectedItem()).name()); updateDriverStatus(); });
         driverVersionCombo.addActionListener(e -> updateDriverStatus());
         downloadDriverButton.addActionListener(e -> runDriverAction(false));
@@ -200,6 +180,10 @@ public class ConnectionDialog extends DialogWrapper {
         root.add(previewPanel, BorderLayout.SOUTH);
 
         setupListeners();
+        Dimension preferred = root.getPreferredSize();
+        preferred.width = Math.max(JBUI.scale(600), preferred.width);
+        root.setPreferredSize(preferred);
+        root.setMinimumSize(new Dimension(JBUI.scale(600), root.getMinimumSize().height));
         return root;
     }
 
@@ -225,190 +209,67 @@ public class ConnectionDialog extends DialogWrapper {
     }
 
     private JPanel createMysqlPanel() {
-        JPanel p = new JPanel(new GridBagLayout());
-        p.setBorder(BorderFactory.createTitledBorder("MySQL Connection Settings"));
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(3, 3, 3, 3);
-        gbc.fill = GridBagConstraints.NONE;
-        gbc.anchor = GridBagConstraints.WEST;
-
-        // Host & Port
-        gbc.gridx = 0; gbc.gridy = 0;
-        p.add(new JBLabel("Host:"), gbc);
-        gbc.gridx = 1; gbc.gridy = 0;
-        mysqlHostField = new JBTextField("localhost", 16);
-        p.add(mysqlHostField, gbc);
-
-        gbc.gridx = 2; gbc.gridy = 0;
-        p.add(new JBLabel("Port:"), gbc);
-        gbc.gridx = 3; gbc.gridy = 0;
+        ConnectionFormPanel form = new ConnectionFormPanel();
+        mysqlHostField = new JBTextField("localhost", 20);
         mysqlPortField = new JBTextField("3306", 6);
-        p.add(mysqlPortField, gbc);
-
-        // Database
-        gbc.gridx = 0; gbc.gridy = 1;
-        p.add(new JBLabel("Database:"), gbc);
-        gbc.gridx = 1; gbc.gridy = 1; gbc.gridwidth = 3;
-        mysqlDatabaseField = new JBTextField("", 18);
-        p.add(mysqlDatabaseField, gbc);
-        gbc.gridwidth = 1;
-
-        // User & Password
-        gbc.gridx = 0; gbc.gridy = 2;
-        p.add(new JBLabel("User:"), gbc);
-        gbc.gridx = 1; gbc.gridy = 2;
-        mysqlUserField = new JBTextField("", 14);
-        p.add(mysqlUserField, gbc);
-
-        gbc.gridx = 2; gbc.gridy = 2;
-        p.add(new JBLabel("Password:"), gbc);
-        gbc.gridx = 3; gbc.gridy = 2;
-        mysqlPasswordField = new JPasswordField(12);
-        p.add(mysqlPasswordField, gbc);
-
-        return p;
+        form.addRow(0, "Host:", ConnectionFormPanel.hostAndPort(mysqlHostField, mysqlPortField), true);
+        mysqlDatabaseField = ConnectionFormPanel.width(new JBTextField(), 280);
+        form.addRow(1, "Database:", mysqlDatabaseField, false);
+        mysqlUserField = ConnectionFormPanel.width(new JBTextField(), 220);
+        form.addRow(2, "User:", mysqlUserField, false);
+        mysqlPasswordField = ConnectionFormPanel.width(new JPasswordField(), 220);
+        form.addRow(3, "Password:", mysqlPasswordField, false);
+        return form;
     }
 
     private JPanel createHsqlPanel() {
-        JPanel p = new JPanel(new BorderLayout(4, 4));
-        p.setBorder(BorderFactory.createTitledBorder("HSQLDB Connection Settings"));
-
-        JPanel top = new JPanel(new GridBagLayout());
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(3, 3, 3, 3);
-        gbc.fill = GridBagConstraints.NONE;
-        gbc.anchor = GridBagConstraints.WEST;
-
-        gbc.gridx = 0; gbc.gridy = 0;
-        top.add(new JBLabel("Mode:"), gbc);
-        gbc.gridx = 1; gbc.gridy = 0;
-        hsqlModeCombo = new JComboBox<>(HsqlMode.values());
+        ConnectionFormPanel form = new ConnectionFormPanel();
+        hsqlModeCombo = ConnectionFormPanel.width(new JComboBox<>(HsqlMode.values()), 280);
         hsqlModeCombo.setSelectedItem(HsqlMode.SERVER);
-        top.add(hsqlModeCombo, gbc);
-
-        p.add(top, BorderLayout.NORTH);
+        form.addRow(0, "Mode:", hsqlModeCombo, false);
 
         hsqlSubCardLayout = new CardLayout();
         hsqlSubCardPanel = new JPanel(hsqlSubCardLayout);
-
-        // Subcard 1: SERVER (Default)
-        JPanel srvPanel = new JPanel(new GridBagLayout());
-        GridBagConstraints sgbc = new GridBagConstraints();
-        sgbc.insets = new Insets(3, 3, 3, 3);
-        sgbc.fill = GridBagConstraints.NONE;
-        sgbc.anchor = GridBagConstraints.WEST;
-
-        sgbc.gridx = 0; sgbc.gridy = 0;
-        srvPanel.add(new JBLabel("Host:"), sgbc);
-        sgbc.gridx = 1; sgbc.gridy = 0;
-        hsqlServerHostField = new JBTextField("localhost", 16);
-        srvPanel.add(hsqlServerHostField, sgbc);
-
-        sgbc.gridx = 2; sgbc.gridy = 0;
-        srvPanel.add(new JBLabel("Port:"), sgbc);
-        sgbc.gridx = 3; sgbc.gridy = 0;
+        ConnectionFormPanel serverForm = new ConnectionFormPanel();
+        hsqlServerHostField = new JBTextField("localhost", 20);
         hsqlServerPortField = new JBTextField("9001", 6);
-        srvPanel.add(hsqlServerPortField, sgbc);
+        serverForm.addRow(0, "Host:", ConnectionFormPanel.hostAndPort(hsqlServerHostField, hsqlServerPortField), true);
+        hsqlServerDbField = ConnectionFormPanel.width(new JBTextField(), 280);
+        serverForm.addRow(1, "Database:", hsqlServerDbField, false);
+        hsqlSubCardPanel.add(serverForm, HsqlMode.SERVER.name());
 
-        sgbc.gridx = 0; sgbc.gridy = 1;
-        srvPanel.add(new JBLabel("Database:"), sgbc);
-        sgbc.gridx = 1; sgbc.gridy = 1; sgbc.gridwidth = 3;
-        hsqlServerDbField = new JBTextField("", 18);
-        srvPanel.add(hsqlServerDbField, sgbc);
-
-        hsqlSubCardPanel.add(srvPanel, HsqlMode.SERVER.name());
-
-        // Subcard 2: FILE
-        JPanel filePanel = new JPanel(new GridBagLayout());
-        GridBagConstraints fgbc = new GridBagConstraints();
-        fgbc.insets = new Insets(3, 3, 3, 3);
-        fgbc.fill = GridBagConstraints.NONE;
-        fgbc.anchor = GridBagConstraints.WEST;
-        fgbc.gridx = 0; fgbc.gridy = 0;
-        filePanel.add(new JBLabel("File / Path:"), fgbc);
-        fgbc.gridx = 1; fgbc.gridy = 0;
+        ConnectionFormPanel fileForm = new ConnectionFormPanel();
         hsqlFileField = new TextFieldWithBrowseButton();
         hsqlFileField.getTextField().setColumns(24);
         hsqlFileField.addBrowseFolderListener(null, FileChooserDescriptorFactory.createSingleFileOrFolderDescriptor().withTitle("Select Database File"));
-        filePanel.add(hsqlFileField, fgbc);
-        hsqlSubCardPanel.add(filePanel, HsqlMode.FILE.name());
+        fileForm.addRow(0, "File / Path:", hsqlFileField, true);
+        hsqlSubCardPanel.add(fileForm, HsqlMode.FILE.name());
 
-        // Subcard 3: MEM
-        JPanel memPanel = new JPanel(new GridBagLayout());
-        GridBagConstraints mgbc = new GridBagConstraints();
-        mgbc.insets = new Insets(3, 3, 3, 3);
-        mgbc.fill = GridBagConstraints.NONE;
-        mgbc.anchor = GridBagConstraints.WEST;
-        mgbc.gridx = 0; mgbc.gridy = 0;
-        memPanel.add(new JBLabel("Database Name:"), mgbc);
-        mgbc.gridx = 1; mgbc.gridy = 0;
-        hsqlMemNameField = new JBTextField("", 18);
-        memPanel.add(hsqlMemNameField, mgbc);
-        hsqlSubCardPanel.add(memPanel, HsqlMode.MEM.name());
+        ConnectionFormPanel memoryForm = new ConnectionFormPanel();
+        hsqlMemNameField = ConnectionFormPanel.width(new JBTextField(), 280);
+        memoryForm.addRow(0, "Database Name:", hsqlMemNameField, false);
+        hsqlSubCardPanel.add(memoryForm, HsqlMode.MEM.name());
+        form.addFullWidthRow(1, hsqlSubCardPanel);
 
-        p.add(hsqlSubCardPanel, BorderLayout.CENTER);
-
-        // HSQL user/password
-        JPanel authPanel = new JPanel(new GridBagLayout());
-        GridBagConstraints agbc = new GridBagConstraints();
-        agbc.insets = new Insets(3, 3, 3, 3);
-        agbc.fill = GridBagConstraints.NONE;
-        agbc.anchor = GridBagConstraints.WEST;
-
-        agbc.gridx = 0; agbc.gridy = 0;
-        authPanel.add(new JBLabel("User:"), agbc);
-        agbc.gridx = 1; agbc.gridy = 0;
-        hsqlUserField = new JBTextField("", 14);
-        authPanel.add(hsqlUserField, agbc);
-
-        agbc.gridx = 2; agbc.gridy = 0;
-        authPanel.add(new JBLabel("Password:"), agbc);
-        agbc.gridx = 3; agbc.gridy = 0;
-        hsqlPasswordField = new JPasswordField(12);
-        authPanel.add(hsqlPasswordField, agbc);
-
-        p.add(authPanel, BorderLayout.SOUTH);
-
-        return p;
+        hsqlUserField = ConnectionFormPanel.width(new JBTextField(), 220);
+        form.addRow(2, "User:", hsqlUserField, false);
+        hsqlPasswordField = ConnectionFormPanel.width(new JPasswordField(), 220);
+        form.addRow(3, "Password:", hsqlPasswordField, false);
+        return form;
     }
 
     private JPanel createCustomUrlPanel() {
-        JPanel p = new JPanel(new GridBagLayout());
-        p.setBorder(BorderFactory.createTitledBorder("Custom JDBC URL Connection"));
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(3, 3, 3, 3);
-        gbc.fill = GridBagConstraints.NONE;
-        gbc.anchor = GridBagConstraints.WEST;
-
-        // URL
-        gbc.gridx = 0; gbc.gridy = 0;
-        p.add(new JBLabel("JDBC URL:"), gbc);
-        gbc.gridx = 1; gbc.gridy = 0; gbc.gridwidth = 3;
-        customUrlField = new JBTextField("", 32);
-        p.add(customUrlField, gbc);
-        gbc.gridwidth = 1;
-
-        // User & Password
-        gbc.gridx = 0; gbc.gridy = 1;
-        p.add(new JBLabel("User:"), gbc);
-        gbc.gridx = 1; gbc.gridy = 1;
-        customUrlUserField = new JBTextField("", 14);
-        p.add(customUrlUserField, gbc);
-
-        gbc.gridx = 2; gbc.gridy = 1;
-        p.add(new JBLabel("Password:"), gbc);
-        gbc.gridx = 3; gbc.gridy = 1;
-        customUrlPasswordField = new JPasswordField(12);
-        p.add(customUrlPasswordField, gbc);
-
-        // Helper Note
-        gbc.gridx = 1; gbc.gridy = 2; gbc.gridwidth = 3;
-        JBLabel noteLabel = new JBLabel("<html><body width='300'>Enter the full JDBC connection string. Credentials entered above will be passed to the driver.</body></html>");
+        ConnectionFormPanel form = new ConnectionFormPanel();
+        customUrlField = new JBTextField("", 36);
+        form.addRow(0, "JDBC URL:", customUrlField, true);
+        customUrlUserField = ConnectionFormPanel.width(new JBTextField(), 220);
+        form.addRow(1, "User:", customUrlUserField, false);
+        customUrlPasswordField = ConnectionFormPanel.width(new JPasswordField(), 220);
+        form.addRow(2, "Password:", customUrlPasswordField, false);
+        JBLabel noteLabel = new JBLabel("<html><body width='360'>Enter the full JDBC connection string. Credentials entered above will be passed to the driver.</body></html>");
         noteLabel.setForeground(JBColor.GRAY);
-        noteLabel.setFont(noteLabel.getFont().deriveFont(Font.PLAIN, 11f));
-        p.add(noteLabel, gbc);
-
-        return p;
+        form.addRow(3, "", noteLabel, false);
+        return form;
     }
 
     private void setupListeners() {
