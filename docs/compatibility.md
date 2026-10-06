@@ -11,7 +11,7 @@ Production targets Java 21 and IntelliJ IDEA 2025.1 (build 251). Plugin Verifier
 | 2025.3 Unified/Ultimate | 253.28294.334 | Compatible |
 | 2026.2.3 Ultimate | 262.10968.63 | Compatible in earlier compatibility validation |
 
-The release workflow verifies its exact candidate against all three 2025 SDKs. Ordinary builds use the committed Gradle wrapper, with a pinned distribution checksum, and downloaded Maven/IntelliJ dependencies. See [script reference](../scripts/README.md) for optional verification helpers.
+The release workflow verifies its exact candidate against all three 2025 SDKs. Ordinary builds use the committed Gradle wrapper, with a pinned distribution checksum, and downloaded Maven/IntelliJ dependencies. See [script reference](SCRIPTS.md) for optional verification helpers.
 
 These results establish binary/API compatibility for the named builds. They do not establish every patch/future IDE release, interactive UI behavior, project-close behavior or dynamic unload. The Windows build/test path has been executed locally; hosted Linux/macOS builds are configured but await their first GitHub run.
 
@@ -39,4 +39,4 @@ The wizard selects bundled, downloaded or local-JAR drivers. Downloads are expli
 
 Test Connection reads DatabaseMetaData after authenticated connection and reports server/driver versions and elapsed time. It cannot reliably infer versions when authentication or protocol negotiation fails, and does not replace the chosen driver automatically.
 
-Legacy HSQLDB schema/SCRIPT handling and MySQL column-rename syntax were exercised by the matrix. HSQLDB multi-statement DDL is not atomic. Full CREATE reconstruction may be unavailable on older engines and is labeled partial. See [CONTRIBUTING](../CONTRIBUTING.md) for portable baseline tests.
+Legacy HSQLDB schema/SCRIPT handling and MySQL column-rename syntax were exercised by the matrix. HSQLDB multi-statement DDL is not atomic. Full CREATE reconstruction may be unavailable on older engines and is labeled partial. See [CONTRIBUTING](CONTRIBUTING.md) for portable baseline tests.

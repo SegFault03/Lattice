@@ -39,7 +39,7 @@ def patch_notes(changelog, version):
         content = "\n".join(sections.get(heading, [])).strip()
         if content and any(line.lstrip().startswith("- ") for line in content.splitlines()):
             return content
-    raise ValueError(f"Add patch notes for [{version}] or [Unreleased] in CHANGELOG.md")
+    raise ValueError(f"Add patch notes for [{version}] or [Unreleased] in docs/CHANGELOG.md")
 
 
 def git(root, *args):
@@ -67,7 +67,7 @@ def prepare(root, version, tag=None, repository=None, server="https://github.com
             raise ValueError("Release tag must be v followed by the release version")
         if git(root, "rev-parse", f"{tag}^{{commit}}") != git(root, "rev-parse", "HEAD"):
             raise ValueError("The release tag must point to the commit being built")
-    notes = patch_notes((root / "CHANGELOG.md").read_text(encoding="utf-8"), version)
+    notes = patch_notes((root / "docs/CHANGELOG.md").read_text(encoding="utf-8"), version)
     previous = previous_tag(root, version)
     commit_range = f"{previous}..HEAD" if previous else "HEAD"
     commits = git(root, "log", "--reverse", "--format=%H%x09%s", commit_range)

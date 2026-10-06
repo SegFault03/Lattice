@@ -9,7 +9,7 @@ Run **Build, test and release → Run workflow** on the intended branch to valid
 ## Prepare a version
 
 1. Update `pluginVersion` in `gradle.properties` for ordinary local builds.
-2. Move relevant `CHANGELOG.md` entries into a matching version section, including any prerelease suffix, and keep an Unreleased section for future changes.
+2. Move relevant `docs/CHANGELOG.md` entries into a matching version section, including any prerelease suffix, and keep an Unreleased section for future changes.
 3. Run `python scripts/test.py --live --mysql --hsqldb --build` with the isolated fixtures, plus the Python tooling tests and compatibility checks.
 4. Review the packaged plugin and commit the changes.
 5. Create and push a new annotated tag, for example:
@@ -48,6 +48,6 @@ python scripts/check-release-archive.py build/distributions/Lattice-1.0.0.zip --
 python scripts/verify-plugin.py build/distributions/Lattice-1.0.0.zip --ide-version 2025.1
 ```
 
-Use `--tag vX.Y.Z` when the local tag exists and points to HEAD. Scripts generate files locally and never publish. The same commands work on Windows, Linux and macOS. Use python3 if required by your Python installation. Set JAVA_HOME to JDK 21; Docker must be running for the owned MySQL fixture. See scripts/README.md for cache and optional SDK overrides.
+Use `--tag vX.Y.Z` when the local tag exists and points to HEAD. Scripts generate files locally and never publish. The same commands work on Windows, Linux and macOS. Use python3 if required by your Python installation. Set JAVA_HOME to JDK 21; Docker must be running for the owned MySQL fixture. See the [script reference](SCRIPTS.md) for cache and optional SDK overrides.
 
 For dependency upgrades, update Gradle dependencies, bundled fallback JARs, third-party notices/license texts and the pinned corresponding-source URL/checksum together.

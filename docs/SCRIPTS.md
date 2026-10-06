@@ -59,4 +59,4 @@ Default user plugin locations follow [JetBrains' IDE directory documentation](ht
 
 Downloaded development assets use the OS user-cache directory: LocalAppData on Windows, Library/Caches on macOS, XDG_CACHE_HOME or ~/.cache on Linux. Set `LATTICE_DEV_CACHE` or pass a script's `--cache` override to relocate downloads. Build outputs remain in ignored `build/`.
 
-The root `gradlew` / `gradlew.bat` are the standard Gradle wrapper launchers. Maintainer-specific SDK/legacy-server scripts are deliberately excluded from this repository and its history.
+The root `gradlew` / `gradlew.bat` are the standard Gradle wrapper launchers. Public helpers live in `scripts/`. Workstation-only runners belong in locally excluded `scripts/local/`, with private instructions in `docs/local/`; never force-add either directory. SDKs, legacy-server binaries and their asset-management scripts remain outside this repository and its history. See the [documentation index](README.md) for the project layout.

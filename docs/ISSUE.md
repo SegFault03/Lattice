@@ -14,4 +14,4 @@ For a bug, include:
 
 For a feature, describe the task you want to complete, the current obstacle and the proposed behavior. UI screenshots may help, after removing private information.
 
-Security concerns should follow [SECURITY](SECURITY.md) rather than a public bug report. Compatibility claims and known limits are documented in [README](README.md) and the [compatibility report](docs/compatibility.md).
+Security concerns should follow [SECURITY](SECURITY.md) rather than a public bug report. Compatibility claims and known limits are documented in [README](../README.md) and the [compatibility report](compatibility.md).
