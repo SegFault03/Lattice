@@ -37,7 +37,7 @@ public final class WrapLayout extends FlowLayout {
                 Component m = target.getComponent(i);
                 if (m.isVisible()) {
                     Dimension d = preferred ? m.getPreferredSize() : m.getMinimumSize();
-                    if (rowWidth > 0 && rowWidth + hgap + d.width > maxWidth) {
+                    if (rowWidth > 0 && rowWidth + d.width > maxWidth) {
                         dim.width = Math.max(dim.width, rowWidth);
                         dim.height += rowHeight + vgap;
                         rowWidth = 0;

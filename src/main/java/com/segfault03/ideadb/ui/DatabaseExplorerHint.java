@@ -9,7 +9,7 @@ import java.awt.*;
 
 /** Contextual hint shown only when a table is selected. */
 final class DatabaseExplorerHint extends JPanel {
-    private final JBLabel label = new JBLabel("Double-click table to open in editor tab");
+    private final JBLabel label = new JBLabel("Double-click a table to view and edit data");
 
     DatabaseExplorerHint() {
         super(new BorderLayout());

@@ -10,11 +10,24 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 
 class EmptyConnectionPanelTest {
+    @Test void databaseChoiceDispatchesBothTypes() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            java.util.List<com.segfault03.ideadb.model.DatabaseType> choices = new java.util.ArrayList<>();
+            JPopupMenu menu = DatabaseUi.connectionMenu(choices::add);
+            assertEquals(2, menu.getComponentCount());
+            for (Component item : menu.getComponents()) ((JMenuItem)item).doClick(0);
+            assertEquals(java.util.List.of(com.segfault03.ideadb.model.DatabaseType.MYSQL,
+                    com.segfault03.ideadb.model.DatabaseType.HSQLDB), choices);
+        });
+    }
     @Test
-    void promptStaysCenteredAndLinkOpensTheConnectionDialog() throws Exception {
+    void promptStaysCenteredAndLinkAnchorsTheDatabaseChoice() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             AtomicInteger opened = new AtomicInteger();
-            EmptyConnectionPanel panel = new EmptyConnectionPanel(opened::incrementAndGet);
+            EmptyConnectionPanel panel = new EmptyConnectionPanel(anchor -> {
+                assertInstanceOf(JButton.class, anchor);
+                opened.incrementAndGet();
+            });
             for (int width : new int[]{260, 400}) {
                 panel.setSize(width, 400);
                 panel.doLayout();
@@ -34,7 +47,7 @@ class EmptyConnectionPanelTest {
     @Test
     void mouseAndDialogFocusRestorationLeaveNoOutlineButKeyboardTraversalKeepsItsCue() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
-            EmptyConnectionPanel panel = new EmptyConnectionPanel(() -> {});
+            EmptyConnectionPanel panel = new EmptyConnectionPanel(c -> {});
             JButton link = (JButton) panel.getComponent(1);
             assertTrue(link.isFocusable(), "The link remains keyboard accessible");
             assertFalse(link.isFocusPainted());

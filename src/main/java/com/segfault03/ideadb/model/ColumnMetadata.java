@@ -58,7 +58,7 @@ public class ColumnMetadata {
             sb.append(" [NOT NULL]");
         }
         if (autoIncrement) {
-            sb.append(" [AI]");
+            sb.append(" [Auto]");
         }
         return sb.toString();
     }

@@ -13,6 +13,8 @@ public class Icons {
     public static final Icon COLUMN = loadIcon("/icons/column.svg", AllIcons.Nodes.DataColumn);
     public static final Icon KEY = loadIcon("/icons/key.svg", AllIcons.Nodes.ResourceBundle);
     public static final Icon CONSOLE = loadIcon("/icons/console.svg", AllIcons.Actions.Execute);
+    public static final Icon STOP = loadIcon("/icons/stop.svg", AllIcons.Actions.Cancel);
+    public static final Icon CLEAR = loadIcon("/icons/clear.svg", AllIcons.Actions.Cancel);
 
     private static Icon loadIcon(String path, Icon fallback) {
         try {

@@ -12,7 +12,7 @@ import java.awt.event.MouseEvent;
 
 /** Centered entry point for creating the first database connection. */
 final class EmptyConnectionPanel extends JPanel {
-    EmptyConnectionPanel(Runnable addConnection) {
+    EmptyConnectionPanel(java.util.function.Consumer<Component> addConnection) {
         super(new GridBagLayout());
         GridBagConstraints prompt = new GridBagConstraints();
         prompt.gridx = 0;
@@ -21,6 +21,9 @@ final class EmptyConnectionPanel extends JPanel {
         prompt.gridy = 1;
         prompt.insets = JBUI.insetsTop(8);
         ActionLink link = new ActionLink("Add a connection…");
+        link.setIcon(com.intellij.icons.AllIcons.General.ButtonDropTriangle);
+        link.setHorizontalTextPosition(SwingConstants.LEFT);
+        link.setToolTipText("Choose MySQL or HSQLDB");
         // Dialog focus restoration otherwise leaves the link's blue focus border visible
         // after a mouse click. Keep that indicator for keyboard traversal only.
         link.setFocusPainted(false);
@@ -41,7 +44,7 @@ final class EmptyConnectionPanel extends JPanel {
                 link.setFocusPainted(false);
             }
         });
-        link.addActionListener(e -> addConnection.run());
+        link.addActionListener(e -> addConnection.accept(link));
         add(link, prompt);
     }
 }

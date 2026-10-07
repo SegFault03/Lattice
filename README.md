@@ -22,6 +22,30 @@ Built with help from **Gemini 3.8**, **GPT-6 Luna** and **GPT-6.1 Sol**.
 - Server and driver version information through **Test Connection**.
 - Passwords and custom JDBC URLs stored through IntelliJ PasswordSafe.
 
+## Screenshots
+
+Previews use sample data. See [all UI screenshots](screenshots/) for light and dark variants.
+
+### Side panel
+
+![Database side panel with schemas, tables, views and columns](screenshots/side-panel.png)
+
+### Connection dialog
+
+![Connection dialog with grouped connection, authentication and driver settings](screenshots/connection-dialog.png)
+
+### Table view
+
+![Table data grid with filtering and pagination](screenshots/table-view.png)
+
+### Editing a table
+
+![Table editor with modified cells, a new row and pending changes](screenshots/table-editing.png)
+
+### SQL console
+
+![SQL console with a query and its results](screenshots/sql-console.png)
+
 ## Requirements and compatibility
 
 IntelliJ IDEA **2025.1 or later**, Community or Ultimate/unified editions, using the IDE's Java 21+ runtime. Windows, Linux and macOS are intended targets; hosted checks cover all three platforms. Interactive IDE testing remains pending.
@@ -85,6 +109,8 @@ Use `python3` if that is your system's Python command. All optional development/
 
 ### Quick local UI testing
 
+To preview the welcome screen, side panel, connection and schema dialogs, table editor/viewer and SQL console without launching IDEA, run `python scripts/ui-preview.py` with JDK 21 and the cached IntelliJ SDK, then open `build/ui-preview/index.html`. Every run refreshes the tracked PNGs in `screenshots/`, including the five fixed filenames above. Commit updated screenshots with UI changes. See [UI previews](docs/UI_PREVIEW.md) for setup, theme limitations and layout review notes. The [UI copy review](docs/UI_REVIEW.md) records label, icon and warning conventions.
+
 To run the tooling and pure Java tests, build the ZIP, find an installed IntelliJ IDEA, and deploy the freshly built plugin:
 
 ```text
@@ -117,6 +143,7 @@ See [CONTRIBUTING](docs/CONTRIBUTING.md) to use existing isolated fixtures. Gene
 | `.github/` | GitHub issue forms, pull request template and workflows |
 | `assets/`, `licenses/`, `lib/` | Branding, dependency license texts and fallback-test JDBC JARs |
 | `build/` | Ignored generated output, distribution ZIPs and validation reports |
+| `screenshots/` | Tracked UI previews and the five stable README images |
 
 Workstation-only helpers and notes live in locally excluded `scripts/local/` and `docs/local/`. README, LICENSE, agent instructions and the Gradle wrapper launchers retain their root entry points.
 

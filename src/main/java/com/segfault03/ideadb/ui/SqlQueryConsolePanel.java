@@ -7,9 +7,8 @@ import com.intellij.ui.JBColor;
 import com.intellij.ui.JBSplitter;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBScrollPane;
-import com.intellij.ui.components.JBTabbedPane;
 import com.intellij.ui.components.JBTextArea;
-import com.intellij.ui.table.JBTable;
+import com.intellij.util.ui.JBUI;
 import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.model.QueryResult;
 import com.segfault03.ideadb.model.QueryHistoryEntry;
@@ -21,7 +20,6 @@ import com.segfault03.ideadb.service.DatabaseSession;
 import javax.swing.*;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
-import javax.swing.table.JTableHeader;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
@@ -31,8 +29,6 @@ import java.util.List;
 
 public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     private static final JBColor NORMAL_MSG_COLOR = new JBColor(new Color(40, 40, 40), new Color(200, 200, 200));
-    private static final JBColor ERROR_MSG_COLOR = new JBColor(new Color(200, 40, 40), new Color(255, 107, 107));
-    private static final JBColor SUCCESS_MSG_COLOR = new JBColor(new Color(30, 140, 60), new Color(98, 181, 67));
     private final com.segfault03.ideadb.service.DatabaseTaskScope tasks=com.segfault03.ideadb.service.DatabaseTaskService.getInstance().newScope();
     private final Project project;
     private final ConnectionConfig config;
@@ -48,8 +44,8 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     private JBTextArea editorArea;
     private JButton runBtn;
     private JComboBox<QueryHistoryEntry> historyCombo;
-    private JBTabbedPane resultsTabs;
-    private JBTable resultsTable;
+    private JTabbedPane resultsTabs;
+    private DatabaseTable resultsTable;
     private DefaultTableModel resultsModel;
     private JBTextArea messagesArea;
     private JBLabel statusLabel;
@@ -67,12 +63,13 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     }
 
     private void initUI(List<String> allDatabases) {
-        // Toolbar
-        JPanel toolbar = new JPanel(new WrapLayout(FlowLayout.LEFT, 6, 4));
-
-        toolbar.add(new JBLabel("Database:"));
-        databaseCombo = new JComboBox<>();
-        databaseCombo.setPrototypeDisplayValue("database_name_1234567");
+        JPanel heading = new JPanel(new BorderLayout());
+        heading.setBorder(JBUI.Borders.customLineBottom(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR));
+        JPanel toolbar = new JPanel(new WrapLayout(FlowLayout.LEFT, JBUI.scale(4), JBUI.scale(4)));
+        toolbar.setBorder(JBUI.Borders.empty(4, 8));
+        databaseCombo = DatabaseInputs.comboBox();
+        databaseCombo.setPrototypeDisplayValue("database_name_123");
+        databaseCombo.setToolTipText("Database for the next query");
         if (allDatabases != null) {
             for (String db : allDatabases) {
                 databaseCombo.addItem(db);
@@ -88,38 +85,38 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
                 activeDatabase = selected.toString();
             }
         });
-        toolbar.add(databaseCombo);
-
-        toolbar.add(new JSeparator(SwingConstants.VERTICAL));
-
-        runBtn = new JButton("Run (Ctrl+Enter)", AllIcons.Actions.Execute);
+        int menuShortcut = GraphicsEnvironment.isHeadless() ? java.awt.event.InputEvent.CTRL_DOWN_MASK
+                : Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+        String runShortcut = (menuShortcut & java.awt.event.InputEvent.META_DOWN_MASK) != 0 ? "⌘Enter" : "Ctrl+Enter";
+        runBtn = DatabaseUi.action("Run", AllIcons.Actions.Execute, "Run selection or query (" + runShortcut + ")");
         runBtn.addActionListener(e -> executeCurrentSql());
-        toolbar.add(runBtn);
-        cancelBtn = new JButton("Cancel"); cancelBtn.setEnabled(false);
-        cancelBtn.addActionListener(e -> cancelExecution()); toolbar.add(cancelBtn);
-        toolbar.add(new JBLabel("Rows:"));
-        resultLimit = new JComboBox<>(new Integer[]{100,1000,10000}); resultLimit.setSelectedItem(1000); toolbar.add(resultLimit);
-
-        JButton clearBtn = new JButton("Clear");
+        cancelBtn = DatabaseUi.action("Stop", Icons.STOP, "Stop the running query");
+        cancelBtn.setEnabled(false);
+        cancelBtn.addActionListener(e -> cancelExecution());
+        resultLimit = DatabaseInputs.comboBox(new Integer[]{100, 1000, 10000});
+        resultLimit.setSelectedItem(1000);
+        resultLimit.setToolTipText("Maximum rows returned by the next query");
+        JButton clearBtn = DatabaseUi.action("Clear", Icons.CLEAR, "Clear query text");
         clearBtn.addActionListener(e -> editorArea.setText(""));
-        toolbar.add(clearBtn);
+        toolbar.add(labeledPicker("Database", databaseCombo));
+        toolbar.add(DatabaseUi.group(DatabaseUi.separator(), runBtn, cancelBtn));
+        toolbar.add(DatabaseUi.group(DatabaseUi.separator(), clearBtn));
+        heading.add(toolbar, BorderLayout.NORTH);
 
-        toolbar.add(new JSeparator(SwingConstants.VERTICAL));
-
-        toolbar.add(new JBLabel("History:"));
-        historyCombo = new JComboBox<>(new QueryHistoryEntry[]{new QueryHistoryEntry(null)});
-        historyCombo.setPrototypeDisplayValue(new QueryHistoryEntry("SELECT columns FROM table WHERE ..."));
+        JPanel recall = new JPanel(new WrapLayout(FlowLayout.LEFT, JBUI.scale(4), JBUI.scale(4)));
+        recall.setBorder(JBUI.Borders.empty(0, 8, 4, 8));
+        historyCombo = DatabaseInputs.comboBox(new QueryHistoryEntry[]{new QueryHistoryEntry(null)});
+        historyCombo.setPrototypeDisplayValue(new QueryHistoryEntry("SELECT … FROM customers"));
         historyCombo.addActionListener(e -> {
             if (historyCombo.getSelectedIndex() > 0) {
                 QueryHistoryEntry query = (QueryHistoryEntry) historyCombo.getSelectedItem();
                 if (query != null && query.sql()!=null) setSqlText(query.sql());
             }
         });
-        toolbar.add(historyCombo);
-
-        toolbar.add(new JBLabel("Snippets:"));
-        JComboBox<String> snippetCombo = new JComboBox<>(new String[]{
-                "(Insert Template)",
+        historyCombo.setToolTipText("Restore a recent query into the editor");
+        recall.add(labeledPicker("History", historyCombo));
+        JComboBox<String> snippetCombo = DatabaseInputs.comboBox(new String[]{
+                "Choose a template…",
                 "SELECT * FROM ... LIMIT 50;",
                 "SELECT COUNT(*) FROM ...;",
                 "INSERT INTO ... VALUES (...);",
@@ -131,24 +128,29 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
             if (snippetCombo.getSelectedIndex() > 0) {
                 String snip = (String) snippetCombo.getSelectedItem();
                 editorArea.insert(snip + "\n", editorArea.getCaretPosition());
+                snippetCombo.setSelectedIndex(0);
             }
         });
-        toolbar.add(snippetCombo);
-
-        add(toolbar, BorderLayout.NORTH);
+        snippetCombo.setPrototypeDisplayValue("UPDATE … SET … WHERE …");
+        snippetCombo.setToolTipText("Insert a SQL template at the caret");
+        recall.add(labeledPicker("Template", snippetCombo));
+        heading.add(recall, BorderLayout.CENTER);
+        add(heading, BorderLayout.NORTH);
 
         // Center Splitter: Editor on top, Results on bottom
-        JBSplitter splitter = new JBSplitter(true, 0.45f);
+        JBSplitter splitter = new JBSplitter(true, 0.33f);
+        splitter.setDividerWidth(JBUI.scale(4));
 
         // Editor
         editorArea = new JBTextArea();
-        editorArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
+        editorArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, getFont().getSize()));
+        editorArea.setMargin(JBUI.insets(10, 12));
         editorArea.setTabSize(4);
-        editorArea.setText("-- SQL Query Console (" + config.getName() + ")\n-- Write your query and press Ctrl+Enter to execute\n\n");
+        editorArea.setText("-- " + config.getName() + "\n-- Write your query and press " + runShortcut + " to execute\n\n");
         editorArea.setCaretPosition(editorArea.getText().length());
 
         // Keyboard Shortcut: Ctrl+Enter / Cmd+Enter to Run
-        KeyStroke runKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx());
+        KeyStroke runKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, menuShortcut);
         editorArea.getInputMap().put(runKeyStroke, "runSql");
         editorArea.getActionMap().put("runSql", new AbstractAction() {
             @Override
@@ -157,42 +159,66 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
             }
         });
 
+        JPanel queryPanel = new JPanel(new BorderLayout());
+        JPanel queryCaption = new JPanel(new WrapLayout(FlowLayout.LEFT, JBUI.scale(8), JBUI.scale(4)));
+        queryCaption.setBorder(JBUI.Borders.empty(2, 8));
+        JBLabel queryTitle = new JBLabel("SQL query");
+        queryTitle.setFont(queryTitle.getFont().deriveFont(Font.BOLD));
+        queryCaption.add(queryTitle);
+        JBLabel shortcutHint = new JBLabel(runShortcut + " · Run selection or query");
+        shortcutHint.setForeground(JBColor.namedColor("Label.infoForeground", JBColor.GRAY));
+        queryCaption.add(shortcutHint);
+        queryPanel.add(queryCaption, BorderLayout.NORTH);
         JBScrollPane editorScroll = new JBScrollPane(editorArea);
-        splitter.setFirstComponent(editorScroll);
+        editorScroll.setBorder(JBUI.Borders.empty());
+        editorScroll.setRowHeaderView(new SqlLineNumbers(editorArea));
+        queryPanel.add(editorScroll, BorderLayout.CENTER);
+        splitter.setFirstComponent(queryPanel);
 
         // Results Pane
-        resultsTabs = new JBTabbedPane();
-        resultsTabs.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
+        // Let the native delegate paint tab labels instead of custom JBTabbedPane label components.
+        resultsTabs = new JTabbedPane();
+        resultsTabs.setTabLayoutPolicy(JTabbedPane.WRAP_TAB_LAYOUT);
 
         resultsModel = new ReadOnlyResultModel();
-        resultsTable = new JBTable(resultsModel);
-        resultsTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
-        resultsTable.setRowHeight(24);
-        resultsTable.setShowGrid(true);
-        resultsTable.setGridColor(new JBColor(new Color(230, 230, 230), new Color(60, 63, 65)));
+        resultsTable = new DatabaseTable(resultsModel);
         resultsTable.setDefaultRenderer(Object.class, new ConsoleResultCellRenderer());
-
-        JTableHeader header = resultsTable.getTableHeader();
-        header.setReorderingAllowed(false);
-        header.setPreferredSize(new Dimension(header.getPreferredSize().width, 28));
-        header.setDefaultRenderer(new ConsoleTableHeaderRenderer());
-
-        resultsTabs.addTab("Results", new JBScrollPane(resultsTable));
+        resultsTable.getEmptyText().setText("Run a query to see results");
+        JBScrollPane resultsScroll = resultsTable.createScrollPane();
+        resultsTabs.addTab("Results", resultsScroll);
 
         messagesArea = new JBTextArea();
         messagesArea.setEditable(false);
         messagesArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         messagesArea.setForeground(NORMAL_MSG_COLOR);
-        resultsTabs.addTab("Messages", new JBScrollPane(messagesArea));
+        messagesArea.setMargin(JBUI.insets(10, 12));
+        JBScrollPane messagesScroll = new JBScrollPane(messagesArea);
+        messagesScroll.setBorder(JBUI.Borders.empty());
+        resultsTabs.addTab("Messages", messagesScroll);
 
         splitter.setSecondComponent(resultsTabs);
         add(splitter, BorderLayout.CENTER);
 
         // South: Status Bar
-        JPanel statusBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
-        statusLabel = new JBLabel("Ready");
-        statusBar.add(statusLabel);
+        JPanel statusBar = new JPanel(new BorderLayout(JBUI.scale(12), 0));
+        statusBar.setBorder(BorderFactory.createCompoundBorder(
+                JBUI.Borders.customLineTop(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR), JBUI.Borders.empty(4, 12)));
+        statusLabel = new JBLabel("Ready") {
+            @Override public void setText(String text) { super.setText(text); setToolTipText(text); }
+        };
+        statusBar.add(statusLabel, BorderLayout.CENTER);
+        statusBar.add(DatabaseUi.group(new JBLabel("Max rows"), resultLimit), BorderLayout.EAST);
         add(statusBar, BorderLayout.SOUTH);
+    }
+
+    private JPanel labeledPicker(String text, JComponent picker) {
+        JBLabel label = new JBLabel(text);
+        int width = 0;
+        for (String title : new String[]{"Database", "History", "Template"})
+            width = Math.max(width, new JBLabel(title).getPreferredSize().width);
+        label.setPreferredSize(new Dimension(width, label.getPreferredSize().height));
+        label.setLabelFor(picker);
+        return DatabaseUi.group(label, picker);
     }
 
     public void setSqlText(String sql) {
@@ -216,10 +242,8 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         final DataService.QueryOptions options = new DataService.QueryOptions((Integer) resultLimit.getSelectedItem(),60,100);
         final com.segfault03.ideadb.service.QueryExecution current = new com.segfault03.ideadb.service.QueryExecution();
         execution = current;
-        cancelBtn.setEnabled(true);
-        running = true;
-        runBtn.setEnabled(false);
-        statusLabel.setText("Executing query...");
+        setRunning(true);
+        DatabaseUi.status(statusLabel, "Running query…", DatabaseUi.Tone.BUSY);
 
         // Record history
         if (!queryHistory.contains(finalSql)) {
@@ -234,14 +258,10 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
 
                 SwingUtilities.invokeLater(() -> {
                     if (disposed) return;
-                    execution = null; cancelBtn.setEnabled(false);
-                    running = false;
-                    runBtn.setEnabled(true);
+                    execution = null;
+                    setRunning(false);
                     if (result.hasError()) {
-                        messagesArea.setText("ERROR: " + result.getError() + "\nElapsed: " + result.getExecutionTimeMs() + " ms");
-                        messagesArea.setForeground(ERROR_MSG_COLOR);
-                        resultsTabs.setSelectedIndex(1); // Switch to Messages tab
-                        statusLabel.setText("Query failed: " + result.getError());
+                        showQueryError(result.getError(), result.getExecutionTimeMs());
                     } else if (result.isResultSet()) {
                         messagesArea.setText(result.getMessage());
                         messagesArea.setForeground(NORMAL_MSG_COLOR);
@@ -250,34 +270,56 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
                         Object[][] values = result.getRows().stream().map(List::toArray).toArray(Object[][]::new);
                         resultsModel.setDataVector(values, result.getColumnNames().toArray());
 
-                        for (int i = 0; i < resultsTable.getColumnCount(); i++) {
-                            int headerWidth = resultsTable.getColumnModel().getColumn(i).getHeaderValue().toString().length() * 10 + 30;
-                            resultsTable.getColumnModel().getColumn(i).setPreferredWidth(Math.max(headerWidth, 90));
-                        }
+                        resultsTable.sizeColumnsToContent();
 
+                        resultsTabs.setToolTipTextAt(0, null);
                         resultsTabs.setTitleAt(0, "Results (" + result.getRows().size() + ")");
                         resultsTabs.setSelectedIndex(0); // Switch to Results tab
-                        statusLabel.setText(result.getMessage());
+                        DatabaseUi.status(statusLabel,
+                                result.isTruncated() ? result.getRows().size() + " rows · Limit reached" : result.getRows().size() + " rows · " + result.getExecutionTimeMs() + " ms",
+                                result.isTruncated() ? DatabaseUi.Tone.WARNING : DatabaseUi.Tone.SUCCESS);
+                        statusLabel.setToolTipText(result.getMessage());
                     } else {
                         messagesArea.setText(result.getMessage());
-                        messagesArea.setForeground(SUCCESS_MSG_COLOR);
+                        messagesArea.setForeground(NORMAL_MSG_COLOR);
                         resultsTabs.setSelectedIndex(1);
-                        statusLabel.setText(result.getMessage());
+                        DatabaseUi.status(statusLabel, result.getAffectedRows() + " rows affected · " + result.getExecutionTimeMs() + " ms", DatabaseUi.Tone.SUCCESS);
                     }
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
                     if (disposed) return;
-                    execution = null; cancelBtn.setEnabled(false);
-                    running = false;
-                    runBtn.setEnabled(true);
-                    messagesArea.setText("Exception: " + ex.getMessage());
-                    messagesArea.setForeground(ERROR_MSG_COLOR);
-                    resultsTabs.setSelectedIndex(1);
-                    statusLabel.setText("Execution error: " + ex.getMessage());
+                    execution = null;
+                    setRunning(false);
+                    showQueryError(ex.getMessage(), -1);
                 });
             }
         });
+    }
+
+    private void showQueryError(String error, long elapsedMs) {
+        String detail = java.util.Objects.requireNonNullElse(error, "No error details were returned.");
+        messagesArea.setText("Query failed\n\n" + detail + (elapsedMs >= 0 ? "\n\nElapsed: " + elapsedMs + " ms" : ""));
+        messagesArea.setForeground(NORMAL_MSG_COLOR);
+        resultsTabs.setSelectedIndex(1);
+        if (resultsModel.getRowCount() > 0) {
+            resultsTabs.setTitleAt(0, "Previous results");
+            resultsTabs.setToolTipTextAt(0, "These results are from the last successful query");
+        }
+        DatabaseUi.status(statusLabel, "Query failed · See Messages for details", DatabaseUi.Tone.ERROR);
+        statusLabel.setToolTipText(detail);
+    }
+
+    private void setRunning(boolean running) {
+        this.running = running;
+        if (running && resultsModel.getRowCount() > 0) {
+            resultsTabs.setTitleAt(0, "Previous results");
+            resultsTabs.setToolTipTextAt(0, "These results are from the last successful query");
+        }
+        runBtn.setEnabled(!running);
+        cancelBtn.setEnabled(running);
+        databaseCombo.setEnabled(!running);
+        resultLimit.setEnabled(!running);
     }
 
     private void cancelExecution() {
@@ -300,51 +342,21 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     }
 
     private static class ConsoleResultCellRenderer extends DefaultTableCellRenderer {
-        private final JBColor oddBg = new JBColor(new Color(245, 247, 250), new Color(43, 45, 48));
-        private final JBColor nullFg = new JBColor(new Color(150, 150, 150), new Color(125, 125, 125));
+        private final JBColor nullFg = new JBColor(0x777D86, 0xA0A5AE);
 
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
                                                        boolean hasFocus, int row, int column) {
-            Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-            if (isSelected) {
-                c.setBackground(table.getSelectionBackground());
-                c.setForeground(table.getSelectionForeground());
-                setFont(getFont().deriveFont(Font.PLAIN));
-            } else {
-                c.setBackground(row % 2 == 0 ? table.getBackground() : oddBg);
-                if (value == null) {
-                    c.setForeground(nullFg);
-                    setFont(getFont().deriveFont(Font.ITALIC));
-                } else {
-                    c.setForeground(table.getForeground());
-                    setFont(getFont().deriveFont(Font.PLAIN));
-                }
-            }
-            if (value == null) {
-                setText("<null>");
-            }
-            return c;
-        }
-    }
-
-    private static class ConsoleTableHeaderRenderer extends DefaultTableCellRenderer {
-        private final JBColor headerBg = new JBColor(new Color(232, 236, 242), new Color(48, 51, 56));
-        private final JBColor headerFg = new JBColor(new Color(30, 32, 36), new Color(220, 224, 230));
-        private final JBColor headerBorder = new JBColor(new Color(205, 210, 216), new Color(70, 73, 78));
-
-        @Override
-        public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
-                                                       boolean hasFocus, int row, int column) {
-            Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-            c.setBackground(headerBg);
-            c.setForeground(headerFg);
-            setFont(getFont().deriveFont(Font.BOLD, 12f));
-            setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createMatteBorder(0, 0, 2, 1, headerBorder),
-                    BorderFactory.createEmptyBorder(4, 8, 4, 8)
-            ));
-            return c;
+            super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+            setFont(table.getFont().deriveFont(value == null ? Font.ITALIC : Font.PLAIN));
+            setBackground(isSelected ? table.getSelectionBackground() : table.getBackground());
+            setForeground(isSelected ? table.getSelectionForeground() : value == null ? nullFg : table.getForeground());
+            setHorizontalAlignment(value instanceof Number ? SwingConstants.RIGHT : SwingConstants.LEFT);
+            setBorder(hasFocus ? BorderFactory.createCompoundBorder(
+                    JBUI.Borders.customLine(JBColor.namedColor("Component.focusColor", new JBColor(0x3574F0, 0x548AF7))),
+                    JBUI.Borders.empty(0, 7)) : JBUI.Borders.empty(0, 8));
+            if (value == null) setText("NULL");
+            return this;
         }
     }
 }
