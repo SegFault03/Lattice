@@ -39,6 +39,7 @@ import java.util.List;
 
 public class ConnectionDialog extends DialogWrapper {
     private final ConnectionConfig config;
+    private final boolean showUrlPreview;
     private JPanel rootPanel;
     private JPanel driverDetails;
     private final ActionLink driverToggle = new ActionLink("Driver options ▸");
@@ -96,7 +97,7 @@ public class ConnectionDialog extends DialogWrapper {
     private JBTextField customUrlUserField;
     private JPasswordField customUrlPasswordField;
 
-    // Preview and Action components
+    // Preview and action components
     private JBLabel urlPreviewLabel;
     private final ActionLink testButton = new ActionLink("Test connection");
     private final JBLabel testStatusLabel = new JBLabel("");
@@ -108,12 +109,13 @@ public class ConnectionDialog extends DialogWrapper {
     public ConnectionDialog(@Nullable Project project, ConnectionConfig config, boolean newConnection) {
         super(project, true);
         this.config = config.copy();
+        this.showUrlPreview = !newConnection;
         testButton.setAutoHideOnDisable(false);
         setTitle(newConnection ? "New connection" : "Edit connection");
         setOKButtonText(newConnection ? "Add connection" : "Save");
         init();
         loadValues();
-        updatePreview();
+        refreshConnectionState();
         uiInitialized = true;
         updateTestAvailability();
         // A retained driver is a deliberate choice, so reveal it instead of hiding it behind the summary.
@@ -165,23 +167,25 @@ public class ConnectionDialog extends DialogWrapper {
         mainCardPanel.add(createCustomUrlPanel(), "JDBC_URL");
         addPart(1, mainCardPanel);
 
-        JPanel urlSection = new JPanel(new BorderLayout());
-        urlSection.add(DatabaseUi.section("JDBC URL"), BorderLayout.NORTH);
-        JPanel previewPanel = new JPanel(new BorderLayout(JBUI.scale(8), 0));
-        urlPreviewLabel = new JBLabel();
-        urlPreviewLabel.setFont(new Font(Font.MONOSPACED, Font.PLAIN, urlPreviewLabel.getFont().getSize()));
-        urlPreviewLabel.setPreferredSize(JBUI.size(320, 28));
-        JButton copyUrl = DatabaseUi.action("", AllIcons.Actions.Copy, "Copy JDBC URL");
-        copyUrl.addActionListener(e -> {
-            if (urlPreviewLabel.getToolTipText() != null)
-                Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(urlPreviewLabel.getToolTipText()), null);
-        });
-        previewPanel.add(urlPreviewLabel, BorderLayout.CENTER);
-        previewPanel.add(copyUrl, BorderLayout.EAST);
-        urlSection.add(previewPanel, BorderLayout.CENTER);
-        addPart(2, urlSection);
+        if (showUrlPreview) {
+            JPanel urlSection = new JPanel(new BorderLayout());
+            urlSection.add(DatabaseUi.section("JDBC URL"), BorderLayout.NORTH);
+            JPanel previewPanel = new JPanel(new BorderLayout(JBUI.scale(8), 0));
+            urlPreviewLabel = new JBLabel();
+            urlPreviewLabel.setFont(new Font(Font.MONOSPACED, Font.PLAIN, urlPreviewLabel.getFont().getSize()));
+            urlPreviewLabel.setPreferredSize(JBUI.size(320, 28));
+            JButton copyUrl = DatabaseUi.action("", AllIcons.Actions.Copy, "Copy JDBC URL");
+            copyUrl.addActionListener(e -> {
+                if (urlPreviewLabel.getToolTipText() != null)
+                    Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(urlPreviewLabel.getToolTipText()), null);
+            });
+            previewPanel.add(urlPreviewLabel, BorderLayout.CENTER);
+            previewPanel.add(copyUrl, BorderLayout.EAST);
+            urlSection.add(previewPanel, BorderLayout.CENTER);
+            addPart(2, urlSection);
+        }
 
-        JPanel driverSection = new JPanel(new BorderLayout());
+        JPanel driverSection = new JPanel(new BorderLayout(0, JBUI.scale(3)));
         driverSection.add(DatabaseUi.section("Driver"), BorderLayout.NORTH);
         JPanel driverBody = new JPanel(new BorderLayout(0, JBUI.scale(6)));
         JPanel summaryRow = new JPanel(new BorderLayout(JBUI.scale(8), 0));
@@ -216,7 +220,8 @@ public class ConnectionDialog extends DialogWrapper {
         driverBody.add(driverDetails, BorderLayout.CENTER);
         driverDetails.setVisible(false);
         driverSection.add(driverBody, BorderLayout.CENTER);
-        addPart(3, driverSection);
+        int driverRow = showUrlPreview ? 3 : 2;
+        addPart(driverRow, driverSection);
         driverSourceCombo.addActionListener(e -> {
             showDriverCard((DriverSource) driverSourceCombo.getSelectedItem());
             updateDriverStatus();
@@ -228,7 +233,7 @@ public class ConnectionDialog extends DialogWrapper {
         refillDriverVersions();
         setupListeners();
         GridBagConstraints space = new GridBagConstraints();
-        space.gridy = 4;
+        space.gridy = driverRow + 1;
         space.weighty = 1;
         space.fill = GridBagConstraints.VERTICAL;
         rootPanel.add(Box.createVerticalGlue(), space);
@@ -281,17 +286,22 @@ public class ConnectionDialog extends DialogWrapper {
 
     @Override
     protected JComponent createSouthPanel() {
-        JPanel south = new JPanel(new BorderLayout(JBUI.scale(12), JBUI.scale(6)));
-        south.setBorder(BorderFactory.createCompoundBorder(
-                JBUI.Borders.customLineTop(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR),
-                JBUI.Borders.empty(12, 8, 0, 8)));
+        JPanel south = new JPanel(new BorderLayout(0, JBUI.scale(6)));
+        south.setBorder(JBUI.Borders.empty(0, 8, 0, 8));
         testStatusLabel.setFont(testStatusLabel.getFont().deriveFont(Font.PLAIN));
         testStatusLabel.setVisible(false);
         south.add(testStatusLabel, BorderLayout.NORTH);
         testButton.addActionListener(e -> doTestConnection());
-        south.add(testButton, BorderLayout.WEST);
+        JPanel actions = new JPanel(new BorderLayout(JBUI.scale(12), JBUI.scale(6)));
+        actions.setBorder(BorderFactory.createCompoundBorder(
+                JBUI.Borders.empty(24, 0, 0, 0),
+                BorderFactory.createCompoundBorder(
+                        JBUI.Borders.customLineTop(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR),
+                        JBUI.Borders.empty(12, 0, 0, 0))));
+        actions.add(testButton, BorderLayout.WEST);
         JComponent defaultButtons = super.createSouthPanel();
-        if (defaultButtons != null) south.add(defaultButtons, BorderLayout.EAST);
+        if (defaultButtons != null) actions.add(defaultButtons, BorderLayout.EAST);
+        south.add(actions, BorderLayout.CENTER);
         return south;
     }
 
@@ -377,13 +387,13 @@ public class ConnectionDialog extends DialogWrapper {
         // Toggle between Standard and Custom JDBC URL modes
         standardRadio.addActionListener(e -> {
             mainCardLayout.show(mainCardPanel, "STANDARD");
-            updatePreview();
+            refreshConnectionState();
             refreshFormSize();
         });
 
         customUrlRadio.addActionListener(e -> {
             mainCardLayout.show(mainCardPanel, "JDBC_URL");
-            updatePreview();
+            refreshConnectionState();
             refreshFormSize();
         });
 
@@ -404,7 +414,7 @@ public class ConnectionDialog extends DialogWrapper {
                     }
                 }
                 refillDriverVersions();
-                updatePreview();
+                refreshConnectionState();
                 refreshFormSize();
             }
         });
@@ -414,15 +424,15 @@ public class ConnectionDialog extends DialogWrapper {
             if (e.getStateChange() == ItemEvent.SELECTED) {
                 HsqlMode mode = (HsqlMode) hsqlModeCombo.getSelectedItem();
                 hsqlSubCardLayout.show(hsqlSubCardPanel, mode.name());
-                updatePreview();
+                refreshConnectionState();
                 refreshFormSize();
             }
         });
 
         DocumentListener dl = new DocumentListener() {
-            public void insertUpdate(DocumentEvent e) { updatePreview(); }
-            public void removeUpdate(DocumentEvent e) { updatePreview(); }
-            public void changedUpdate(DocumentEvent e) { updatePreview(); }
+            public void insertUpdate(DocumentEvent e) { refreshConnectionState(); }
+            public void removeUpdate(DocumentEvent e) { refreshConnectionState(); }
+            public void changedUpdate(DocumentEvent e) { refreshConnectionState(); }
         };
 
         mysqlHostField.getDocument().addDocumentListener(dl);
@@ -437,11 +447,11 @@ public class ConnectionDialog extends DialogWrapper {
         hsqlServerDbField.getDocument().addDocumentListener(dl);
         hsqlUserField.getDocument().addDocumentListener(dl);
 
-        // Auto-detect type when typing custom JDBC URL
+        // Auto-detect type when typing a custom JDBC URL.
         customUrlField.getDocument().addDocumentListener(new DocumentListener() {
-            public void insertUpdate(DocumentEvent e) { checkUrlPrefix(); updatePreview(); }
-            public void removeUpdate(DocumentEvent e) { checkUrlPrefix(); updatePreview(); }
-            public void changedUpdate(DocumentEvent e) { checkUrlPrefix(); updatePreview(); }
+            public void insertUpdate(DocumentEvent e) { checkUrlPrefix(); refreshConnectionState(); }
+            public void removeUpdate(DocumentEvent e) { checkUrlPrefix(); refreshConnectionState(); }
+            public void changedUpdate(DocumentEvent e) { checkUrlPrefix(); refreshConnectionState(); }
 
             private void checkUrlPrefix() {
                 String u = customUrlField.getText().trim().toLowerCase(java.util.Locale.ROOT);
@@ -454,21 +464,26 @@ public class ConnectionDialog extends DialogWrapper {
         });
 
         customUrlUserField.getDocument().addDocumentListener(dl);
-        driverJarField.getTextField().getDocument().addDocumentListener(dl);
+        DocumentListener driverSelectionListener = new DocumentListener() {
+            public void insertUpdate(DocumentEvent e) { updateDriverStatus(); }
+            public void removeUpdate(DocumentEvent e) { updateDriverStatus(); }
+            public void changedUpdate(DocumentEvent e) { updateDriverStatus(); }
+        };
+        driverJarField.getTextField().getDocument().addDocumentListener(driverSelectionListener);
         if (driverVersionCombo.getEditor().getEditorComponent() instanceof JTextField versionField)
-            versionField.getDocument().addDocumentListener(dl);
+            versionField.getDocument().addDocumentListener(driverSelectionListener);
         nameField.getDocument().addDocumentListener(dl);
     }
 
-    private void updatePreview() {
+    private void refreshConnectionState() {
         updateTestAvailability();
+        if (urlPreviewLabel == null) return;
         if (customUrlRadio.isSelected() && customUrlField.getText().trim().isEmpty()) {
             urlPreviewLabel.setText("Enter a JDBC URL");
             urlPreviewLabel.setToolTipText(null);
             return;
         }
-        ConnectionConfig temp = createTempConfig();
-        String resolvedUrl = temp.buildJdbcUrl();
+        String resolvedUrl = createTempConfig().buildJdbcUrl();
         urlPreviewLabel.setText(resolvedUrl);
         urlPreviewLabel.setToolTipText(resolvedUrl);
     }
@@ -575,7 +590,14 @@ public class ConnectionDialog extends DialogWrapper {
         if (driverBusy || driverSourceCombo == null) return;
         DatabaseType type = (DatabaseType) typeCombo.getSelectedItem();
         DriverSource source = (DriverSource)driverSourceCombo.getSelectedItem();
-        driverSummary.setText(type.getDisplayName() + (source == DriverSource.BUNDLED ? " " + selectedBundledLabel() : "") + " · " + source);
+        if (source == null) return;
+        String selectedDriver = switch (source) {
+            case BUNDLED -> formatDriverLabel(type, selectedBundledLabel());
+            case DOWNLOAD -> formatDriverLabel(type, selectedDriverVersion());
+            case LOCAL_JAR -> selectedLocalDriverLabel(type);
+        };
+        driverSummary.setText(type.getDisplayName() + " · " + source
+                + (selectedDriver.isBlank() ? "" : " · " + selectedDriver));
         driverSummary.setToolTipText(driverSummary.getText());
         if (source == DriverSource.BUNDLED) {
             var selected = (InstalledDriver) bundledDriverCombo.getSelectedItem();
@@ -594,7 +616,8 @@ public class ConnectionDialog extends DialogWrapper {
         updateTestAvailability();
     }
     private String selectedDriverVersion() {
-        return String.valueOf(driverVersionCombo.getEditor().getItem()).trim();
+        Object selected = driverVersionCombo.getEditor().getItem();
+        return selected == null ? "" : selected.toString().trim();
     }
     /** Blank means the packaged driver; a version names a retained download. */
     private String selectedBundledVersion() {
@@ -603,7 +626,40 @@ public class ConnectionDialog extends DialogWrapper {
     }
     private String selectedBundledLabel() {
         var selected = (InstalledDriver) bundledDriverCombo.getSelectedItem();
-        return selected == null || selected.version().isBlank() ? "driver" : selected.version();
+        return selected == null ? "" : selected.version();
+    }
+    private String formatDriverLabel(DatabaseType type, String version) {
+        String name = type == DatabaseType.MYSQL ? "MySQL Connector/J" : "HSQLDB";
+        return version == null || version.isBlank() ? name : name + " " + version;
+    }
+    private String selectedLocalDriverLabel(DatabaseType type) {
+        String pathText = driverJarField.getText().trim();
+        if (pathText.isEmpty()) return "";
+        try {
+            java.nio.file.Path path = java.nio.file.Path.of(pathText);
+            java.nio.file.Path fileName = path.getFileName();
+            if (fileName == null) return "";
+            String name = fileName.toString();
+            String version = DriverCatalog.versionOf(type, name);
+            if (version.isBlank() && java.nio.file.Files.isRegularFile(path)) {
+                try (java.util.jar.JarFile jar = new java.util.jar.JarFile(path.toFile())) {
+                    var manifest = jar.getManifest();
+                    var attributes = manifest == null ? null : manifest.getMainAttributes();
+                    if (attributes != null) {
+                        for (String attribute : List.of("Implementation-Version", "Bundle-Version", "Specification-Version")) {
+                            String value = attributes.getValue(attribute);
+                            if (value != null && !value.isBlank()) {
+                                version = value.trim();
+                                break;
+                            }
+                        }
+                    }
+                } catch (java.io.IOException ignored) { }
+            }
+            return version.isBlank() ? name : formatDriverLabel(type, version);
+        } catch (java.nio.file.InvalidPathException | SecurityException ignored) {
+            return "";
+        }
     }
     private void runDriverAction(boolean listOnly) {
         if (driverBusy || connectionBusy || isDisposed()) return;
@@ -707,7 +763,7 @@ public class ConnectionDialog extends DialogWrapper {
                                 hsqlServerDbField.setText(temp.getDatabaseName());
                                 hsqlUserField.setText(temp.getUser());
                             }
-                            updatePreview();
+                            refreshConnectionState();
                         }
                         DatabaseUi.status(testStatusLabel, "Connected · " + result.getDatabaseProductName() + " " + result.getDatabaseProductVersion(), DatabaseUi.Tone.SUCCESS);
                         testStatusLabel.setToolTipText("Driver: " + result.getDriverName() + " " + result.getDriverVersion() + "; " + result.getResponseTimeMs() + " ms");

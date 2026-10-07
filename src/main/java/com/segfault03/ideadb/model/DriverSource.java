@@ -2,7 +2,7 @@ package com.segfault03.ideadb.model;
 
 public enum DriverSource {
     /** The packaged driver, or a download already retained on this machine. */
-    BUNDLED("Bundled driver"),
+    BUNDLED("Available drivers"),
     /** Fetches a release from Maven Central once, then keeps it in the bundled list. */
     DOWNLOAD("Download a version"),
     LOCAL_JAR("Local JAR");
