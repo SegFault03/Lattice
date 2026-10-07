@@ -26,6 +26,9 @@ import javax.imageio.ImageIO;
 public final class UiPreview {
     static Path output;
     static final List<String> snapshots = new ArrayList<>();
+    static final Set<String> FEATURED_PREVIEWS = Set.of(
+            "side-panel-340", "connection-mysql-600", "table-1100", "table-new-row-1100", "sql-console-1100");
+    static boolean featuredOnly;
     static Object field(Object target, String name) throws Exception {
         Field field = target.getClass().getDeclaredField(name);
         field.setAccessible(true);
@@ -45,6 +48,7 @@ public final class UiPreview {
         component.setSize(width, height);
         for (int pass = 0; pass < 4; pass++) layout(component);
         verifyInputs(component);
+        if (featuredOnly && !FEATURED_PREVIEWS.contains(name.replaceFirst("^(light|dark)-", ""))) return;
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
         Graphics2D graphics = image.createGraphics();
         graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
@@ -468,6 +472,7 @@ public final class UiPreview {
         output = Path.of(args[0]);
         Files.createDirectories(output);
         String theme = args[1];
+        featuredOnly = args.length < 3 || !args[2].equals("all");
         UIManager.setLookAndFeel(theme.equals("dark") ? new FlatDarculaLaf() : new FlatIntelliJLaf());
         UIManager.put("defaultFont", new Font("SansSerif", Font.PLAIN, 13));
         JBColor.setDark(theme.equals("dark"));

@@ -1,6 +1,6 @@
 # Preview and refine the UI without launching IntelliJ
 
-The reusable preview helper renders the production welcome screen, side-panel widgets, connection dialog, schema dialogs, table editor/viewer and SQL console into PNGs, a browser gallery, and a shareable ZIP. Use it while changing spacing, grouping, themes, and validation appearance. It compiles the current Java source on every run, so rerun it after each UI edit.
+The reusable preview helper renders production UI components into PNGs, a browser gallery, and a shareable ZIP without launching IntelliJ. By default it renders only the five featured README screens in the light theme. Pass `--all-previews` to render the full light/dark UI review set, including the welcome screen, side-panel states, dialogs, table variants and SQL console states. Use it while changing spacing, grouping, themes, and validation appearance. It compiles the current Java source on every run, so rerun it after each UI edit.
 
 ## Setup and first run
 
@@ -30,6 +30,12 @@ Then generate previews on any platform:
 python scripts/ui-preview.py
 ```
 
+This default run renders the five featured screens. To generate the full light/dark preview gallery instead:
+
+```text
+python scripts/ui-preview.py --all-previews
+```
+
 Explicit paths are also supported; quote paths containing spaces:
 
 ```text
@@ -51,7 +57,7 @@ The helper writes `build/ui-preview/lattice-ui-previews.zip` containing the gall
 
 ## Refresh the README screenshots
 
-Every successful run also writes all current light/dark PNGs into the repository's tracked `screenshots/` folder. This happens even with a custom `--output`: that option changes the gallery/build location, while `screenshots/` always represents the latest render. Keep build output outside `screenshots/`.
+Every successful run refreshes only the five fixed README images in the tracked `screenshots/` folder and removes any extra PNGs there. This also applies with `--all-previews` and a custom `--output`: all generated variants stay in the gallery/build directory, while `screenshots/` remains limited to its five featured files. Keep build output outside `screenshots/`.
 
 The five README links use fixed filenames, refreshed from these variants:
 
@@ -63,20 +69,20 @@ The five README links use fixed filenames, refreshed from these variants:
 | `screenshots/table-editing.png` | `light-table-new-row-1100.png` |
 | `screenshots/sql-console.png` | `light-sql-console-1100.png` |
 
-Run `python scripts/ui-preview.py` after changing the UI, review the gallery, then commit the changed PNGs alongside the Java/helper changes. Do not rename the five featured files or manually update their contents. Their mapping lives in `FEATURED_SCREENSHOTS` in `scripts/ui-preview.py`; a missing featured variant fails generation before existing README images are replaced. Commit the other light/dark variants too, so all preview states remain available in the repository.
+Run `python scripts/ui-preview.py` after changing the featured UI screens, review the gallery, then commit changed files alongside the Java/helper changes. Use `python scripts/ui-preview.py --all-previews` when reviewing other states or making a full before/after comparison. Do not rename the five featured files or manually update their contents. Their mapping lives in `FEATURED_SCREENSHOTS` in `scripts/ui-preview.py`; a missing featured variant fails generation before existing README images are replaced. Full preview variants are generated under ignored `build/` output and are not committed.
 
 ## Iterate with before/after previews
 
 Capture a baseline before editing:
 
 ```text
-python scripts/ui-preview.py --output build/ui-before
+python scripts/ui-preview.py --all-previews --output build/ui-before
 ```
 
 Make the UI changes, then render into a different directory and supply the baseline:
 
 ```text
-python scripts/ui-preview.py --output build/ui-after --compare-with build/ui-before
+python scripts/ui-preview.py --all-previews --output build/ui-after --compare-with build/ui-before
 ```
 
 Open `build/ui-after/index.html` and select Before / after. Matching variants appear beside one another; new variants show only the current screenshot. Repeat the second command after each edit. `--compare-with` must reference an existing directory different from `--output`.
@@ -84,14 +90,14 @@ Open `build/ui-after/index.html` and select Before / after. Matching variants ap
 For the current copy and welcome-screen review, the local baseline is in `build/ui-copy-welcome-before`, so regenerate the comparison with:
 
 ```text
-python scripts/ui-preview.py --compare-with build/ui-copy-welcome-before
+python scripts/ui-preview.py --all-previews --compare-with build/ui-copy-welcome-before
 ```
 
 Local baseline directories are not committed. A fresh checkout can make its own baseline using the commands above. The helper reads a fresh render manifest, so stale images from previous runs are not included in the new gallery or ZIP.
 
 ## Coverage and limitations
 
-The 102 variant screenshots cover light/dark themes; the shared input controls (including editable, disabled/error and larger-font states); create-database/create-table/alter-table dialogs and the drop-column warning; welcome screens at 900 and 520 pixels, with and without saved connections; populated/empty/error side panels and the first-connection database menu; SQL consoles at 1100, 760 and 520 pixels with sample queries/results, empty results, execution and error messages; table widths of 1100, 760, and 520 pixels; populated table/view fixtures; modified cells; valid new rows; an active inline cell editor; and invalid decimals with Commit disabled. Native-delegate table/console variants exercise IntelliJ button, header and tab painting; auto-column variants show editing existing identities and inserting explicit new values. Connection variants include new/edit connection titles, success/failure feedback, MySQL, HSQLDB server/file/memory, custom JDBC URL, bundled/downloaded/local drivers, a wider dialog, an enlarged download form, and a scrolled view of its driver controls. Expanded bundled-driver cases cover both databases and all HSQLDB modes; a collapse-after-expansion case checks shrinking, and incomplete MySQL/HSQLDB/JDBC forms show disabled testing. Five additional stable copies are featured in the README.
+The default run produces exactly five screenshots: the side panel, MySQL connection dialog, table viewer, new-row table editor, and SQL console. `--all-previews` generates the full 102-variant set in light and dark themes, covering shared input controls (including editable, disabled/error and larger-font states); create-database/create-table/alter-table dialogs and the drop-column warning; welcome screens at 900 and 520 pixels, with and without saved connections; populated/empty/error side panels and the first-connection database menu; SQL consoles at 1100, 760 and 520 pixels with sample queries/results, empty results, execution and error messages; table widths of 1100, 760, and 520 pixels; populated table/view fixtures; modified cells; valid new rows; an active inline cell editor; and invalid decimals with Commit disabled. Native-delegate table/console variants exercise IntelliJ button, header and tab painting; auto-column variants show editing existing identities and inserting explicit new values. Connection variants include new/edit connection titles, success/failure feedback, MySQL, HSQLDB server/file/memory, custom JDBC URL, bundled/downloaded/local drivers, a wider dialog, an enlarged download form, and a scrolled view of its driver controls. Expanded bundled-driver cases cover both databases and all HSQLDB modes; a collapse-after-expansion case checks shrinking, and incomplete MySQL/HSQLDB/JDBC forms show disabled testing. Only the five featured README images are stored in `screenshots/`; other generated variants stay in ignored build output.
 
 The helper uses the actual layout managers, SDK icons, controls, borders, table model, cell renderers, and validation states. Each render checks visible single-line inputs for consistent preferred height, symmetric vertical insets and text-baseline balance within two pixels, including composite browse fields. Fixture checks exercise Set to NULL / Use database default through the relocated context-menu actions, verify identity cells are editable with validated values and original row keys preserved, confirm valid/invalid Commit states, check narrow toolbar/footer bounds, and catch leftover renderer outlines and empty HSQL form rows. Both grids are checked for distinct header/data backgrounds and disabled hover surfaces. Native header tests inspect painted pixels after theme/model changes. Console checks exercise repeated template insertion, history restoration, Clear, the Run shortcut with selected SQL, and execution-control states; background work stays blocked. Welcome checks verify console availability after adding a connection and the positive startup preference; status checks verify that severity icons reset. Explorer checks verify error diagnostics and tooltip reset.
 
@@ -135,7 +141,7 @@ Use `DatabaseInputs` from `com.segfault03.ideadb.ui` for every single-line input
 
 Use `DatabaseInputs.textField(...)`, `passwordField()`, `comboBox(...)` or `browseField()` when adding controls. Set widths separately where the layout calls for them; do not set fixed heights or add another input border. For an existing `JTable`, call `DatabaseInputs.styleTableEditors(table)` to retain its typed editors while applying the shared appearance. Avoid changing global `UIManager` defaults: this style is scoped to Lattice controls.
 
-Review [light inputs](../screenshots/light-inputs-600.png), [dark inputs](../screenshots/dark-inputs-600.png) and [inline editing](../screenshots/light-table-cell-editing-1100.png), or choose **Input controls** / **Schema dialogs** in the gallery. Font-growth and look-and-feel-refresh tests protect sizing; a native Darcula delegate test compares text/password caret origins; browse tests check button actions and disabled state. Numeric-editor tests protect invalid-value rejection, typed commits and cancellation; default-marker tests protect unchanged Auto cells. An owned in-memory HSQLDB test verifies generated/explicit identity inserts and identity updates matched by the original key. Connection fixtures check compact bundled-driver gaps, restored content height after collapse and live Test connection availability; Java tests cover readiness across connection/driver modes.
+Run `python scripts/ui-preview.py --all-previews` and choose **Input controls**, **Schema dialogs**, or **Table editor / viewer** in the gallery to review shared fields, schema warnings and inline editing. Font-growth and look-and-feel-refresh tests protect sizing; a native Darcula delegate test compares text/password caret origins; browse tests check button actions and disabled state. Numeric-editor tests protect invalid-value rejection, typed commits and cancellation; default-marker tests protect unchanged Auto cells. An owned in-memory HSQLDB test verifies generated/explicit identity inserts and identity updates matched by the original key. Connection fixtures check compact bundled-driver gaps, restored content height after collapse and live Test connection availability; Java tests cover readiness across connection/driver modes.
 
 ## Copy, icons and warning cues
 

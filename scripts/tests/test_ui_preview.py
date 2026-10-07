@@ -58,7 +58,21 @@ class UiPreviewTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'snapshot sets differ'):
                 preview.render_gallery(output)
 
-    def test_publish_refreshes_all_variants_and_stable_readme_names(self):
+    def test_featured_gallery_supports_light_only_output(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            name = 'light-side-panel-340.png'
+            (output / name).write_bytes(b'featured screenshot')
+            (output / 'light-manifest.txt').write_text(name + '\n')
+            (output / 'dark-manifest.txt').write_text('')
+            preview.render_gallery(output)
+            page = (output / 'index.html').read_text()
+            self.assertIn('id="theme"', page)
+            self.assertIn('<label hidden>Theme', page)
+            self.assertNotIn('@DARK_THEME_OPTION@', page)
+            self.assertNotIn('@FIGURES@', page)
+
+    def test_publish_keeps_only_five_stable_readme_names(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             output = root / 'custom-gallery'
@@ -66,6 +80,7 @@ class UiPreviewTests(unittest.TestCase):
             output.mkdir()
             screenshots.mkdir()
             (screenshots / 'side-panel.png').write_bytes(b'previous render')
+            (screenshots / 'dark-old-variant.png').write_bytes(b'old render')
             for theme in ('light', 'dark'):
                 names = [name.replace('light-', theme + '-', 1) for name in preview.FEATURED_SCREENSHOTS.values()]
                 (output / f'{theme}-manifest.txt').write_text('\n'.join(names))
@@ -75,8 +90,7 @@ class UiPreviewTests(unittest.TestCase):
             preview.publish_screenshots(output, screenshots)
             for alias, source in preview.FEATURED_SCREENSHOTS.items():
                 self.assertEqual((screenshots / alias).read_bytes(), source.encode())
-                self.assertEqual((screenshots / source).read_bytes(), source.encode())
-                self.assertTrue((screenshots / source.replace('light-', 'dark-', 1)).is_file())
+            self.assertEqual({path.name for path in screenshots.glob('*.png')}, set(preview.FEATURED_SCREENSHOTS))
             self.assertFalse((screenshots / 'light-stale.png').exists())
 
     def test_missing_featured_variant_leaves_previous_readme_images_intact(self):

@@ -3,7 +3,7 @@
 
 Requires JDK 21 and an IntelliJ 2025.1 SDK (Gradle's cached SDK is discovered).
 Preview-only service shadows block background work; FlatLaf approximates IDE themes.
-Refreshes tracked screenshots/ PNGs and a local gallery under ignored build/ui-preview/.
+Refreshes the five featured screenshots/ PNGs and a local gallery under ignored build/ui-preview/.
 """
 import argparse
 import hashlib
@@ -24,8 +24,6 @@ FEATURED_SCREENSHOTS = {
     'table-editing.png': 'light-table-new-row-1100.png',
     'sql-console.png': 'light-sql-console-1100.png',
 }
-
-
 def java_args(command, args, path):
     # Java argument files avoid Windows command-length limits and quote paths with spaces.
     def quote(value):
@@ -50,7 +48,9 @@ def run():
     parser.add_argument('--java-home', type=Path, help='JDK 21 installation directory')
     parser.add_argument('--compare-with', type=Path, help='Previous output directory for before/after comparison')
     parser.add_argument('--output', type=Path, default=ROOT / 'build/ui-preview',
-                        help='Gallery/build directory; screenshots/ is always refreshed')
+                        help='Gallery/build directory; screenshots/ keeps only the five featured images')
+    parser.add_argument('--all-previews', action='store_true',
+                        help='Generate the full light/dark preview gallery; by default only the five featured screens are rendered')
     args = parser.parse_args()
     java = Path(java_command(args.java_home)).resolve()
     javac = java.with_name('javac.exe' if os.name == 'nt' else 'javac')
@@ -91,8 +91,19 @@ def run():
     preview_sources = sorted((ROOT / 'scripts/ui-preview').glob('*.java'))
     java_args(javac, ['--release', '21', '-encoding', 'UTF-8', '-cp', os.pathsep.join([str(production), str(flatlaf), cp]), '-d', str(preview)] + list(map(str, preview_sources)), output / 'compile-preview.args')
     runtime = os.pathsep.join([str(preview), str(production), str(ROOT / 'src/main/resources'), str(flatlaf), cp])
+    # A reused output directory should represent this invocation only.
     for theme in ('light', 'dark'):
-        java_args(java, ['--add-opens=java.desktop/javax.swing=ALL-UNNAMED', '--add-opens=java.desktop/java.awt=ALL-UNNAMED', '--add-opens=java.desktop/sun.awt=ALL-UNNAMED', '--add-opens=java.desktop/sun.swing=ALL-UNNAMED', '--add-opens=java.desktop/javax.swing.plaf.basic=ALL-UNNAMED', '-Djava.awt.headless=true', f'-Didea.system.path={output / "idea-system"}', '-cp', runtime, 'UiPreview', str(output), theme], output / f'{theme}.args')
+        for path in output.glob(f'{theme}-*.png'):
+            path.unlink()
+        manifest = output / f'{theme}-manifest.txt'
+        if manifest.exists():
+            manifest.unlink()
+    mode = 'all' if args.all_previews else 'featured'
+    themes = ('light', 'dark') if args.all_previews else ('light',)
+    for theme in themes:
+        java_args(java, ['--add-opens=java.desktop/javax.swing=ALL-UNNAMED', '--add-opens=java.desktop/java.awt=ALL-UNNAMED', '--add-opens=java.desktop/sun.awt=ALL-UNNAMED', '--add-opens=java.desktop/sun.swing=ALL-UNNAMED', '--add-opens=java.desktop/javax.swing.plaf.basic=ALL-UNNAMED', '-Djava.awt.headless=true', f'-Didea.system.path={output / "idea-system"}', '-cp', runtime, 'UiPreview', str(output), theme, mode], output / f'{theme}.args')
+    if not args.all_previews:
+        (output / 'dark-manifest.txt').write_text('', encoding='utf-8')
     publish_screenshots(output, screenshots)
     render_gallery(output, baseline)
 
@@ -100,7 +111,7 @@ def run():
 def snapshot_names(output):
     light = (output / 'light-manifest.txt').read_text().splitlines()
     dark = (output / 'dark-manifest.txt').read_text().splitlines()
-    if [name.removeprefix('light-') for name in light] != [name.removeprefix('dark-') for name in dark]:
+    if not light or (dark and [name.removeprefix('light-') for name in light] != [name.removeprefix('dark-') for name in dark]):
         raise ValueError('Light and dark snapshot sets differ')
     for name in light + dark:
         if Path(name).name != name or not name.endswith('.png'):
@@ -111,16 +122,21 @@ def snapshot_names(output):
 def publish_screenshots(output, screenshots):
     light, dark = snapshot_names(output)
     names = light + dark
-    # Validate the complete set before refreshing any tracked README images.
-    for name in names + list(FEATURED_SCREENSHOTS.values()):
-        if name not in names or not (output / name).is_file():
+    # Validate the manifests and all README sources before replacing tracked images.
+    for name in names:
+        if not (output / name).is_file():
+            raise ValueError(f'Missing required screenshot: {name}')
+    for name in FEATURED_SCREENSHOTS.values():
+        if name not in names:
             raise ValueError(f'Missing required screenshot: {name}')
     screenshots.mkdir(parents=True, exist_ok=True)
-    for name in names:
-        shutil.copyfile(output / name, screenshots / name)
     for alias, source in FEATURED_SCREENSHOTS.items():
         shutil.copyfile(output / source, screenshots / alias)
-    print(f'Repository screenshots: {screenshots} ({len(names)} variants + {len(FEATURED_SCREENSHOTS)} README images)')
+    featured = set(FEATURED_SCREENSHOTS)
+    for path in screenshots.glob('*.png'):
+        if path.name not in featured:
+            path.unlink()
+    print(f'Repository screenshots: {screenshots} ({len(featured)} featured images; {len(names)} gallery variants)')
 
 
 def render_gallery(output, baseline=None):
@@ -147,7 +163,10 @@ def render_gallery(output, baseline=None):
             images.append(f'<div class="shot" data-version="{version}"><h2>{label}</h2><a href="{source}"><img src="{source}" data-name="{name}" data-prefix="{prefix}" loading="lazy" alt="{html.escape(name)} — {label}"></a></div>')
         figures.append(f'<figure data-screen="{screen}"><figcaption>{html.escape(name.replace("-", " "))}</figcaption><div class="pair">{"".join(images)}</div></figure>')
     template = (ROOT / 'scripts/ui-preview/gallery.html').read_text(encoding='utf-8')
-    gallery = template.replace('@FIGURES@', '\n'.join(figures)).replace('@COMPARISON_HIDDEN@', '' if baseline else 'hidden')
+    gallery = (template.replace('@FIGURES@', '\n'.join(figures))
+               .replace('@COMPARISON_HIDDEN@', '' if baseline else 'hidden')
+               .replace('@DARK_THEME_OPTION@', '<option value="dark">dark</option>' if dark else '')
+               .replace('@DARK_THEME_HIDDEN@', '' if dark else 'hidden'))
     index = output / 'index.html'
     index.write_text(gallery, encoding='utf-8')
     artifacts.append(index)

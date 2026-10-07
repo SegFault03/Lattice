@@ -24,7 +24,7 @@ Built with help from **Gemini 3.8**, **GPT-6 Luna** and **GPT-6.1 Sol**.
 
 ## Screenshots
 
-Previews use sample data. See [all UI screenshots](screenshots/) for light and dark variants.
+Previews use sample data. These five screens are the featured UI previews.
 
 ### Side panel
 
@@ -109,7 +109,7 @@ Use `python3` if that is your system's Python command. All optional development/
 
 ### Quick local UI testing
 
-To preview the welcome screen, side panel, connection and schema dialogs, table editor/viewer and SQL console without launching IDEA, run `python scripts/ui-preview.py` with JDK 21 and the cached IntelliJ SDK, then open `build/ui-preview/index.html`. Every run refreshes the tracked PNGs in `screenshots/`, including the five fixed filenames above. Commit updated screenshots with UI changes. See [UI previews](docs/UI_PREVIEW.md) for setup, theme limitations and layout review notes. The [UI copy review](docs/UI_REVIEW.md) records label, icon and warning conventions.
+To preview the five featured screens without launching IDEA, run `python scripts/ui-preview.py` with JDK 21 and the cached IntelliJ SDK, then open `build/ui-preview/index.html`. Pass `--all-previews` to generate the complete light/dark gallery. Only the five featured images above are tracked in `screenshots/`; commit them when updating the UI. See [UI previews](docs/UI_PREVIEW.md) for setup, theme limitations and layout review notes. The [UI copy review](docs/UI_REVIEW.md) records label, icon and warning conventions.
 
 To run the tooling and pure Java tests, build the ZIP, find an installed IntelliJ IDEA, and deploy the freshly built plugin:
 
@@ -143,7 +143,7 @@ See [CONTRIBUTING](docs/CONTRIBUTING.md) to use existing isolated fixtures. Gene
 | `.github/` | GitHub issue forms, pull request template and workflows |
 | `assets/`, `licenses/`, `lib/` | Branding, dependency license texts and fallback-test JDBC JARs |
 | `build/` | Ignored generated output, distribution ZIPs and validation reports |
-| `screenshots/` | Tracked UI previews and the five stable README images |
+| `screenshots/` | The five tracked README preview images |
 
 Workstation-only helpers and notes live in locally excluded `scripts/local/` and `docs/local/`. README, LICENSE, agent instructions and the Gradle wrapper launchers retain their root entry points.
 

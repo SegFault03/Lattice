@@ -5,7 +5,7 @@ All public helper scripts use Python's standard library and run on Windows, Linu
 | Script | Purpose | Additional requirements |
 |---|---|---|
 | `test.py` | Gradle tests and optional packaging; owns optional database fixtures | JDK 21; Docker only for `--mysql` |
-| `ui-preview.py` | Refresh tracked `screenshots/` PNGs for the side panel, connection dialog, table editor/viewer and SQL console; build a theme-switching gallery | JDK 21; cached IntelliJ 2025.1 SDK or `--ide-home`; network on first use for preview-only FlatLaf |
+| `ui-preview.py` | Refresh the five featured README screenshots; optionally build the full light/dark preview gallery with `--all-previews` | JDK 21; cached IntelliJ 2025.1 SDK or `--ide-home`; network on first use for preview-only FlatLaf |
 | `dev-deploy.py` | Test, build, discover a local IDEA, deploy Lattice and restart a running IDE | Installed IntelliJ IDEA 2025.1+; JDK 21; Git for tooling tests |
 | `release.py` | Validate a stable version/tag and generate patch notes/commit history | Git |
 | `check-release-archive.py` | Check ZIP layout, descriptor, bytecode, licenses; generate checksums | Built plugin ZIP |
@@ -34,7 +34,7 @@ With JDK 21 and the cached IntelliJ 2025.1 SDK, run:
 python scripts/ui-preview.py
 ```
 
-Open `build/ui-preview/index.html` to review the light/dark variants. The **Welcome**, **Input controls** and **Schema dialogs** filters cover onboarding, shared fields and the column-deletion warning. Connection variants include new/edit labels and test feedback. Every successful run refreshes all PNGs in the tracked `screenshots/` folder and the five fixed filenames referenced by the README. Commit changed PNGs with UI changes. `--output` changes the gallery/build directory while still updating `screenshots/`; `--compare-with` adds a local before/after baseline.
+Open `build/ui-preview/index.html` to review the five featured screens. Pass `--all-previews` to include light/dark variants for the **Welcome**, **Input controls**, **Schema dialogs**, connection states, table editor/viewer and SQL console. Every successful run updates only the five fixed README image files in `screenshots/`; extra generated images stay under `build/`. Commit changed featured PNGs with UI changes. `--output` changes the gallery/build directory while still updating `screenshots/`; use `--all-previews` for `--compare-with` before/after baselines.
 
 See [UI preview instructions](UI_PREVIEW.md) for SDK setup, explicit paths, the featured-image mapping and preview limitations.
 

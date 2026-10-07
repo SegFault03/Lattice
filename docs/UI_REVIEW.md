@@ -36,4 +36,4 @@ The gallery contains first-use/configured welcome states, narrow welcome layouts
 
 The preview cannot validate native confirmation placement, custom IDE themes, screen-reader announcements, display scaling or live connection diagnostics. Check those in IDEA before release. SQL and database terminology is retained where it describes the actual operation; column tooltips explain compact PK/Auto metadata. The five README screenshot filenames remain unchanged.
 
-Example renders: [welcome](../screenshots/light-welcome-520.png), [dark welcome](../screenshots/dark-welcome-900.png), [connection feedback](../screenshots/light-connection-success-600.png), [column deletion](../screenshots/dark-schema-drop-column-800.png), [console failure](../screenshots/light-sql-console-messages-1100.png).
+The [README screenshots](../README.md#screenshots) show the five tracked featured renders. To inspect welcome, connection-feedback, schema-warning and console-error states, run the full preview helper described in [UI previews](UI_PREVIEW.md).
