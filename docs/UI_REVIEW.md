@@ -25,7 +25,7 @@ This review covers the welcome editor, explorer toolbar/tree/context menus, conn
 
 ## Review evidence and remaining IDE checks
 
-The gallery contains first-use/configured welcome states, narrow welcome layouts, new/edit connection labels, connection test feedback, a drop-column warning, table validation and console error states. Fixture checks cover startup preference persistence, changing console availability, severity reset and existing table/console interactions.
+The gallery contains first-use/configured welcome states, narrow welcome layouts, new/edit connection labels, connection test feedback, a drop-column warning, table validation and console error states. Fixture checks cover startup preference persistence, changing console availability, severity reset and existing table/console interactions. Java layout tests use the current connection labels and shared input factories; exact HSQLDB column alignment is checked with the runner’s default font and twelve font family/style/size combinations at 520 and 800 pixels. These checks cover the font-dependent one-pixel mismatch that stale label fixtures exposed in CI.
 
 The preview cannot validate native confirmation placement, custom IDE themes, screen-reader announcements, display scaling or live connection diagnostics. Check those in IDEA before release. SQL and database terminology is retained where it describes the actual operation; column tooltips explain compact PK/AI metadata. The five README screenshot filenames remain unchanged.
 

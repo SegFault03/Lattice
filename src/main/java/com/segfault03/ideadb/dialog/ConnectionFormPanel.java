@@ -12,8 +12,13 @@ final class ConnectionFormPanel extends JPanel {
     ConnectionFormPanel() {
         super(new GridBagLayout());
         GridBagLayout layout = (GridBagLayout) getLayout();
-        int labelWidth = Math.max(new JLabel("Database name:").getPreferredSize().width,
-                new JLabel("Database Type:").getPreferredSize().width) + JBUI.scale(10);
+        // Include the widest labels used by any nested card, using the rendered copy.
+        // Otherwise GridBagLayout can expand one card's label column independently.
+        int labelWidth = 0;
+        for (String label : new String[]{"Database name:", "Database type:", "Database path:"}) {
+            labelWidth = Math.max(labelWidth, new JLabel(label).getPreferredSize().width);
+        }
+        labelWidth += JBUI.scale(10);
         layout.columnWidths = new int[]{labelWidth, 0};
         layout.columnWeights = new double[]{0, 1};
 
