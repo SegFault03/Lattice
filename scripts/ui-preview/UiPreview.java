@@ -300,23 +300,8 @@ public final class UiPreview {
         int difference = Math.abs(color.getRed() - background.getRed())
                 + Math.abs(color.getGreen() - background.getGreen()) + Math.abs(color.getBlue() - background.getBlue());
         if (difference < 20) throw new AssertionError("Header background must differ from data rows");
-        String tip = table.getToolTipText(hover(table, nullRow, nullColumn));
-        if (!tip.contains("NULL (no value)")) throw new AssertionError("Missing readable NULL tooltip: " + tip);
-    }
-    static void tooltipSnapshot(JComponent panel, DatabaseTable table, int row, int column, String name) throws Exception {
-        JLayeredPane layers = new JLayeredPane();
-        layers.add(panel, JLayeredPane.DEFAULT_LAYER);
-        panel.setBounds(0, 0, 1100, 620);
-        for (int pass = 0; pass < 4; pass++) layout(panel);
-        var event = hover(table, row, column);
-        JToolTip tooltip = table.createToolTip();
-        tooltip.setTipText(table.getToolTipText(event));
-        Point anchor = SwingUtilities.convertPoint(table, table.getToolTipLocation(event), layers);
-        Dimension size = tooltip.getPreferredSize();
-        tooltip.setBounds(anchor.x, anchor.y, size.width, size.height);
-        layers.add(tooltip, JLayeredPane.POPUP_LAYER);
-        render(layers, name, 1100, 620);
-        layers.remove(panel);
+        if (table.getToolTipText(hover(table, nullRow, nullColumn)) != null)
+            throw new AssertionError("Table hover must stay disabled");
     }
     static JButton findButton(Container container, String text) {
         for (Component child : container.getComponents()) {
@@ -366,6 +351,45 @@ public final class UiPreview {
             throw new AssertionError("Completed controls must restore Run/Stop state");
         System.out.println("Console templates, history, clear, shortcut and execution controls verified (background tasks blocked)");
     }
+    static void nativeDelegates(Container parent) {
+        for (Component child : parent.getComponents()) {
+            if (child instanceof JButton button && !(button instanceof com.intellij.ui.components.ActionLink))
+                button.setUI(new com.intellij.ide.ui.laf.darcula.ui.DarculaButtonUI());
+            if (child instanceof JTabbedPane tabs)
+                tabs.setUI(new com.intellij.ide.ui.laf.darcula.ui.DarculaTabbedPaneUI());
+            if (child instanceof javax.swing.table.JTableHeader header)
+                header.setUI(new com.intellij.ide.ui.laf.darcula.DarculaTableHeaderUI());
+            if (child instanceof Container nested) nativeDelegates(nested);
+        }
+    }
+    static void autoEditing(String theme) throws Exception {
+        TableDataEditorPanel panel = table(false);
+        JTable table = (JTable)field(panel, "dataTable");
+        TableModel model = (TableModel)field(panel, "tableModel");
+        if (!model.isCellEditable(0, 0) || !model.getColumnName(0).contains("Auto") || model.getColumnName(0).contains("AI"))
+            throw new AssertionError("Auto columns must be labeled Auto and allow editing");
+        model.setValueAt("invalid identity", 0, 0);
+        if (((JButton)field(panel, "saveBtn")).isEnabled()) throw new AssertionError("Invalid auto values must disable Commit");
+        model.setValueAt(2001L, 0, 0);
+        @SuppressWarnings("unchecked") List<List<Object>> original = (List<List<Object>>)field(model, "originalRows");
+        if (!original.get(0).get(0).equals(1001L)) throw new AssertionError("Auto edits must preserve the original row identity");
+        panel.setSize(1100, 620);
+        for (int pass = 0; pass < 4; pass++) layout(panel);
+        if (!table.editCellAt(0, 0)) throw new AssertionError("Auto cell must open its editor");
+        ((JTextField)table.getEditorComponent()).setText("2002");
+        render(panel, theme + "-table-auto-cell-editing-1100", 1100, 620);
+        if (!table.getCellEditor().stopCellEditing()) throw new AssertionError("Valid auto input must become a pending edit");
+        invoke(model, "addNewRow", new Class<?>[]{});
+        model.setValueAt("Grace Lee", 12, 1);
+        model.setValueAt(3001L, 12, 0);
+        if (!((JButton)field(panel, "saveBtn")).isEnabled()) throw new AssertionError("Explicit new auto value must be valid");
+        render(panel, theme + "-table-new-auto-row-1100", 1100, 620);
+        prepareMenu(table, 12, 0);
+        JMenuItem defaultAction = (JMenuItem)table.getComponentPopupMenu().getComponent(1);
+        if (!defaultAction.isEnabled()) throw new AssertionError("New auto cells can restore database generation");
+        defaultAction.doClick(0);
+        if (model.getValueAt(12, 0) != RowDefaults.Value.USE_DEFAULT) throw new AssertionError("Auto generation must use the default marker");
+    }
     static void prepareMenu(JTable table, int row, int column) {
         table.setRowSelectionInterval(row, row);
         table.setColumnSelectionInterval(column, column);
@@ -381,7 +405,7 @@ public final class UiPreview {
         JMenuItem nullAction = (JMenuItem)menu.getComponent(0);
         JMenuItem defaultAction = (JMenuItem)menu.getComponent(1);
         prepareMenu(table, 0, 0);
-        if (nullAction.isEnabled() || defaultAction.isEnabled()) throw new AssertionError("Identity cell must be read-only");
+        if (nullAction.isEnabled() || defaultAction.isEnabled()) throw new AssertionError("Existing non-nullable identity has no NULL/default action");
         prepareMenu(table, 0, 2);
         if (!nullAction.isEnabled() || defaultAction.isEnabled()) throw new AssertionError("Nullable persisted cell actions");
         nullAction.doClick(0);
@@ -486,7 +510,6 @@ public final class UiPreview {
                 verifyControls((Container)consoleLayout.getLayoutComponent(BorderLayout.SOUTH));
                 DatabaseTable results = (DatabaseTable)field(console, "resultsTable");
                 verifyGrid(results, 1, 2);
-                tooltipSnapshot(console, results, 1, 2, theme + "-sql-console-null-tooltip-1100");
                 invoke(console, "setRunning", new Class<?>[]{boolean.class}, true);
                 com.segfault03.ideadb.ui.DatabaseUi.status((JLabel)field(console, "statusLabel"), "Running query…", com.segfault03.ideadb.ui.DatabaseUi.Tone.BUSY);
                 render(console, theme + "-sql-console-running-1100", 1100, 620);
@@ -499,6 +522,20 @@ public final class UiPreview {
                 emptyConsole.setSqlText("");
                 render(emptyConsole, theme + "-sql-console-empty-1100", 1100, 620);
                 verifyConsoleActions();
+                SqlQueryConsolePanel nativeConsole = console();
+                nativeDelegates(nativeConsole);
+                ((DatabaseTable)field(nativeConsole, "resultsTable")).sizeColumnsToContent();
+                render(nativeConsole, theme + "-sql-console-native-1100", 1100, 620);
+                verifyControls((Container)((BorderLayout)nativeConsole.getLayout()).getLayoutComponent(BorderLayout.NORTH));
+                JTabbedPane nativeTabs = (JTabbedPane)field(nativeConsole, "resultsTabs");
+                if (nativeTabs.getTabComponentAt(0) != null || nativeTabs.getTitleAt(0).isBlank())
+                    throw new AssertionError("Native result tabs must use visible text titles");
+                TableDataEditorPanel nativeTable = table(false);
+                nativeDelegates(nativeTable);
+                ((DatabaseTable)field(nativeTable, "dataTable")).sizeColumnsToContent();
+                render(nativeTable, theme + "-table-native-1100", 1100, 620);
+                verifyControls((Container)((BorderLayout)nativeTable.getLayout()).getLayoutComponent(BorderLayout.NORTH));
+                autoEditing(theme);
                 verifyConnectionReadiness();
                 for (String variant : List.of("mysql", "new", "success", "failed", "hsql-server", "hsql-memory", "hsql-file", "jdbc-url", "driver-download", "driver-local", "mysql-bundled-expanded", "hsql-bundled-expanded", "hsql-memory-bundled-expanded", "hsql-file-bundled-expanded", "mysql-collapsed-after-expansion", "mysql-incomplete", "hsql-incomplete", "jdbc-url-incomplete")) connection(theme, variant, 600);
                 connection(theme, "mysql", 800);
@@ -506,7 +543,6 @@ public final class UiPreview {
                 render(editor, theme + "-table-1100", 1100, 620);
                 DatabaseTable grid = (DatabaseTable)field(editor, "dataTable");
                 verifyGrid(grid, 3, 2);
-                tooltipSnapshot(editor, grid, 3, 2, theme + "-table-null-tooltip-1100");
                 render(editor, theme + "-table-760", 760, 620);
                 render(editor, theme + "-table-520", 520, 620);
                 BorderLayout editorLayout = (BorderLayout)editor.getLayout();
@@ -516,9 +552,6 @@ public final class UiPreview {
                 ((TableModel)model).setValueAt("Amelia Stone", 0, 1);
                 if (!((JButton)field(editor, "saveBtn")).isEnabled()) throw new AssertionError("Commit must be enabled for a valid edit");
                 render(editor, theme + "-table-edited-1100", 1100, 620);
-                if (!grid.getToolTipText(hover(grid, 0, 1)).contains("Original: Amelia Brooks"))
-                    throw new AssertionError("Modified cell tooltip must retain its original value");
-                tooltipSnapshot(editor, grid, 0, 1, theme + "-table-modified-tooltip-1100");
                 invoke(model, "addNewRow", new Class<?>[]{});
                 ((TableModel)model).setValueAt("Grace Lee", 12, 1);
                 ((TableModel)model).setValueAt("grace@example.com", 12, 2);
@@ -530,8 +563,6 @@ public final class UiPreview {
                 if (!grid.getCellEditor().stopCellEditing()) throw new AssertionError("Valid text must commit to the pending row");
                 ((TableModel)model).setValueAt("not a number", 1, 4);
                 if (((JButton)field(editor, "saveBtn")).isEnabled()) throw new AssertionError("Commit must be disabled for an invalid decimal");
-                if (!grid.getToolTipText(hover(grid, 1, 4)).contains("Validation error:"))
-                    throw new AssertionError("Invalid cell tooltip must explain the validation error");
                 render(editor, theme + "-table-error-1100", 1100, 620);
                 render(table(true), theme + "-view-1100", 1100, 620);
                 verifyCellActions();

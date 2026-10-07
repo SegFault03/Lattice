@@ -7,7 +7,6 @@ import com.intellij.ui.JBColor;
 import com.intellij.ui.JBSplitter;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBScrollPane;
-import com.intellij.ui.components.JBTabbedPane;
 import com.intellij.ui.components.JBTextArea;
 import com.intellij.util.ui.JBUI;
 import com.segfault03.ideadb.model.ConnectionConfig;
@@ -45,7 +44,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     private JBTextArea editorArea;
     private JButton runBtn;
     private JComboBox<QueryHistoryEntry> historyCombo;
-    private JBTabbedPane resultsTabs;
+    private JTabbedPane resultsTabs;
     private DatabaseTable resultsTable;
     private DefaultTableModel resultsModel;
     private JBTextArea messagesArea;
@@ -99,12 +98,12 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         resultLimit.setToolTipText("Maximum rows returned by the next query");
         JButton clearBtn = DatabaseUi.action("Clear", Icons.CLEAR, "Clear query text");
         clearBtn.addActionListener(e -> editorArea.setText(""));
-        toolbar.add(DatabaseUi.group(new JBLabel("Database"), databaseCombo));
+        toolbar.add(labeledPicker("Database", databaseCombo));
         toolbar.add(DatabaseUi.group(DatabaseUi.separator(), runBtn, cancelBtn));
         toolbar.add(DatabaseUi.group(DatabaseUi.separator(), clearBtn));
         heading.add(toolbar, BorderLayout.NORTH);
 
-        JPanel recall = new JPanel(new WrapLayout(FlowLayout.LEFT, JBUI.scale(8), JBUI.scale(4)));
+        JPanel recall = new JPanel(new WrapLayout(FlowLayout.LEFT, JBUI.scale(4), JBUI.scale(4)));
         recall.setBorder(JBUI.Borders.empty(0, 8, 4, 8));
         historyCombo = DatabaseInputs.comboBox(new QueryHistoryEntry[]{new QueryHistoryEntry(null)});
         historyCombo.setPrototypeDisplayValue(new QueryHistoryEntry("SELECT … FROM customers"));
@@ -115,7 +114,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
             }
         });
         historyCombo.setToolTipText("Restore a recent query into the editor");
-        recall.add(DatabaseUi.group(new JBLabel("History"), historyCombo));
+        recall.add(labeledPicker("History", historyCombo));
         JComboBox<String> snippetCombo = DatabaseInputs.comboBox(new String[]{
                 "Choose a template…",
                 "SELECT * FROM ... LIMIT 50;",
@@ -134,12 +133,13 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         });
         snippetCombo.setPrototypeDisplayValue("UPDATE … SET … WHERE …");
         snippetCombo.setToolTipText("Insert a SQL template at the caret");
-        recall.add(DatabaseUi.group(new JBLabel("Template"), snippetCombo));
+        recall.add(labeledPicker("Template", snippetCombo));
         heading.add(recall, BorderLayout.CENTER);
         add(heading, BorderLayout.NORTH);
 
         // Center Splitter: Editor on top, Results on bottom
-        JBSplitter splitter = new JBSplitter(true, 0.45f);
+        JBSplitter splitter = new JBSplitter(true, 0.33f);
+        splitter.setDividerWidth(JBUI.scale(4));
 
         // Editor
         editorArea = new JBTextArea();
@@ -160,14 +160,14 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         });
 
         JPanel queryPanel = new JPanel(new BorderLayout());
-        JPanel queryCaption = new JPanel(new BorderLayout());
-        queryCaption.setBorder(JBUI.Borders.empty(6, 12));
+        JPanel queryCaption = new JPanel(new WrapLayout(FlowLayout.LEFT, JBUI.scale(8), JBUI.scale(4)));
+        queryCaption.setBorder(JBUI.Borders.empty(2, 8));
         JBLabel queryTitle = new JBLabel("SQL query");
         queryTitle.setFont(queryTitle.getFont().deriveFont(Font.BOLD));
-        queryCaption.add(queryTitle, BorderLayout.WEST);
-        JBLabel shortcutHint = new JBLabel(runShortcut + " to run · selection or full query");
+        queryCaption.add(queryTitle);
+        JBLabel shortcutHint = new JBLabel(runShortcut + " · Run selection or query");
         shortcutHint.setForeground(JBColor.namedColor("Label.infoForeground", JBColor.GRAY));
-        queryCaption.add(shortcutHint, BorderLayout.EAST);
+        queryCaption.add(shortcutHint);
         queryPanel.add(queryCaption, BorderLayout.NORTH);
         JBScrollPane editorScroll = new JBScrollPane(editorArea);
         editorScroll.setBorder(JBUI.Borders.empty());
@@ -176,8 +176,9 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         splitter.setFirstComponent(queryPanel);
 
         // Results Pane
-        resultsTabs = new JBTabbedPane();
-        resultsTabs.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
+        // Let the native delegate paint tab labels instead of custom JBTabbedPane label components.
+        resultsTabs = new JTabbedPane();
+        resultsTabs.setTabLayoutPolicy(JTabbedPane.WRAP_TAB_LAYOUT);
 
         resultsModel = new ReadOnlyResultModel();
         resultsTable = new DatabaseTable(resultsModel);
@@ -208,6 +209,16 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         statusBar.add(statusLabel, BorderLayout.CENTER);
         statusBar.add(DatabaseUi.group(new JBLabel("Max rows"), resultLimit), BorderLayout.EAST);
         add(statusBar, BorderLayout.SOUTH);
+    }
+
+    private JPanel labeledPicker(String text, JComponent picker) {
+        JBLabel label = new JBLabel(text);
+        int width = 0;
+        for (String title : new String[]{"Database", "History", "Template"})
+            width = Math.max(width, new JBLabel(title).getPreferredSize().width);
+        label.setPreferredSize(new Dimension(width, label.getPreferredSize().height));
+        label.setLabelFor(picker);
+        return DatabaseUi.group(label, picker);
     }
 
     public void setSqlText(String sql) {
@@ -259,10 +270,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
                         Object[][] values = result.getRows().stream().map(List::toArray).toArray(Object[][]::new);
                         resultsModel.setDataVector(values, result.getColumnNames().toArray());
 
-                        for (int i = 0; i < resultsTable.getColumnCount(); i++) {
-                            int headerWidth = resultsTable.getColumnModel().getColumn(i).getHeaderValue().toString().length() * 10 + 30;
-                            resultsTable.getColumnModel().getColumn(i).setPreferredWidth(Math.max(headerWidth, 90));
-                        }
+                        resultsTable.sizeColumnsToContent();
 
                         resultsTabs.setToolTipTextAt(0, null);
                         resultsTabs.setTitleAt(0, "Results (" + result.getRows().size() + ")");

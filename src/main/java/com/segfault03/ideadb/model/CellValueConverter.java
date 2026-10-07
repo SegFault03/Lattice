@@ -76,7 +76,6 @@ public final class CellValueConverter {
         } catch(NumberFormatException | java.time.DateTimeException error) { throw new IllegalArgumentException("Invalid " + type + " value: " + text,error); }
     }
     public static String validate(DatabaseType dialect,ColumnMetadata column,Object value) {
-        if(column!=null && column.isAutoIncrement()) return null;
         try { convert(dialect,column,value); return null; } catch(IllegalArgumentException error) { return error.getMessage(); }
     }
     private static boolean isText(int jdbc) { return jdbc==Types.CHAR || jdbc==Types.VARCHAR || jdbc==Types.LONGVARCHAR || jdbc==Types.NCHAR || jdbc==Types.NVARCHAR || jdbc==Types.LONGNVARCHAR || jdbc==Types.CLOB || jdbc==Types.NCLOB; }

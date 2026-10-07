@@ -7,6 +7,24 @@ import java.awt.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DatabaseInputsTest {
+    @Test void openingAndLeavingAnAutomaticCellPreservesDatabaseGeneration() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            Object automatic = com.segfault03.ideadb.model.RowDefaults.Value.USE_DEFAULT;
+            JTable table = new JTable(new DefaultTableModel(new Object[][]{{automatic}}, new Object[]{"ID [Auto]"}));
+            table.setDefaultRenderer(Object.class, new javax.swing.table.DefaultTableCellRenderer() {
+                @Override protected void setValue(Object value) { setText(value == automatic ? "(Auto)" : value.toString()); }
+            });
+            DatabaseInputs.styleTableEditors(table);
+            assertTrue(table.editCellAt(0, 0));
+            assertEquals("(Auto)", ((JTextField)table.getEditorComponent()).getText());
+            assertTrue(table.getCellEditor().stopCellEditing());
+            assertSame(automatic, table.getValueAt(0, 0));
+            assertTrue(table.editCellAt(0, 0));
+            ((JTextField)table.getEditorComponent()).setText("42");
+            assertTrue(table.getCellEditor().stopCellEditing());
+            assertEquals("42", table.getValueAt(0, 0));
+        });
+    }
     @Test void nativeTextAndPasswordDelegatesHaveTheSameTextOrigin() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             JTextField text = DatabaseInputs.textField("sample");

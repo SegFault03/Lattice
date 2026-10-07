@@ -5,7 +5,7 @@ public final class RowDefaults {
     private RowDefaults() {}
     public enum Value { USE_DEFAULT; @Override public String toString() { return "(Default)"; } }
     public static Object initialValue(ColumnMetadata column) {
-        if(column!=null && column.isAutoIncrement()) return "(Auto)";
+        if(column!=null && column.isAutoIncrement()) return Value.USE_DEFAULT;
         return column!=null && column.getDefaultValue()!=null ? Value.USE_DEFAULT : null;
     }
 }

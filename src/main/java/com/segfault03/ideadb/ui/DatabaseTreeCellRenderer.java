@@ -92,7 +92,7 @@ public class DatabaseTreeCellRenderer extends ColoredTreeCellRenderer {
                         append(" NOT NULL", SimpleTextAttributes.GRAYED_SMALL_ATTRIBUTES);
                     }
                     if (col.isAutoIncrement()) {
-                        append(" AI", SimpleTextAttributes.GRAYED_SMALL_ATTRIBUTES);
+                        append(" Auto", SimpleTextAttributes.GRAYED_SMALL_ATTRIBUTES);
                     }
                 } else {
                     setIcon(Icons.COLUMN);

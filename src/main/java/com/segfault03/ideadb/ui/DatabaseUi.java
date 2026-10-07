@@ -53,11 +53,19 @@ public final class DatabaseUi {
     public static JButton action(String text, Icon icon, String tooltip) {
         JButton button = new JButton(text, icon) {
             @Override public Dimension getPreferredSize() {
-                Dimension size = super.getPreferredSize();
-                size.height = Math.max(size.height, JBUI.scale(28));
-                size.width = Math.max(size.width, JBUI.scale(28));
-                return size;
+                // Size toolbar actions to content, bypassing native dialog-button minimum widths.
+                Insets padding = getInsets();
+                FontMetrics font = getFontMetrics(getFont());
+                String label = getText();
+                Icon glyph = getIcon();
+                int textWidth = label == null || label.isEmpty() ? 0 : font.stringWidth(label);
+                int iconWidth = glyph == null ? 0 : glyph.getIconWidth();
+                int gap = textWidth > 0 && iconWidth > 0 ? getIconTextGap() : 0;
+                return new Dimension(Math.max(JBUI.scale(28), padding.left + padding.right + textWidth + iconWidth + gap),
+                        Math.max(JBUI.scale(28), padding.top + padding.bottom
+                                + Math.max(textWidth > 0 ? font.getHeight() : 0, glyph == null ? 0 : glyph.getIconHeight())));
             }
+            @Override public Dimension getMinimumSize() { return getPreferredSize(); }
             @Override protected void paintComponent(Graphics graphics) {
                 ButtonModel model = getModel();
                 if (isEnabled() && (model.isRollover() || model.isPressed() && model.isArmed() || hasFocus())) {
@@ -82,6 +90,8 @@ public final class DatabaseUi {
         button.setBorder(JBUI.Borders.empty(4, 6));
         button.setBorderPainted(false);
         button.setContentAreaFilled(false);
+        button.setOpaque(false);
+        button.setDefaultCapable(false);
         button.setFocusPainted(false); // The focus cue is painted above with the native theme color.
         button.setRolloverEnabled(true);
         button.setIconTextGap(JBUI.scale(5));
@@ -90,7 +100,9 @@ public final class DatabaseUi {
 
     /** An indivisible group so wrapping never separates a field from its label. */
     public static JPanel group(Component... controls) {
-        JPanel group = new JPanel(new FlowLayout(FlowLayout.LEFT, JBUI.scale(4), 0));
+        FlowLayout layout = new FlowLayout(FlowLayout.LEFT, JBUI.scale(4), 0);
+        layout.setAlignOnBaseline(true);
+        JPanel group = new JPanel(layout);
         group.setOpaque(false);
         for (Component control : controls) group.add(control);
         return group;

@@ -228,17 +228,32 @@ public final class DatabaseInputs {
     private static final class InputCellEditor implements TableCellEditor {
         private final TableCellEditor delegate;
         private JComponent input;
+        private Object initialValue;
+        private String initialText;
         InputCellEditor(TableCellEditor delegate) { this.delegate = delegate; }
         @Override public Component getTableCellEditorComponent(JTable table, Object value, boolean selected, int row, int column) {
             Component component = delegate.getTableCellEditorComponent(table, value, selected, row, column);
+            initialValue = value;
+            initialText = null;
             if (component instanceof JTextField field) {
                 input = field;
                 input.putClientProperty("JComponent.outline", null);
                 style(input);
+                Component rendered = table.getCellRenderer(row, column).getTableCellRendererComponent(
+                        table, value, selected, false, row, column);
+                if (rendered instanceof JLabel label) field.setHorizontalAlignment(label.getHorizontalAlignment());
+                if (value == com.segfault03.ideadb.model.RowDefaults.Value.USE_DEFAULT) {
+                    if (rendered instanceof JLabel label) field.setText(label.getText());
+                    initialText = field.getText();
+                }
             } else input = null;
             return component;
         }
-        @Override public Object getCellEditorValue() { return delegate.getCellEditorValue(); }
+        @Override public Object getCellEditorValue() {
+            Object value = delegate.getCellEditorValue();
+            return initialValue == com.segfault03.ideadb.model.RowDefaults.Value.USE_DEFAULT
+                    && java.util.Objects.equals(initialText, value) ? initialValue : value;
+        }
         @Override public boolean isCellEditable(EventObject event) { return delegate.isCellEditable(event); }
         @Override public boolean shouldSelectCell(EventObject event) { return delegate.shouldSelectCell(event); }
         @Override public boolean stopCellEditing() {

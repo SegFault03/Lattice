@@ -38,6 +38,7 @@ import java.io.File;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.sql.Connection;
+import java.sql.Types;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -132,7 +133,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         orderField.addActionListener(e -> loadData(1, pageSize));
         JButton filterBtn = DatabaseUi.action("Apply", AllIcons.Actions.Execute, "Apply filter and sort");
         filterBtn.addActionListener(e -> loadData(1, pageSize));
-        JPanel filters = new JPanel(new WrapLayout(FlowLayout.LEFT, JBUI.scale(8), JBUI.scale(4)));
+        JPanel filters = new JPanel(new WrapLayout(FlowLayout.LEFT, JBUI.scale(4), JBUI.scale(4)));
         filters.setBorder(BorderFactory.createCompoundBorder(
                 JBUI.Borders.customLineBottom(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR),
                 JBUI.Borders.empty(2, 8, 6, 8)));
@@ -180,10 +181,10 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             int selectedColumn=dataTable.getSelectedColumn(); if(selectedColumn<0) return;
             int column=dataTable.convertColumnIndexToModel(selectedColumn);
             ColumnMetadata metadata=tableModel.getColumnMeta(column);
-            if(metadata==null || metadata.getDefaultValue()==null) return;
+            if(metadata==null || metadata.getDefaultValue()==null && !metadata.isAutoIncrement()) return;
             for(int selected:dataTable.getSelectedRows()) {
                 int row=dataTable.convertRowIndexToModel(selected);
-                if(tableModel.isRowNew(row) && tableModel.isCellEditable(row,column)) tableModel.setValueAt(RowDefaults.Value.USE_DEFAULT,row,column);
+                if(tableModel.isRowNew(row) && tableModel.isCellEditable(row,column)) tableModel.setValueAt(RowDefaults.initialValue(metadata),row,column);
             }
         });
         saveBtn = DatabaseUi.action("Commit", AllIcons.Actions.Checked, "Commit pending changes to the database");
@@ -229,7 +230,6 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
 
         tableModel = new EditableTableModel();
         dataTable = new DatabaseTable(tableModel);
-        dataTable.setCellTooltip(this::cellTooltip);
         dataTable.setDefaultRenderer(Object.class, new CellHighlightRenderer());
         JPopupMenu cellMenu = new JPopupMenu();
         cellMenu.add(nullBtn);
@@ -260,7 +260,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 ColumnMetadata column = col < 0 ? null : tableModel.getColumnMeta(modelCol);
                 nullBtn.setEnabled(editable && tableModel.isCellEditable(modelRow, modelCol) && column != null && column.isNullable());
                 defaultBtn.setEnabled(editable && tableModel.isRowNew(modelRow) && tableModel.isCellEditable(modelRow, modelCol)
-                        && column != null && column.getDefaultValue() != null);
+                        && column != null && (column.getDefaultValue() != null || column.isAutoIncrement()));
             }
             @Override public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent event) {}
             @Override public void popupMenuCanceled(javax.swing.event.PopupMenuEvent event) {}
@@ -362,10 +362,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     currentPage = requestedPage;
                     pageSize = requestedSize;
                     tableModel.setData(result.getColumnNames(), result.getColumnTypes(), result.getRows());
-                    for (int i = 0; i < dataTable.getColumnCount(); i++) {
-                        int headerWidth = dataTable.getColumnModel().getColumn(i).getHeaderValue().toString().length() * 10 + 30;
-                        dataTable.getColumnModel().getColumn(i).setPreferredWidth(Math.max(headerWidth, 100));
-                    }
+                    dataTable.sizeColumnsToContent();
                     updatePendingChangesState();
 
                     long maxPage = totalRowCount >= 0 ? Math.max(1,(totalRowCount + pageSize - 1) / pageSize) : -1;
@@ -435,7 +432,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             DatabaseUi.status(statusLabel, statusLabel.getText(), DatabaseUi.Tone.NORMAL);
             if (hasPending) {
                 saveBtn.setText("Commit (" + tableModel.getPendingChangesCount() + ")");
-                DatabaseUi.status(statusLabel, tableModel.getPendingChangesCount() + " pending changes · Commit to save", DatabaseUi.Tone.WARNING);
+                int count = tableModel.getPendingChangesCount();
+                DatabaseUi.status(statusLabel, count + (count == 1 ? " pending change" : " pending changes") + " · Commit to save", DatabaseUi.Tone.WARNING);
             } else {
                 saveBtn.setText("Commit");
             }
@@ -851,6 +849,11 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             for (int row = 0; row < rows.size(); row++) {
                 for (int col = 0; col < columns.size(); col++) {
                     if (!isRowNew(row) && !isCellModified(row,col)) continue;
+                    ColumnMetadata metadata = getColumnMeta(col);
+                    if (isRowNew(row) && metadata != null && metadata.isAutoIncrement() && "(Auto)".equals(rows.get(row).get(col))) {
+                        rows.get(row).set(col, RowDefaults.Value.USE_DEFAULT);
+                        newRows.get(row - originalRows.size()).put(columns.get(col), RowDefaults.Value.USE_DEFAULT);
+                    }
                     String error = validateInput(getColumnMeta(col), rows.get(row).get(col));
                     if (error != null) validationErrors.put(new CellCoord(row,col),error);
                 }
@@ -864,7 +867,13 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             for (int row = 0; row < rows.size(); row++) {
                 if (isRowNew(row)) {
                     Map<String,Object> values = new LinkedHashMap<>();
-                    for (int col = 0; col < columns.size(); col++) values.put(columns.get(col),rows.get(row).get(col));
+                    for (int col = 0; col < columns.size(); col++) {
+                        ColumnMetadata metadata = getColumnMeta(col);
+                        // Older drafts stored the automatic value as display text.
+                        if (metadata != null && metadata.isAutoIncrement() && "(Auto)".equals(rows.get(row).get(col)))
+                            rows.get(row).set(col, RowDefaults.Value.USE_DEFAULT);
+                        values.put(columns.get(col), rows.get(row).get(col));
+                    }
                     newRows.add(values);
                 } else {
                     for (int col = 0; col < columns.size(); col++) {
@@ -980,11 +989,11 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             ColumnMetadata cm = (col < columnMetaList.size()) ? columnMetaList.get(col) : tableMetadata.getColumn(colName);
             if (cm != null) {
                 if (cm.isPrimaryKey() && cm.isAutoIncrement()) {
-                    return colName + " [PK, AI]";
+                    return colName + " [PK, Auto]";
                 } else if (cm.isPrimaryKey()) {
                     return colName + " [PK]";
                 } else if (cm.isAutoIncrement()) {
-                    return colName + " [AI]";
+                    return colName + " [Auto]";
                 }
             }
             return colName;
@@ -992,11 +1001,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
 
         @Override
         public boolean isCellEditable(int row, int col) {
-            ColumnMetadata cm = getColumnMeta(col);
-            if (cm != null && cm.isAutoIncrement()) {
-                return false; // Auto-generated keys are read-only!
-            }
-            return true;
+            return !mutationRunning && !disposed && !tableMetadata.isView();
         }
 
         @Override public Object getValueAt(int row, int col) {
@@ -1024,9 +1029,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         @Override public void setValueAt(Object val, int row, int col) {
             if (row < rows.size() && col < rows.get(row).size()) {
                 ColumnMetadata cm = getColumnMeta(col);
-                if (cm != null && cm.isAutoIncrement()) {
-                    return; // Protected
-                }
+                if (!isCellEditable(row, col)) return;
 
                 Object processedVal = val;
                 rows.get(row).set(col, processedVal);
@@ -1061,27 +1064,6 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         }
     }
 
-    private String cellTooltip(int row, int column) {
-        Object value = tableModel.getValueAt(row, column);
-        ColumnMetadata metadata = tableModel.getColumnMeta(column);
-        String text = tableModel.getColumnName(column) + ": " + DatabaseTable.describeValue(value);
-        String error = tableModel.getValidationError(new CellCoord(row, column));
-        if (error != null) text += "\nValidation error: " + error;
-        if (tableModel.isRowNew(row)) {
-            if (metadata != null && metadata.isAutoIncrement())
-                text += "\nIdentity key assigned by the database on commit.";
-            else if (value == RowDefaults.Value.USE_DEFAULT && metadata != null)
-                text += "\nDatabase default on commit: " + metadata.getDefaultValue();
-            text += "\nNew row; not yet committed.";
-        } else if (tableModel.isCellModified(row, column)) {
-            text += "\nOriginal: " + DatabaseTable.describeValue(tableModel.getOriginalValue(row, column));
-            text += "\nModified; not yet committed.";
-        } else if (metadata != null && metadata.isAutoIncrement()) {
-            text += "\nAuto-generated identity key (read-only).";
-        }
-        return text;
-    }
-
     private class CellHighlightRenderer extends DefaultTableCellRenderer {
 
         // Modified existing cell (UPDATE): Ocean / Cyan highlight
@@ -1112,7 +1094,6 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
 
             setFont(table.getFont());
             setBorder(JBUI.Borders.empty(0, 8));
-            setHorizontalAlignment(value instanceof Number ? SwingConstants.RIGHT : SwingConstants.LEFT);
             int modelRow = table.convertRowIndexToModel(row);
             int modelCol = table.convertColumnIndexToModel(column);
             CellCoord coord = new CellCoord(modelRow, modelCol);
@@ -1122,6 +1103,12 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             boolean isNewRow = tableModel.isRowNew(modelRow);
             ColumnMetadata cm = tableModel.getColumnMeta(modelCol);
             boolean isAuto = cm != null && cm.isAutoIncrement();
+            boolean numeric = cm != null && switch (cm.getDataType()) {
+                case Types.TINYINT, Types.SMALLINT, Types.INTEGER, Types.BIGINT,
+                        Types.NUMERIC, Types.DECIMAL, Types.REAL, Types.FLOAT, Types.DOUBLE -> true;
+                default -> false;
+            };
+            setHorizontalAlignment(numeric || value instanceof Number ? SwingConstants.RIGHT : SwingConstants.LEFT);
 
             if (errorMsg != null) {
                 c.setBackground(isSelected ? errorSelBg : errorBg);
@@ -1139,7 +1126,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                         BorderFactory.createMatteBorder(0, JBUI.scale(2), 0, 0, newRowBorder),
                         JBUI.Borders.empty(0, 6)
                 ));
-                if (isAuto && "(Auto)".equals(value)) {
+                if (isAuto && value == RowDefaults.Value.USE_DEFAULT) {
                     c.setForeground(autoFg);
                     setFont(getFont().deriveFont(Font.ITALIC));
                 }
@@ -1178,6 +1165,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             }
             if (value == null) {
                 setText("NULL");
+            } else if (isAuto && value == RowDefaults.Value.USE_DEFAULT) {
+                setText("(Auto)");
             }
             return c;
         }

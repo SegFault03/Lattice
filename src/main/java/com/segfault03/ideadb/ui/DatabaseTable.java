@@ -8,15 +8,12 @@ import com.intellij.util.ui.JBUI;
 import javax.swing.*;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableModel;
+import javax.swing.table.JTableHeader;
 import java.awt.*;
 import java.awt.event.MouseEvent;
-import java.util.function.BiFunction;
 
-/** Shared database grid styling and a single tooltip anchored to the hovered cell. */
+/** Shared database grids with a persistent header band and no hover surfaces. */
 public final class DatabaseTable extends JBTable {
-    private BiFunction<Integer, Integer, String> cellTooltip;
-    private final Color headerBackground = JBColor.namedColor("Lattice.TableHeader.background", new JBColor(0xE9EEF5, 0x383E48));
-
     public DatabaseTable(TableModel model) {
         super(model);
         setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
@@ -24,68 +21,71 @@ public final class DatabaseTable extends JBTable {
         setShowGrid(true);
         DatabaseInputs.styleTableEditors(this);
         setGridColor(JBColor.namedColor("Table.gridColor", new JBColor(0xE8E9ED, 0x393B40)));
-        // Clipped-cell expansion is another floating popup; cell tooltips supply
-        // the full value and context without competing with it.
         setExpandableItemsEnabled(false);
+        com.intellij.ui.render.RenderingUtil.setHoverPaintingDisabled(this, true);
+        ((JBTableHeader)getTableHeader()).setExpandableItemsEnabled(false);
+        com.intellij.ui.render.RenderingUtil.setHoverPaintingDisabled(getTableHeader(), true);
         getTableHeader().setReorderingAllowed(false);
-        getTableHeader().setBackground(headerBackground);
-        getTableHeader().setPreferredSize(new Dimension(getTableHeader().getPreferredSize().width, JBUI.scale(32)));
         getTableHeader().setDefaultRenderer(new HeaderRenderer());
-        ToolTipManager.sharedInstance().registerComponent(this);
+        ToolTipManager.sharedInstance().unregisterComponent(this);
+        ToolTipManager.sharedInstance().unregisterComponent(getTableHeader());
+    }
+
+    @Override protected JTableHeader createDefaultTableHeader() {
+        return new JBTableHeader() {
+            // Native UI refreshes may replace a header background set only at construction.
+            @Override public Color getBackground() { return headerBackground(); }
+            @Override public Dimension getPreferredSize() {
+                Dimension size = super.getPreferredSize();
+                size.height = Math.max(JBUI.scale(32), getFontMetrics(getFont()).getHeight() + JBUI.scale(10));
+                return size;
+            }
+            @Override public String getToolTipText(MouseEvent event) { return null; }
+            @Override public Point getToolTipLocation(MouseEvent event) { return null; }
+            @Override public void updateUI() {
+                super.updateUI();
+                if (getParent() instanceof JViewport viewport) viewport.setBackground(getBackground());
+            }
+        };
+    }
+
+    private Color headerBackground() {
+        Color rows = getBackground();
+        if (rows == null) rows = Color.WHITE;
+        boolean light = rows.getRed() + rows.getGreen() + rows.getBlue() > 384;
+        Color accent = light ? new Color(86, 111, 148) : new Color(150, 169, 198);
+        double blend = light ? 0.20 : 0.24;
+        return new Color((int)(rows.getRed() * (1 - blend) + accent.getRed() * blend),
+                (int)(rows.getGreen() * (1 - blend) + accent.getGreen() * blend),
+                (int)(rows.getBlue() * (1 - blend) + accent.getBlue() * blend));
     }
 
     public JBScrollPane createScrollPane() {
         JBScrollPane scroll = new JBScrollPane(this);
         scroll.setBorder(JBUI.Borders.empty());
         scroll.setColumnHeaderView(getTableHeader());
-        scroll.getColumnHeader().setBackground(headerBackground);
+        scroll.getColumnHeader().setBackground(getTableHeader().getBackground());
         scroll.getViewport().setBackground(getBackground());
         return scroll;
     }
 
-    /** The provider receives model indices, including after sorting or reordering. */
-    public void setCellTooltip(BiFunction<Integer, Integer, String> provider) {
-        cellTooltip = provider;
+    /** Fit real header/value metrics, with a cap for long text and wide result sets. */
+    public void sizeColumnsToContent() {
+        for (int column = 0; column < getColumnCount(); column++) {
+            Component header = getTableHeader().getDefaultRenderer().getTableCellRendererComponent(
+                    this, getColumnModel().getColumn(column).getHeaderValue(), false, false, -1, column);
+            int width = header.getPreferredSize().width;
+            for (int row = 0; row < Math.min(getRowCount(), 50); row++)
+                width = Math.max(width, prepareRenderer(getCellRenderer(row, column), row, column).getPreferredSize().width);
+            getColumnModel().getColumn(column).setPreferredWidth(Math.max(JBUI.scale(72), Math.min(width + JBUI.scale(8), JBUI.scale(320))));
+        }
     }
 
-    @Override public String getToolTipText(MouseEvent event) {
-        if (event == null) return null;
-        int row = rowAtPoint(event.getPoint());
-        int column = columnAtPoint(event.getPoint());
-        if (row < 0 || column < 0) return null;
-        int modelRow = convertRowIndexToModel(row);
-        int modelColumn = convertColumnIndexToModel(column);
-        String text = cellTooltip == null
-                ? getModel().getColumnName(modelColumn) + ": " + describeValue(getModel().getValueAt(modelRow, modelColumn))
-                : cellTooltip.apply(modelRow, modelColumn);
-        if (text == null || text.isBlank()) return null;
-        // Values are database text, never tooltip markup (including literal <html>).
-        String escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                .replace("\"", "&quot;").replace("\n", "<br>");
-        return text.length() > 70 || text.contains("\n")
-                ? "<html><body style='width: 340px'>" + escaped + "</body></html>"
-                : "<html>" + escaped + "</html>";
-    }
-
-    @Override public Point getToolTipLocation(MouseEvent event) {
-        if (event == null) return null;
-        int row = rowAtPoint(event.getPoint());
-        int column = columnAtPoint(event.getPoint());
-        if (row < 0 || column < 0) return null;
-        Rectangle cell = getCellRect(row, column, true);
-        int x = Math.min(event.getX() + JBUI.scale(8), cell.x + cell.width - 1);
-        return new Point(x, cell.y + cell.height + JBUI.scale(2));
-    }
-
-    public static String describeValue(Object value) {
-        if (value == null) return "NULL (no value)";
-        if (value instanceof String text && text.isEmpty()) return "Empty string (0 characters)";
-        if (value instanceof byte[] bytes) return "Binary data (" + bytes.length + " bytes)";
-        String text = value.toString();
-        return text.length() > 1000 ? text.substring(0, 1000) + "… (truncated)" : text;
-    }
+    @Override public String getToolTipText(MouseEvent event) { return null; }
+    @Override public Point getToolTipLocation(MouseEvent event) { return null; }
 
     private static final class HeaderRenderer extends DefaultTableCellRenderer {
+        @Override public boolean isOpaque() { return true; }
         @Override public Component getTableCellRendererComponent(JTable table, Object value, boolean selected,
                                                                  boolean focus, int row, int column) {
             super.getTableCellRendererComponent(table, value, selected, focus, row, column);
