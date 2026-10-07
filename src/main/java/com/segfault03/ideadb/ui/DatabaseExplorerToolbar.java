@@ -24,15 +24,15 @@ final class DatabaseExplorerToolbar extends JPanel {
         setBorder(BorderFactory.createCompoundBorder(
                 JBUI.Borders.customLineBottom(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR),
                 JBUI.Borders.empty(6, 12)));
-        JButton add = button(AllIcons.General.Add, "Add Database Connection", null, true);
+        JButton add = button(AllIcons.General.Add, "Add connection…", null, true);
         add.addActionListener(e -> addConnection.accept(add));
-        edit = button(AllIcons.General.Settings, "Edit Connection Properties", editConnection);
-        remove = button(AllIcons.General.Remove, "Remove Connection", removeConnection);
+        edit = button(AllIcons.General.Settings, "Edit connection…", editConnection);
+        remove = button(AllIcons.General.Remove, "Remove connection settings", removeConnection);
         separator();
         refresh = button(AllIcons.Actions.Refresh, "Refresh", refreshConnection);
-        console = button(AllIcons.Debugger.Console, "Open SQL Console", openConsole);
+        console = button(Icons.CONSOLE, "Open SQL Console", openConsole);
         separator();
-        button(AllIcons.General.ContextHelp, "Lattice Welcome & Tips", showHelp);
+        button(AllIcons.General.ContextHelp, "Welcome to Lattice", showHelp);
         setHasConnections(false);
     }
 

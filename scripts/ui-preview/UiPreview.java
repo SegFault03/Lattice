@@ -134,6 +134,8 @@ public final class UiPreview {
         TableMetadata metadata = (TableMetadata)field(table(false), "tableMetadata");
         AlterTableDialog alter = new AlterTableDialog(null, config(DatabaseType.MYSQL), "shop", metadata);
         render(alter.previewPanel(), theme + "-schema-alter-table-800", 800, alter.previewPanel().getPreferredSize().height);
+        findButton(alter.previewPanel(), "Drop column").doClick(0);
+        render(alter.previewPanel(), theme + "-schema-drop-column-800", 800, alter.previewPanel().getPreferredSize().height);
     }
     static void connection(String theme, String variant, int width) throws Exception {
         ConnectionConfig config = config(variant.startsWith("hsql") ? DatabaseType.HSQLDB : DatabaseType.MYSQL);
@@ -142,7 +144,14 @@ public final class UiPreview {
         if (variant.equals("jdbc-url")) config.setCustomUrl("jdbc:mysql://localhost:3306/shop?useSSL=true");
         if (variant.equals("driver-download")) config.setDriverSource(DriverSource.DOWNLOAD);
         if (variant.equals("driver-local")) { config.setDriverSource(DriverSource.LOCAL_JAR); config.setDriverJarPath("/home/developer/drivers/mysql-connector-j.jar"); }
-        ConnectionDialog dialog = new ConnectionDialog(null, config);
+        ConnectionDialog dialog = new ConnectionDialog(null, config, variant.equals("new"));
+        if (variant.equals("success") || variant.equals("failed")) {
+            JLabel status = (JLabel)field(dialog, "testStatusLabel");
+            status.setVisible(true);
+            com.segfault03.ideadb.ui.DatabaseUi.status(status,
+                    variant.equals("success") ? "Connected · MySQL 8.4.4" : "Connection failed · Check the settings",
+                    variant.equals("success") ? com.segfault03.ideadb.ui.DatabaseUi.Tone.SUCCESS : com.segfault03.ideadb.ui.DatabaseUi.Tone.ERROR);
+        }
         JPanel panel = dialog.previewPanel();
         render(panel, theme + "-connection-" + variant + "-" + width, width, panel.getPreferredSize().height);
         if (variant.equals("driver-download")) {
@@ -185,7 +194,7 @@ public final class UiPreview {
         int[] widths = {110, 190, 280, 150, 150};
         for (int i = 0; i < widths.length; i++) table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
         ((JButton) field(panel, "nextPageBtn")).setEnabled(false);
-        ((JLabel) field(panel, "statusLabel")).setText("Loaded 12 row(s) in 18 ms | Total rows: not counted");
+        ((JLabel) field(panel, "statusLabel")).setText("12 rows · 18 ms · Total: not counted");
         return panel;
     }
     static SqlQueryConsolePanel console() throws Exception {
@@ -202,7 +211,7 @@ public final class UiPreview {
         ((JScrollPane)table.getParent().getParent()).setColumnHeaderView(table.getTableHeader());
         int[] widths = {110, 220, 320, 150};
         for (int i = 0; i < widths.length; i++) table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
-        ((JLabel)field(panel, "statusLabel")).setText("4 row(s) returned in 18 ms");
+        com.segfault03.ideadb.ui.DatabaseUi.status((JLabel)field(panel, "statusLabel"), "4 rows · 18 ms", com.segfault03.ideadb.ui.DatabaseUi.Tone.SUCCESS);
         ((JTabbedPane)field(panel, "resultsTabs")).setTitleAt(0, "Results (4)");
         ((JTextArea)field(panel, "messagesArea")).setText("Query completed successfully.\n4 rows returned in 18 ms.\n");
         return panel;
@@ -247,6 +256,17 @@ public final class UiPreview {
         render(layers, name, 1100, 620);
         layers.remove(panel);
     }
+    static JButton findButton(Container container, String text) {
+        for (Component child : container.getComponents()) {
+            if (child instanceof JButton button && text.equals(button.getText())) return button;
+            if (child instanceof Container nested) {
+                JButton match = findButton(nested, text);
+                if (match != null) return match;
+            }
+        }
+        return null;
+    }
+
     static JComponent findByTooltip(Container container, String tooltip) {
         for (Component child : container.getComponents()) {
             if (child instanceof JComponent component && tooltip.equals(component.getToolTipText())) return component;
@@ -317,6 +337,47 @@ public final class UiPreview {
         if (normal.getBorder().getBorderInsets(normal).top != 0) throw new AssertionError("Modified/error border leaked into a normal cell");
         System.out.println("Cell menu actions and renderer state verified");
     }
+    static JPanel welcome(boolean configured) throws Exception {
+        var settings = new com.segfault03.ideadb.state.DatabaseSettingsState();
+        if (configured) {
+            var state = (com.segfault03.ideadb.state.DatabaseSettingsState.State)field(settings, "state");
+            state.connections.add(config(DatabaseType.MYSQL));
+        }
+        var constructor = com.segfault03.ideadb.ui.WelcomePanel.class.getDeclaredConstructor(
+                com.intellij.openapi.project.Project.class, com.segfault03.ideadb.state.DatabaseSettingsState.class);
+        constructor.setAccessible(true);
+        return constructor.newInstance(null, settings);
+    }
+
+    static void verifyWelcome() throws Exception {
+        JPanel panel = welcome(false);
+        JButton console = (JButton)field(panel, "openConsole");
+        if (console.isEnabled()) throw new AssertionError("A SQL console needs a saved connection");
+        var settings = (com.segfault03.ideadb.state.DatabaseSettingsState)field(panel, "settings");
+        var state = (com.segfault03.ideadb.state.DatabaseSettingsState.State)field(settings, "state");
+        state.connections.add(config(DatabaseType.MYSQL));
+        invoke(panel, "updateConsoleAvailability", new Class<?>[]{});
+        if (!console.isEnabled()) throw new AssertionError("Console must become available after adding a connection");
+        verifyWelcomePreference(panel, settings);
+        JLabel status = new JLabel();
+        com.segfault03.ideadb.ui.DatabaseUi.status(status, "Query failed", com.segfault03.ideadb.ui.DatabaseUi.Tone.ERROR);
+        if (status.getIcon() == null) throw new AssertionError("Error needs a severity icon");
+        com.segfault03.ideadb.ui.DatabaseUi.status(status, "Ready", com.segfault03.ideadb.ui.DatabaseUi.Tone.NORMAL);
+        if (status.getIcon() != null) throw new AssertionError("Status icon must reset");
+        System.out.println("Welcome availability, startup preference and status reset verified");
+    }
+
+    static void verifyWelcomePreference(Container panel, com.segfault03.ideadb.state.DatabaseSettingsState settings) {
+        for (Component component : panel.getComponents()) {
+            if (component instanceof JCheckBox check && "Show welcome screen on startup".equals(check.getText())) {
+                check.doClick(0);
+                if (settings.isShowWelcomeScreen()) throw new AssertionError("Startup preference should follow the positive checkbox");
+                check.doClick(0);
+                if (!settings.isShowWelcomeScreen()) throw new AssertionError("Startup preference should be restored");
+            } else if (component instanceof Container nested) verifyWelcomePreference(nested, settings);
+        }
+    }
+
     public static void main(String[] args) throws Exception {
         output = Path.of(args[0]);
         Files.createDirectories(output);
@@ -330,8 +391,13 @@ public final class UiPreview {
         SwingUtilities.invokeAndWait(() -> {
             try {
                 inputPreviews(theme);
+                render(welcome(false), theme + "-welcome-900", 900, 680);
+                render(welcome(false), theme + "-welcome-520", 520, 680);
+                render(welcome(true), theme + "-welcome-connected-900", 900, 680);
+                verifyWelcome();
                 render(ExplorerPreview.create(config(DatabaseType.MYSQL), false), theme + "-side-panel-340", 340, 620);
                 render(ExplorerPreview.create(config(DatabaseType.MYSQL), true), theme + "-side-panel-empty-340", 340, 620);
+                render(ExplorerPreview.error(config(DatabaseType.MYSQL)), theme + "-side-panel-error-340", 340, 620);
                 SqlQueryConsolePanel console = console();
                 render(console, theme + "-sql-console-1100", 1100, 620);
                 render(console, theme + "-sql-console-760", 760, 620);
@@ -343,21 +409,18 @@ public final class UiPreview {
                 verifyGrid(results, 1, 2);
                 tooltipSnapshot(console, results, 1, 2, theme + "-sql-console-null-tooltip-1100");
                 invoke(console, "setRunning", new Class<?>[]{boolean.class}, true);
-                ((JLabel)field(console, "statusLabel")).setText("Executing query…");
+                com.segfault03.ideadb.ui.DatabaseUi.status((JLabel)field(console, "statusLabel"), "Running query…", com.segfault03.ideadb.ui.DatabaseUi.Tone.BUSY);
                 render(console, theme + "-sql-console-running-1100", 1100, 620);
                 invoke(console, "setRunning", new Class<?>[]{boolean.class}, false);
                 JTextArea consoleEditor = (JTextArea)field(console, "editorArea");
                 console.setSqlText(consoleEditor.getText().replace("WHERE status", "WHERE customer_status"));
-                ((JTextArea)field(console, "messagesArea")).setText("ERROR: Unknown column 'customer_status' in WHERE clause\nElapsed: 8 ms\n\nCheck the column name and run the query again.");
-                ((JTextArea)field(console, "messagesArea")).setForeground(new JBColor(0xC62828, 0xFF8282));
-                ((JTabbedPane)field(console, "resultsTabs")).setSelectedIndex(1);
-                ((JLabel)field(console, "statusLabel")).setText("Query failed: unknown column 'customer_status'");
+                invoke(console, "showQueryError", new Class<?>[]{String.class, long.class}, "Unknown column 'customer_status' in WHERE clause", 8L);
                 render(console, theme + "-sql-console-messages-1100", 1100, 620);
                 SqlQueryConsolePanel emptyConsole = new SqlQueryConsolePanel(null, config(DatabaseType.MYSQL), "shop", List.of("shop"));
                 emptyConsole.setSqlText("");
                 render(emptyConsole, theme + "-sql-console-empty-1100", 1100, 620);
                 verifyConsoleActions();
-                for (String variant : List.of("mysql", "hsql-server", "hsql-memory", "hsql-file", "jdbc-url", "driver-download", "driver-local")) connection(theme, variant, 600);
+                for (String variant : List.of("mysql", "new", "success", "failed", "hsql-server", "hsql-memory", "hsql-file", "jdbc-url", "driver-download", "driver-local")) connection(theme, variant, 600);
                 connection(theme, "mysql", 800);
                 TableDataEditorPanel editor = table(false);
                 render(editor, theme + "-table-1100", 1100, 620);

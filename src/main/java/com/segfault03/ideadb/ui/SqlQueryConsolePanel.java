@@ -30,8 +30,6 @@ import java.util.List;
 
 public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     private static final JBColor NORMAL_MSG_COLOR = new JBColor(new Color(40, 40, 40), new Color(200, 200, 200));
-    private static final JBColor ERROR_MSG_COLOR = new JBColor(new Color(200, 40, 40), new Color(255, 107, 107));
-    private static final JBColor SUCCESS_MSG_COLOR = new JBColor(new Color(30, 140, 60), new Color(98, 181, 67));
     private final com.segfault03.ideadb.service.DatabaseTaskScope tasks=com.segfault03.ideadb.service.DatabaseTaskService.getInstance().newScope();
     private final Project project;
     private final ConnectionConfig config;
@@ -93,13 +91,13 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         String runShortcut = (menuShortcut & java.awt.event.InputEvent.META_DOWN_MASK) != 0 ? "⌘Enter" : "Ctrl+Enter";
         runBtn = DatabaseUi.action("Run", AllIcons.Actions.Execute, "Run selection or query (" + runShortcut + ")");
         runBtn.addActionListener(e -> executeCurrentSql());
-        cancelBtn = DatabaseUi.action("Stop", AllIcons.Actions.Suspend, "Cancel the running query");
+        cancelBtn = DatabaseUi.action("Stop", Icons.STOP, "Stop the running query");
         cancelBtn.setEnabled(false);
         cancelBtn.addActionListener(e -> cancelExecution());
         resultLimit = DatabaseInputs.comboBox(new Integer[]{100, 1000, 10000});
         resultLimit.setSelectedItem(1000);
         resultLimit.setToolTipText("Maximum rows returned by the next query");
-        JButton clearBtn = DatabaseUi.action("", AllIcons.Actions.GC, "Clear query text");
+        JButton clearBtn = DatabaseUi.action("Clear", Icons.CLEAR, "Clear query text");
         clearBtn.addActionListener(e -> editorArea.setText(""));
         toolbar.add(DatabaseUi.group(new JBLabel("Database"), databaseCombo));
         toolbar.add(DatabaseUi.group(DatabaseUi.separator(), runBtn, cancelBtn));
@@ -234,7 +232,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         final com.segfault03.ideadb.service.QueryExecution current = new com.segfault03.ideadb.service.QueryExecution();
         execution = current;
         setRunning(true);
-        statusLabel.setText("Executing query...");
+        DatabaseUi.status(statusLabel, "Running query…", DatabaseUi.Tone.BUSY);
 
         // Record history
         if (!queryHistory.contains(finalSql)) {
@@ -252,10 +250,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
                     execution = null;
                     setRunning(false);
                     if (result.hasError()) {
-                        messagesArea.setText("ERROR: " + result.getError() + "\nElapsed: " + result.getExecutionTimeMs() + " ms");
-                        messagesArea.setForeground(ERROR_MSG_COLOR);
-                        resultsTabs.setSelectedIndex(1); // Switch to Messages tab
-                        statusLabel.setText("Query failed: " + result.getError());
+                        showQueryError(result.getError(), result.getExecutionTimeMs());
                     } else if (result.isResultSet()) {
                         messagesArea.setText(result.getMessage());
                         messagesArea.setForeground(NORMAL_MSG_COLOR);
@@ -269,14 +264,18 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
                             resultsTable.getColumnModel().getColumn(i).setPreferredWidth(Math.max(headerWidth, 90));
                         }
 
+                        resultsTabs.setToolTipTextAt(0, null);
                         resultsTabs.setTitleAt(0, "Results (" + result.getRows().size() + ")");
                         resultsTabs.setSelectedIndex(0); // Switch to Results tab
-                        statusLabel.setText(result.getMessage());
+                        DatabaseUi.status(statusLabel,
+                                result.isTruncated() ? result.getRows().size() + " rows · Limit reached" : result.getRows().size() + " rows · " + result.getExecutionTimeMs() + " ms",
+                                result.isTruncated() ? DatabaseUi.Tone.WARNING : DatabaseUi.Tone.SUCCESS);
+                        statusLabel.setToolTipText(result.getMessage());
                     } else {
                         messagesArea.setText(result.getMessage());
-                        messagesArea.setForeground(SUCCESS_MSG_COLOR);
+                        messagesArea.setForeground(NORMAL_MSG_COLOR);
                         resultsTabs.setSelectedIndex(1);
-                        statusLabel.setText(result.getMessage());
+                        DatabaseUi.status(statusLabel, result.getAffectedRows() + " rows affected · " + result.getExecutionTimeMs() + " ms", DatabaseUi.Tone.SUCCESS);
                     }
                 });
             } catch (Exception ex) {
@@ -284,17 +283,31 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
                     if (disposed) return;
                     execution = null;
                     setRunning(false);
-                    messagesArea.setText("Exception: " + ex.getMessage());
-                    messagesArea.setForeground(ERROR_MSG_COLOR);
-                    resultsTabs.setSelectedIndex(1);
-                    statusLabel.setText("Execution error: " + ex.getMessage());
+                    showQueryError(ex.getMessage(), -1);
                 });
             }
         });
     }
 
+    private void showQueryError(String error, long elapsedMs) {
+        String detail = java.util.Objects.requireNonNullElse(error, "No error details were returned.");
+        messagesArea.setText("Query failed\n\n" + detail + (elapsedMs >= 0 ? "\n\nElapsed: " + elapsedMs + " ms" : ""));
+        messagesArea.setForeground(NORMAL_MSG_COLOR);
+        resultsTabs.setSelectedIndex(1);
+        if (resultsModel.getRowCount() > 0) {
+            resultsTabs.setTitleAt(0, "Previous results");
+            resultsTabs.setToolTipTextAt(0, "These results are from the last successful query");
+        }
+        DatabaseUi.status(statusLabel, "Query failed · See Messages for details", DatabaseUi.Tone.ERROR);
+        statusLabel.setToolTipText(detail);
+    }
+
     private void setRunning(boolean running) {
         this.running = running;
+        if (running && resultsModel.getRowCount() > 0) {
+            resultsTabs.setTitleAt(0, "Previous results");
+            resultsTabs.setToolTipTextAt(0, "These results are from the last successful query");
+        }
         runBtn.setEnabled(!running);
         cancelBtn.setEnabled(running);
         databaseCombo.setEnabled(!running);

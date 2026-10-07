@@ -92,14 +92,18 @@ public class ConnectionDialog extends DialogWrapper {
 
     // Preview and Action components
     private JBLabel urlPreviewLabel;
-    private final JButton testButton = new ActionLink("Test Connection");
+    private final JButton testButton = new ActionLink("Test connection");
     private final JBLabel testStatusLabel = new JBLabel("");
 
     public ConnectionDialog(@Nullable Project project, ConnectionConfig config) {
+        this(project, config, false);
+    }
+
+    public ConnectionDialog(@Nullable Project project, ConnectionConfig config, boolean newConnection) {
         super(project, true);
         this.config = config.copy();
-        setTitle(config.getName().isEmpty() || config.getName().equals("New Connection")
-                ? "New Database Connection" : "Edit Database Connection");
+        setTitle(newConnection ? "New connection" : "Edit connection");
+        setOKButtonText(newConnection ? "Add connection" : "Save");
         init();
         loadValues();
         updatePreview();
@@ -128,7 +132,7 @@ public class ConnectionDialog extends DialogWrapper {
         nameField = ConnectionFormPanel.width(DatabaseInputs.textField(), 360);
         topPanel.addRow(1, "Name:", nameField, false);
         typeCombo = ConnectionFormPanel.width(DatabaseInputs.comboBox(DatabaseType.values()), 220);
-        topPanel.addRow(2, "Database Type:", typeCombo, false);
+        topPanel.addRow(2, "Database type:", typeCombo, false);
         topPanel.addSection(3, "Connection");
         JPanel radioPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         standardRadio = new JRadioButton("Standard", true);
@@ -324,12 +328,12 @@ public class ConnectionDialog extends DialogWrapper {
         hsqlFileField = DatabaseInputs.browseField();
         ConnectionFormPanel.width(hsqlFileField, 220);
         hsqlFileField.addBrowseFolderListener(null, FileChooserDescriptorFactory.createSingleFileOrFolderDescriptor().withTitle("Select Database File"));
-        fileForm.addRow(0, "File / Path:", hsqlFileField, false);
+        fileForm.addRow(0, "Database path:", hsqlFileField, false);
         hsqlSubCardPanel.add(fileForm, HsqlMode.FILE.name());
 
         ConnectionFormPanel memoryForm = new ConnectionFormPanel();
         hsqlMemNameField = ConnectionFormPanel.width(DatabaseInputs.textField(), 220);
-        memoryForm.addRow(0, "Database Name:", hsqlMemNameField, false);
+        memoryForm.addRow(0, "Database name:", hsqlMemNameField, false);
         hsqlSubCardPanel.add(memoryForm, HsqlMode.MEM.name());
         form.addFullWidthRow(1, hsqlSubCardPanel);
 
@@ -453,6 +457,7 @@ public class ConnectionDialog extends DialogWrapper {
 
     private void setDriverStatus(String message) {
         message = java.util.Objects.requireNonNullElse(message, " ");
+        driverStatusLabel.setIcon(null);
         driverStatusLabel.setText("<html><body width='300'>" + escapeHtml(message) + "</body></html>");
         driverStatusLabel.setToolTipText(message);
         refreshFormSize();
@@ -554,7 +559,8 @@ public class ConnectionDialog extends DialogWrapper {
                     driverVersionCombo.removeAllItems(); available.forEach(driverVersionCombo::addItem); driverVersionCombo.setSelectedItem(version);
                 }
                 updateDriverStatus();
-                if (failure != null) { setDriverStatus("Download failed; use a local JAR or retry."); Messages.showErrorDialog(failure, "JDBC Driver"); }
+                if (failure != null) { setDriverStatus(listOnly ? "Could not load versions; enter a version or retry." : "Download failed; use a local JAR or retry.");
+                    driverStatusLabel.setIcon(com.intellij.icons.AllIcons.General.Error); Messages.showErrorDialog(failure, "JDBC Driver"); }
             });
         });
     }
@@ -597,9 +603,9 @@ public class ConnectionDialog extends DialogWrapper {
         ConnectionConfig temp = createTempConfig();
         DatabaseType originalType = temp.getType();
         ConnectionConfig requested = temp.copy();
-        testStatusLabel.setText("Connecting...");
+        DatabaseUi.status(testStatusLabel, "Testing connection…", DatabaseUi.Tone.BUSY);
         testStatusLabel.setVisible(true);
-        testStatusLabel.setForeground(JBColor.GRAY);
+
         testButton.setEnabled(false); downloadDriverButton.setEnabled(false); listVersionsButton.setEnabled(false);
 
         connectionTask = com.segfault03.ideadb.service.DatabaseTaskService.getInstance().submit(() -> {
@@ -610,7 +616,7 @@ public class ConnectionDialog extends DialogWrapper {
                     if (isDisposed()) return;
                     testButton.setEnabled(true); downloadDriverButton.setEnabled(true); listVersionsButton.setEnabled(true);
                     if (!sameRequest(requested, createTempConfig())) {
-                        testStatusLabel.setText("Settings changed; test again"); return;
+                        DatabaseUi.status(testStatusLabel, "Settings changed · Test again", DatabaseUi.Tone.WARNING); return;
                     }
                     if (result.isSuccess()) {
                         // If the backend detected a database type mismatch (e.g. MySQL port was running HSQLDB)
@@ -626,13 +632,12 @@ public class ConnectionDialog extends DialogWrapper {
                             }
                             updatePreview();
                         }
-                        testStatusLabel.setText(result.getDatabaseProductName() + " " + result.getDatabaseProductVersion());
+                        DatabaseUi.status(testStatusLabel, "Connected · " + result.getDatabaseProductName() + " " + result.getDatabaseProductVersion(), DatabaseUi.Tone.SUCCESS);
                         testStatusLabel.setToolTipText("Driver: " + result.getDriverName() + " " + result.getDriverVersion() + "; " + result.getResponseTimeMs() + " ms");
-                        testStatusLabel.setForeground(new JBColor(new Color(40, 160, 80), new Color(98, 181, 67)));
-                        Messages.showInfoMessage(result.getSummaryMessage(), "Connection Successful");
+
                     } else {
-                        testStatusLabel.setText("Failed!");
-                        testStatusLabel.setForeground(new JBColor(new Color(200, 40, 40), new Color(255, 107, 107)));
+                        DatabaseUi.status(testStatusLabel, "Connection failed · Check the settings", DatabaseUi.Tone.ERROR);
+                        testStatusLabel.setToolTipText(result.getSummaryMessage());
                         Messages.showErrorDialog(result.getSummaryMessage(), "Connection Failed");
                     }
                 });

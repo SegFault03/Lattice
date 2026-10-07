@@ -67,6 +67,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
 
     @Override public void dispose() {
         disposed=true; tasks.cancelPending();
+        ToolTipManager.sharedInstance().unregisterComponent(databaseTree);
         com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(tasks::close);
     }
     private void initUI() {
@@ -84,6 +85,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         databaseTree.setCellRenderer(new DatabaseTreeCellRenderer());
         databaseTree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
         databaseTree.setRootVisible(true);
+        ToolTipManager.sharedInstance().registerComponent(databaseTree);
         databaseTree.setShowsRootHandles(true);
         databaseTree.setBorder(JBUI.Borders.empty(6, 8));
 
@@ -204,7 +206,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         switch (data.getType()) {
             case CONNECTION: {
                 ConnectionConfig cfg = data.getConnectionConfig();
-                JMenuItem connectItem = new JMenuItem("Connect / Reload", AllIcons.Actions.Refresh);
+                JMenuItem connectItem = new JMenuItem(data.isConnected() ? "Refresh connection" : "Connect", AllIcons.Actions.Refresh);
                 connectItem.addActionListener(e -> {
                     data.setLoaded(false);
                     loadDatabasesForConnectionNode(node, data);
@@ -224,21 +226,21 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
 
                 menu.addSeparator();
 
-                JMenuItem consoleItem = new JMenuItem("Open SQL Console", Icons.CONSOLE);
+                JMenuItem consoleItem = new JMenuItem("Open SQL console", Icons.CONSOLE);
                 consoleItem.addActionListener(e -> DatabaseEditorManager.getInstance(project).openConsole(cfg, null, null));
                 menu.add(consoleItem);
 
-                JMenuItem createDbItem = new JMenuItem("Create " + (cfg.getType() == DatabaseType.MYSQL ? "Database..." : "Schema..."));
+                JMenuItem createDbItem = new JMenuItem("Create " + (cfg.getType() == DatabaseType.MYSQL ? "database…" : "schema…"));
                 createDbItem.addActionListener(e -> doCreateDatabase(cfg, node, data));
                 menu.add(createDbItem);
 
                 menu.addSeparator();
 
-                JMenuItem editItem = new JMenuItem("Edit Connection Properties...", AllIcons.Actions.Edit);
+                JMenuItem editItem = new JMenuItem("Edit connection…", AllIcons.Actions.Edit);
                 editItem.addActionListener(e -> editConnection(cfg));
                 menu.add(editItem);
 
-                JMenuItem delItem = new JMenuItem("Remove Connection", AllIcons.General.Remove);
+                JMenuItem delItem = new JMenuItem("Remove connection", AllIcons.General.Remove);
                 delItem.addActionListener(e -> removeConnection(cfg));
                 menu.add(delItem);
                 break;
@@ -248,20 +250,20 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 ConnectionConfig cfg = data.getConnectionConfig();
                 String dbName = data.getDatabaseName();
 
-                JMenuItem consoleItem = new JMenuItem("Open SQL Console", Icons.CONSOLE);
+                JMenuItem consoleItem = new JMenuItem("Open SQL console", Icons.CONSOLE);
                 consoleItem.addActionListener(e -> DatabaseEditorManager.getInstance(project).openConsole(cfg, dbName, null));
                 menu.add(consoleItem);
 
-                JMenuItem createTableItem = new JMenuItem("Create Table...", Icons.TABLE);
+                JMenuItem createTableItem = new JMenuItem("Create table…", Icons.TABLE);
                 createTableItem.addActionListener(e -> doCreateTable(cfg, dbName, node));
                 menu.add(createTableItem);
 
-                JMenuItem dropDbItem = new JMenuItem("Drop " + (cfg.getType() == DatabaseType.MYSQL ? "Database..." : "Schema..."));
+                JMenuItem dropDbItem = new JMenuItem("Drop " + (cfg.getType() == DatabaseType.MYSQL ? "database…" : "schema…"));
                 dropDbItem.addActionListener(e -> doDropDatabase(cfg, dbName, node));
                 menu.add(dropDbItem);
 
                 menu.addSeparator();
-                JMenuItem refreshItem = new JMenuItem("Refresh Tables", AllIcons.Actions.Refresh);
+                JMenuItem refreshItem = new JMenuItem("Refresh tables", AllIcons.Actions.Refresh);
                 refreshItem.addActionListener(e -> {
                     data.setLoaded(false);
                     loadTablesForDatabaseNode(node, data);
@@ -276,12 +278,12 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 String dbName = data.getDatabaseName();
                 TableMetadata tm = data.getTableMetadata();
 
-                JMenuItem viewDataItem = new JMenuItem("View / Edit Data", AllIcons.Actions.Preview);
+                JMenuItem viewDataItem = new JMenuItem("Open data editor", AllIcons.Actions.Preview);
                 viewDataItem.setFont(viewDataItem.getFont().deriveFont(Font.BOLD));
                 viewDataItem.addActionListener(e -> DatabaseEditorManager.getInstance(project).openTableData(cfg, dbName, tm));
                 menu.add(viewDataItem);
 
-                JMenuItem consoleItem = new JMenuItem("Open in SQL Console", Icons.CONSOLE);
+                JMenuItem consoleItem = new JMenuItem("Open in SQL console", Icons.CONSOLE);
                 consoleItem.addActionListener(e -> {
                     String query = "SELECT * FROM " + DdlService.formatTable(cfg,dbName,tm.getName()) + " LIMIT 100;";
                     DatabaseEditorManager.getInstance(project).openConsole(cfg, dbName, query);
@@ -291,7 +293,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 if (!tm.isView()) {
                     menu.addSeparator();
 
-                    JMenuItem alterItem = new JMenuItem("Modify / Alter Table...", AllIcons.Actions.Edit);
+                    JMenuItem alterItem = new JMenuItem("Alter table…", AllIcons.Actions.Edit);
                     alterItem.addActionListener(e -> {
                         AlterTableDialog dlg = new AlterTableDialog(project, cfg, dbName, tm);
                         if (dlg.showAndGet()) {
@@ -302,11 +304,11 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                     });
                     menu.add(alterItem);
 
-                    JMenuItem truncateItem = new JMenuItem("Truncate Table...");
+                    JMenuItem truncateItem = new JMenuItem("Truncate table…", AllIcons.General.Remove);
                     truncateItem.addActionListener(e -> doTruncateTable(cfg, dbName, tm.getName()));
                     menu.add(truncateItem);
 
-                    JMenuItem dropItem = new JMenuItem("Drop Table...", AllIcons.General.Remove);
+                    JMenuItem dropItem = new JMenuItem("Drop table…", AllIcons.General.Remove);
                     dropItem.addActionListener(e -> doDropTable(cfg, dbName, tm.getName(), node));
                     menu.add(dropItem);
                 }
@@ -367,7 +369,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                     if(disposed || project.isDisposed()) return;
                     connNode.removeAllChildren();
                     data.setConnected(false);
-                    connNode.add(new DefaultMutableTreeNode(TreeNodeData.loading("Error: " + ex.getMessage())));
+                    connNode.add(new DefaultMutableTreeNode(TreeNodeData.error("Connection failed · Refresh to retry", ex.getMessage())));
                     treeModel.nodeStructureChanged(connNode);
                     Messages.showErrorDialog(project, "Failed to connect: " + ex.getMessage(), "Connection Error");
                 });
@@ -421,7 +423,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 SwingUtilities.invokeLater(() -> {
                     if(disposed || project.isDisposed()) return;
                     dbNode.removeAllChildren();
-                    dbNode.add(new DefaultMutableTreeNode(TreeNodeData.loading("Error: " + ex.getMessage())));
+                    dbNode.add(new DefaultMutableTreeNode(TreeNodeData.error("Could not load tables", ex.getMessage())));
                     treeModel.nodeStructureChanged(dbNode);
                 });
             }
@@ -460,7 +462,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 SwingUtilities.invokeLater(() -> {
                     if(disposed || project.isDisposed()) return;
                     tableNode.removeAllChildren();
-                    tableNode.add(new DefaultMutableTreeNode(TreeNodeData.loading("Error: " + ex.getMessage())));
+                    tableNode.add(new DefaultMutableTreeNode(TreeNodeData.error("Could not load columns", ex.getMessage())));
                     treeModel.nodeStructureChanged(tableNode);
                 });
             }
@@ -469,11 +471,11 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
 
     private void showAddConnectionMenu(Component invoker) {
         JPopupMenu menu = new JPopupMenu();
-        JMenuItem mysqlItem = new JMenuItem("MySQL Database...");
+        JMenuItem mysqlItem = new JMenuItem("MySQL…");
         mysqlItem.addActionListener(e -> showAddConnectionDialog(DatabaseType.MYSQL));
         menu.add(mysqlItem);
 
-        JMenuItem hsqlItem = new JMenuItem("HSQLDB Database...");
+        JMenuItem hsqlItem = new JMenuItem("HSQLDB…");
         hsqlItem.addActionListener(e -> showAddConnectionDialog(DatabaseType.HSQLDB));
         menu.add(hsqlItem);
 
@@ -484,7 +486,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         ConnectionConfig newCfg = new ConnectionConfig(defaultType, "New " + defaultType.getDisplayName());
         newCfg.setDatabaseName("");
         newCfg.setUser("");
-        ConnectionDialog dlg = new ConnectionDialog(project, newCfg);
+        ConnectionDialog dlg = new ConnectionDialog(project, newCfg, true);
         if (dlg.showAndGet()) {
             ConnectionConfig result = dlg.getResultConfig();
             DatabaseSettingsState.getInstance().addConnection(result);
@@ -524,7 +526,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     }
 
     private void removeConnection(ConnectionConfig cfg) {
-        int confirm = Messages.showYesNoDialog(project, "Remove connection '" + cfg.getName() + "'?", "Confirm Remove", Messages.getQuestionIcon());
+        int confirm = Messages.showYesNoDialog(project, "Remove connection '" + cfg.getName() + "'?\nOnly the saved connection settings will be removed. Your database and data will be kept.", "Remove connection", "Remove connection", "Cancel", Messages.getQuestionIcon());
         if (confirm == Messages.YES) {
             DatabaseSettingsState.getInstance().removeConnection(cfg.getId());
         }
@@ -579,21 +581,21 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                     DdlService.getInstance().createDatabase(conn, cfg, dbName);
                     SwingUtilities.invokeLater(() -> {
                     if(disposed || project.isDisposed()) return;
-                        Messages.showInfoMessage(project, "Database/Schema '" + dbName + "' created successfully!", "Success");
+                        Messages.showInfoMessage(project, (cfg.getType() == DatabaseType.MYSQL ? "Database" : "Schema") + " '" + dbName + "' created.", "Created");
                         connData.setLoaded(false);
                         loadDatabasesForConnectionNode(connNode, connData);
                     });
                 } catch (Exception ex) {
-                    SwingUtilities.invokeLater(() -> Messages.showErrorDialog(project, "Failed to create database: " + ex.getMessage(), "Error"));
+                    SwingUtilities.invokeLater(() -> Messages.showErrorDialog(project, "Failed to create database: " + ex.getMessage(), "Create database failed"));
                 }
             });
         }
     }
 
     private void doDropDatabase(ConnectionConfig cfg, String dbName, DefaultMutableTreeNode dbNode) {
-        int confirm = Messages.showYesNoDialog(project, "Are you sure you want to drop database '" + dbName + "'?\nAll tables and data will be destroyed.",
-                "Confirm Drop Database", Messages.getWarningIcon());
-        if (confirm != Messages.YES) return;
+        String object = cfg.getType() == DatabaseType.MYSQL ? "database" : "schema";
+        if (!DatabaseUi.confirmDestructive(project, "Drop " + object,
+                "Drop " + object + " '" + dbName + "'?\nAll tables and their data will be permanently deleted.", "Drop " + object)) return;
 
         tasks.submitMutation(() -> {
             try {
@@ -601,7 +603,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 DdlService.getInstance().dropDatabase(conn, cfg, dbName);
                 SwingUtilities.invokeLater(() -> {
                     if(disposed || project.isDisposed()) return;
-                    Messages.showInfoMessage(project, "Database '" + dbName + "' dropped successfully.", "Success");
+                    Messages.showInfoMessage(project, "Dropped " + object + " '" + dbName + "'.", "Dropped");
                     DefaultMutableTreeNode parent = (DefaultMutableTreeNode) dbNode.getParent();
                     if (parent != null) {
                         TreeNodeData parentData = (TreeNodeData) parent.getUserObject();
@@ -610,7 +612,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                     }
                 });
             } catch (Exception ex) {
-                SwingUtilities.invokeLater(() -> Messages.showErrorDialog(project, "Failed to drop database: " + ex.getMessage(), "Error"));
+                SwingUtilities.invokeLater(() -> Messages.showErrorDialog(project, "Failed to drop database: " + ex.getMessage(), "Drop database failed"));
             }
         });
     }
@@ -627,22 +629,21 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                     DdlService.getInstance().createTable(conn, cfg, dbName, tableName, cols);
                     SwingUtilities.invokeLater(() -> {
                     if(disposed || project.isDisposed()) return;
-                        Messages.showInfoMessage(project, "Table '" + tableName + "' created successfully!", "Success");
+                        Messages.showInfoMessage(project, "Table '" + tableName + "' created.", "Table created");
                         TreeNodeData data = (TreeNodeData) dbNode.getUserObject();
                         data.setLoaded(false);
                         loadTablesForDatabaseNode(dbNode, data);
                     });
                 } catch (Exception ex) {
-                    SwingUtilities.invokeLater(() -> Messages.showErrorDialog(project, "Failed to create table: " + ex.getMessage(), "Error"));
+                    SwingUtilities.invokeLater(() -> Messages.showErrorDialog(project, "Failed to create table: " + ex.getMessage(), "Create table failed"));
                 }
             });
         }
     }
 
     private void doDropTable(ConnectionConfig cfg, String dbName, String tableName, DefaultMutableTreeNode tableNode) {
-        int confirm = Messages.showYesNoDialog(project, "Are you sure you want to drop table '" + tableName + "'?",
-                "Confirm Drop Table", Messages.getWarningIcon());
-        if (confirm != Messages.YES) return;
+        if (!DatabaseUi.confirmDestructive(project, "Drop table",
+                "Drop table '" + tableName + "'?\nThe table structure and all its data will be permanently deleted.", "Drop table")) return;
 
         tasks.submitMutation(() -> {
             try {
@@ -650,30 +651,29 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 DdlService.getInstance().dropTable(conn, cfg, dbName, tableName);
                 SwingUtilities.invokeLater(() -> {
                     if(disposed || project.isDisposed()) return;
-                    Messages.showInfoMessage(project, "Table '" + tableName + "' dropped.", "Success");
+                    Messages.showInfoMessage(project, "Table '" + tableName + "' dropped.", "Table dropped");
                     DefaultMutableTreeNode parent = (DefaultMutableTreeNode) tableNode.getParent();
                     if (parent != null) {
                         treeModel.removeNodeFromParent(tableNode);
                     }
                 });
             } catch (Exception ex) {
-                SwingUtilities.invokeLater(() -> Messages.showErrorDialog(project, "Failed to drop table: " + ex.getMessage(), "Error"));
+                SwingUtilities.invokeLater(() -> Messages.showErrorDialog(project, "Failed to drop table: " + ex.getMessage(), "Drop table failed"));
             }
         });
     }
 
     private void doTruncateTable(ConnectionConfig cfg, String dbName, String tableName) {
-        int confirm = Messages.showYesNoDialog(project, "Are you sure you want to truncate table '" + tableName + "'?\nAll records will be deleted.",
-                "Confirm Truncate Table", Messages.getWarningIcon());
-        if (confirm != Messages.YES) return;
+        if (!DatabaseUi.confirmDestructive(project, "Truncate table",
+                "Truncate table '" + tableName + "'?\nAll rows will be permanently deleted. The table structure will be kept.", "Truncate table")) return;
 
         tasks.submitMutation(() -> {
             try {
                 Connection conn = DatabaseConnectionManager.getInstance().getConnection(cfg);
                 DdlService.getInstance().truncateTable(conn, cfg, dbName, tableName);
-                SwingUtilities.invokeLater(() -> Messages.showInfoMessage(project, "Table '" + tableName + "' truncated successfully.", "Success"));
+                SwingUtilities.invokeLater(() -> Messages.showInfoMessage(project, "All rows removed from '" + tableName + "'.", "Table truncated"));
             } catch (Exception ex) {
-                SwingUtilities.invokeLater(() -> Messages.showErrorDialog(project, "Failed to truncate table: " + ex.getMessage(), "Error"));
+                SwingUtilities.invokeLater(() -> Messages.showErrorDialog(project, "Failed to truncate table: " + ex.getMessage(), "Truncate table failed"));
             }
         });
     }

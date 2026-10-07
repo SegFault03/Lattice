@@ -36,28 +36,28 @@ public class AlterTableDialog extends DialogWrapper {
     private JPanel centerPanel;
     private final java.util.Map<Component,Boolean> enabledStates = new java.util.IdentityHashMap<>();
 
-    // Add Column tab
+    // Add column tab
     private JBTextField addColNameField;
     private JComboBox<String> addColTypeCombo;
     private JBTextField addColSizeField;
     private JBCheckBox addColNullableCheck;
     private JBTextField addColDefaultField;
 
-    // Rename Column tab
+    // Rename column tab
     private JComboBox<String> renameColCombo;
     private JBTextField renameColNewNameField;
 
-    // Modify Column tab
+    // Modify column tab
     private JComboBox<String> modifyColCombo;
     private JComboBox<String> modifyColTypeCombo;
     private JBTextField modifyColSizeField;
     private JBCheckBox modifyColNullableCheck;
     private JBTextField modifyColDefaultField;
 
-    // Drop Column tab
+    // Drop column tab
     private JComboBox<String> dropColCombo;
 
-    // Rename Table tab
+    // Rename table tab
     private JBTextField renameTableField;
 
     private static final String[] DATA_TYPES = {
@@ -71,10 +71,16 @@ public class AlterTableDialog extends DialogWrapper {
         this.databaseName = databaseName;
         this.tableMetadata = tableMetadata;
 
-        setTitle("Modify Table: " + tableMetadata.getName());
+        setTitle("Alter table: " + tableMetadata.getName());
         setResizable(true);
+        setCancelButtonText("Close");
         init();
         if (tableMetadata.getColumns().isEmpty()) runAlter(conn -> {}, tableMetadata.getName(), null);
+    }
+
+    @Override
+    protected Action[] createActions() {
+        return new Action[]{getCancelAction()};
     }
 
     @Override
@@ -91,14 +97,14 @@ public class AlterTableDialog extends DialogWrapper {
 
         String[] colNames = tableMetadata.getColumns().stream().map(ColumnMetadata::getName).toArray(String[]::new);
 
-        // 1. Add Column Panel
+        // 1. Add column Panel
         JPanel addPanel = new JPanel(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(6, 6, 6, 6);
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
         gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0.3;
-        addPanel.add(new JBLabel("Column Name:"), gbc);
+        addPanel.add(new JBLabel("Column name:"), gbc);
         gbc.gridx = 1; gbc.gridy = 0; gbc.weightx = 0.7;
         addColNameField = DatabaseInputs.textField();
         addPanel.add(addColNameField, gbc);
@@ -110,7 +116,7 @@ public class AlterTableDialog extends DialogWrapper {
         addPanel.add(addColTypeCombo, gbc);
 
         gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 0.3;
-        addPanel.add(new JBLabel("Size / Length:"), gbc);
+        addPanel.add(new JBLabel("Size / length:"), gbc);
         gbc.gridx = 1; gbc.gridy = 2; gbc.weightx = 0.7;
         addColSizeField = DatabaseInputs.textField("255");
         addPanel.add(addColSizeField, gbc);
@@ -122,31 +128,31 @@ public class AlterTableDialog extends DialogWrapper {
         addPanel.add(addColNullableCheck, gbc);
 
         gbc.gridx = 0; gbc.gridy = 4; gbc.weightx = 0.3;
-        addPanel.add(new JBLabel("Default Value:"), gbc);
+        addPanel.add(new JBLabel("Default value:"), gbc);
         gbc.gridx = 1; gbc.gridy = 4; gbc.weightx = 0.7;
         addColDefaultField = DatabaseInputs.textField();
         addColDefaultField.setToolTipText("Use TEXT: for a literal, SQL: for an expression; blank removes the default.");
         addPanel.add(addColDefaultField, gbc);
 
-        JButton executeAddBtn = new JButton("Add Column Now");
+        JButton executeAddBtn = new JButton("Add column");
         executeAddBtn.addActionListener(e -> doAddColumn());
         gbc.gridx = 1; gbc.gridy = 5;
         addPanel.add(executeAddBtn, gbc);
 
-        // 2. Rename Column Panel
+        // 2. Rename column Panel
         JPanel renameColPanel = new JPanel(new GridBagLayout());
         GridBagConstraints rcgbc = new GridBagConstraints();
         rcgbc.insets = new Insets(8, 8, 8, 8);
         rcgbc.fill = GridBagConstraints.HORIZONTAL;
 
         rcgbc.gridx = 0; rcgbc.gridy = 0; rcgbc.weightx = 0.3;
-        renameColPanel.add(new JBLabel("Select Column:"), rcgbc);
+        renameColPanel.add(new JBLabel("Column:"), rcgbc);
         rcgbc.gridx = 1; rcgbc.gridy = 0; rcgbc.weightx = 0.7;
         renameColCombo = DatabaseInputs.comboBox(colNames);
         renameColPanel.add(renameColCombo, rcgbc);
 
         rcgbc.gridx = 0; rcgbc.gridy = 1; rcgbc.weightx = 0.3;
-        renameColPanel.add(new JBLabel("New Column Name:"), rcgbc);
+        renameColPanel.add(new JBLabel("New Column name:"), rcgbc);
         rcgbc.gridx = 1; rcgbc.gridy = 1; rcgbc.weightx = 0.7;
         renameColNewNameField = DatabaseInputs.textField(colNames.length > 0 ? colNames[0] : "");
         renameColPanel.add(renameColNewNameField, rcgbc);
@@ -158,19 +164,19 @@ public class AlterTableDialog extends DialogWrapper {
             }
         });
 
-        JButton executeRenameColBtn = new JButton("Rename Column Now");
+        JButton executeRenameColBtn = new JButton("Rename column");
         executeRenameColBtn.addActionListener(e -> doRenameColumn());
         rcgbc.gridx = 1; rcgbc.gridy = 2;
         renameColPanel.add(executeRenameColBtn, rcgbc);
 
-        // 3. Modify Column Panel
+        // 3. Modify column Panel
         JPanel modifyColPanel = new JPanel(new GridBagLayout());
         GridBagConstraints mcgbc = new GridBagConstraints();
         mcgbc.insets = new Insets(6, 6, 6, 6);
         mcgbc.fill = GridBagConstraints.HORIZONTAL;
 
         mcgbc.gridx = 0; mcgbc.gridy = 0; mcgbc.weightx = 0.3;
-        modifyColPanel.add(new JBLabel("Select Column:"), mcgbc);
+        modifyColPanel.add(new JBLabel("Column:"), mcgbc);
         mcgbc.gridx = 1; mcgbc.gridy = 0; mcgbc.weightx = 0.7;
         modifyColCombo = DatabaseInputs.comboBox(colNames);
         modifyColPanel.add(modifyColCombo, mcgbc);
@@ -183,7 +189,7 @@ public class AlterTableDialog extends DialogWrapper {
         modifyColPanel.add(modifyColTypeCombo, mcgbc);
 
         mcgbc.gridx = 0; mcgbc.gridy = 2; mcgbc.weightx = 0.3;
-        modifyColPanel.add(new JBLabel("Size / Length:"), mcgbc);
+        modifyColPanel.add(new JBLabel("Size / length:"), mcgbc);
         mcgbc.gridx = 1; mcgbc.gridy = 2; mcgbc.weightx = 0.7;
         modifyColSizeField = DatabaseInputs.textField("255");
         modifyColPanel.add(modifyColSizeField, mcgbc);
@@ -195,7 +201,7 @@ public class AlterTableDialog extends DialogWrapper {
         modifyColPanel.add(modifyColNullableCheck, mcgbc);
 
         mcgbc.gridx = 0; mcgbc.gridy = 4; mcgbc.weightx = 0.3;
-        modifyColPanel.add(new JBLabel("Default Value:"), mcgbc);
+        modifyColPanel.add(new JBLabel("Default value:"), mcgbc);
         mcgbc.gridx = 1; mcgbc.gridy = 4; mcgbc.weightx = 0.7;
         modifyColDefaultField = DatabaseInputs.textField();
         modifyColDefaultField.setToolTipText("Use TEXT: for a literal, SQL: for an expression; blank removes the default.");
@@ -211,42 +217,46 @@ public class AlterTableDialog extends DialogWrapper {
             populateModifyFields(colNames[0]);
         }
 
-        JButton executeModifyColBtn = new JButton("Modify Column Definition Now");
+        JButton executeModifyColBtn = new JButton("Apply column changes");
         executeModifyColBtn.addActionListener(e -> doModifyColumn());
         mcgbc.gridx = 1; mcgbc.gridy = 5;
         modifyColPanel.add(executeModifyColBtn, mcgbc);
 
-        // 4. Drop Column Panel
+        // 4. Drop column Panel
         JPanel dropPanel = new JPanel(new GridBagLayout());
         GridBagConstraints dgbc = new GridBagConstraints();
         dgbc.insets = new Insets(8, 8, 8, 8);
         dgbc.fill = GridBagConstraints.HORIZONTAL;
 
         dgbc.gridx = 0; dgbc.gridy = 0; dgbc.weightx = 0.3;
-        dropPanel.add(new JBLabel("Select Column to Drop:"), dgbc);
+        dropPanel.add(new JBLabel("Column to drop:"), dgbc);
         dgbc.gridx = 1; dgbc.gridy = 0; dgbc.weightx = 0.7;
         dropColCombo = DatabaseInputs.comboBox(colNames);
         dropPanel.add(dropColCombo, dgbc);
 
-        JButton executeDropBtn = new JButton("Drop Column Now");
-        executeDropBtn.setForeground(Color.RED);
+        JButton executeDropBtn = new JButton("Drop column");
+        executeDropBtn.setIcon(com.intellij.icons.AllIcons.General.Warning);
         executeDropBtn.addActionListener(e -> doDropColumn());
         dgbc.gridx = 1; dgbc.gridy = 1;
         dropPanel.add(executeDropBtn, dgbc);
+        dgbc.gridy = 2;
+        JBLabel warning = new JBLabel("<html>Dropping a column permanently deletes its values.<br>You will be asked to confirm.</html>");
+        warning.setForeground(JBColor.namedColor("Label.infoForeground", JBColor.GRAY));
+        dropPanel.add(warning, dgbc);
 
-        // 5. Rename Table Panel
+        // 5. Rename table Panel
         JPanel renamePanel = new JPanel(new GridBagLayout());
         GridBagConstraints rgbc = new GridBagConstraints();
         rgbc.insets = new Insets(8, 8, 8, 8);
         rgbc.fill = GridBagConstraints.HORIZONTAL;
 
         rgbc.gridx = 0; rgbc.gridy = 0; rgbc.weightx = 0.3;
-        renamePanel.add(new JBLabel("New Table Name:"), rgbc);
+        renamePanel.add(new JBLabel("New Table name:"), rgbc);
         rgbc.gridx = 1; rgbc.gridy = 0; rgbc.weightx = 0.7;
         renameTableField = DatabaseInputs.textField(tableMetadata.getName());
         renamePanel.add(renameTableField, rgbc);
 
-        JButton executeRenameBtn = new JButton("Rename Table Now");
+        JButton executeRenameBtn = new JButton("Rename table");
         executeRenameBtn.addActionListener(e -> doRenameTable());
         rgbc.gridx = 1; rgbc.gridy = 1;
         renamePanel.add(executeRenameBtn, rgbc);
@@ -272,7 +282,7 @@ public class AlterTableDialog extends DialogWrapper {
         tabScrollPane.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new JBColor(new Color(210, 210, 210), new Color(60, 63, 65))));
         tabScrollPane.getHorizontalScrollBar().setPreferredSize(new Dimension(0, 6));
 
-        String[] tabLabels = {"Add Column", "Rename Column", "Modify Column", "Drop Column", "Rename Table"};
+        String[] tabLabels = {"Add column", "Rename column", "Modify column", "Drop column", "Rename table"};
         String[] tabKeys = {"ADD", "RENAME_COL", "MODIFY_COL", "DROP_COL", "RENAME_TABLE"};
         JButton[] tabButtons = new JButton[tabLabels.length];
 
@@ -375,7 +385,7 @@ public class AlterTableDialog extends DialogWrapper {
                 SwingUtilities.invokeLater(() -> {
                     if (isDisposed()) return;
                     tableMetadata.setColumns(columns); setBusy(false); refreshDropdowns();
-                    if (success != null) { Messages.showInfoMessage(project,success,"Success"); close(OK_EXIT_CODE); }
+                    if (success != null) { Messages.showInfoMessage(project,success,"Table updated"); close(OK_EXIT_CODE); }
                 });
             } catch(Exception error) {
                 SwingUtilities.invokeLater(() -> {
@@ -411,7 +421,7 @@ public class AlterTableDialog extends DialogWrapper {
         ColumnDefinition col = new ColumnDefinition(colName, (String) addColTypeCombo.getSelectedItem(), size,
                 addColNullableCheck.isSelected(), false, false, addColDefaultField.getText().trim());
 
-        runAlter(conn -> DdlService.getInstance().alterTableAddColumn(conn, config, databaseName, tableMetadata.getName(), col), tableMetadata.getName(), "Column '" + colName + "' added successfully!");
+        runAlter(conn -> DdlService.getInstance().alterTableAddColumn(conn, config, databaseName, tableMetadata.getName(), col), tableMetadata.getName(), "Column '" + colName + "' added successfully.");
     }
 
     private void doRenameColumn() {
@@ -427,7 +437,7 @@ public class AlterTableDialog extends DialogWrapper {
             return;
         }
 
-        runAlter(conn -> DdlService.getInstance().alterTableRenameColumn(conn, config, databaseName, tableMetadata.getName(), oldCol, newCol), tableMetadata.getName(), "Column '" + oldCol + "' renamed to '" + newCol + "' successfully!");
+        runAlter(conn -> DdlService.getInstance().alterTableRenameColumn(conn, config, databaseName, tableMetadata.getName(), oldCol, newCol), tableMetadata.getName(), "Column '" + oldCol + "' renamed to '" + newCol + "' successfully.");
     }
 
     private void doModifyColumn() {
@@ -449,7 +459,7 @@ public class AlterTableDialog extends DialogWrapper {
             col.setDecimalDigits(original.getDecimalDigits());
         }
 
-        runAlter(conn -> DdlService.getInstance().alterTableModifyColumn(conn, config, databaseName, tableMetadata.getName(), col), tableMetadata.getName(), "Column '" + colName + "' definition updated successfully!");
+        runAlter(conn -> DdlService.getInstance().alterTableModifyColumn(conn, config, databaseName, tableMetadata.getName(), col), tableMetadata.getName(), "Column '" + colName + "' definition updated successfully.");
     }
 
     private void doDropColumn() {
@@ -457,11 +467,10 @@ public class AlterTableDialog extends DialogWrapper {
         String colName = (String) dropColCombo.getSelectedItem();
         if (colName == null) return;
 
-        int confirm = Messages.showYesNoDialog(project, "Are you sure you want to drop column '" + colName + "'?\nThis will permanently delete data in this column.",
-                "Confirm Drop Column", Messages.getWarningIcon());
-        if (confirm != Messages.YES) return;
+        if (!com.segfault03.ideadb.ui.DatabaseUi.confirmDestructive(project, "Drop column",
+                "Drop column '" + colName + "' from '" + tableMetadata.getName() + "'?\nThe column and all its values will be permanently deleted.", "Drop column")) return;
 
-        runAlter(conn -> DdlService.getInstance().alterTableDropColumn(conn, config, databaseName, tableMetadata.getName(), colName), tableMetadata.getName(), "Column '" + colName + "' dropped successfully!");
+        runAlter(conn -> DdlService.getInstance().alterTableDropColumn(conn, config, databaseName, tableMetadata.getName(), colName), tableMetadata.getName(), "Column '" + colName + "' dropped successfully.");
     }
 
     private void doRenameTable() {
@@ -477,7 +486,7 @@ public class AlterTableDialog extends DialogWrapper {
             SwingUtilities.invokeLater(() -> {
                 if(project!=null && !project.isDisposed()) project.getMessageBus().syncPublisher(com.segfault03.ideadb.editor.TableRenameListener.TOPIC).tableRenamed(config,databaseName,tableMetadata.getName(),renamed);
             });
-        }, newName, "Table renamed to '" + newName + "' successfully!");
+        }, newName, "Table renamed to '" + newName + "' successfully.");
     }
 
 }

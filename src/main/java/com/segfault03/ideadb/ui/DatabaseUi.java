@@ -10,6 +10,33 @@ import java.awt.*;
 public final class DatabaseUi {
     private DatabaseUi() {}
 
+    public enum Tone { NORMAL, BUSY, SUCCESS, WARNING, ERROR }
+
+    /** Text and native glyphs keep status meaning clear without relying on color. */
+    public static void status(JLabel label, String text, Tone tone) {
+        label.setText(text);
+        label.setToolTipText(text);
+        label.getAccessibleContext().setAccessibleDescription(text);
+        label.setIcon(switch (tone) {
+            case NORMAL -> null;
+            case BUSY -> com.intellij.icons.AllIcons.Process.Step_passive;
+            case SUCCESS -> com.intellij.icons.AllIcons.General.GreenCheckmark;
+            case WARNING -> com.intellij.icons.AllIcons.General.Warning;
+            case ERROR -> com.intellij.icons.AllIcons.General.Error;
+        });
+        label.setForeground(switch (tone) {
+            case ERROR -> JBColor.namedColor("Label.errorForeground", new JBColor(0xB83232, 0xFF8282));
+            case WARNING -> JBColor.namedColor("Label.warningForeground", new JBColor(0x88600C, 0xE5BA6A));
+            default -> javax.swing.UIManager.getColor("Label.foreground");
+        });
+    }
+
+    public static boolean confirmDestructive(com.intellij.openapi.project.Project project,
+                                             String title, String message, String action) {
+        return com.intellij.openapi.ui.Messages.showYesNoDialog(project, message, title, action, "Cancel",
+                com.intellij.openapi.ui.Messages.getWarningIcon()) == com.intellij.openapi.ui.Messages.YES;
+    }
+
     public static JButton action(String text, Icon icon, String tooltip) {
         JButton button = new JButton(text, icon) {
             @Override public Dimension getPreferredSize() {

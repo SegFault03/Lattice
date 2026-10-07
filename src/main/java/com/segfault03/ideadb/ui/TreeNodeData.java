@@ -15,7 +15,8 @@ public class TreeNodeData {
         VIEW,
         COLUMNS_FOLDER,
         COLUMN,
-        LOADING
+        LOADING,
+        ERROR
     }
 
     private final NodeType type;
@@ -24,6 +25,7 @@ public class TreeNodeData {
     private String databaseName;
     private TableMetadata tableMetadata;
     private ColumnMetadata columnMetadata;
+    private String errorDetail;
     private boolean connected;
     private boolean loaded;
 
@@ -93,6 +95,13 @@ public class TreeNodeData {
         return new TreeNodeData(NodeType.LOADING, text);
     }
 
+    public static TreeNodeData error(String summary, String detail) {
+        TreeNodeData data = new TreeNodeData(NodeType.ERROR, summary);
+        data.errorDetail = java.util.Objects.requireNonNullElse(detail, "No error details were returned.");
+        return data;
+    }
+
+    public String getErrorDetail() { return errorDetail; }
     public NodeType getType() { return type; }
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }

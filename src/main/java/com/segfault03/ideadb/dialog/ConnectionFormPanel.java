@@ -12,7 +12,7 @@ final class ConnectionFormPanel extends JPanel {
     ConnectionFormPanel() {
         super(new GridBagLayout());
         GridBagLayout layout = (GridBagLayout) getLayout();
-        int labelWidth = Math.max(new JLabel("Database Name:").getPreferredSize().width,
+        int labelWidth = Math.max(new JLabel("Database name:").getPreferredSize().width,
                 new JLabel("Database Type:").getPreferredSize().width) + JBUI.scale(10);
         layout.columnWidths = new int[]{labelWidth, 0};
         layout.columnWeights = new double[]{0, 1};

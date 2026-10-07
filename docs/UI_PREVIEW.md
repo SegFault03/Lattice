@@ -1,6 +1,6 @@
 # Preview and refine the UI without launching IntelliJ
 
-The reusable preview helper renders the production side-panel widgets, connection dialog, table editor/viewer and SQL console into PNGs, a browser gallery, and a shareable ZIP. Use it while changing spacing, grouping, themes, and validation appearance. It compiles the current Java source on every run, so rerun it after each UI edit.
+The reusable preview helper renders the production welcome screen, side-panel widgets, connection dialog, schema dialogs, table editor/viewer and SQL console into PNGs, a browser gallery, and a shareable ZIP. Use it while changing spacing, grouping, themes, and validation appearance. It compiles the current Java source on every run, so rerun it after each UI edit.
 
 ## Setup and first run
 
@@ -43,7 +43,7 @@ On macOS, `--ide-home` points to the SDK's `Contents` directory and `--java-home
 Open `build/ui-preview/index.html` in a browser. No web server is required.
 
 - Theme selects light or dark renders.
-- Screen filters the gallery to input controls, the side panel, connection dialog, schema dialogs, table editor/viewer or SQL console.
+- Screen filters the gallery to the welcome screen, input controls, the side panel, connection dialog, schema dialogs, table editor/viewer or SQL console.
 - Click a screenshot to open it at full resolution.
 - With a baseline supplied, View switches between Current and Before / after.
 
@@ -81,23 +81,23 @@ python scripts/ui-preview.py --output build/ui-after --compare-with build/ui-bef
 
 Open `build/ui-after/index.html` and select Before / after. Matching variants appear beside one another; new variants show only the current screenshot. Repeat the second command after each edit. `--compare-with` must reference an existing directory different from `--output`.
 
-For the current input-style review, the local baseline is in `build/ui-inputs-before`, so regenerate the comparison with:
+For the current copy and welcome-screen review, the local baseline is in `build/ui-copy-welcome-before`, so regenerate the comparison with:
 
 ```text
-python scripts/ui-preview.py --compare-with build/ui-inputs-before
+python scripts/ui-preview.py --compare-with build/ui-copy-welcome-before
 ```
 
 Local baseline directories are not committed. A fresh checkout can make its own baseline using the commands above. The helper reads a fresh render manifest, so stale images from previous runs are not included in the new gallery or ZIP.
 
 ## Coverage and limitations
 
-The 66 variant screenshots cover light/dark themes; the shared input controls (including editable, disabled/error and larger-font states); create-database/create-table/alter-table dialogs; populated/empty side panels; SQL consoles at 1100, 760 and 520 pixels with sample queries/results, empty results, execution and error messages; table widths of 1100, 760, and 520 pixels; populated table/view fixtures; modified cells; valid new rows; an active inline cell editor; and invalid decimals with Commit disabled. Hover previews show NULL tooltips in both grids and modified-cell context in the table editor. Connection variants include MySQL, HSQLDB server/file/memory, custom JDBC URL, bundled/downloaded/local drivers, a wider dialog, an enlarged download form, and a scrolled view of its driver controls. Five additional stable copies are featured in the README.
+The 82 variant screenshots cover light/dark themes; the shared input controls (including editable, disabled/error and larger-font states); create-database/create-table/alter-table dialogs and the drop-column warning; welcome screens at 900 and 520 pixels, with and without saved connections; populated/empty/error side panels; SQL consoles at 1100, 760 and 520 pixels with sample queries/results, empty results, execution and error messages; table widths of 1100, 760, and 520 pixels; populated table/view fixtures; modified cells; valid new rows; an active inline cell editor; and invalid decimals with Commit disabled. Hover previews show NULL tooltips in both grids and modified-cell context in the table editor. Connection variants include new/edit connection titles, success/failure feedback, MySQL, HSQLDB server/file/memory, custom JDBC URL, bundled/downloaded/local drivers, a wider dialog, an enlarged download form, and a scrolled view of its driver controls. Five additional stable copies are featured in the README.
 
-The helper uses the actual layout managers, SDK icons, controls, borders, table model, cell renderers, and validation states. Each render checks visible single-line inputs for consistent preferred height, symmetric vertical insets and text-baseline balance within two pixels, including composite browse fields. Fixture checks exercise Set NULL / Use Default through the relocated context-menu actions, verify identity cells are read-only, confirm valid/invalid Commit states, check narrow toolbar/footer bounds, and catch leftover renderer outlines and empty HSQL form rows. Both grids are checked for distinct header/data backgrounds and readable NULL tooltips. Console checks exercise repeated template insertion, history restoration, Clear, the Run shortcut with selected SQL, and execution-control states; background work stays blocked.
+The helper uses the actual layout managers, SDK icons, controls, borders, table model, cell renderers, and validation states. Each render checks visible single-line inputs for consistent preferred height, symmetric vertical insets and text-baseline balance within two pixels, including composite browse fields. Fixture checks exercise Set to NULL / Use database default through the relocated context-menu actions, verify identity cells are read-only, confirm valid/invalid Commit states, check narrow toolbar/footer bounds, and catch leftover renderer outlines and empty HSQL form rows. Both grids are checked for distinct header/data backgrounds and readable NULL tooltips. Console checks exercise repeated template insertion, history restoration, Clear, the Run shortcut with selected SQL, and execution-control states; background work stays blocked. Welcome checks verify console availability after adding a connection and the positive startup preference; status checks verify that severity icons reset. Explorer checks verify error diagnostics and tooltip reset.
 
-The Swing controls in the gallery are images; only gallery selectors are interactive. FlatIntelliJLaf and FlatDarculaLaf approximate IntelliJ themes. Tooltip previews paint an actual Swing `JToolTip` at the production grid's computed cell anchor; real popup placement near screen edges still needs an IDE check. Dialog title, outer padding and Cancel/OK buttons are simulated. The explorer uses a Swing `JTree` with Lattice's production node renderer because IntelliJ's `Tree` needs application services. Exact IDE window sizing, tree styling, display scaling, focus, keymaps, clipboard access, file browsing, and live database behavior still need an IDE check.
+The Swing controls in the gallery are images; only gallery selectors are interactive. FlatIntelliJLaf and FlatDarculaLaf approximate IntelliJ themes. Tooltip previews paint an actual Swing `JToolTip` at the production grid's computed cell anchor; real popup placement near screen edges still needs an IDE check. Dialog title, outer padding and footer action buttons are simulated using their production labels and action selection. The explorer uses a Swing `JTree` with Lattice's production node renderer because IntelliJ's `Tree` needs application services. Exact IDE window sizing, tree styling, display scaling, focus, keymaps, clipboard access, file browsing, and live database behavior still need an IDE check.
 
-The helper compiles production classes into its own output directory, then places preview-only `DatabaseTaskService` and `DialogWrapper` shadows ahead of them on the preview classpath. JDBC/background work is blocked. No IDE application container, database connection, driver download, or connection test is started. Reflection supplies sample rows and selects preview states in the existing private table model. The explorer preview assembles the same production toolbar, tree renderer, empty state and hint used by `DatabaseMainPanel`, replacing its project-service orchestration with a fixture tree. The SQL console uses its production panel and result model; headless rendering uses Ctrl as the menu shortcut modifier.
+The helper compiles production classes into its own output directory, then places preview-only `DatabaseTaskService` and `DialogWrapper` shadows ahead of them on the preview classpath. JDBC/background work is blocked. No IDE application container, database connection, driver download, or connection test is started. Reflection supplies sample rows and selects preview states in the existing private table model. The explorer preview assembles the same production toolbar, tree renderer, empty state and hint used by `DatabaseMainPanel`, replacing its project-service orchestration with a fixture tree. The SQL console uses its production panel and result model; headless rendering uses Ctrl as the menu shortcut modifier. Connection outcomes use fixture messages through the shared production status helper; no connection test is executed.
 
 Sources live in `scripts/ui-preview.py` and `scripts/ui-preview/`, outside Gradle's production/test source sets. Their dependency, shadows, and artifacts are excluded from the plugin ZIP.
 
@@ -134,3 +134,9 @@ Use `DatabaseInputs` from `com.segfault03.ideadb.ui` for every single-line input
 Use `DatabaseInputs.textField(...)`, `passwordField()`, `comboBox(...)` or `browseField()` when adding controls. Set widths separately where the layout calls for them; do not set fixed heights or add another input border. For an existing `JTable`, call `DatabaseInputs.styleTableEditors(table)` to retain its typed editors while applying the shared appearance. Avoid changing global `UIManager` defaults: this style is scoped to Lattice controls.
 
 Review [light inputs](../screenshots/light-inputs-600.png), [dark inputs](../screenshots/dark-inputs-600.png) and [inline editing](../screenshots/light-table-cell-editing-1100.png), or choose **Input controls** / **Schema dialogs** in the gallery. Font-growth and look-and-feel-refresh tests protect sizing; numeric-editor tests protect invalid-value rejection, typed commits and cancellation.
+
+## Copy, icons and warning cues
+
+See [the UI copy review](UI_REVIEW.md) for the audit and conventions. Use `DatabaseUi.status(label, text, tone)` for operation feedback so severity is conveyed by an icon and text as well as color. Keep footer messages short; put full error details in a tooltip and the Messages tab or native error dialog. Use `DatabaseUi.confirmDestructive(...)` for database deletion confirmations with an explicit action and Cancel.
+
+The Welcome gallery filter includes first-use and configured states. These are actual `WelcomePanel` instances with an isolated settings object. Startup preference interactions change that fixture only. The connection and schema filters now include new-connection button labels, test feedback and the drop-column warning.

@@ -13,6 +13,7 @@ public class DatabaseTreeCellRenderer extends ColoredTreeCellRenderer {
     @Override
     public void customizeCellRenderer(@NotNull JTree tree, Object value, boolean selected, boolean expanded,
                                       boolean leaf, int row, boolean hasFocus) {
+        setToolTipText(null);
         if (!(value instanceof DefaultMutableTreeNode)) {
             return;
         }
@@ -34,6 +35,7 @@ public class DatabaseTreeCellRenderer extends ColoredTreeCellRenderer {
                 break;
 
             case CONNECTION:
+                setToolTipText(data.isConnected() ? "Connected · Expand to browse databases" : "Disconnected · Expand to connect");
                 setIcon(Icons.DATABASE);
                 append(data.getName(), data.isConnected() ? SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES : SimpleTextAttributes.REGULAR_ATTRIBUTES);
                 if (data.getConnectionConfig() != null) {
@@ -70,6 +72,10 @@ public class DatabaseTreeCellRenderer extends ColoredTreeCellRenderer {
             case COLUMN:
                 if (data.getColumnMetadata() != null) {
                     var col = data.getColumnMetadata();
+                    setToolTipText(col.getName() + " · " + col.getFormattedType()
+                            + (col.isPrimaryKey() ? " · Primary key" : "")
+                            + (col.isNullable() ? " · Allows NULL" : " · Required")
+                            + (col.isAutoIncrement() ? " · Auto-increment" : ""));
                     if (col.isPrimaryKey()) {
                         setIcon(Icons.KEY);
                         append(col.getName(), SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES);
@@ -92,6 +98,12 @@ public class DatabaseTreeCellRenderer extends ColoredTreeCellRenderer {
                     setIcon(Icons.COLUMN);
                     append(data.getName(), SimpleTextAttributes.REGULAR_ATTRIBUTES);
                 }
+                break;
+
+            case ERROR:
+                setIcon(AllIcons.General.Error);
+                append(data.getName(), SimpleTextAttributes.ERROR_ATTRIBUTES);
+                setToolTipText(data.getErrorDetail());
                 break;
 
             case LOADING:

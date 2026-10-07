@@ -47,6 +47,7 @@ public final class ExplorerPreview {
         tree.setCellRenderer(new DatabaseTreeCellRenderer());
         tree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
         tree.setRootVisible(true);
+        ToolTipManager.sharedInstance().registerComponent(tree);
         tree.setShowsRootHandles(true);
         tree.setBorder(JBUI.Borders.empty(6, 8));
         for (int row = 0; row < tree.getRowCount(); row++) tree.expandRow(row);
@@ -60,6 +61,32 @@ public final class ExplorerPreview {
         DatabaseExplorerHint hint = new DatabaseExplorerHint();
         hint.setSelection(selection);
         panel.add(hint, BorderLayout.SOUTH);
+        return panel;
+    }
+
+    public static JPanel error(ConnectionConfig config) {
+        JPanel panel = create(config, false);
+        JTree tree = (JTree)((JScrollPane)((BorderLayout)panel.getLayout()).getLayoutComponent(BorderLayout.CENTER)).getViewport().getView();
+        DefaultTreeModel model = (DefaultTreeModel)tree.getModel();
+        DefaultMutableTreeNode root = (DefaultMutableTreeNode)model.getRoot();
+        root.removeAllChildren();
+        DefaultMutableTreeNode connection = node(root, TreeNodeData.connection(config, false));
+        node(connection, TreeNodeData.error("Connection failed · Refresh to retry", "Connection refused at localhost:3306. Check that the server is running."));
+        model.reload();
+        for (int row = 0; row < tree.getRowCount(); row++) tree.expandRow(row);
+        TreeNodeData selection = (TreeNodeData)connection.getUserObject();
+        tree.setSelectionPath(new TreePath(connection.getPath()));
+        for (Component component : panel.getComponents()) {
+            if (component instanceof DatabaseExplorerToolbar toolbar) toolbar.setSelection(selection);
+            if (component instanceof DatabaseExplorerHint hint) hint.setSelection(selection);
+        }
+        DefaultMutableTreeNode error = (DefaultMutableTreeNode)connection.getFirstChild();
+        DatabaseTreeCellRenderer renderer = (DatabaseTreeCellRenderer)tree.getCellRenderer();
+        renderer.getTreeCellRendererComponent(tree, error, false, false, true, 2, false);
+        if (renderer.getToolTipText() == null || renderer.getIcon() == null)
+            throw new AssertionError("Explorer error must expose an icon and diagnostic tooltip");
+        renderer.getTreeCellRendererComponent(tree, root, false, true, false, 0, false);
+        if (renderer.getToolTipText() != null) throw new AssertionError("Explorer diagnostic tooltip must reset");
         return panel;
     }
 

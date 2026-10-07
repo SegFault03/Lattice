@@ -109,7 +109,7 @@ Use `python3` if that is your system's Python command. All optional development/
 
 ### Quick local UI testing
 
-To preview the side panel, connection dialog, table editor/viewer and SQL console without launching IDEA, run `python scripts/ui-preview.py` with JDK 21 and the cached IntelliJ SDK, then open `build/ui-preview/index.html`. Every run refreshes the tracked PNGs in `screenshots/`, including the five fixed filenames above. Commit updated screenshots with UI changes. See [UI previews](docs/UI_PREVIEW.md) for setup, theme limitations and layout review notes.
+To preview the welcome screen, side panel, connection and schema dialogs, table editor/viewer and SQL console without launching IDEA, run `python scripts/ui-preview.py` with JDK 21 and the cached IntelliJ SDK, then open `build/ui-preview/index.html`. Every run refreshes the tracked PNGs in `screenshots/`, including the five fixed filenames above. Commit updated screenshots with UI changes. See [UI previews](docs/UI_PREVIEW.md) for setup, theme limitations and layout review notes. The [UI copy review](docs/UI_REVIEW.md) records label, icon and warning conventions.
 
 To run the tooling and pure Java tests, build the ZIP, find an installed IntelliJ IDEA, and deploy the freshly built plugin:
 

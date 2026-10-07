@@ -151,7 +151,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         nextPageBtn = DatabaseUi.action("", AllIcons.Actions.Forward, "Next page");
         nextPageBtn.addActionListener(e -> loadData(currentPage + 1, pageSize));
 
-        JButton addRowBtn = DatabaseUi.action("", AllIcons.General.Add, "Add Row");
+        JButton addRowBtn = DatabaseUi.action("", AllIcons.General.Add, "Add a new row");
         addRowBtn.addActionListener(e -> {
             if (tableModel != null && !mutationRunning) {
                 tableModel.addNewRow();
@@ -160,9 +160,9 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         });
 
         JButton delRowBtn = DatabaseUi.action("", AllIcons.General.Remove, "Delete selected rows");
-        delRowBtn.setToolTipText("Delete selected row(s)");
+        delRowBtn.setToolTipText("Delete selected rows immediately after confirmation");
         delRowBtn.addActionListener(e -> deleteSelectedRows());
-        JMenuItem nullBtn=new JMenuItem("Set NULL");
+        JMenuItem nullBtn=new JMenuItem("Set to NULL");
         nullBtn.setToolTipText("Set the selected column to SQL NULL for selected rows");
         nullBtn.addActionListener(event -> {
             if(mutationRunning || disposed || !finishCellEditing()) return;
@@ -173,7 +173,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 if(tableModel.isCellEditable(row,column)) tableModel.setValueAt(null,row,column);
             }
         });
-        JMenuItem defaultBtn=new JMenuItem("Use Default");
+        JMenuItem defaultBtn=new JMenuItem("Use database default");
         defaultBtn.setToolTipText("Use the database default for a selected new-row cell");
         defaultBtn.addActionListener(event -> {
             if(mutationRunning || disposed || !finishCellEditing()) return;
@@ -186,7 +186,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 if(tableModel.isRowNew(row) && tableModel.isCellEditable(row,column)) tableModel.setValueAt(RowDefaults.Value.USE_DEFAULT,row,column);
             }
         });
-        saveBtn = DatabaseUi.action("Commit", AllIcons.Actions.Commit, "Commit pending changes");
+        saveBtn = DatabaseUi.action("Commit", AllIcons.Actions.Checked, "Commit pending changes to the database");
         saveBtn.setEnabled(false);
         saveBtn.addActionListener(e -> commitChanges());
         revertBtn = DatabaseUi.action("", AllIcons.Actions.Rollback, "Revert pending changes");
@@ -203,7 +203,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         exportBtn.setToolTipText("Choose current page, selected rows, or all persisted rows for export");
         exportBtn.addActionListener(e -> showExportMenu(exportBtn));
 
-        JMenuItem truncateBtn = new JMenuItem("Truncate Table…", AllIcons.Actions.GC);
+        JMenuItem truncateBtn = new JMenuItem("Truncate table…", AllIcons.General.Remove);
         truncateBtn.setToolTipText("Truncate table (permanently delete all rows)");
         truncateBtn.addActionListener(e -> truncateCurrentTable());
 
@@ -213,7 +213,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
 
         JButton optionsBtn = DatabaseUi.action("", AllIcons.Actions.MoreHorizontal, "Table options");
         JPopupMenu options = new JPopupMenu();
-        JMenuItem countItem = new JMenuItem("Count Rows");
+        JMenuItem countItem = new JMenuItem("Count rows");
         countItem.addActionListener(e -> countRows());
         options.add(countItem);
         options.addSeparator();
@@ -300,7 +300,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         if (seconds > 0) {
             autoRefreshTimer = new javax.swing.Timer(seconds * 1000, e -> {
                 if (tableModel.hasPendingChanges()) {
-                    statusLabel.setText("Auto-refresh paused: pending changes exist");
+                    DatabaseUi.status(statusLabel, "Auto-refresh paused · Commit or revert pending edits", DatabaseUi.Tone.WARNING);
                 } else {
                     loadData(currentPage,pageSize,false);
                 }
@@ -339,8 +339,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         String order = orderField.getText().trim();
         List<ColumnMetadata> knownColumns=new ArrayList<>(tableMetadata.getColumns());
         long knownCount=!refreshMetadata && where.equals(appliedWhere) ? totalRowCount : -1;
-        statusLabel.setText("Loading data...");
-        statusLabel.setForeground(null);
+        DatabaseUi.status(statusLabel, "Loading data…", DatabaseUi.Tone.BUSY);
         tasks.submit(() -> {
             try (var read = tasks.openRead(config)) {
                 Connection conn=read.connection();
@@ -374,14 +373,15 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     nextPageBtn.setEnabled(hasNext);
                     pageLabel.setText("Page " + currentPage + (maxPage > 0 ? " of " + maxPage : ""));
 
-                    statusLabel.setText(String.format("Loaded %d row(s) in %d ms | Total rows: %s",
+                    DatabaseUi.status(statusLabel, String.format("%d rows · %d ms · Total: %s",
                             result.getRows().size(), result.getExecutionTimeMs(),
-                            totalRowCount >= 0 ? String.valueOf(totalRowCount) : "not counted") + (keys.isEmpty() && order.isEmpty() ? " | No primary key: specify Order by for predictable pages" : ""));
+                            totalRowCount >= 0 ? String.valueOf(totalRowCount) : "not counted") + (keys.isEmpty() && order.isEmpty() ? " · No primary key: set ORDER BY for stable pages" : ""), keys.isEmpty() && order.isEmpty() ? DatabaseUi.Tone.WARNING : DatabaseUi.Tone.NORMAL);
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
                     if (disposed || generation != loadGeneration || mutationRunning) return;
-                    statusLabel.setText("Error loading data: " + ex.getMessage());
+                    DatabaseUi.status(statusLabel, "Could not load data · See error details", DatabaseUi.Tone.ERROR);
+                    statusLabel.setToolTipText(ex.getMessage());
                     Messages.showErrorDialog(project, "Error: " + ex.getMessage(), "Data Fetch Error");
                 });
             }
@@ -391,7 +391,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     private void countRows() {
         if(disposed || mutationRunning) return;
         long generation=loadGeneration; String where=appliedWhere;
-        statusLabel.setText("Counting persisted rows...");
+        DatabaseUi.status(statusLabel, "Counting saved rows…", DatabaseUi.Tone.BUSY);
         tasks.submit(() -> {
             try(var read=tasks.openRead(config)) {
                 long count=DataService.getInstance().countRows(read.connection(),config,databaseName,tableMetadata.getName(),where);
@@ -400,10 +400,10 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     totalRowCount=count;
                     long pages=Math.max(1,(count+pageSize-1)/pageSize);
                     pageLabel.setText("Page " + currentPage + " of " + pages);
-                    statusLabel.setText("Persisted rows matching current filter: " + count);
+                    DatabaseUi.status(statusLabel, count + " saved rows match the filter", DatabaseUi.Tone.NORMAL);
                 });
             } catch(Exception error) {
-                SwingUtilities.invokeLater(() -> { if(!disposed && generation==loadGeneration) statusLabel.setText("Count failed: " + error.getMessage()); });
+                SwingUtilities.invokeLater(() -> { if(!disposed && generation==loadGeneration) DatabaseUi.status(statusLabel, "Row count failed: " + error.getMessage(), DatabaseUi.Tone.ERROR); });
             }
         });
     }
@@ -425,17 +425,17 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         if (hasErrors) {
             saveBtn.setEnabled(false);
             String firstError = errors.values().iterator().next();
-            statusLabel.setText("⚠️ " + firstError + " — Commit is disabled until fixed.");
-            statusLabel.setForeground(new JBColor(new Color(210, 40, 40), new Color(255, 110, 110)));
-            saveBtn.setToolTipText("Commit disabled: Please fix " + errors.size() + " validation error(s).");
+            DatabaseUi.status(statusLabel, (errors.size() == 1 ? "1 invalid cell" : errors.size() + " invalid cells") + " · Fix before committing", DatabaseUi.Tone.ERROR);
+            statusLabel.setToolTipText(firstError);
+            saveBtn.setToolTipText("Fix invalid cells before committing");
             saveBtn.setText("Commit");
         } else {
             saveBtn.setEnabled(hasPending && !mutationRunning);
-            saveBtn.setToolTipText(null);
-            statusLabel.setForeground(null);
+            saveBtn.setToolTipText("Commit pending changes to the database");
+            DatabaseUi.status(statusLabel, statusLabel.getText(), DatabaseUi.Tone.NORMAL);
             if (hasPending) {
                 saveBtn.setText("Commit (" + tableModel.getPendingChangesCount() + ")");
-                statusLabel.setText("Pending changes: " + tableModel.getPendingChangesCount() + " (Ready to commit)");
+                DatabaseUi.status(statusLabel, tableModel.getPendingChangesCount() + " pending changes · Commit to save", DatabaseUi.Tone.WARNING);
             } else {
                 saveBtn.setText("Commit");
             }
@@ -448,17 +448,12 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             statusLabel.setText("Commit or Revert pending edits before truncating.");
             return;
         }
-        int confirm = Messages.showYesNoDialog(
-                project,
-                "Are you sure you want to TRUNCATE table '" + tableMetadata.getName() + "'?\n" +
-                "All rows in this table will be permanently deleted.",
-                "Truncate Table",
-                Messages.getWarningIcon()
-        );
-        if (confirm != Messages.YES) return;
+        if (!DatabaseUi.confirmDestructive(project, "Truncate table",
+                "Truncate table '" + tableMetadata.getName() + "'?\nAll rows will be permanently deleted. The table structure will be kept.",
+                "Truncate table")) return;
 
         setMutationRunning(true);
-        statusLabel.setText("Truncating table '" + tableMetadata.getName() + "'...");
+        DatabaseUi.status(statusLabel, "Truncating table…", DatabaseUi.Tone.BUSY);
         tasks.submitMutation(() -> {
             try {
                 DataService.getInstance().withMutationConnection(DatabaseConnectionManager.getInstance().openConnection(config), conn -> {
@@ -475,7 +470,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 SwingUtilities.invokeLater(() -> {
                     if (disposed) return;
                     setMutationRunning(false);
-                    statusLabel.setText("Truncate failed: " + ex.getMessage());
+                    DatabaseUi.status(statusLabel, "Truncate failed · See error details", DatabaseUi.Tone.ERROR);
+                    statusLabel.setToolTipText(ex.getMessage());
                     Messages.showErrorDialog(project, "Failed to truncate table: " + ex.getMessage(), "Truncate Error");
                 });
             }
@@ -488,13 +484,14 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     }
 
     private void showCreateTableDialog() {
-        statusLabel.setText("Fetching CREATE statement...");
+        DatabaseUi.status(statusLabel, "Loading CREATE TABLE statement…", DatabaseUi.Tone.BUSY);
         tasks.submit(() -> {
             try (var read=tasks.openRead(config)) {
                 Connection conn=read.connection();
                 String ddl = DdlService.getInstance().getCreateTableStatement(conn, config, databaseName, tableMetadata);
                 SwingUtilities.invokeLater(() -> {
                     if(disposed) return;
+                    DatabaseUi.status(statusLabel, "CREATE TABLE statement loaded", DatabaseUi.Tone.NORMAL);
                     Window owner = SwingUtilities.getWindowAncestor(this);
                     JDialog dialog = (owner instanceof Frame)
                             ? new JDialog((Frame) owner, "CREATE TABLE DDL - " + tableMetadata.getName(), true)
@@ -513,19 +510,19 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     dialog.add(scrollPane, BorderLayout.CENTER);
 
                     JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 6));
-                    JButton copyBtn = new JButton("Copy to Clipboard", AllIcons.Actions.Copy);
+                    JButton copyBtn = new JButton("Copy statement", AllIcons.Actions.Copy);
                     makeCompactButton(copyBtn);
                     copyBtn.addActionListener(e -> {
                         StringSelection sel = new StringSelection(ddl);
                         Toolkit.getDefaultToolkit().getSystemClipboard().setContents(sel, null);
-                        copyBtn.setText("Copied!");
-                        javax.swing.Timer t = new javax.swing.Timer(1500, evt -> copyBtn.setText("Copy to Clipboard"));
+                        copyBtn.setText("Copied");
+                        javax.swing.Timer t = new javax.swing.Timer(1500, evt -> copyBtn.setText("Copy statement"));
                         t.setRepeats(false);
                         t.start();
                     });
                     btnPanel.add(copyBtn);
 
-                    JButton consoleItem = new JButton("Open in SQL Console", Icons.CONSOLE);
+                    JButton consoleItem = new JButton("Open in SQL console", Icons.CONSOLE);
                     makeCompactButton(consoleItem);
                     consoleItem.addActionListener(e -> {
                         dialog.dispose();
@@ -544,7 +541,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
                     if(disposed) return;
-                    statusLabel.setText("Failed to fetch CREATE DDL: " + ex.getMessage());
+                    DatabaseUi.status(statusLabel, "Could not load CREATE TABLE statement", DatabaseUi.Tone.ERROR);
+                    statusLabel.setToolTipText(ex.getMessage());
                     Messages.showErrorDialog(project, "Failed to fetch CREATE statement: " + ex.getMessage(), "DDL Error");
                 });
             }
@@ -573,9 +571,9 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             return;
         }
 
-        int confirm = Messages.showYesNoDialog(project, "Are you sure you want to delete " + rows.length + " selected row(s)?",
-                "Confirm Delete", Messages.getWarningIcon());
-        if (confirm != Messages.YES) return;
+        if (!DatabaseUi.confirmDestructive(project, "Delete rows",
+                "Delete " + (keys.size() == 1 ? "1 saved row" : keys.size() + " saved rows") + " from '" + tableMetadata.getName() + "'?\nThis applies immediately and cannot be reverted in this editor.",
+                "Delete rows")) return;
 
         TableDraftState draftStore = project == null ? null : TableDraftState.getInstance(project);
         TableDraftState.Draft remainingDraft = tableModel.captureDraft().withoutRows(modelRows);
@@ -594,12 +592,13 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     if (disposed) return;
                     tableModel.removeRows(modelRows);
                     setMutationRunning(false);
-                    statusLabel.setText("Deleted " + keys.size() + " persisted row(s)");
+                    DatabaseUi.status(statusLabel, "Deleted " + keys.size() + " saved rows", DatabaseUi.Tone.SUCCESS);
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
                     if (disposed) return;
                     setMutationRunning(false);
+                    DatabaseUi.status(statusLabel, "Delete failed · Check database before retrying", DatabaseUi.Tone.ERROR);
                     Messages.showErrorDialog(project, "Delete failed: " + ex.getMessage() + "\nIf the connection failed, verify database state before retrying.", "Delete Error");
                 });
             }
@@ -613,7 +612,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         Map<CellCoord, String> errors = tableModel.getValidationErrors();
         if (!errors.isEmpty()) {
             String firstError = errors.values().iterator().next();
-            Messages.showWarningDialog(project, "Cannot commit: please resolve validation errors first.\n\n" + firstError, "Validation Error");
+            Messages.showWarningDialog(project, "Fix the invalid cells before committing.\n\n" + firstError, "Validation Error");
             return;
         }
 
@@ -672,14 +671,15 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     tableModel.modifiedCells.clear();
                     tableModel.newRows.clear();
                     setMutationRunning(false);
-                    Messages.showInfoMessage(project, "All changes committed successfully!", "Changes Saved");
+                    Messages.showInfoMessage(project, "Changes committed.", "Changes Saved");
                     loadData();
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
                     if (disposed) return;
                     setMutationRunning(false);
-                    Messages.showErrorDialog(project, "Save failed: " + ex.getMessage() + "\nIf the connection failed, verify database state before retrying.", "Commit Error");
+                    DatabaseUi.status(statusLabel, "Commit failed · Pending edits kept", DatabaseUi.Tone.ERROR);
+                    Messages.showErrorDialog(project, "Commit failed: " + ex.getMessage() + "\nIf the connection failed, verify database state before retrying.", "Commit Error");
                 });
             }
         });
@@ -716,7 +716,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
 
         menu.addSeparator();
 
-        JMenuItem viewCreateItem = new JMenuItem("View CREATE TABLE (DDL)...", AllIcons.Actions.ShowAsTree);
+        JMenuItem viewCreateItem = new JMenuItem("View CREATE TABLE…", AllIcons.Actions.ShowAsTree);
         viewCreateItem.addActionListener(e -> showCreateTableDialog());
         menu.add(viewCreateItem);
 
@@ -726,7 +726,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     private void addExportFormats(JPopupMenu menu,String label,ExportScope scope) {
         JMenu submenu=new JMenu(label);
         for(String format:new String[]{"csv","json","sql"}) {
-            JMenuItem item=new JMenuItem(format.toUpperCase(java.util.Locale.ROOT) + "...");
+            JMenuItem item=new JMenuItem(format.toUpperCase(java.util.Locale.ROOT) + "…");
             item.addActionListener(event -> exportData(format,scope)); submenu.add(item);
         }
         menu.add(submenu);

@@ -42,7 +42,8 @@ public class CreateTableDialog extends DialogWrapper {
         super(project, true);
         this.config = config;
         this.databaseName = databaseName;
-        setTitle("Create Table in " + databaseName);
+        setTitle("Create table in " + databaseName);
+        setOKButtonText("Create table");
         init();
         updatePreview();
     }
@@ -67,7 +68,7 @@ public class CreateTableDialog extends DialogWrapper {
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
         gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0.2;
-        topPanel.add(new JBLabel("Table Name:"), gbc);
+        topPanel.add(new JBLabel("Table name:"), gbc);
         gbc.gridx = 1; gbc.gridy = 0; gbc.weightx = 0.8;
         tableNameField = DatabaseInputs.textField("new_table");
         topPanel.add(tableNameField, gbc);
@@ -97,7 +98,7 @@ public class CreateTableDialog extends DialogWrapper {
 
         // Action buttons
         JPanel tableButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
-        JButton addBtn = new JButton("Add Column");
+        JButton addBtn = new JButton("Add column");
         JButton remBtn = new JButton("Remove Column");
         JButton upBtn = new JButton("Move Up");
         JButton downBtn = new JButton("Move Down");
@@ -174,14 +175,14 @@ public class CreateTableDialog extends DialogWrapper {
     protected @Nullable ValidationInfo doValidate() {
         String tName = tableNameField.getText().trim();
         if (tName.isEmpty()) {
-            return new ValidationInfo("Table name cannot be empty", tableNameField);
+            return new ValidationInfo("Enter a table name", tableNameField);
         }
         if (tableModel.getColumns().isEmpty()) {
-            return new ValidationInfo("Table must have at least one column");
+            return new ValidationInfo("Add at least one column");
         }
         for (ColumnDefinition col : tableModel.getColumns()) {
             if (col.getName().trim().isEmpty()) {
-                return new ValidationInfo("Column names cannot be empty");
+                return new ValidationInfo("Enter a name for every column");
             }
         }
         return null;
