@@ -6,6 +6,7 @@ All commands in these guides run from the repository root unless stated otherwis
 |---|---|
 | [Contributing](CONTRIBUTING.md) | Build requirements, tests and development practices |
 | [Scripts](SCRIPTS.md) | Portable test, deployment and release helpers |
+| [UI previews](UI_PREVIEW.md) | Render the side panel, connection dialog, table editor/viewer and SQL console outside the IDE; refresh README screenshots |
 | [Releasing](RELEASING.md) | Versioning, tags, validation and publication |
 | [Changelog](CHANGELOG.md) | Versioned release notes |
 | [Issue reporting](ISSUE.md) | Bug reports and feature requests |

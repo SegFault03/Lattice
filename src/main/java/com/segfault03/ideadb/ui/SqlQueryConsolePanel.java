@@ -148,7 +148,9 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         editorArea.setCaretPosition(editorArea.getText().length());
 
         // Keyboard Shortcut: Ctrl+Enter / Cmd+Enter to Run
-        KeyStroke runKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx());
+        int menuShortcut = GraphicsEnvironment.isHeadless() ? java.awt.event.InputEvent.CTRL_DOWN_MASK
+                : Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+        KeyStroke runKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, menuShortcut);
         editorArea.getInputMap().put(runKeyStroke, "runSql");
         editorArea.getActionMap().put("runSql", new AbstractAction() {
             @Override

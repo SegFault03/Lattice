@@ -1,6 +1,8 @@
 package com.segfault03.ideadb.dialog;
 
 import org.junit.jupiter.api.Test;
+import com.segfault03.ideadb.ui.VisibleCardPanel;
+import com.intellij.util.ui.JBUI;
 
 import javax.swing.*;
 import java.awt.*;
@@ -21,7 +23,7 @@ class ConnectionFormPanelTest {
             JComboBox<String> mode = ConnectionFormPanel.width(new JComboBox<>(new String[]{"Remote Server (hsql://)"}), 220);
             hsql.addRow(0, "Mode:", mode, false);
             CardLayout cards = new CardLayout();
-            JPanel subforms = new JPanel(cards);
+            JPanel subforms = new VisibleCardPanel(cards);
             JTextField[] modeInputs = new JTextField[3];
             for (int i = 0; i < modeInputs.length; i++) {
                 ConnectionFormPanel subform = new ConnectionFormPanel();
@@ -52,6 +54,11 @@ class ConnectionFormPanelTest {
                     assertEquals(inputX, xInRoot(password, root));
                     assertEquals(user.getPreferredSize().width, user.getWidth(), "Credentials must not shrink or stretch");
                     assertEquals(mode.getPreferredSize().width, mode.getWidth(), "The selected mode must remain readable");
+                    if (selected > 0) {
+                        int inputBottom = SwingUtilities.convertPoint(modeInputs[selected], 0, modeInputs[selected].getHeight(), root).y;
+                        int userTop = SwingUtilities.convertPoint(user, 0, 0, root).y;
+                        assertTrue(userTop - inputBottom <= JBUI.scale(20), "Memory/file mode must not reserve empty server rows before credentials");
+                    }
                     assertTrue(password.getY() > user.getY() + user.getHeight(), "Credential rows must not overlap");
                     assertEquals(0, hsql.getInsets().left, "Settings must not add an outer frame or padding");
                 }

@@ -1,6 +1,7 @@
 package com.segfault03.ideadb.dialog;
 
 import com.intellij.util.ui.JBUI;
+import com.segfault03.ideadb.ui.DatabaseUi;
 
 import javax.swing.*;
 import java.awt.*;
@@ -39,6 +40,10 @@ final class ConnectionFormPanel extends JPanel {
         cell.insets = JBUI.insets(3, 0);
         cell.fill = stretch ? GridBagConstraints.HORIZONTAL : GridBagConstraints.NONE;
         add(input, cell);
+    }
+
+    void addSection(int row, String title) {
+        addFullWidthRow(row, DatabaseUi.section(title));
     }
 
     void addFullWidthRow(int row, JComponent content) {

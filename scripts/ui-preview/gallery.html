@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lattice UI previews</title>
+<style>
+  body { font: 14px system-ui; margin: 0; background: #f6f7f9; color: #25272b; }
+  header { padding: 20px 32px; background: white; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 1; }
+  h1 { margin: 0 0 8px; font-size: 22px; }
+  p { line-height: 1.5; max-width: 1100px; }
+  label { margin-right: 20px; display: inline-block; margin-top: 6px; }
+  select { padding: 6px 12px; }
+  main { padding: 24px 32px; }
+  figure { margin: 0 0 32px; }
+  figcaption { font-weight: 600; font-size: 16px; margin-bottom: 12px; }
+  .pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 500px), 1fr)); gap: 24px; align-items: start; }
+  .shot h2 { font-size: 13px; color: #666; font-weight: 500; }
+  img { max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 8px; }
+  [hidden] { display: none !important; }
+  body.dark { background: #202124; color: #eee; }
+  body.dark header { background: #2b2d30; border-color: #444; }
+  body.dark .shot h2 { color: #aaa; }
+  a { color: #3574f0; }
+</style>
+<header>
+  <h1>Lattice · UI review</h1>
+  <p>Actual Swing components with sample data, rendered without an IDE or database. Themes approximate IntelliJ; the dialog window shell is simulated. Only the gallery selectors are interactive. Click an image for full resolution.</p>
+  <label>Theme <select id="theme"><option>light</option><option>dark</option></select></label>
+  <label>Screen <select id="screen"><option value="all">All</option><option value="side-panel">Side panel</option><option value="connection">Connection dialog</option><option value="table">Table editor / viewer</option><option value="sql-console">SQL console</option></select></label>
+  <label @COMPARISON_HIDDEN@>View <select id="view"><option value="after">Current</option><option value="pair">Before / after</option></select></label>
+</header>
+<main>@FIGURES@</main>
+<script>
+  function update() {
+    const theme = document.querySelector('#theme').value;
+    const screen = document.querySelector('#screen').value;
+    const pair = document.querySelector('#view').value === 'pair';
+    document.body.classList.toggle('dark', theme === 'dark');
+    document.querySelectorAll('figure').forEach(figure => {
+      figure.hidden = screen !== 'all' && figure.dataset.screen !== screen;
+      figure.querySelectorAll('.shot').forEach(shot => {
+        shot.hidden = shot.dataset.version === 'before' && !pair;
+        const img = shot.querySelector('img');
+        img.src = img.dataset.prefix + theme + '-' + img.dataset.name + '.png';
+        shot.querySelector('a').href = img.src;
+      });
+    });
+  }
+  document.querySelectorAll('select').forEach(select => select.addEventListener('change', update));
+  update();
+</script>
+</html>

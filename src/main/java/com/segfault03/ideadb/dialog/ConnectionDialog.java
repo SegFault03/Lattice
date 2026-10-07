@@ -6,6 +6,12 @@ import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.ui.TextFieldWithBrowseButton;
 import com.intellij.ui.JBColor;
+import com.intellij.icons.AllIcons;
+import com.intellij.ui.components.ActionLink;
+import com.intellij.ui.components.JBScrollPane;
+import com.segfault03.ideadb.ui.DatabaseUi;
+import com.segfault03.ideadb.ui.VisibleCardPanel;
+import java.awt.datatransfer.StringSelection;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBTextField;
 import com.intellij.util.ui.JBUI;
@@ -27,6 +33,11 @@ import java.awt.event.ItemEvent;
 
 public class ConnectionDialog extends DialogWrapper {
     private final ConnectionConfig config;
+    private JPanel rootPanel;
+    private JPanel driverDetails;
+    private final ActionLink driverToggle = new ActionLink("Driver options ▸");
+    private final JBLabel driverSummary = new JBLabel();
+    private boolean uiInitialized;
     private JComboBox<DriverSource> driverSourceCombo;
     private JComboBox<String> driverVersionCombo;
     private TextFieldWithBrowseButton driverJarField;
@@ -79,7 +90,7 @@ public class ConnectionDialog extends DialogWrapper {
 
     // Preview and Action components
     private JBLabel urlPreviewLabel;
-    private final JButton testButton = new JButton("Test Connection");
+    private final JButton testButton = new ActionLink("Test Connection");
     private final JBLabel testStatusLabel = new JBLabel("");
 
     public ConnectionDialog(@Nullable Project project, ConnectionConfig config) {
@@ -90,6 +101,9 @@ public class ConnectionDialog extends DialogWrapper {
         init();
         loadValues();
         updatePreview();
+        uiInitialized = true;
+        setDriverExpanded(config.getDriverSource() != DriverSource.BUNDLED);
+        refreshFormSize();
     }
 
     public ConnectionConfig getResultConfig() {
@@ -99,139 +113,167 @@ public class ConnectionDialog extends DialogWrapper {
 
     @Override
     protected @Nullable JComponent createCenterPanel() {
-        JPanel root = new JPanel(new BorderLayout(0, 10));
-        root.setBorder(JBUI.Borders.empty(0, 8, 0, 0));
-
+        rootPanel = new JPanel(new GridBagLayout()) {
+            @Override public Dimension getPreferredSize() {
+                Dimension size = super.getPreferredSize();
+                size.width = Math.max(JBUI.scale(520), size.width);
+                return size;
+            }
+        };
+        rootPanel.setBorder(JBUI.Borders.empty(0, 8));
         ConnectionFormPanel topPanel = new ConnectionFormPanel();
+        topPanel.addSection(0, "Data source");
         nameField = ConnectionFormPanel.width(new JBTextField(), 360);
-        topPanel.addRow(0, "Name:", nameField, false);
-
+        topPanel.addRow(1, "Name:", nameField, false);
         typeCombo = ConnectionFormPanel.width(new JComboBox<>(DatabaseType.values()), 220);
-        topPanel.addRow(1, "Database Type:", typeCombo, false);
-
+        topPanel.addRow(2, "Database Type:", typeCombo, false);
+        topPanel.addSection(3, "Connection");
         JPanel radioPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        standardRadio = new JRadioButton("Standard (Host & Port)", true);
-        customUrlRadio = new JRadioButton("Custom JDBC URL", false);
+        standardRadio = new JRadioButton("Standard", true);
+        customUrlRadio = new JRadioButton("JDBC URL");
         ButtonGroup group = new ButtonGroup();
         group.add(standardRadio);
         group.add(customUrlRadio);
         radioPanel.add(standardRadio);
         radioPanel.add(Box.createHorizontalStrut(JBUI.scale(12)));
         radioPanel.add(customUrlRadio);
-        topPanel.addRow(2, "Connect via:", radioPanel, false);
+        topPanel.addRow(4, "Connect via:", radioPanel, false);
+        addPart(0, topPanel);
 
+        mainCardLayout = new CardLayout();
+        mainCardPanel = new VisibleCardPanel(mainCardLayout);
+        dbTypeCardLayout = new CardLayout();
+        dbTypeCardPanel = new VisibleCardPanel(dbTypeCardLayout);
+        dbTypeCardPanel.add(createMysqlPanel(), DatabaseType.MYSQL.name());
+        dbTypeCardPanel.add(createHsqlPanel(), DatabaseType.HSQLDB.name());
+        mainCardPanel.add(dbTypeCardPanel, "STANDARD");
+        mainCardPanel.add(createCustomUrlPanel(), "JDBC_URL");
+        addPart(1, mainCardPanel);
+
+        JPanel urlSection = new JPanel(new BorderLayout());
+        urlSection.add(DatabaseUi.section("JDBC URL"), BorderLayout.NORTH);
+        JPanel previewPanel = new JPanel(new BorderLayout(JBUI.scale(8), 0));
+        urlPreviewLabel = new JBLabel();
+        urlPreviewLabel.setFont(new Font(Font.MONOSPACED, Font.PLAIN, urlPreviewLabel.getFont().getSize()));
+        urlPreviewLabel.setPreferredSize(JBUI.size(320, 28));
+        JButton copyUrl = DatabaseUi.action("", AllIcons.Actions.Copy, "Copy JDBC URL");
+        copyUrl.addActionListener(e -> {
+            if (urlPreviewLabel.getToolTipText() != null)
+                Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(urlPreviewLabel.getToolTipText()), null);
+        });
+        previewPanel.add(urlPreviewLabel, BorderLayout.CENTER);
+        previewPanel.add(copyUrl, BorderLayout.EAST);
+        urlSection.add(previewPanel, BorderLayout.CENTER);
+        addPart(2, urlSection);
+
+        JPanel driverSection = new JPanel(new BorderLayout());
+        driverSection.add(DatabaseUi.section("Driver"), BorderLayout.NORTH);
+        JPanel driverBody = new JPanel(new BorderLayout(0, JBUI.scale(6)));
+        JPanel summaryRow = new JPanel(new BorderLayout(JBUI.scale(8), 0));
+        driverSummary.setForeground(JBColor.namedColor("Label.infoForeground", new JBColor(0x63666C, 0xB5B8BD)));
+        summaryRow.add(driverSummary, BorderLayout.CENTER);
+        summaryRow.add(driverToggle, BorderLayout.EAST);
+        driverBody.add(summaryRow, BorderLayout.NORTH);
+        driverToggle.addActionListener(e -> setDriverExpanded(!driverDetails.isVisible()));
+        ConnectionFormPanel driverForm = new ConnectionFormPanel();
         driverSourceCombo = ConnectionFormPanel.width(new JComboBox<>(DriverSource.values()), 220);
-        topPanel.addRow(3, "JDBC driver:", driverSourceCombo, false);
-        driverCards = new JPanel(driverLayout) {
-            private Dimension cardSize(Dimension layoutSize, boolean minimum) {
-                for (Component card : getComponents()) {
-                    if (card.isVisible()) {
-                        Dimension visibleSize = minimum ? card.getMinimumSize() : card.getPreferredSize();
-                        Insets insets = getInsets();
-                        layoutSize.height = visibleSize.height + insets.top + insets.bottom + driverLayout.getVgap();
-                        break;
-                    }
-                }
-                return layoutSize;
-            }
-
-            @Override public Dimension getPreferredSize() {
-                return cardSize(super.getPreferredSize(), false);
-            }
-
-            @Override public Dimension getMinimumSize() {
-                return cardSize(super.getMinimumSize(), true);
-            }
-        };
-        driverCards.add(new JBLabel("MySQL 9.0.0 / HSQLDB 2.7.3 included"), DriverSource.BUNDLED.name());
-        JPanel versionPanel = new JPanel(new BorderLayout(0, JBUI.scale(4)));
-        JPanel versionRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        JPanel versionActions = new JPanel(new FlowLayout(FlowLayout.LEFT, JBUI.scale(6), 0));
-        driverVersionCombo = new JComboBox<>();
+        driverForm.addRow(0, "Source:", driverSourceCombo, false);
+        driverCards = new VisibleCardPanel(driverLayout);
+        driverCards.add(new JPanel(), DriverSource.BUNDLED.name());
+        JPanel versionPanel = new JPanel(new BorderLayout(0, JBUI.scale(6)));
+        driverVersionCombo = ConnectionFormPanel.width(new JComboBox<>(), 220);
         driverVersionCombo.setEditable(true);
-        ConnectionFormPanel.width(driverVersionCombo, 220);
-        versionRow.add(driverVersionCombo);
-        versionActions.add(listVersionsButton);
-        versionActions.add(downloadDriverButton);
-        versionPanel.add(versionRow, BorderLayout.NORTH);
-        versionPanel.add(versionActions, BorderLayout.SOUTH);
+        versionPanel.add(driverVersionCombo, BorderLayout.NORTH);
+        versionPanel.add(DatabaseUi.group(listVersionsButton, downloadDriverButton), BorderLayout.SOUTH);
         driverCards.add(versionPanel, DriverSource.DOWNLOAD.name());
         driverJarField = new TextFieldWithBrowseButton();
         driverJarField.getTextField().setBorder(new RoundedInputBorder());
-        ConnectionFormPanel.width(driverJarField, 220);
+        ConnectionFormPanel.width(driverJarField, 360);
         driverJarField.setToolTipText("Choose the driver matching the server or HSQLDB file format.");
         driverJarField.addBrowseFolderListener(null, FileChooserDescriptorFactory.createSingleFileDescriptor("jar").withTitle("Select JDBC Driver JAR"));
         driverCards.add(driverJarField, DriverSource.LOCAL_JAR.name());
-        topPanel.addRow(4, "", driverCards, false);
-        topPanel.addRow(5, "", driverStatusLabel, false);
-        driverSourceCombo.addActionListener(e -> { showDriverCard((DriverSource) driverSourceCombo.getSelectedItem()); updateDriverStatus(); });
+        driverForm.addRow(1, "", driverCards, false);
+        driverStatusLabel.setForeground(JBColor.namedColor("Label.infoForeground", new JBColor(0x63666C, 0xB5B8BD)));
+        driverForm.addRow(2, "", driverStatusLabel, false);
+        driverDetails = driverForm;
+        driverBody.add(driverDetails, BorderLayout.CENTER);
+        driverDetails.setVisible(false);
+        driverSection.add(driverBody, BorderLayout.CENTER);
+        addPart(3, driverSection);
+        driverSourceCombo.addActionListener(e -> {
+            showDriverCard((DriverSource) driverSourceCombo.getSelectedItem());
+            updateDriverStatus();
+        });
         driverVersionCombo.addActionListener(e -> updateDriverStatus());
         downloadDriverButton.addActionListener(e -> runDriverAction(false));
         listVersionsButton.addActionListener(e -> runDriverAction(true));
         refillDriverVersions();
-        root.add(topPanel, BorderLayout.NORTH);
-
-        // 2. Center Section: Switchable Cards (Standard vs JDBC URL)
-        mainCardLayout = new CardLayout();
-        mainCardPanel = new JPanel(mainCardLayout);
-
-        // Standard Mode Card (contains MySQL or HSQLDB views)
-        JPanel standardCard = new JPanel(new BorderLayout());
-        dbTypeCardLayout = new CardLayout();
-        dbTypeCardPanel = new JPanel(dbTypeCardLayout);
-        dbTypeCardPanel.add(createMysqlPanel(), DatabaseType.MYSQL.name());
-        dbTypeCardPanel.add(createHsqlPanel(), DatabaseType.HSQLDB.name());
-        standardCard.add(dbTypeCardPanel, BorderLayout.CENTER);
-
-        // Custom JDBC URL Card
-        JPanel customUrlCard = createCustomUrlPanel();
-
-        mainCardPanel.add(standardCard, "STANDARD");
-        mainCardPanel.add(customUrlCard, "JDBC_URL");
-
-        root.add(mainCardPanel, BorderLayout.CENTER);
-
-        // 3. Bottom Preview line (compact & clean)
-        JPanel previewPanel = new JPanel(new BorderLayout(8, 0));
-        previewPanel.setBorder(JBUI.Borders.empty(2, 0, 4, 0));
-        JBLabel prefixLabel = new JBLabel("Resolved URL:");
-        prefixLabel.setForeground(JBColor.GRAY);
-        previewPanel.add(prefixLabel, BorderLayout.WEST);
-
-        urlPreviewLabel = new JBLabel();
-        urlPreviewLabel.setForeground(JBColor.GRAY);
-        urlPreviewLabel.setFont(urlPreviewLabel.getFont().deriveFont(Font.PLAIN, 12f));
-        previewPanel.add(urlPreviewLabel, BorderLayout.CENTER);
-
-        root.add(previewPanel, BorderLayout.SOUTH);
-
         setupListeners();
-        Dimension preferred = root.getPreferredSize();
-        preferred.width = Math.max(JBUI.scale(520), preferred.width);
-        root.setPreferredSize(preferred);
-        root.setMinimumSize(new Dimension(JBUI.scale(520), root.getMinimumSize().height));
-        return root;
+        GridBagConstraints space = new GridBagConstraints();
+        space.gridy = 4;
+        space.weighty = 1;
+        space.fill = GridBagConstraints.VERTICAL;
+        rootPanel.add(Box.createVerticalGlue(), space);
+        JBScrollPane scroll = new JBScrollPane(rootPanel) {
+            @Override public Dimension getPreferredSize() {
+                Dimension size = super.getPreferredSize();
+                size.height = Math.min(size.height, JBUI.scale(580));
+                return size;
+            }
+        };
+        scroll.setBorder(JBUI.Borders.empty());
+        scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        return scroll;
+    }
+
+    private void addPart(int row, JComponent part) {
+        GridBagConstraints cell = new GridBagConstraints();
+        cell.gridx = 0;
+        cell.gridy = row;
+        cell.weightx = 1;
+        cell.fill = GridBagConstraints.HORIZONTAL;
+        cell.anchor = GridBagConstraints.NORTHWEST;
+        rootPanel.add(part, cell);
+    }
+
+    private void setDriverExpanded(boolean expanded) {
+        driverDetails.setVisible(expanded);
+        driverToggle.setText(expanded ? "Driver options ▾" : "Driver options ▸");
+        refreshFormSize();
+        if (expanded) SwingUtilities.invokeLater(() -> {
+            if (!isDisposed() && driverDetails.isVisible())
+                driverDetails.scrollRectToVisible(new Rectangle(0, 0, driverDetails.getWidth(), driverDetails.getHeight()));
+        });
+    }
+
+    private void refreshFormSize() {
+        if (!uiInitialized) return;
+        rootPanel.revalidate();
+        rootPanel.repaint();
+        Window window = getWindow();
+        if (window != null) {
+            window.setMinimumSize(null);
+            Dimension preferred = window.getPreferredSize();
+            window.setMinimumSize(new Dimension(JBUI.scale(560), preferred.height));
+            if (!window.isShowing()) window.pack();
+            else if (window.getHeight() < preferred.height)
+                window.setSize(Math.max(window.getWidth(), JBUI.scale(560)), preferred.height);
+        }
     }
 
     @Override
     protected JComponent createSouthPanel() {
-        JPanel south = new JPanel(new BorderLayout(10, 0));
-        south.setBorder(JBUI.Borders.empty(6, 8, 0, 0));
-
-        JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        testStatusLabel.setFont(testStatusLabel.getFont().deriveFont(Font.PLAIN, 12f));
-        left.add(testButton);
-        left.add(Box.createHorizontalStrut(JBUI.scale(8)));
-        left.add(testStatusLabel);
-
+        JPanel south = new JPanel(new BorderLayout(JBUI.scale(12), JBUI.scale(6)));
+        south.setBorder(BorderFactory.createCompoundBorder(
+                JBUI.Borders.customLineTop(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR),
+                JBUI.Borders.empty(12, 8, 0, 8)));
+        testStatusLabel.setFont(testStatusLabel.getFont().deriveFont(Font.PLAIN));
+        testStatusLabel.setVisible(false);
+        south.add(testStatusLabel, BorderLayout.NORTH);
         testButton.addActionListener(e -> doTestConnection());
-
+        south.add(testButton, BorderLayout.WEST);
         JComponent defaultButtons = super.createSouthPanel();
-
-        south.add(left, BorderLayout.WEST);
-        if (defaultButtons != null) {
-            south.add(defaultButtons, BorderLayout.EAST);
-        }
+        if (defaultButtons != null) south.add(defaultButtons, BorderLayout.EAST);
         return south;
     }
 
@@ -244,9 +286,10 @@ public class ConnectionDialog extends DialogWrapper {
         mysqlDatabaseField = ConnectionFormPanel.width(new JBTextField(), 220);
         form.addRow(2, "Database:", mysqlDatabaseField, false);
         mysqlUserField = ConnectionFormPanel.width(new JBTextField(), 220);
-        form.addRow(3, "User:", mysqlUserField, false);
+        form.addSection(3, "Authentication");
+        form.addRow(4, "User:", mysqlUserField, false);
         mysqlPasswordField = ConnectionFormPanel.width(new JPasswordField(), 220);
-        form.addRow(4, "Password:", mysqlPasswordField, false);
+        form.addRow(5, "Password:", mysqlPasswordField, false);
         return form;
     }
 
@@ -256,6 +299,7 @@ public class ConnectionDialog extends DialogWrapper {
         driverCards.revalidate();
         driverCards.repaint();
         if (driverCards.getParent() != null) driverCards.getParent().revalidate();
+        refreshFormSize();
     }
 
     private JPanel createHsqlPanel() {
@@ -265,7 +309,7 @@ public class ConnectionDialog extends DialogWrapper {
         form.addRow(0, "Mode:", hsqlModeCombo, false);
 
         hsqlSubCardLayout = new CardLayout();
-        hsqlSubCardPanel = new JPanel(hsqlSubCardLayout);
+        hsqlSubCardPanel = new VisibleCardPanel(hsqlSubCardLayout);
         ConnectionFormPanel serverForm = new ConnectionFormPanel();
         hsqlServerHostField = ConnectionFormPanel.width(new JBTextField("localhost"), 220);
         hsqlServerPortField = ConnectionFormPanel.width(new JBTextField("9001"), 76);
@@ -290,9 +334,10 @@ public class ConnectionDialog extends DialogWrapper {
         form.addFullWidthRow(1, hsqlSubCardPanel);
 
         hsqlUserField = ConnectionFormPanel.width(new JBTextField(), 220);
-        form.addRow(2, "User:", hsqlUserField, false);
+        form.addSection(2, "Authentication");
+        form.addRow(3, "User:", hsqlUserField, false);
         hsqlPasswordField = ConnectionFormPanel.width(new JPasswordField(), 220);
-        form.addRow(3, "Password:", hsqlPasswordField, false);
+        form.addRow(4, "Password:", hsqlPasswordField, false);
         return form;
     }
 
@@ -301,12 +346,13 @@ public class ConnectionDialog extends DialogWrapper {
         customUrlField = ConnectionFormPanel.width(new JBTextField(), 360);
         form.addRow(0, "JDBC URL:", customUrlField, false);
         customUrlUserField = ConnectionFormPanel.width(new JBTextField(), 220);
-        form.addRow(1, "User:", customUrlUserField, false);
+        form.addSection(1, "Authentication");
+        form.addRow(2, "User:", customUrlUserField, false);
         customUrlPasswordField = ConnectionFormPanel.width(new JPasswordField(), 220);
-        form.addRow(2, "Password:", customUrlPasswordField, false);
+        form.addRow(3, "Password:", customUrlPasswordField, false);
         JBLabel noteLabel = new JBLabel("<html><body width='340'>Enter the full JDBC connection string. Credentials entered above will be passed to the driver.</body></html>");
         noteLabel.setForeground(JBColor.GRAY);
-        form.addRow(3, "", noteLabel, false);
+        form.addRow(4, "", noteLabel, false);
         return form;
     }
 
@@ -315,11 +361,13 @@ public class ConnectionDialog extends DialogWrapper {
         standardRadio.addActionListener(e -> {
             mainCardLayout.show(mainCardPanel, "STANDARD");
             updatePreview();
+            refreshFormSize();
         });
 
         customUrlRadio.addActionListener(e -> {
             mainCardLayout.show(mainCardPanel, "JDBC_URL");
             updatePreview();
+            refreshFormSize();
         });
 
         // Database Type Switcher
@@ -340,6 +388,7 @@ public class ConnectionDialog extends DialogWrapper {
                 }
                 refillDriverVersions();
                 updatePreview();
+                refreshFormSize();
             }
         });
 
@@ -349,6 +398,7 @@ public class ConnectionDialog extends DialogWrapper {
                 HsqlMode mode = (HsqlMode) hsqlModeCombo.getSelectedItem();
                 hsqlSubCardLayout.show(hsqlSubCardPanel, mode.name());
                 updatePreview();
+                refreshFormSize();
             }
         });
 
@@ -397,7 +447,7 @@ public class ConnectionDialog extends DialogWrapper {
         }
         ConnectionConfig temp = createTempConfig();
         String resolvedUrl = temp.buildJdbcUrl();
-        urlPreviewLabel.setText(resolvedUrl.length() <= 44 ? resolvedUrl : resolvedUrl.substring(0, 41) + "...");
+        urlPreviewLabel.setText(resolvedUrl);
         urlPreviewLabel.setToolTipText(resolvedUrl);
     }
 
@@ -405,6 +455,7 @@ public class ConnectionDialog extends DialogWrapper {
         message = java.util.Objects.requireNonNullElse(message, " ");
         driverStatusLabel.setText("<html><body width='300'>" + escapeHtml(message) + "</body></html>");
         driverStatusLabel.setToolTipText(message);
+        refreshFormSize();
     }
 
     private static String escapeHtml(String text) {
@@ -469,13 +520,17 @@ public class ConnectionDialog extends DialogWrapper {
     }
     private void updateDriverStatus() {
         if (driverBusy || driverSourceCombo == null) return;
+        DatabaseType type = (DatabaseType) typeCombo.getSelectedItem();
         DriverSource source = (DriverSource)driverSourceCombo.getSelectedItem();
+        String bundledVersion = type == DatabaseType.MYSQL ? "9.0.0" : "2.7.3";
+        driverSummary.setText(type.getDisplayName() + (source == DriverSource.BUNDLED ? " " + bundledVersion : "") + " · " + source);
+        driverSummary.setToolTipText(driverSummary.getText());
         if (source == DriverSource.DOWNLOAD) {
             try {
                 var path = DriverCatalog.downloadedJar((DatabaseType)typeCombo.getSelectedItem(), String.valueOf(driverVersionCombo.getEditor().getItem()).trim());
                 setDriverStatus(java.nio.file.Files.isRegularFile(path) ? "Downloaded and ready" : "Choose a version, then Download. You can also enter a release version.");
             } catch (IllegalArgumentException error) { setDriverStatus(error.getMessage()); }
-        } else setDriverStatus(source == DriverSource.LOCAL_JAR ? "Select the driver JAR matching your database server." : "Bundled drivers are ready to use.");
+        } else setDriverStatus(source == DriverSource.LOCAL_JAR ? "Select the driver JAR matching your database server." : type.getDisplayName() + " " + bundledVersion + " included and ready to use.");
     }
     private void runDriverAction(boolean listOnly) {
         if (driverBusy || !testButton.isEnabled() || isDisposed()) return;
@@ -543,6 +598,7 @@ public class ConnectionDialog extends DialogWrapper {
         DatabaseType originalType = temp.getType();
         ConnectionConfig requested = temp.copy();
         testStatusLabel.setText("Connecting...");
+        testStatusLabel.setVisible(true);
         testStatusLabel.setForeground(JBColor.GRAY);
         testButton.setEnabled(false); downloadDriverButton.setEnabled(false); listVersionsButton.setEnabled(false);
 

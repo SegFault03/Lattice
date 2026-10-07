@@ -7,6 +7,9 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.vfs.VirtualFileWrapper;
 import com.intellij.ui.JBColor;
+import com.intellij.util.ui.JBUI;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.components.JBTextField;
@@ -107,105 +110,61 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         }
     }
 
-    private void makeCompactButton(AbstractButton btn) {
-        btn.setMargin(new Insets(1, 5, 1, 5));
-        btn.setFocusable(false);
+    private void makeCompactButton(AbstractButton button) {
+        button.setMargin(JBUI.insets(1, 5));
+        button.setFocusable(false);
     }
 
     private void initUI() {
-        // Toolbar with WrapLayout to prevent overflow/clipping on any screen size
-        JPanel toolbar = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 3));
+        JPanel heading = new JPanel(new BorderLayout());
+        JPanel toolbar = new JPanel(new WrapLayout(FlowLayout.LEFT, JBUI.scale(4), JBUI.scale(4)));
+        toolbar.setBorder(JBUI.Borders.empty(2, 8));
 
-        JButton refreshBtn = new JButton("Refresh", AllIcons.Actions.Refresh);
-        makeCompactButton(refreshBtn);
+        JButton refreshBtn = DatabaseUi.action("", AllIcons.Actions.Refresh, "Refresh table data");
         refreshBtn.addActionListener(e -> loadData());
-        toolbar.add(refreshBtn);
-
         autoRefreshCombo = new JComboBox<>(new String[]{"Auto: Off", "10s", "15s", "20s", "30s", "60s"});
         autoRefreshCombo.setToolTipText("Periodic auto-refresh interval");
-        autoRefreshCombo.setFocusable(false);
         autoRefreshCombo.addActionListener(e -> onAutoRefreshChanged());
-        toolbar.add(autoRefreshCombo);
 
-        toolbar.add(new JSeparator(SwingConstants.VERTICAL));
+        whereField = new JBTextField(20);
+        whereField.setToolTipText("SQL WHERE condition; press Enter to apply");
+        whereField.addActionListener(e -> loadData(1, pageSize));
+        orderField = new JBTextField(14);
+        orderField.setToolTipText("SQL ORDER BY clause; blank uses the primary key when available");
+        orderField.addActionListener(e -> loadData(1, pageSize));
+        JButton filterBtn = DatabaseUi.action("Apply", AllIcons.Actions.Execute, "Apply filter and sort");
+        filterBtn.addActionListener(e -> loadData(1, pageSize));
+        JPanel filters = new JPanel(new WrapLayout(FlowLayout.LEFT, JBUI.scale(8), JBUI.scale(4)));
+        filters.setBorder(BorderFactory.createCompoundBorder(
+                JBUI.Borders.customLineBottom(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR),
+                JBUI.Borders.empty(2, 8, 6, 8)));
+        filters.add(DatabaseUi.group(new JBLabel("WHERE"), whereField));
+        filters.add(DatabaseUi.group(new JBLabel("ORDER BY"), orderField));
+        filters.add(filterBtn);
 
-        toolbar.add(new JBLabel("WHERE:"));
-        whereField = new JBTextField(8);
-        whereField.addActionListener(e -> {
-            loadData(1, pageSize);
-        });
-        toolbar.add(whereField);
-
-        JButton filterBtn = new JButton("Filter");
-        makeCompactButton(filterBtn);
-        filterBtn.addActionListener(e -> {
-            loadData(1, pageSize);
-        });
-        toolbar.add(filterBtn);
-        toolbar.add(new JBLabel("Order by:")); orderField=new JBTextField(8);
-        orderField.setToolTipText("SQL sort clause; blank uses the primary key when available");
-        orderField.addActionListener(event -> loadData(1,pageSize)); toolbar.add(orderField);
-        JButton countBtn=new JButton("Count Rows"); makeCompactButton(countBtn); countBtn.addActionListener(event -> countRows()); toolbar.add(countBtn);
-
-        toolbar.add(new JSeparator(SwingConstants.VERTICAL));
-
-        toolbar.add(new JBLabel("Limit:"));
         pageSizeCombo = new JComboBox<>(new String[]{"50", "100", "250", "500", "1000"});
         pageSizeCombo.setSelectedItem("100");
-        pageSizeCombo.setFocusable(false);
-        pageSizeCombo.addActionListener(e -> {
-            loadData(1, Integer.parseInt((String) pageSizeCombo.getSelectedItem()));
-        });
-        toolbar.add(pageSizeCombo);
-
-        prevPageBtn = new JButton("<");
+        pageSizeCombo.setToolTipText("Rows per page");
+        pageSizeCombo.addActionListener(e -> loadData(1, Integer.parseInt((String) pageSizeCombo.getSelectedItem())));
+        prevPageBtn = DatabaseUi.action("", AllIcons.Actions.Back, "Previous page");
         prevPageBtn.setEnabled(false);
-        prevPageBtn.setPreferredSize(new Dimension(26, 24));
-        prevPageBtn.setMaximumSize(new Dimension(26, 24));
-        prevPageBtn.setMargin(new Insets(1, 2, 1, 2));
-        prevPageBtn.setFont(prevPageBtn.getFont().deriveFont(Font.BOLD, 12f));
-        prevPageBtn.setToolTipText("Previous Page");
-        prevPageBtn.setFocusable(false);
-        prevPageBtn.addActionListener(e -> {
-            if (currentPage > 1) {
-                loadData(currentPage - 1, pageSize);
-            }
-        });
-        toolbar.add(prevPageBtn);
-
+        prevPageBtn.addActionListener(e -> { if (currentPage > 1) loadData(currentPage - 1, pageSize); });
         pageLabel = new JBLabel("Page 1");
-        toolbar.add(pageLabel);
+        nextPageBtn = DatabaseUi.action("", AllIcons.Actions.Forward, "Next page");
+        nextPageBtn.addActionListener(e -> loadData(currentPage + 1, pageSize));
 
-        nextPageBtn = new JButton(">");
-        nextPageBtn.setPreferredSize(new Dimension(26, 24));
-        nextPageBtn.setMaximumSize(new Dimension(26, 24));
-        nextPageBtn.setMargin(new Insets(1, 2, 1, 2));
-        nextPageBtn.setFont(nextPageBtn.getFont().deriveFont(Font.BOLD, 12f));
-        nextPageBtn.setToolTipText("Next Page");
-        nextPageBtn.setFocusable(false);
-        nextPageBtn.addActionListener(e -> {
-            loadData(currentPage + 1, pageSize);
-        });
-        toolbar.add(nextPageBtn);
-
-        toolbar.add(new JSeparator(SwingConstants.VERTICAL));
-
-        JButton addRowBtn = new JButton("Add Row", AllIcons.General.Add);
-        makeCompactButton(addRowBtn);
+        JButton addRowBtn = DatabaseUi.action("", AllIcons.General.Add, "Add Row");
         addRowBtn.addActionListener(e -> {
             if (tableModel != null && !mutationRunning) {
                 tableModel.addNewRow();
                 updatePendingChangesState();
             }
         });
-        toolbar.add(addRowBtn);
 
-        JButton delRowBtn = new JButton("Delete", AllIcons.General.Remove);
-        makeCompactButton(delRowBtn);
+        JButton delRowBtn = DatabaseUi.action("", AllIcons.General.Remove, "Delete selected rows");
         delRowBtn.setToolTipText("Delete selected row(s)");
         delRowBtn.addActionListener(e -> deleteSelectedRows());
-        toolbar.add(delRowBtn);
-        JButton nullBtn=new JButton("Set NULL"); makeCompactButton(nullBtn);
+        JMenuItem nullBtn=new JMenuItem("Set NULL");
         nullBtn.setToolTipText("Set the selected column to SQL NULL for selected rows");
         nullBtn.addActionListener(event -> {
             if(mutationRunning || disposed || !finishCellEditing()) return;
@@ -215,8 +174,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 int row=dataTable.convertRowIndexToModel(selected);
                 if(tableModel.isCellEditable(row,column)) tableModel.setValueAt(null,row,column);
             }
-        }); toolbar.add(nullBtn);
-        JButton defaultBtn=new JButton("Use Default"); makeCompactButton(defaultBtn);
+        });
+        JMenuItem defaultBtn=new JMenuItem("Use Default");
         defaultBtn.setToolTipText("Use the database default for a selected new-row cell");
         defaultBtn.addActionListener(event -> {
             if(mutationRunning || disposed || !finishCellEditing()) return;
@@ -228,16 +187,11 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 int row=dataTable.convertRowIndexToModel(selected);
                 if(tableModel.isRowNew(row) && tableModel.isCellEditable(row,column)) tableModel.setValueAt(RowDefaults.Value.USE_DEFAULT,row,column);
             }
-        }); toolbar.add(defaultBtn);
-
-        saveBtn = new JButton("Commit", AllIcons.Actions.Commit);
-        makeCompactButton(saveBtn);
+        });
+        saveBtn = DatabaseUi.action("Commit", AllIcons.Actions.Commit, "Commit pending changes");
         saveBtn.setEnabled(false);
         saveBtn.addActionListener(e -> commitChanges());
-        toolbar.add(saveBtn);
-
-        revertBtn = new JButton("Revert", AllIcons.Actions.Rollback);
-        makeCompactButton(revertBtn);
+        revertBtn = DatabaseUi.action("", AllIcons.Actions.Rollback, "Revert pending changes");
         revertBtn.setEnabled(false);
         revertBtn.addActionListener(e -> {
             if (mutationRunning) return;
@@ -246,52 +200,94 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             updatePendingChangesState();
             loadData();
         });
-        toolbar.add(revertBtn);
 
-        toolbar.add(new JSeparator(SwingConstants.VERTICAL));
-
-        JButton exportBtn = new JButton("Export...", AllIcons.ToolbarDecorator.Export);
-        makeCompactButton(exportBtn);
+        JButton exportBtn = DatabaseUi.action("Export", AllIcons.ToolbarDecorator.Export, "Export data");
         exportBtn.setToolTipText("Choose current page, selected rows, or all persisted rows for export");
         exportBtn.addActionListener(e -> showExportMenu(exportBtn));
-        toolbar.add(exportBtn);
 
-        JButton truncateBtn = new JButton("Truncate", AllIcons.Actions.GC);
-        makeCompactButton(truncateBtn);
+        JMenuItem truncateBtn = new JMenuItem("Truncate Table…", AllIcons.Actions.GC);
         truncateBtn.setToolTipText("Truncate table (permanently delete all rows)");
         truncateBtn.addActionListener(e -> truncateCurrentTable());
-        toolbar.add(truncateBtn);
 
-        JButton consoleBtn = new JButton("Console", Icons.CONSOLE);
-        makeCompactButton(consoleBtn);
+        JButton consoleBtn = DatabaseUi.action("", Icons.CONSOLE, "Open SQL console");
         consoleBtn.setToolTipText("Open interactive query console for " + (databaseName != null ? databaseName : "this database"));
         consoleBtn.addActionListener(e -> openSqlConsole());
-        toolbar.add(consoleBtn);
 
-        add(toolbar, BorderLayout.NORTH);
+        JButton optionsBtn = DatabaseUi.action("", AllIcons.Actions.MoreHorizontal, "Table options");
+        JPopupMenu options = new JPopupMenu();
+        JMenuItem countItem = new JMenuItem("Count Rows");
+        countItem.addActionListener(e -> countRows());
+        options.add(countItem);
+        options.addSeparator();
+        options.add(truncateBtn);
+        optionsBtn.addActionListener(e -> options.show(optionsBtn, 0, optionsBtn.getHeight()));
+        toolbar.add(DatabaseUi.group(refreshBtn, autoRefreshCombo));
+        toolbar.add(DatabaseUi.group(DatabaseUi.separator(), addRowBtn, delRowBtn));
+        toolbar.add(DatabaseUi.group(DatabaseUi.separator(), saveBtn, revertBtn));
+        toolbar.add(DatabaseUi.group(DatabaseUi.separator(), exportBtn, consoleBtn, optionsBtn));
+        heading.add(toolbar, BorderLayout.NORTH);
+        heading.add(filters, BorderLayout.CENTER);
+        add(heading, BorderLayout.NORTH);
 
-        // Center Table
         tableModel = new EditableTableModel();
         dataTable = new JBTable(tableModel);
         dataTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
-        dataTable.setRowHeight(24);
+        dataTable.setRowHeight(JBUI.scale(28));
         dataTable.setShowGrid(true);
-        dataTable.setGridColor(new JBColor(new Color(230, 230, 230), new Color(60, 63, 65)));
+        dataTable.setGridColor(JBColor.namedColor("Table.gridColor", new JBColor(0xE8E9ED, 0x393B40)));
         dataTable.setDefaultRenderer(Object.class, new CellHighlightRenderer());
-
         JTableHeader header = dataTable.getTableHeader();
         header.setReorderingAllowed(false);
-        header.setPreferredSize(new Dimension(header.getPreferredSize().width, 28));
+        header.setPreferredSize(new Dimension(header.getPreferredSize().width, JBUI.scale(30)));
         header.setDefaultRenderer(new TableHeaderRenderer());
+        JPopupMenu cellMenu = new JPopupMenu();
+        cellMenu.add(nullBtn);
+        cellMenu.add(defaultBtn);
+        dataTable.setComponentPopupMenu(cellMenu);
+        dataTable.addMouseListener(new MouseAdapter() {
+            private void selectPopupCell(MouseEvent event) {
+                if (!event.isPopupTrigger() || !finishCellEditing()) return;
+                int row = dataTable.rowAtPoint(event.getPoint());
+                int column = dataTable.columnAtPoint(event.getPoint());
+                if (row >= 0 && column >= 0) {
+                    if (!dataTable.isRowSelected(row)) dataTable.setRowSelectionInterval(row, row);
+                    dataTable.setColumnSelectionInterval(column, column);
+                } else {
+                    dataTable.clearSelection();
+                }
+            }
+            @Override public void mousePressed(MouseEvent event) { selectPopupCell(event); }
+            @Override public void mouseReleased(MouseEvent event) { selectPopupCell(event); }
+        });
+        cellMenu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
+            @Override public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent event) {
+                int row = dataTable.getSelectedRow();
+                int col = dataTable.getSelectedColumn();
+                boolean editable = row >= 0 && col >= 0 && !mutationRunning && !disposed;
+                int modelRow = row < 0 ? -1 : dataTable.convertRowIndexToModel(row);
+                int modelCol = col < 0 ? -1 : dataTable.convertColumnIndexToModel(col);
+                ColumnMetadata column = col < 0 ? null : tableModel.getColumnMeta(modelCol);
+                nullBtn.setEnabled(editable && tableModel.isCellEditable(modelRow, modelCol) && column != null && column.isNullable());
+                defaultBtn.setEnabled(editable && tableModel.isRowNew(modelRow) && tableModel.isCellEditable(modelRow, modelCol)
+                        && column != null && column.getDefaultValue() != null);
+            }
+            @Override public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent event) {}
+            @Override public void popupMenuCanceled(javax.swing.event.PopupMenuEvent event) {}
+        });
+        JBScrollPane scroll = new JBScrollPane(dataTable);
+        scroll.setBorder(JBUI.Borders.empty());
+        add(scroll, BorderLayout.CENTER);
 
-        add(new JBScrollPane(dataTable), BorderLayout.CENTER);
-
-        // Bottom Status
-        JPanel statusPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
-        statusPanel.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
-        statusLabel = new JBLabel("Ready");
-        statusPanel.add(statusLabel);
-        add(statusPanel, BorderLayout.SOUTH);
+        JPanel footer = new JPanel(new BorderLayout(JBUI.scale(12), 0));
+        footer.setBorder(BorderFactory.createCompoundBorder(
+                JBUI.Borders.customLineTop(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR), JBUI.Borders.empty(4, 12)));
+        statusLabel = new JBLabel("Ready") {
+            @Override public void setText(String text) { super.setText(text); setToolTipText(text); }
+        };
+        JPanel navigation = DatabaseUi.group(new JBLabel("Rows"), pageSizeCombo, prevPageBtn, pageLabel, nextPageBtn);
+        footer.add(statusLabel, BorderLayout.CENTER);
+        footer.add(navigation, BorderLayout.EAST);
+        add(footer, BorderLayout.SOUTH);
     }
 
     private void onAutoRefreshChanged() {
@@ -434,7 +430,6 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         }
         Map<CellCoord, String> errors = tableModel.getValidationErrors();
         boolean hasErrors = !errors.isEmpty();
-
         revertBtn.setEnabled(hasPending && !mutationRunning);
 
         if (hasErrors) {
@@ -1077,7 +1072,6 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     }
 
     private class CellHighlightRenderer extends DefaultTableCellRenderer {
-        private final JBColor oddBg = new JBColor(new Color(245, 247, 250), new Color(43, 45, 48));
 
         // Modified existing cell (UPDATE): Ocean / Cyan highlight
         private final JBColor modifiedBg = new JBColor(new Color(205, 232, 255), new Color(24, 72, 115));
@@ -1105,6 +1099,9 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                                                        boolean hasFocus, int row, int column) {
             Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
 
+            setFont(table.getFont());
+            setBorder(JBUI.Borders.empty(0, 8));
+            setHorizontalAlignment(value instanceof Number ? SwingConstants.RIGHT : SwingConstants.LEFT);
             int modelRow = table.convertRowIndexToModel(row);
             int modelCol = table.convertColumnIndexToModel(column);
             CellCoord coord = new CellCoord(modelRow, modelCol);
@@ -1118,19 +1115,19 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             if (errorMsg != null) {
                 c.setBackground(isSelected ? errorSelBg : errorBg);
                 c.setForeground(errorFg);
-                setFont(getFont().deriveFont(Font.BOLD));
+                setFont(table.getFont());
                 setBorder(BorderFactory.createCompoundBorder(
-                        BorderFactory.createLineBorder(errorBorder, 2),
-                        BorderFactory.createEmptyBorder(1, 4, 1, 4)
+                        BorderFactory.createLineBorder(errorBorder, JBUI.scale(2)),
+                        JBUI.Borders.empty(0, 6)
                 ));
                 setToolTipText("Validation Error: " + errorMsg);
             } else if (isNewRow) {
                 c.setBackground(isSelected ? newRowSelBg : newRowBg);
                 c.setForeground(newRowFg);
-                setFont(getFont().deriveFont(Font.BOLD));
+                setFont(table.getFont());
                 setBorder(BorderFactory.createCompoundBorder(
-                        BorderFactory.createLineBorder(newRowBorder, isSelected ? 2 : 1),
-                        BorderFactory.createEmptyBorder(1, 4, 1, 4)
+                        BorderFactory.createMatteBorder(0, JBUI.scale(2), 0, 0, newRowBorder),
+                        JBUI.Borders.empty(0, 6)
                 ));
                 if (isAuto && "(Auto)".equals(value)) {
                     c.setForeground(autoFg);
@@ -1142,10 +1139,10 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             } else if (isModified) {
                 c.setBackground(isSelected ? modifiedSelBg : modifiedBg);
                 c.setForeground(modifiedFg);
-                setFont(getFont().deriveFont(Font.BOLD));
+                setFont(table.getFont());
                 setBorder(BorderFactory.createCompoundBorder(
-                        BorderFactory.createLineBorder(modifiedBorder, isSelected ? 2 : 1),
-                        BorderFactory.createEmptyBorder(1, 4, 1, 4)
+                        BorderFactory.createMatteBorder(0, JBUI.scale(2), 0, 0, modifiedBorder),
+                        JBUI.Borders.empty(0, 6)
                 ));
                 Object origVal = tableModel.getOriginalValue(modelRow, modelCol);
                 setToolTipText("Modified (Original: " + (origVal != null ? origVal : "<null>") + " -> Current: " + (value != null ? value : "<null>") + ")");
@@ -1155,7 +1152,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     c.setForeground(table.getSelectionForeground());
                     setFont(getFont().deriveFont(Font.PLAIN));
                 } else {
-                    c.setBackground(row % 2 == 0 ? table.getBackground() : oddBg);
+                    c.setBackground(table.getBackground());
                     if (value == null) {
                         c.setForeground(nullFg);
                         setFont(getFont().deriveFont(Font.ITALIC));
@@ -1174,6 +1171,11 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 }
             }
 
+            if (hasFocus && errorMsg == null) {
+                setBorder(BorderFactory.createCompoundBorder(
+                        JBUI.Borders.customLine(JBColor.namedColor("Component.focusColor", new JBColor(0x3574F0, 0x548AF7))),
+                        JBUI.Borders.empty(0, 7)));
+            }
             if (value == null) {
                 setText("<null>");
             }
@@ -1182,9 +1184,9 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     }
 
     private static class TableHeaderRenderer extends DefaultTableCellRenderer {
-        private final JBColor headerBg = new JBColor(new Color(232, 236, 242), new Color(48, 51, 56));
-        private final JBColor headerFg = new JBColor(new Color(30, 32, 36), new Color(220, 224, 230));
-        private final JBColor headerBorder = new JBColor(new Color(205, 210, 216), new Color(70, 73, 78));
+        private final JBColor headerBg = JBColor.namedColor("TableHeader.background", new JBColor(0xF5F5F7, 0x303236));
+        private final JBColor headerFg = JBColor.namedColor("TableHeader.foreground", new JBColor(0x303238, 0xDFE1E5));
+        private final JBColor headerBorder = JBColor.namedColor("Table.gridColor", new JBColor(0xE0E2E6, 0x393B40));
 
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
@@ -1192,10 +1194,10 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
             c.setBackground(headerBg);
             c.setForeground(headerFg);
-            setFont(getFont().deriveFont(Font.BOLD, 12f));
+            setFont(table.getFont().deriveFont(Font.BOLD));
             setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createMatteBorder(0, 0, 2, 1, headerBorder),
-                    BorderFactory.createEmptyBorder(4, 8, 4, 8)
+                    BorderFactory.createMatteBorder(0, 0, JBUI.scale(1), JBUI.scale(1), headerBorder),
+                    JBUI.Borders.empty(4, 8)
             ));
             return c;
         }
