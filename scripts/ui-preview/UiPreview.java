@@ -7,6 +7,7 @@ import com.segfault03.ideadb.model.*;
 import com.segfault03.ideadb.ui.TableDataEditorPanel;
 import com.segfault03.ideadb.ui.ExplorerPreview;
 import com.segfault03.ideadb.ui.SqlQueryConsolePanel;
+import com.segfault03.ideadb.ui.DatabaseTable;
 import javax.swing.*;
 import javax.swing.table.*;
 import java.awt.*;
@@ -124,6 +125,7 @@ public final class UiPreview {
         int[] widths = {110, 220, 320, 150};
         for (int i = 0; i < widths.length; i++) table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
         ((JLabel)field(panel, "statusLabel")).setText("4 row(s) returned in 18 ms");
+        ((JTabbedPane)field(panel, "resultsTabs")).setTitleAt(0, "Results (4)");
         ((JTextArea)field(panel, "messagesArea")).setText("Query completed successfully.\n4 rows returned in 18 ms.\n");
         return panel;
     }
@@ -135,6 +137,74 @@ public final class UiPreview {
                 throw new AssertionError("Clipped toolbar/footer control: " + child.getClass().getSimpleName());
             if (child instanceof Container nested) verifyControls(nested);
         }
+    }
+    static java.awt.event.MouseEvent hover(JTable table, int row, int column) {
+        Rectangle cell = table.getCellRect(row, column, true);
+        return new java.awt.event.MouseEvent(table, java.awt.event.MouseEvent.MOUSE_MOVED, 0, 0,
+                cell.x + cell.width / 2, cell.y + cell.height / 2, 0, false);
+    }
+    static void verifyGrid(DatabaseTable table, int nullRow, int nullColumn) {
+        Component header = table.getTableHeader().getDefaultRenderer().getTableCellRendererComponent(
+                table, table.getColumnName(0), false, false, -1, 0);
+        Color color = header.getBackground();
+        Color background = table.getBackground();
+        int difference = Math.abs(color.getRed() - background.getRed())
+                + Math.abs(color.getGreen() - background.getGreen()) + Math.abs(color.getBlue() - background.getBlue());
+        if (difference < 20) throw new AssertionError("Header background must differ from data rows");
+        String tip = table.getToolTipText(hover(table, nullRow, nullColumn));
+        if (!tip.contains("NULL (no value)")) throw new AssertionError("Missing readable NULL tooltip: " + tip);
+    }
+    static void tooltipSnapshot(JComponent panel, DatabaseTable table, int row, int column, String name) throws Exception {
+        JLayeredPane layers = new JLayeredPane();
+        layers.add(panel, JLayeredPane.DEFAULT_LAYER);
+        panel.setBounds(0, 0, 1100, 620);
+        for (int pass = 0; pass < 4; pass++) layout(panel);
+        var event = hover(table, row, column);
+        JToolTip tooltip = table.createToolTip();
+        tooltip.setTipText(table.getToolTipText(event));
+        Point anchor = SwingUtilities.convertPoint(table, table.getToolTipLocation(event), layers);
+        Dimension size = tooltip.getPreferredSize();
+        tooltip.setBounds(anchor.x, anchor.y, size.width, size.height);
+        layers.add(tooltip, JLayeredPane.POPUP_LAYER);
+        render(layers, name, 1100, 620);
+        layers.remove(panel);
+    }
+    static JComponent findByTooltip(Container container, String tooltip) {
+        for (Component child : container.getComponents()) {
+            if (child instanceof JComponent component && tooltip.equals(component.getToolTipText())) return component;
+            if (child instanceof Container nested) {
+                JComponent match = findByTooltip(nested, tooltip);
+                if (match != null) return match;
+            }
+        }
+        return null;
+    }
+    static void verifyConsoleActions() throws Exception {
+        SqlQueryConsolePanel panel = console();
+        JTextArea editor = (JTextArea)field(panel, "editorArea");
+        panel.setSqlText("");
+        JComboBox<?> template = (JComboBox<?>)findByTooltip(panel, "Insert a SQL template at the caret");
+        template.setSelectedIndex(1);
+        template.setSelectedIndex(1);
+        if (editor.getText().split("SELECT", -1).length != 3) throw new AssertionError("Template must support repeated insertion");
+        @SuppressWarnings("unchecked") JComboBox<QueryHistoryEntry> history = (JComboBox<QueryHistoryEntry>)field(panel, "historyCombo");
+        history.addItem(new QueryHistoryEntry("SELECT 42;"));
+        history.setSelectedIndex(1);
+        if (!editor.getText().equals("SELECT 42;")) throw new AssertionError("History must restore the full query");
+        ((JButton)findByTooltip(panel, "Clear query text")).doClick(0);
+        if (!editor.getText().isEmpty()) throw new AssertionError("Clear action must clear the query");
+        panel.setSqlText("SELECT 1; SELECT 2;");
+        editor.select(10, 19);
+        editor.getActionMap().get("runSql").actionPerformed(new java.awt.event.ActionEvent(editor, 0, "runSql"));
+        if (((JButton)field(panel, "runBtn")).isEnabled() || !((JButton)field(panel, "cancelBtn")).isEnabled()
+                || ((JComboBox<?>)field(panel, "databaseCombo")).isEnabled() || ((JComboBox<?>)field(panel, "resultLimit")).isEnabled())
+            throw new AssertionError("Executing controls must reflect the active query");
+        @SuppressWarnings("unchecked") List<String> queries = (List<String>)field(panel, "queryHistory");
+        if (!queries.get(0).equals("SELECT 2;")) throw new AssertionError("Run shortcut must execute the selection");
+        invoke(panel, "setRunning", new Class<?>[]{boolean.class}, false);
+        if (!((JButton)field(panel, "runBtn")).isEnabled() || ((JButton)field(panel, "cancelBtn")).isEnabled())
+            throw new AssertionError("Completed controls must restore Run/Stop state");
+        System.out.println("Console templates, history, clear, shortcut and execution controls verified (background tasks blocked)");
     }
     static void prepareMenu(JTable table, int row, int column) {
         table.setRowSelectionInterval(row, row);
@@ -186,10 +256,35 @@ public final class UiPreview {
                 SqlQueryConsolePanel console = console();
                 render(console, theme + "-sql-console-1100", 1100, 620);
                 render(console, theme + "-sql-console-760", 760, 620);
+                render(console, theme + "-sql-console-520", 520, 620);
+                BorderLayout consoleLayout = (BorderLayout)console.getLayout();
+                verifyControls((Container)consoleLayout.getLayoutComponent(BorderLayout.NORTH));
+                verifyControls((Container)consoleLayout.getLayoutComponent(BorderLayout.SOUTH));
+                DatabaseTable results = (DatabaseTable)field(console, "resultsTable");
+                verifyGrid(results, 1, 2);
+                tooltipSnapshot(console, results, 1, 2, theme + "-sql-console-null-tooltip-1100");
+                invoke(console, "setRunning", new Class<?>[]{boolean.class}, true);
+                ((JLabel)field(console, "statusLabel")).setText("Executing query…");
+                render(console, theme + "-sql-console-running-1100", 1100, 620);
+                invoke(console, "setRunning", new Class<?>[]{boolean.class}, false);
+                JTextArea consoleEditor = (JTextArea)field(console, "editorArea");
+                console.setSqlText(consoleEditor.getText().replace("WHERE status", "WHERE customer_status"));
+                ((JTextArea)field(console, "messagesArea")).setText("ERROR: Unknown column 'customer_status' in WHERE clause\nElapsed: 8 ms\n\nCheck the column name and run the query again.");
+                ((JTextArea)field(console, "messagesArea")).setForeground(new JBColor(0xC62828, 0xFF8282));
+                ((JTabbedPane)field(console, "resultsTabs")).setSelectedIndex(1);
+                ((JLabel)field(console, "statusLabel")).setText("Query failed: unknown column 'customer_status'");
+                render(console, theme + "-sql-console-messages-1100", 1100, 620);
+                SqlQueryConsolePanel emptyConsole = new SqlQueryConsolePanel(null, config(DatabaseType.MYSQL), "shop", List.of("shop"));
+                emptyConsole.setSqlText("");
+                render(emptyConsole, theme + "-sql-console-empty-1100", 1100, 620);
+                verifyConsoleActions();
                 for (String variant : List.of("mysql", "hsql-server", "hsql-memory", "hsql-file", "jdbc-url", "driver-download", "driver-local")) connection(theme, variant, 600);
                 connection(theme, "mysql", 800);
                 TableDataEditorPanel editor = table(false);
                 render(editor, theme + "-table-1100", 1100, 620);
+                DatabaseTable grid = (DatabaseTable)field(editor, "dataTable");
+                verifyGrid(grid, 3, 2);
+                tooltipSnapshot(editor, grid, 3, 2, theme + "-table-null-tooltip-1100");
                 render(editor, theme + "-table-760", 760, 620);
                 render(editor, theme + "-table-520", 520, 620);
                 BorderLayout editorLayout = (BorderLayout)editor.getLayout();
@@ -199,6 +294,9 @@ public final class UiPreview {
                 ((TableModel)model).setValueAt("Amelia Stone", 0, 1);
                 if (!((JButton)field(editor, "saveBtn")).isEnabled()) throw new AssertionError("Commit must be enabled for a valid edit");
                 render(editor, theme + "-table-edited-1100", 1100, 620);
+                if (!grid.getToolTipText(hover(grid, 0, 1)).contains("Original: Amelia Brooks"))
+                    throw new AssertionError("Modified cell tooltip must retain its original value");
+                tooltipSnapshot(editor, grid, 0, 1, theme + "-table-modified-tooltip-1100");
                 invoke(model, "addNewRow", new Class<?>[]{});
                 ((TableModel)model).setValueAt("Grace Lee", 12, 1);
                 ((TableModel)model).setValueAt("grace@example.com", 12, 2);
@@ -206,6 +304,8 @@ public final class UiPreview {
                 render(editor, theme + "-table-new-row-1100", 1100, 620);
                 ((TableModel)model).setValueAt("not a number", 1, 4);
                 if (((JButton)field(editor, "saveBtn")).isEnabled()) throw new AssertionError("Commit must be disabled for an invalid decimal");
+                if (!grid.getToolTipText(hover(grid, 1, 4)).contains("Validation error:"))
+                    throw new AssertionError("Invalid cell tooltip must explain the validation error");
                 render(editor, theme + "-table-error-1100", 1100, 620);
                 render(table(true), theme + "-view-1100", 1100, 620);
                 verifyCellActions();

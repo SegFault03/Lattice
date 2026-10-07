@@ -13,7 +13,6 @@ import java.awt.event.MouseEvent;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.components.JBTextField;
-import com.intellij.ui.table.JBTable;
 import com.segfault03.ideadb.editor.DatabaseEditorManager;
 import com.segfault03.ideadb.model.ColumnMetadata;
 import com.segfault03.ideadb.model.ConnectionConfig;
@@ -33,7 +32,6 @@ import com.segfault03.ideadb.state.TableDraftState;
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
-import javax.swing.table.JTableHeader;
 import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 import java.io.File;
@@ -67,7 +65,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     private JButton saveBtn;
     private JButton revertBtn;
 
-    private JBTable dataTable;
+    private DatabaseTable dataTable;
     private EditableTableModel tableModel;
 
     private int currentPage = 1;
@@ -230,16 +228,9 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         add(heading, BorderLayout.NORTH);
 
         tableModel = new EditableTableModel();
-        dataTable = new JBTable(tableModel);
-        dataTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
-        dataTable.setRowHeight(JBUI.scale(28));
-        dataTable.setShowGrid(true);
-        dataTable.setGridColor(JBColor.namedColor("Table.gridColor", new JBColor(0xE8E9ED, 0x393B40)));
+        dataTable = new DatabaseTable(tableModel);
+        dataTable.setCellTooltip(this::cellTooltip);
         dataTable.setDefaultRenderer(Object.class, new CellHighlightRenderer());
-        JTableHeader header = dataTable.getTableHeader();
-        header.setReorderingAllowed(false);
-        header.setPreferredSize(new Dimension(header.getPreferredSize().width, JBUI.scale(30)));
-        header.setDefaultRenderer(new TableHeaderRenderer());
         JPopupMenu cellMenu = new JPopupMenu();
         cellMenu.add(nullBtn);
         cellMenu.add(defaultBtn);
@@ -274,8 +265,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             @Override public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent event) {}
             @Override public void popupMenuCanceled(javax.swing.event.PopupMenuEvent event) {}
         });
-        JBScrollPane scroll = new JBScrollPane(dataTable);
-        scroll.setBorder(JBUI.Borders.empty());
+        JBScrollPane scroll = dataTable.createScrollPane();
         add(scroll, BorderLayout.CENTER);
 
         JPanel footer = new JPanel(new BorderLayout(JBUI.scale(12), 0));
@@ -1071,6 +1061,27 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         }
     }
 
+    private String cellTooltip(int row, int column) {
+        Object value = tableModel.getValueAt(row, column);
+        ColumnMetadata metadata = tableModel.getColumnMeta(column);
+        String text = tableModel.getColumnName(column) + ": " + DatabaseTable.describeValue(value);
+        String error = tableModel.getValidationError(new CellCoord(row, column));
+        if (error != null) text += "\nValidation error: " + error;
+        if (tableModel.isRowNew(row)) {
+            if (metadata != null && metadata.isAutoIncrement())
+                text += "\nIdentity key assigned by the database on commit.";
+            else if (value == RowDefaults.Value.USE_DEFAULT && metadata != null)
+                text += "\nDatabase default on commit: " + metadata.getDefaultValue();
+            text += "\nNew row; not yet committed.";
+        } else if (tableModel.isCellModified(row, column)) {
+            text += "\nOriginal: " + DatabaseTable.describeValue(tableModel.getOriginalValue(row, column));
+            text += "\nModified; not yet committed.";
+        } else if (metadata != null && metadata.isAutoIncrement()) {
+            text += "\nAuto-generated identity key (read-only).";
+        }
+        return text;
+    }
+
     private class CellHighlightRenderer extends DefaultTableCellRenderer {
 
         // Modified existing cell (UPDATE): Ocean / Cyan highlight
@@ -1120,7 +1131,6 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                         BorderFactory.createLineBorder(errorBorder, JBUI.scale(2)),
                         JBUI.Borders.empty(0, 6)
                 ));
-                setToolTipText("Validation Error: " + errorMsg);
             } else if (isNewRow) {
                 c.setBackground(isSelected ? newRowSelBg : newRowBg);
                 c.setForeground(newRowFg);
@@ -1132,9 +1142,6 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 if (isAuto && "(Auto)".equals(value)) {
                     c.setForeground(autoFg);
                     setFont(getFont().deriveFont(Font.ITALIC));
-                    setToolTipText("Auto-generated identity key (assigned by database on commit)");
-                } else {
-                    setToolTipText("New row (not yet committed)");
                 }
             } else if (isModified) {
                 c.setBackground(isSelected ? modifiedSelBg : modifiedBg);
@@ -1144,8 +1151,6 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                         BorderFactory.createMatteBorder(0, JBUI.scale(2), 0, 0, modifiedBorder),
                         JBUI.Borders.empty(0, 6)
                 ));
-                Object origVal = tableModel.getOriginalValue(modelRow, modelCol);
-                setToolTipText("Modified (Original: " + (origVal != null ? origVal : "<null>") + " -> Current: " + (value != null ? value : "<null>") + ")");
             } else {
                 if (isSelected) {
                     c.setBackground(table.getSelectionBackground());
@@ -1164,11 +1169,6 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                         setFont(getFont().deriveFont(Font.PLAIN));
                     }
                 }
-                if (isAuto) {
-                    setToolTipText("Auto-generated identity key: " + value + " (read-only)");
-                } else {
-                    setToolTipText(value != null ? value.toString() : "<null>");
-                }
             }
 
             if (hasFocus && errorMsg == null) {
@@ -1177,28 +1177,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                         JBUI.Borders.empty(0, 7)));
             }
             if (value == null) {
-                setText("<null>");
+                setText("NULL");
             }
-            return c;
-        }
-    }
-
-    private static class TableHeaderRenderer extends DefaultTableCellRenderer {
-        private final JBColor headerBg = JBColor.namedColor("TableHeader.background", new JBColor(0xF5F5F7, 0x303236));
-        private final JBColor headerFg = JBColor.namedColor("TableHeader.foreground", new JBColor(0x303238, 0xDFE1E5));
-        private final JBColor headerBorder = JBColor.namedColor("Table.gridColor", new JBColor(0xE0E2E6, 0x393B40));
-
-        @Override
-        public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
-                                                       boolean hasFocus, int row, int column) {
-            Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-            c.setBackground(headerBg);
-            c.setForeground(headerFg);
-            setFont(table.getFont().deriveFont(Font.BOLD));
-            setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createMatteBorder(0, 0, JBUI.scale(1), JBUI.scale(1), headerBorder),
-                    JBUI.Borders.empty(4, 8)
-            ));
             return c;
         }
     }

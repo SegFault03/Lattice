@@ -1,6 +1,6 @@
 # UI screenshots
 
-These PNGs are generated from Lattice's Swing components with sample data. The root README features `side-panel.png`, `connection-dialog.png`, `table-view.png`, `table-editing.png` and `sql-console.png`. Their filenames are stable; the remaining PNGs provide light/dark themes and alternate UI states.
+These PNGs are generated from Lattice's Swing components with sample data. The root README features `side-panel.png`, `connection-dialog.png`, `table-view.png`, `table-editing.png` and `sql-console.png`. Their filenames are stable; the remaining PNGs provide light/dark themes, narrow layouts, hover tooltips and alternate editing/execution states.
 
 From the repository root, run:
 
