@@ -4,6 +4,9 @@ Patch notes are selected by the exact release version, including prerelease suff
 
 ## [Unreleased]
 
+- Downloaded JDBC drivers are kept in the IDE cache and offered in the bundled driver list, so a version is downloaded at most once and reused for later connections instead of being fetched again.
+- The packaged driver version is read from the shipped driver JAR instead of duplicated text, and a bundled selection naming a JAR that is no longer stored is reported instead of silently falling back.
+
 ## [0.0.1-alpha]
 
 - First public alpha of the MySQL/HSQLDB database management plugin for IntelliJ IDEA 2025.1+ / Java 21.

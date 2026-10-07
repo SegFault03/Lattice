@@ -72,11 +72,11 @@ Choose a JDBC driver compatible with your server. HSQLDB requires a matching ser
 
 Select MySQL or HSQLDB, enter connection details, and choose a driver:
 
-- **Bundled**: Connector/J 9.0.0 or HSQLDB 2.7.3.
-- **Download**: choose or enter a version and click **Download**. Downloads are explicit and checksum-verified.
+- **Bundled driver**: the driver packaged with the plugin (Connector/J 9.0.0 or HSQLDB 2.7.3) plus every version you already downloaded. Pick one from the list to reuse it without downloading again.
+- **Download a version**: choose or enter a version and click **Download**. Downloads are explicit and checksum-verified, and a release is fetched at most once. Afterwards it appears in the bundled list.
 - **Local JAR**: select an existing JDBC driver.
 
-**Test Connection** reports the server product/version after authentication and the driver's version. Failed authentication or negotiation can prevent detection. JDBC downloads use the IDE system cache.
+**Test Connection** reports the server product/version after authentication and the driver's version. Failed authentication or negotiation can prevent detection. Downloaded drivers are kept in the IDE system cache and are reused across restarts.
 
 Generated MySQL URLs currently disable TLS and use UTC for the driver/server session. For remote or TLS-required servers, use a custom JDBC URL with your required security options. Custom URLs retain your options.
 

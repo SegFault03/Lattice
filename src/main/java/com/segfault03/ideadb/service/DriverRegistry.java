@@ -87,18 +87,41 @@ public class DriverRegistry implements com.intellij.openapi.Disposable {
         return driver;
     }
 
+    /** The packaged driver JAR shipped beside the plugin classes, or null when it cannot be located. */
+    public synchronized File packagedJar(DatabaseType type) {
+        return findJarFile(type == DatabaseType.MYSQL ? "mysql-connector" : "hsqldb");
+    }
+
     /** An explicit selection must never resolve to the bundled driver's classes. */
     public synchronized Driver getDriver(ConnectionConfig config) throws Exception {
         if (disposed) throw new IllegalStateException("Driver registry is disposed");
-        if (config.getDriverSource() == DriverSource.BUNDLED) return getDriver(config.getType());
+        if (config.getDriverSource() == DriverSource.BUNDLED) {
+            if (config.getDriverVersion().isBlank()) return getDriver(config.getType());
+            // A named bundled driver is a retained download; never silently fall back to the packaged one.
+            var retained = retainedJar(config.getType(), config.getDriverVersion());
+            if (retained == null) throw new IllegalStateException("The downloaded driver is no longer stored. Download " + config.getDriverVersion() + " again.");
+            return loadCached(config.getType(), retained);
+        }
         Path path = config.getDriverSource() == DriverSource.DOWNLOAD
                 ? DriverCatalog.downloadedJar(config.getType(), config.getDriverVersion()) : Path.of(config.getDriverJarPath());
-        if (!Files.isRegularFile(path)) throw new IllegalStateException("Driver JAR is missing. Download the selected version or choose an existing local JAR.");
-        path = path.toRealPath();
-        String key = config.getType() + ":" + path + ":" + Files.size(path) + ":" + Files.getLastModifiedTime(path);
+        return loadCached(config.getType(), path);
+    }
+
+    /** The retained JAR backing a bundled selection, or null when the packaged driver should be used. */
+    public static Path retainedJar(DatabaseType type, String version) {
+        String selection = version == null ? "" : version.trim();
+        return selection.isEmpty() || !DriverCatalog.isInstalled(type, selection)
+                ? null : DriverCatalog.downloadedJar(type, selection);
+    }
+
+    /** Keyed by path, size and modification time, so replacing a JAR on disk never serves a stale driver. */
+    private Driver loadCached(DatabaseType type, Path jar) throws Exception {
+        if (!Files.isRegularFile(jar)) throw new IllegalStateException("Driver JAR is missing. Download the selected version or choose an existing local JAR.");
+        Path path = jar.toRealPath();
+        String key = type + ":" + path + ":" + Files.size(path) + ":" + Files.getLastModifiedTime(path);
         Driver cached = driverCache.get(key);
         if (cached != null) return cached;
-        Driver driver = loadIsolated(config.getType(), path);
+        Driver driver = loadIsolated(type, path);
         driverCache.put(key, driver);
         return driver;
     }
@@ -156,11 +179,13 @@ public class DriverRegistry implements com.intellij.openapi.Disposable {
         ownedLoaders.clear(); driverCache.clear(); searchDirectories.clear();
     }
 
+    /** Sorted so the same packaged version is chosen on every start. */
     private File findJarFile(String keyword) {
         for (File dir : searchDirectories) {
             if (dir.exists() && dir.isDirectory()) {
                 File[] files = dir.listFiles((d, name) -> name.toLowerCase(java.util.Locale.ROOT).contains(keyword.toLowerCase(java.util.Locale.ROOT)) && name.endsWith(".jar"));
                 if (files != null && files.length > 0) {
+                    java.util.Arrays.sort(files);
                     return files[0];
                 }
             }

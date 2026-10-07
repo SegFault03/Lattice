@@ -72,6 +72,13 @@ public class RegressionSuitesTest {
         assertEquals(DriverSource.BUNDLED, configuration.getDriverSource());
         configuration.setDriverSource(DriverSource.DOWNLOAD); configuration.setDriverVersion("5.1.49");
         configuration.setDriverJarPath(java.nio.file.Path.of("drivers", "mysql.jar").toAbsolutePath().toString());
+        // A bundled selection records a stored release, or nothing for the packaged driver.
+        var retained = new ConnectionConfig(DatabaseType.MYSQL, "stored driver");
+        assertEquals("", retained.getDriverVersion());
+        retained.setDriverVersion("8.4.0");
+        assertEquals("8.4.0", retained.copy().getDriverVersion());
+        assertEquals("8.4.0", com.intellij.util.xmlb.XmlSerializer.deserialize(
+                com.intellij.util.xmlb.XmlSerializer.serialize(retained), ConnectionConfig.class).getDriverVersion());
         var restored = com.intellij.util.xmlb.XmlSerializer.deserialize(com.intellij.util.xmlb.XmlSerializer.serialize(configuration.copy()), ConnectionConfig.class);
         assertEquals(DriverSource.DOWNLOAD, restored.getDriverSource());
         assertEquals("5.1.49", restored.getDriverVersion()); assertEquals(configuration.getDriverJarPath(), restored.getDriverJarPath());

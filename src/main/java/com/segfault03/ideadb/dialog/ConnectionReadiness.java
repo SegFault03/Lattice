@@ -5,6 +5,7 @@ import com.segfault03.ideadb.model.DatabaseType;
 import com.segfault03.ideadb.model.DriverSource;
 import com.segfault03.ideadb.model.HsqlMode;
 import com.segfault03.ideadb.service.DriverCatalog;
+import com.segfault03.ideadb.service.DriverStore;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -38,6 +39,10 @@ final class ConnectionReadiness {
             } else if (config.getDriverSource() == DriverSource.DOWNLOAD) {
                 Path jar = DriverCatalog.downloadedJar(config.getType(), config.getDriverVersion());
                 if (!Files.isRegularFile(jar) || !Files.isReadable(jar)) return "Download the selected driver first";
+            } else if (config.getDriverSource() == DriverSource.BUNDLED && !config.getDriverVersion().isBlank()
+                    && !DriverStore.isRetained(config.getType(), config.getDriverVersion())) {
+                // A named bundled driver must still be retained; never silently fall back to the packaged one.
+                return "The selected driver is no longer stored; download it again";
             }
         } catch (IllegalArgumentException | SecurityException error) {
             return "Choose a valid driver file or version";

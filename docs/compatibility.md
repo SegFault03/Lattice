@@ -35,7 +35,9 @@ The floor exercised is MySQL 5.5 and HSQLDB 2.2.9. MySQL text export requires ut
 
 ## Driver selection and version detection
 
-The wizard selects bundled, downloaded or local-JAR drivers. Downloads are explicit and checksum-verified; version strings are validated before constructing Maven paths. Isolated classloading ensures the selected driver is used. Changing active driver settings retires existing sessions.
+The wizard selects bundled, downloaded or local-JAR drivers. Downloads are explicit and checksum-verified; version strings are validated before constructing Maven paths. A downloaded release is stored in the JDBC cache and listed in the bundled driver list afterwards, so it is downloaded at most once and can be reused after restarting the IDE. Stored JARs are re-validated before each use, and a selection naming a JAR that is no longer stored is reported rather than silently replaced by the packaged driver. Isolated classloading ensures the selected driver is used. Changing active driver settings retires existing sessions.
+
+Downloaded drivers are never pruned automatically; clearing the IDE JDBC cache removes them and the bundled list returns to the packaged driver.
 
 Test Connection reads DatabaseMetaData after authenticated connection and reports server/driver versions and elapsed time. It cannot reliably infer versions when authentication or protocol negotiation fails, and does not replace the chosen driver automatically.
 

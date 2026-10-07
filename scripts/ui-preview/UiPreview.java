@@ -142,11 +142,27 @@ public final class UiPreview {
         render(alter.previewPanel(), theme + "-schema-drop-column-800", 800, alter.previewPanel().getPreferredSize().height);
     }
     static void connection(String theme, String variant, int width) throws Exception {
-        ConnectionConfig config = config(variant.startsWith("hsql") ? DatabaseType.HSQLDB : DatabaseType.MYSQL);
+        ConnectionConfig config = config(variant.contains("hsql") ? DatabaseType.HSQLDB : DatabaseType.MYSQL);
         if (variant.startsWith("hsql-memory")) { config.setHsqlMode(HsqlMode.MEM); config.setDatabaseName("scratch"); }
         if (variant.startsWith("hsql-file")) { config.setHsqlMode(HsqlMode.FILE); config.setDatabaseName("/home/developer/data/shop"); }
         if (variant.equals("jdbc-url")) config.setCustomUrl("jdbc:mysql://localhost:3306/shop?useSSL=true");
         if (variant.equals("driver-download")) { config.setDriverSource(DriverSource.DOWNLOAD); config.setDriverVersion("9.0.0"); }
+        if (variant.startsWith("driver-retained")) {
+            // A download kept on this machine stays selectable in the bundled list.
+            // The staged JAR is a copy of a packaged driver; the name is a display fixture.
+            String version = variant.endsWith("-hsqldb") ? "2.7.4-jdk8" : "8.4.0";
+            Path jar = com.segfault03.ideadb.service.DriverCatalog.downloadedJar(
+                    variant.endsWith("-hsqldb") ? DatabaseType.HSQLDB : DatabaseType.MYSQL, version);
+            try {
+                java.nio.file.Files.createDirectories(jar.getParent());
+                java.nio.file.Files.copy(Path.of("lib", variant.endsWith("-hsqldb") ? "hsqldb-2.7.3.jar" : "mysql-connector-j-9.0.0.jar"), jar,
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            } catch (Exception absent) {
+                throw new AssertionError("Could not stage a retained driver preview", absent);
+            }
+            config.setDriverSource(DriverSource.BUNDLED);
+            config.setDriverVersion(version);
+        }
         if (variant.equals("driver-local")) { config.setDriverSource(DriverSource.LOCAL_JAR); config.setDriverJarPath("/home/developer/drivers/mysql-connector-j.jar"); }
         if (variant.equals("mysql-incomplete")) config.setUser("");
         if (variant.equals("hsql-incomplete")) config.setDatabaseName("");
@@ -162,10 +178,13 @@ public final class UiPreview {
             JComponent source = (JComponent)field(dialog, "driverSourceCombo");
             JLabel ready = (JLabel)field(dialog, "driverStatusLabel");
             JPanel details = (JPanel)field(dialog, "driverDetails");
+            JPanel cards = (JPanel)field(dialog, "driverCards");
+            // The bundled card now lists installed drivers, so it must fill its row without reserving blank space.
+            if (!cards.isVisible()) throw new AssertionError("Bundled driver list must be visible");
             int gap = SwingUtilities.convertPoint(ready, 0, 0, details).y
                     - SwingUtilities.convertPoint(source, 0, source.getHeight(), details).y;
-            if (gap > 12 || details.getHeight() - ready.getY() - ready.getHeight() > 8)
-                throw new AssertionError("Bundled driver reserves empty space: gap=" + gap);
+            if (gap < cards.getHeight() || gap - cards.getHeight() > 12 || details.getHeight() - ready.getY() - ready.getHeight() > 8)
+                throw new AssertionError("Bundled driver reserves empty space: gap=" + gap + " cards=" + cards.getHeight());
             if (variant.equals("mysql-collapsed-after-expansion")) {
                 invoke(dialog, "setDriverExpanded", new Class<?>[]{boolean.class}, false);
                 if (root.getPreferredSize().height != collapsed) throw new AssertionError("Collapsing must restore form height");
@@ -177,6 +196,14 @@ public final class UiPreview {
         boolean incomplete = variant.endsWith("incomplete") || variant.equals("driver-local")
                 || variant.equals("driver-download") && !Files.isRegularFile(com.segfault03.ideadb.service.DriverCatalog.downloadedJar(config.getType(), config.getDriverVersion()));
         if (test.isEnabled() == incomplete) throw new AssertionError("Incorrect Test connection availability: " + variant);
+        if (variant.startsWith("driver-retained")) {
+            // The retained download must be offered by the bundled list, not just accepted silently.
+            var bundled = (JComboBox<?>)field(dialog, "bundledDriverCombo");
+            var expected = (com.segfault03.ideadb.model.InstalledDriver) bundled.getSelectedItem();
+            if (expected == null || expected.packaged() || !expected.version().equals(config.getDriverVersion()))
+                throw new AssertionError("Retained driver must stay selected: " + config.getDriverVersion());
+            if (bundled.getItemCount() < 2) throw new AssertionError("Bundled list must offer the packaged and stored drivers");
+        }
         if (variant.equals("success") || variant.equals("failed")) {
             JLabel status = (JLabel)field(dialog, "testStatusLabel");
             status.setVisible(true);
@@ -216,6 +243,13 @@ public final class UiPreview {
         if (!variant.equals("jdbc-url-incomplete") && !dialog.getResultConfig().buildJdbcUrl().equals(config.buildJdbcUrl()))
             throw new AssertionError("Preview changed the configured JDBC URL for " + variant);
     }
+    /** Index of the stored MySQL 8.4.0 entry in the bundled driver list. */
+    static int retainedIndex(JComboBox<?> bundled) {
+        for (int index = 0; index < bundled.getItemCount(); index++)
+            if (bundled.getItemAt(index) instanceof com.segfault03.ideadb.model.InstalledDriver driver
+                    && !driver.packaged() && "8.4.0".equals(driver.version())) return index;
+        return -1;
+    }
     static void verifyConnectionReadiness() throws Exception {
         ConnectionDialog dialog = new ConnectionDialog(null, config(DatabaseType.MYSQL), true);
         JButton test = (JButton)field(dialog, "testButton");
@@ -237,6 +271,19 @@ public final class UiPreview {
             throw new AssertionError("Missing driver disables testing while allowing Download");
         ((JComboBox<?>)field(dialog, "driverSourceCombo")).setSelectedItem(DriverSource.BUNDLED);
         if (!test.isEnabled()) throw new AssertionError("Switching to bundled restores testing");
+        // A stored release must be offered without downloading and stay usable after selection.
+        Path retained = com.segfault03.ideadb.service.DriverCatalog.downloadedJar(DatabaseType.MYSQL, "8.4.0");
+        java.nio.file.Files.createDirectories(retained.getParent());
+        java.nio.file.Files.copy(Path.of("lib", "mysql-connector-j-9.0.0.jar"), retained, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        var bundled = (JComboBox<?>)field(dialog, "bundledDriverCombo");
+        // The dialog was built before the file existed; a refresh must pick it up like a new download does.
+        invoke(dialog, "refillBundledDrivers", new Class<?>[0]);
+        if (retainedIndex(bundled) < 0) throw new AssertionError("Stored driver must appear in the bundled list");
+        bundled.setSelectedIndex(retainedIndex(bundled));
+        if (!test.isEnabled()) throw new AssertionError("A stored driver must allow testing without downloading");
+        invoke(dialog, "refillBundledDrivers", new Class<?>[0]);
+        if (bundled.getSelectedIndex() != retainedIndex(bundled))
+            throw new AssertionError("Rebuilding the bundled list must keep the stored driver selected");
         ((JRadioButton)field(dialog, "customUrlRadio")).doClick(0);
         if (test.isEnabled()) throw new AssertionError("Empty JDBC URL disables testing");
         ((JTextField)field(dialog, "customUrlField")).setText("jdbc:hsqldb:mem:scratch");
@@ -542,7 +589,7 @@ public final class UiPreview {
                 verifyControls((Container)((BorderLayout)nativeTable.getLayout()).getLayoutComponent(BorderLayout.NORTH));
                 autoEditing(theme);
                 verifyConnectionReadiness();
-                for (String variant : List.of("mysql", "new", "success", "failed", "hsql-server", "hsql-memory", "hsql-file", "jdbc-url", "driver-download", "driver-local", "mysql-bundled-expanded", "hsql-bundled-expanded", "hsql-memory-bundled-expanded", "hsql-file-bundled-expanded", "mysql-collapsed-after-expansion", "mysql-incomplete", "hsql-incomplete", "jdbc-url-incomplete")) connection(theme, variant, 600);
+                for (String variant : List.of("mysql", "new", "success", "failed", "hsql-server", "hsql-memory", "hsql-file", "jdbc-url", "driver-download", "driver-retained", "driver-retained-hsqldb", "driver-local", "mysql-bundled-expanded", "hsql-bundled-expanded", "hsql-memory-bundled-expanded", "hsql-file-bundled-expanded", "mysql-collapsed-after-expansion", "mysql-incomplete", "hsql-incomplete", "jdbc-url-incomplete")) connection(theme, variant, 600);
                 connection(theme, "mysql", 800);
                 TableDataEditorPanel editor = table(false);
                 render(editor, theme + "-table-1100", 1100, 620);

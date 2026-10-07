@@ -20,7 +20,7 @@
     ]]></description>
 
     <change-notes><![CDATA[
-    IntelliJ IDEA 2025+ / Java 21 compatibility, selectable JDBC versions, verified downloads, local JAR selection, server-version detection, and older MySQL/HSQLDB compatibility fixes.
+    IntelliJ IDEA 2025+ / Java 21 compatibility, selectable JDBC versions, verified downloads that stay in the bundled driver list, local JAR selection, server-version detection, and older MySQL/HSQLDB compatibility fixes.
     ]]></change-notes>
 
     <idea-version since-build="251"/>

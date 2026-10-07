@@ -27,8 +27,11 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
     private record Identity(String url, String user, String password, boolean autoCommit, com.segfault03.ideadb.model.DriverSource driverSource, String driverVersion, String driverJarPath) {
         static Identity of(ConnectionConfig config) {
             var source = config.getDriverSource();
-            return new Identity(config.buildJdbcUrl(), config.getUser(), config.getPassword(), config.isAutoCommit(), source,
-                    source == com.segfault03.ideadb.model.DriverSource.DOWNLOAD ? config.getDriverVersion() : "",
+            // A bundled selection carries a version only when it names a retained download.
+            String version = source == com.segfault03.ideadb.model.DriverSource.DOWNLOAD ? config.getDriverVersion()
+                    : source == com.segfault03.ideadb.model.DriverSource.BUNDLED && DriverRegistry.retainedJar(config.getType(), config.getDriverVersion()) != null
+                            ? config.getDriverVersion() : "";
+            return new Identity(config.buildJdbcUrl(), config.getUser(), config.getPassword(), config.isAutoCommit(), source, version,
                     source == com.segfault03.ideadb.model.DriverSource.LOCAL_JAR ? config.getDriverJarPath() : "");
         }
     }

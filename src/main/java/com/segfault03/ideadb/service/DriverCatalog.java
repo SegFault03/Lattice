@@ -15,6 +15,10 @@ import java.util.regex.Pattern;
 public final class DriverCatalog {
     private static final String CENTRAL = "https://repo.maven.apache.org/maven2/";
     private static final long MAX_JAR_BYTES = 32L * 1024 * 1024;
+    private static final String RELEASE = "\\d+\\.\\d+\\.\\d+";
+    private static final Map<DatabaseType, List<String>> ARTIFACTS = Map.of(
+            DatabaseType.MYSQL, List.of("mysql-connector-j", "mysql-connector-java"),
+            DatabaseType.HSQLDB, List.of("hsqldb"));
     private DriverCatalog() {}
     public static List<String> suggestedVersions(DatabaseType type) {
         return type == DatabaseType.MYSQL ? List.of("9.0.0", "8.4.0", "8.0.33", "5.1.49")
@@ -27,7 +31,7 @@ public final class DriverCatalog {
         return Path.of(root, "jdbc");
     }
     public static String artifactPath(DatabaseType type, String selection) {
-        if (selection == null || !selection.matches("\\d+\\.\\d+\\.\\d+(-jdk8)?")) throw new IllegalArgumentException("Enter a release version such as 8.0.33 or 2.7.4-jdk8");
+        if (selection == null || !selection.matches(RELEASE + "(-jdk8)?")) throw new IllegalArgumentException("Enter a release version such as 8.0.33 or 2.7.4-jdk8");
         boolean jdk8 = selection.endsWith("-jdk8");
         if (jdk8 && type != DatabaseType.HSQLDB) throw new IllegalArgumentException("jdk8 variants are available only for HSQLDB");
         String version = jdk8 ? selection.substring(0, selection.length() - 5) : selection;
@@ -42,6 +46,61 @@ public final class DriverCatalog {
     public static Path downloadedJar(DatabaseType type, String version) {
         String relative = artifactPath(type, version);
         return cacheDirectory().resolve(type.name().toLowerCase(Locale.ROOT)).resolve(relative.substring(relative.lastIndexOf('/') + 1));
+    }
+    /** Recovers the release a retained JAR was downloaded for; blank when the name is not ours. */
+    public static String versionOf(DatabaseType type, String fileName) {
+        if (fileName == null || !fileName.endsWith(".jar")) return "";
+        String stem = fileName.substring(0, fileName.length() - 4);
+        for (String artifact : ARTIFACTS.get(type)) {
+            if (!stem.startsWith(artifact + "-")) continue;
+            String version = stem.substring(artifact.length() + 1);
+            if (version.matches(RELEASE + "(-jdk8)?")) return version;
+        }
+        return "";
+    }
+    /** Versions already retained on this machine, newest first, so they are never downloaded twice. */
+    public static List<String> downloadedVersions(DatabaseType type) {
+        Path directory = cacheDirectory().resolve(type.name().toLowerCase(Locale.ROOT));
+        List<String> versions = new ArrayList<>();
+        try (DirectoryStream<Path> entries = Files.newDirectoryStream(directory, "*.jar")) {
+            for (Path entry : entries) {
+                String version = versionOf(type, entry.getFileName().toString());
+                if (!version.isEmpty() && Files.isRegularFile(entry) && !versions.contains(version)) versions.add(version);
+            }
+        } catch (IOException absent) {
+            return List.of();
+        }
+        versions.sort(DriverCatalog::compareVersionsDescending);
+        return List.copyOf(versions);
+    }
+    /** A retained JAR is re-validated before reuse, so a damaged file is never handed to a class loader. */
+    public static boolean isInstalled(DatabaseType type, String version) {
+        try {
+            Path jar = downloadedJar(type, version);
+            return Files.isRegularFile(jar) && validateJar(type, jar) != null;
+        } catch (IOException | IllegalArgumentException | SecurityException unusable) {
+            return false;
+        }
+    }
+    /**
+     * Maven's descending release order, with the {@code -jdk8} build of a release ahead of the plain
+     * artifact because it is the variant this plugin suggests for HSQLDB.
+     */
+    static int compareVersionsDescending(String left, String right) {
+        String[] first = left.split("\\."), second = right.split("\\.");
+        for (int index = 0; index < Math.max(first.length, second.length); index++) {
+            int difference = numberAt(second, index) - numberAt(first, index);
+            if (difference != 0) return difference;
+        }
+        return Boolean.compare(right.endsWith("-jdk8"), left.endsWith("-jdk8"));
+    }
+    private static int numberAt(String[] parts, int index) {
+        if (index >= parts.length) return 0;
+        try {
+            return Integer.parseInt(parts[index].replace("-jdk8", ""));
+        } catch (NumberFormatException suffix) {
+            return 0;
+        }
     }
     public static List<String> availableVersions(DatabaseType type) throws IOException {
         List<String> paths = type == DatabaseType.MYSQL ? List.of("mysql/mysql-connector-java", "com/mysql/mysql-connector-j") : List.of("org/hsqldb/hsqldb");
@@ -62,6 +121,8 @@ public final class DriverCatalog {
     public static Path download(DatabaseType type, String version) throws Exception {
         String url = CENTRAL + artifactPath(type, version);
         Path target = downloadedJar(type, version);
+        // A retained JAR is already checksum-verified; reuse it instead of fetching it again.
+        if (isInstalled(type, version)) return target;
         Files.createDirectories(target.getParent());
         Path temporary = Files.createTempFile(target.getParent(), "jdbc-", ".part");
         try {
