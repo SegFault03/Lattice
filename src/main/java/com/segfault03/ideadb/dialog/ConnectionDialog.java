@@ -545,7 +545,7 @@ public class ConnectionDialog extends DialogWrapper {
         if (driverBusy || driverSourceCombo == null) return;
         DatabaseType type = (DatabaseType) typeCombo.getSelectedItem();
         DriverSource source = (DriverSource)driverSourceCombo.getSelectedItem();
-        String bundledVersion = type == DatabaseType.MYSQL ? "9.0.0" : "2.7.3";
+        String bundledVersion = type == DatabaseType.MYSQL ? "26.7.0" : "2.7.4";
         driverSummary.setText(type.getDisplayName() + (source == DriverSource.BUNDLED ? " " + bundledVersion : "") + " · " + source);
         driverSummary.setToolTipText(driverSummary.getText());
         if (source == DriverSource.DOWNLOAD) {
