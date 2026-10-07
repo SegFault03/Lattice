@@ -3,11 +3,15 @@ import com.formdev.flatlaf.FlatDarculaLaf;
 import com.intellij.ui.JBColor;
 import com.intellij.openapi.util.IconLoader;
 import com.segfault03.ideadb.dialog.ConnectionDialog;
+import com.segfault03.ideadb.dialog.CreateDatabaseDialog;
+import com.segfault03.ideadb.dialog.CreateTableDialog;
+import com.segfault03.ideadb.dialog.AlterTableDialog;
 import com.segfault03.ideadb.model.*;
 import com.segfault03.ideadb.ui.TableDataEditorPanel;
 import com.segfault03.ideadb.ui.ExplorerPreview;
 import com.segfault03.ideadb.ui.SqlQueryConsolePanel;
 import com.segfault03.ideadb.ui.DatabaseTable;
+import com.segfault03.ideadb.ui.DatabaseInputs;
 import javax.swing.*;
 import javax.swing.table.*;
 import java.awt.*;
@@ -40,6 +44,7 @@ public final class UiPreview {
     static void render(JComponent component, String name, int width, int height) throws Exception {
         component.setSize(width, height);
         for (int pass = 0; pass < 4; pass++) layout(component);
+        verifyInputs(component);
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
         Graphics2D graphics = image.createGraphics();
         graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
@@ -56,6 +61,79 @@ public final class UiPreview {
         config.setDatabaseName("shop");
         config.setUser(type == DatabaseType.MYSQL ? "developer" : "SA");
         return config;
+    }
+    static void verifyInputs(Container parent) {
+        for (Component child : parent.getComponents()) {
+            if (!child.isVisible()) continue;
+            if (child instanceof JComponent input && (input instanceof JTextField || input instanceof JComboBox<?>
+                    || input instanceof com.intellij.openapi.ui.TextFieldWithBrowseButton)) {
+                boolean embedded = SwingUtilities.getAncestorOfClass(JComboBox.class, input) != null
+                        || SwingUtilities.getAncestorOfClass(com.intellij.openapi.ui.TextFieldWithBrowseButton.class, input) != null
+                        || SwingUtilities.getAncestorOfClass(CellRendererPane.class, input) != null;
+                if (!embedded) {
+                    if (input.getPreferredSize().height != DatabaseInputs.height(input))
+                        throw new AssertionError("Inconsistent input height: " + input.getClass().getSimpleName());
+                    if (input.getInsets().top != input.getInsets().bottom)
+                        throw new AssertionError("Uneven input padding: " + input.getClass().getSimpleName());
+                    if (input.getWidth() > 0 && input.getHeight() > 0) {
+                        int baseline = input.getBaseline(input.getWidth(), input.getHeight());
+                        if (input instanceof com.intellij.openapi.ui.TextFieldWithBrowseButton browse) {
+                            JTextField field = browse.getTextField();
+                            baseline = field.getY() + field.getBaseline(field.getWidth(), field.getHeight());
+                        }
+                        if (baseline >= 0) {
+                            FontMetrics font = input.getFontMetrics(input.getFont());
+                            int top = baseline - font.getAscent();
+                            int bottom = input.getHeight() - baseline - font.getDescent();
+                            if (top < 0 || bottom < 0 || Math.abs(top - bottom) > 2)
+                                throw new AssertionError("Uncentered input text: " + input.getClass().getSimpleName()
+                                        + " top=" + top + " bottom=" + bottom + " height=" + input.getHeight());
+                        }
+                    }
+                }
+            }
+            if (child instanceof Container nested) verifyInputs(nested);
+        }
+    }
+    static void inputPreviews(String theme) throws Exception {
+        JPanel samples = new JPanel(new GridBagLayout());
+        samples.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        JTextField disabled = DatabaseInputs.textField("Disabled connection");
+        disabled.setEnabled(false);
+        JTextField error = DatabaseInputs.textField("Not a valid port");
+        error.putClientProperty("JComponent.outline", "error");
+        JTextField large = DatabaseInputs.textField("Larger text stays readable");
+        large.setFont(large.getFont().deriveFont(20f));
+        JPasswordField password = DatabaseInputs.passwordField();
+        password.setText("sample-password");
+        JComboBox<String> editable = DatabaseInputs.comboBox(new String[]{"9.0.0", "8.4.0"});
+        editable.setEditable(true);
+        com.intellij.openapi.ui.TextFieldWithBrowseButton browse = DatabaseInputs.browseField();
+        browse.setText("/home/developer/drivers/mysql.jar");
+        JComponent[] fields = {DatabaseInputs.textField("Local development"), DatabaseInputs.textField("3306"),
+                password, DatabaseInputs.comboBox(new String[]{"Auto: Off", "10s", "30s"}), editable, browse, disabled, error, large};
+        String[] names = {"Text", "Number", "Password", "Dropdown", "Editable dropdown", "File picker", "Disabled", "Validation error", "Larger font"};
+        for (int row = 0; row < fields.length; row++) {
+            GridBagConstraints cell = new GridBagConstraints();
+            cell.gridx = 0; cell.gridy = row; cell.anchor = GridBagConstraints.WEST;
+            cell.insets = new Insets(5, 0, 5, 16);
+            samples.add(new JLabel(names[row]), cell);
+            cell.gridx = 1; cell.weightx = 1; cell.fill = GridBagConstraints.HORIZONTAL;
+            cell.insets = new Insets(5, 0, 5, 0);
+            samples.add(fields[row], cell);
+        }
+        render(samples, theme + "-inputs-600", 600, samples.getPreferredSize().height);
+        CreateDatabaseDialog database = new CreateDatabaseDialog(null, config(DatabaseType.MYSQL));
+        ((JTextField)field(database, "nameField")).setText("shop_archive");
+        render(database.previewPanel(), theme + "-schema-create-database-600", 600, database.previewPanel().getPreferredSize().height);
+        CreateTableDialog create = new CreateTableDialog(null, config(DatabaseType.MYSQL), "shop");
+        JPanel createPanel = create.previewPanel();
+        JTable columns = (JTable)field(create, "columnsTable");
+        ((JScrollPane)columns.getParent().getParent()).setColumnHeaderView(columns.getTableHeader());
+        render(createPanel, theme + "-schema-create-table-740", 740, createPanel.getPreferredSize().height);
+        TableMetadata metadata = (TableMetadata)field(table(false), "tableMetadata");
+        AlterTableDialog alter = new AlterTableDialog(null, config(DatabaseType.MYSQL), "shop", metadata);
+        render(alter.previewPanel(), theme + "-schema-alter-table-800", 800, alter.previewPanel().getPreferredSize().height);
     }
     static void connection(String theme, String variant, int width) throws Exception {
         ConnectionConfig config = config(variant.startsWith("hsql") ? DatabaseType.HSQLDB : DatabaseType.MYSQL);
@@ -251,6 +329,7 @@ public final class UiPreview {
         IconLoader.setUseDarkIcons(theme.equals("dark"));
         SwingUtilities.invokeAndWait(() -> {
             try {
+                inputPreviews(theme);
                 render(ExplorerPreview.create(config(DatabaseType.MYSQL), false), theme + "-side-panel-340", 340, 620);
                 render(ExplorerPreview.create(config(DatabaseType.MYSQL), true), theme + "-side-panel-empty-340", 340, 620);
                 SqlQueryConsolePanel console = console();
@@ -302,6 +381,10 @@ public final class UiPreview {
                 ((TableModel)model).setValueAt("grace@example.com", 12, 2);
                 invoke(editor, "updatePendingChangesState", new Class<?>[]{});
                 render(editor, theme + "-table-new-row-1100", 1100, 620);
+                if (!grid.editCellAt(12, 1)) throw new AssertionError("New-row cell editor must open");
+                ((JTextField)grid.getEditorComponent()).setText("Grace Lee");
+                render(editor, theme + "-table-cell-editing-1100", 1100, 620);
+                if (!grid.getCellEditor().stopCellEditing()) throw new AssertionError("Valid text must commit to the pending row");
                 ((TableModel)model).setValueAt("not a number", 1, 4);
                 if (((JButton)field(editor, "saveBtn")).isEnabled()) throw new AssertionError("Commit must be disabled for an invalid decimal");
                 if (!grid.getToolTipText(hover(grid, 1, 4)).contains("Validation error:"))

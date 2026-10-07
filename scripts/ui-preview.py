@@ -130,7 +130,7 @@ def render_gallery(output, baseline=None):
     for filename in light:
         path = output / filename
         name = path.stem.removeprefix('light-')
-        screen = next((kind for kind in ('connection', 'side-panel', 'sql-console') if name.startswith(kind)), 'table')
+        screen = next((kind for kind in ('connection', 'side-panel', 'sql-console', 'schema', 'inputs') if name.startswith(kind)), 'table')
         shots = []
         if baseline and (baseline / filename).is_file() and (baseline / filename.replace('light-', 'dark-', 1)).is_file():
             (output / 'before').mkdir(exist_ok=True)

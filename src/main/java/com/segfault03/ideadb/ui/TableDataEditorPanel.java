@@ -120,14 +120,14 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
 
         JButton refreshBtn = DatabaseUi.action("", AllIcons.Actions.Refresh, "Refresh table data");
         refreshBtn.addActionListener(e -> loadData());
-        autoRefreshCombo = new JComboBox<>(new String[]{"Auto: Off", "10s", "15s", "20s", "30s", "60s"});
+        autoRefreshCombo = DatabaseInputs.comboBox(new String[]{"Auto: Off", "10s", "15s", "20s", "30s", "60s"});
         autoRefreshCombo.setToolTipText("Periodic auto-refresh interval");
         autoRefreshCombo.addActionListener(e -> onAutoRefreshChanged());
 
-        whereField = new JBTextField(20);
+        whereField = DatabaseInputs.textField(20);
         whereField.setToolTipText("SQL WHERE condition; press Enter to apply");
         whereField.addActionListener(e -> loadData(1, pageSize));
-        orderField = new JBTextField(14);
+        orderField = DatabaseInputs.textField(14);
         orderField.setToolTipText("SQL ORDER BY clause; blank uses the primary key when available");
         orderField.addActionListener(e -> loadData(1, pageSize));
         JButton filterBtn = DatabaseUi.action("Apply", AllIcons.Actions.Execute, "Apply filter and sort");
@@ -140,7 +140,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         filters.add(DatabaseUi.group(new JBLabel("ORDER BY"), orderField));
         filters.add(filterBtn);
 
-        pageSizeCombo = new JComboBox<>(new String[]{"50", "100", "250", "500", "1000"});
+        pageSizeCombo = DatabaseInputs.comboBox(new String[]{"50", "100", "250", "500", "1000"});
         pageSizeCombo.setSelectedItem("100");
         pageSizeCombo.setToolTipText("Rows per page");
         pageSizeCombo.addActionListener(e -> loadData(1, Integer.parseInt((String) pageSizeCombo.getSelectedItem())));

@@ -34,7 +34,7 @@ With JDK 21 and the cached IntelliJ 2025.1 SDK, run:
 python scripts/ui-preview.py
 ```
 
-Open `build/ui-preview/index.html` to review the light/dark variants. Every successful run refreshes all PNGs in the tracked `screenshots/` folder and the five fixed filenames referenced by the README. Commit changed PNGs with UI changes. `--output` changes the gallery/build directory while still updating `screenshots/`; `--compare-with` adds a local before/after baseline.
+Open `build/ui-preview/index.html` to review the light/dark variants. The **Input controls** and **Schema dialogs** filters cover the shared field styling alongside the main panels. Every successful run refreshes all PNGs in the tracked `screenshots/` folder and the five fixed filenames referenced by the README. Commit changed PNGs with UI changes. `--output` changes the gallery/build directory while still updating `screenshots/`; `--compare-with` adds a local before/after baseline.
 
 See [UI preview instructions](UI_PREVIEW.md) for SDK setup, explicit paths, the featured-image mapping and preview limitations.
 

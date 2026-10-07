@@ -2,6 +2,7 @@ package com.segfault03.ideadb.dialog;
 
 import com.intellij.util.ui.JBUI;
 import com.segfault03.ideadb.ui.DatabaseUi;
+import com.segfault03.ideadb.ui.DatabaseInputs;
 
 import javax.swing.*;
 import java.awt.*;
@@ -57,7 +58,7 @@ final class ConnectionFormPanel extends JPanel {
     }
 
     static <T extends JComponent> T width(T component, int width) {
-        if (component instanceof JTextField) component.setBorder(new RoundedInputBorder());
+        DatabaseInputs.style(component);
         Dimension size = component.getPreferredSize();
         size.width = JBUI.scale(width);
         component.setPreferredSize(size);

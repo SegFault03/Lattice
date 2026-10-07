@@ -17,6 +17,8 @@ import com.segfault03.ideadb.service.DdlService;
 import com.segfault03.ideadb.service.MetadataService;
 import org.jetbrains.annotations.Nullable;
 
+import com.segfault03.ideadb.ui.DatabaseInputs;
+
 import javax.swing.*;
 import java.awt.*;
 import java.sql.Connection;
@@ -98,19 +100,19 @@ public class AlterTableDialog extends DialogWrapper {
         gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0.3;
         addPanel.add(new JBLabel("Column Name:"), gbc);
         gbc.gridx = 1; gbc.gridy = 0; gbc.weightx = 0.7;
-        addColNameField = new JBTextField();
+        addColNameField = DatabaseInputs.textField();
         addPanel.add(addColNameField, gbc);
 
         gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0.3;
         addPanel.add(new JBLabel("Type:"), gbc);
         gbc.gridx = 1; gbc.gridy = 1; gbc.weightx = 0.7;
-        addColTypeCombo = new JComboBox<>(DATA_TYPES);
+        addColTypeCombo = DatabaseInputs.comboBox(DATA_TYPES);
         addPanel.add(addColTypeCombo, gbc);
 
         gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 0.3;
         addPanel.add(new JBLabel("Size / Length:"), gbc);
         gbc.gridx = 1; gbc.gridy = 2; gbc.weightx = 0.7;
-        addColSizeField = new JBTextField("255");
+        addColSizeField = DatabaseInputs.textField("255");
         addPanel.add(addColSizeField, gbc);
 
         gbc.gridx = 0; gbc.gridy = 3; gbc.weightx = 0.3;
@@ -122,7 +124,7 @@ public class AlterTableDialog extends DialogWrapper {
         gbc.gridx = 0; gbc.gridy = 4; gbc.weightx = 0.3;
         addPanel.add(new JBLabel("Default Value:"), gbc);
         gbc.gridx = 1; gbc.gridy = 4; gbc.weightx = 0.7;
-        addColDefaultField = new JBTextField();
+        addColDefaultField = DatabaseInputs.textField();
         addColDefaultField.setToolTipText("Use TEXT: for a literal, SQL: for an expression; blank removes the default.");
         addPanel.add(addColDefaultField, gbc);
 
@@ -140,13 +142,13 @@ public class AlterTableDialog extends DialogWrapper {
         rcgbc.gridx = 0; rcgbc.gridy = 0; rcgbc.weightx = 0.3;
         renameColPanel.add(new JBLabel("Select Column:"), rcgbc);
         rcgbc.gridx = 1; rcgbc.gridy = 0; rcgbc.weightx = 0.7;
-        renameColCombo = new JComboBox<>(colNames);
+        renameColCombo = DatabaseInputs.comboBox(colNames);
         renameColPanel.add(renameColCombo, rcgbc);
 
         rcgbc.gridx = 0; rcgbc.gridy = 1; rcgbc.weightx = 0.3;
         renameColPanel.add(new JBLabel("New Column Name:"), rcgbc);
         rcgbc.gridx = 1; rcgbc.gridy = 1; rcgbc.weightx = 0.7;
-        renameColNewNameField = new JBTextField(colNames.length > 0 ? colNames[0] : "");
+        renameColNewNameField = DatabaseInputs.textField(colNames.length > 0 ? colNames[0] : "");
         renameColPanel.add(renameColNewNameField, rcgbc);
 
         renameColCombo.addActionListener(e -> {
@@ -170,20 +172,20 @@ public class AlterTableDialog extends DialogWrapper {
         mcgbc.gridx = 0; mcgbc.gridy = 0; mcgbc.weightx = 0.3;
         modifyColPanel.add(new JBLabel("Select Column:"), mcgbc);
         mcgbc.gridx = 1; mcgbc.gridy = 0; mcgbc.weightx = 0.7;
-        modifyColCombo = new JComboBox<>(colNames);
+        modifyColCombo = DatabaseInputs.comboBox(colNames);
         modifyColPanel.add(modifyColCombo, mcgbc);
 
         mcgbc.gridx = 0; mcgbc.gridy = 1; mcgbc.weightx = 0.3;
         modifyColPanel.add(new JBLabel("Type:"), mcgbc);
         mcgbc.gridx = 1; mcgbc.gridy = 1; mcgbc.weightx = 0.7;
-        modifyColTypeCombo = new JComboBox<>(DATA_TYPES);
+        modifyColTypeCombo = DatabaseInputs.comboBox(DATA_TYPES);
         modifyColTypeCombo.setEditable(true);
         modifyColPanel.add(modifyColTypeCombo, mcgbc);
 
         mcgbc.gridx = 0; mcgbc.gridy = 2; mcgbc.weightx = 0.3;
         modifyColPanel.add(new JBLabel("Size / Length:"), mcgbc);
         mcgbc.gridx = 1; mcgbc.gridy = 2; mcgbc.weightx = 0.7;
-        modifyColSizeField = new JBTextField("255");
+        modifyColSizeField = DatabaseInputs.textField("255");
         modifyColPanel.add(modifyColSizeField, mcgbc);
 
         mcgbc.gridx = 0; mcgbc.gridy = 3; mcgbc.weightx = 0.3;
@@ -195,7 +197,7 @@ public class AlterTableDialog extends DialogWrapper {
         mcgbc.gridx = 0; mcgbc.gridy = 4; mcgbc.weightx = 0.3;
         modifyColPanel.add(new JBLabel("Default Value:"), mcgbc);
         mcgbc.gridx = 1; mcgbc.gridy = 4; mcgbc.weightx = 0.7;
-        modifyColDefaultField = new JBTextField();
+        modifyColDefaultField = DatabaseInputs.textField();
         modifyColDefaultField.setToolTipText("Use TEXT: for a literal, SQL: for an expression; blank removes the default.");
         modifyColPanel.add(modifyColDefaultField, mcgbc);
 
@@ -223,7 +225,7 @@ public class AlterTableDialog extends DialogWrapper {
         dgbc.gridx = 0; dgbc.gridy = 0; dgbc.weightx = 0.3;
         dropPanel.add(new JBLabel("Select Column to Drop:"), dgbc);
         dgbc.gridx = 1; dgbc.gridy = 0; dgbc.weightx = 0.7;
-        dropColCombo = new JComboBox<>(colNames);
+        dropColCombo = DatabaseInputs.comboBox(colNames);
         dropPanel.add(dropColCombo, dgbc);
 
         JButton executeDropBtn = new JButton("Drop Column Now");
@@ -241,7 +243,7 @@ public class AlterTableDialog extends DialogWrapper {
         rgbc.gridx = 0; rgbc.gridy = 0; rgbc.weightx = 0.3;
         renamePanel.add(new JBLabel("New Table Name:"), rgbc);
         rgbc.gridx = 1; rgbc.gridy = 0; rgbc.weightx = 0.7;
-        renameTableField = new JBTextField(tableMetadata.getName());
+        renameTableField = DatabaseInputs.textField(tableMetadata.getName());
         renamePanel.add(renameTableField, rgbc);
 
         JButton executeRenameBtn = new JButton("Rename Table Now");

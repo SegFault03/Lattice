@@ -13,6 +13,8 @@ import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.service.DdlService;
 import org.jetbrains.annotations.Nullable;
 
+import com.segfault03.ideadb.ui.DatabaseInputs;
+
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
@@ -67,7 +69,7 @@ public class CreateTableDialog extends DialogWrapper {
         gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0.2;
         topPanel.add(new JBLabel("Table Name:"), gbc);
         gbc.gridx = 1; gbc.gridy = 0; gbc.weightx = 0.8;
-        tableNameField = new JBTextField("new_table");
+        tableNameField = DatabaseInputs.textField("new_table");
         topPanel.add(tableNameField, gbc);
 
         root.add(topPanel, BorderLayout.NORTH);
@@ -83,10 +85,11 @@ public class CreateTableDialog extends DialogWrapper {
 
         tableModel = new ColumnsTableModel(defaultCols);
         columnsTable = new JBTable(tableModel);
-        columnsTable.setRowHeight(24);
+        columnsTable.setRowHeight(com.intellij.util.ui.JBUI.scale(28));
+        DatabaseInputs.styleTableEditors(columnsTable);
 
         // Setup combo box editor for Type column
-        JComboBox<String> typeEditor = new JComboBox<>(DATA_TYPES);
+        JComboBox<String> typeEditor = DatabaseInputs.comboBox(DATA_TYPES);
         columnsTable.getColumnModel().getColumn(1).setCellEditor(new DefaultCellEditor(typeEditor));
 
         JBScrollPane scrollPane = new JBScrollPane(columnsTable);

@@ -27,6 +27,7 @@ public abstract class DialogWrapper {
         return buttons;
     }
     public void setTitle(String value) { title = value; }
+    public void setResizable(boolean value) {}
     public void setOKActionEnabled(boolean value) {}
     public boolean isDisposed() { return false; }
     protected ValidationInfo doValidate() { return null; }

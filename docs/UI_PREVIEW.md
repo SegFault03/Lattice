@@ -43,7 +43,7 @@ On macOS, `--ide-home` points to the SDK's `Contents` directory and `--java-home
 Open `build/ui-preview/index.html` in a browser. No web server is required.
 
 - Theme selects light or dark renders.
-- Screen filters the gallery to the side panel, connection dialog, table editor/viewer or SQL console.
+- Screen filters the gallery to input controls, the side panel, connection dialog, schema dialogs, table editor/viewer or SQL console.
 - Click a screenshot to open it at full resolution.
 - With a baseline supplied, View switches between Current and Before / after.
 
@@ -81,19 +81,19 @@ python scripts/ui-preview.py --output build/ui-after --compare-with build/ui-bef
 
 Open `build/ui-after/index.html` and select Before / after. Matching variants appear beside one another; new variants show only the current screenshot. Repeat the second command after each edit. `--compare-with` must reference an existing directory different from `--output`.
 
-For the current UI-fixes review, the baseline is in `build/ui-preview-before`, so regenerate the comparison with:
+For the current input-style review, the local baseline is in `build/ui-inputs-before`, so regenerate the comparison with:
 
 ```text
-python scripts/ui-preview.py --compare-with build/ui-preview-before
+python scripts/ui-preview.py --compare-with build/ui-inputs-before
 ```
 
 Local baseline directories are not committed. A fresh checkout can make its own baseline using the commands above. The helper reads a fresh render manifest, so stale images from previous runs are not included in the new gallery or ZIP.
 
 ## Coverage and limitations
 
-The 56 variant screenshots cover light/dark themes; populated/empty side panels; SQL consoles at 1100, 760 and 520 pixels with sample queries/results, empty results, execution and error messages; table widths of 1100, 760, and 520 pixels; populated table/view fixtures; modified cells; valid new rows; and invalid decimals with Commit disabled. Hover previews show NULL tooltips in both grids and modified-cell context in the table editor. Connection variants include MySQL, HSQLDB server/file/memory, custom JDBC URL, bundled/downloaded/local drivers, a wider dialog, an enlarged download form, and a scrolled view of its driver controls. Five additional stable copies are featured in the README.
+The 66 variant screenshots cover light/dark themes; the shared input controls (including editable, disabled/error and larger-font states); create-database/create-table/alter-table dialogs; populated/empty side panels; SQL consoles at 1100, 760 and 520 pixels with sample queries/results, empty results, execution and error messages; table widths of 1100, 760, and 520 pixels; populated table/view fixtures; modified cells; valid new rows; an active inline cell editor; and invalid decimals with Commit disabled. Hover previews show NULL tooltips in both grids and modified-cell context in the table editor. Connection variants include MySQL, HSQLDB server/file/memory, custom JDBC URL, bundled/downloaded/local drivers, a wider dialog, an enlarged download form, and a scrolled view of its driver controls. Five additional stable copies are featured in the README.
 
-The helper uses the actual layout managers, SDK icons, controls, borders, table model, cell renderers, and validation states. Fixture checks exercise Set NULL / Use Default through the relocated context-menu actions, verify identity cells are read-only, confirm valid/invalid Commit states, check narrow toolbar/footer bounds, and catch leftover renderer outlines and empty HSQL form rows. Both grids are checked for distinct header/data backgrounds and readable NULL tooltips. Console checks exercise repeated template insertion, history restoration, Clear, the Run shortcut with selected SQL, and execution-control states; background work stays blocked.
+The helper uses the actual layout managers, SDK icons, controls, borders, table model, cell renderers, and validation states. Each render checks visible single-line inputs for consistent preferred height, symmetric vertical insets and text-baseline balance within two pixels, including composite browse fields. Fixture checks exercise Set NULL / Use Default through the relocated context-menu actions, verify identity cells are read-only, confirm valid/invalid Commit states, check narrow toolbar/footer bounds, and catch leftover renderer outlines and empty HSQL form rows. Both grids are checked for distinct header/data backgrounds and readable NULL tooltips. Console checks exercise repeated template insertion, history restoration, Clear, the Run shortcut with selected SQL, and execution-control states; background work stays blocked.
 
 The Swing controls in the gallery are images; only gallery selectors are interactive. FlatIntelliJLaf and FlatDarculaLaf approximate IntelliJ themes. Tooltip previews paint an actual Swing `JToolTip` at the production grid's computed cell anchor; real popup placement near screen edges still needs an IDE check. Dialog title, outer padding and Cancel/OK buttons are simulated. The explorer uses a Swing `JTree` with Lattice's production node renderer because IntelliJ's `Tree` needs application services. Exact IDE window sizing, tree styling, display scaling, focus, keymaps, clipboard access, file browsing, and live database behavior still need an IDE check.
 
@@ -120,3 +120,17 @@ The connection dialog has Data source, Connection, Authentication, JDBC URL, and
 Both database grids now share a tinted header band, theme-scaled row/header heights, numeric alignment and cell-based tooltips. A tooltip appears directly below its hovered cell using table coordinates, including when scrolled, sorted or reordered. NULL, empty strings, database defaults, identity keys, pending changes and validation errors have explicit descriptions. Database text is escaped before display, so values containing HTML-like text cannot become empty or formatted tooltips. IntelliJ's clipped-cell expansion popup is disabled for these grids to avoid competing hover surfaces.
 
 The SQL console groups database selection and Run/Stop/Clear actions in the first strip, with History/Template below it. Labels and fields wrap together at narrow widths. The query section has a scrolling line-number gutter and a platform-appropriate shortcut hint. Results use the same grid styling as the table editor; an empty state prompts the first query. The footer holds execution status and Max rows. Database/limit controls stay disabled during execution, while completed/error states restore them. Choosing the same template twice inserts it twice.
+
+## Shared input design
+
+Use `DatabaseInputs` from `com.segfault03.ideadb.ui` for every single-line input. Its factories create text/password fields, dropdowns, editable dropdowns and browse fields with the same outline and sizing rules. The connection and schema dialogs, table WHERE/ORDER BY fields, refresh/page-size pickers, SQL-console pickers and table cell editors all use it.
+
+- Minimum height: **26 logical pixels**, growing to fit the current font plus six pixels of vertical space; all dimensions respect IDE scaling.
+- Border insets: **3 pixels above/below**, **8 pixels left/right**; native dropdown/editor spacing remains intact.
+- Rounded outline: **8-pixel arc diameter**, with native theme colors and visible focus, error, warning and disabled states.
+- Browse fields share one outer outline around the text and button. Table editors fit their existing row height and preserve native typed conversion, validation, commit and cancellation.
+- Multiline SQL/document editors retain top-aligned text and their existing document padding.
+
+Use `DatabaseInputs.textField(...)`, `passwordField()`, `comboBox(...)` or `browseField()` when adding controls. Set widths separately where the layout calls for them; do not set fixed heights or add another input border. For an existing `JTable`, call `DatabaseInputs.styleTableEditors(table)` to retain its typed editors while applying the shared appearance. Avoid changing global `UIManager` defaults: this style is scoped to Lattice controls.
+
+Review [light inputs](../screenshots/light-inputs-600.png), [dark inputs](../screenshots/dark-inputs-600.png) and [inline editing](../screenshots/light-table-cell-editing-1100.png), or choose **Input controls** / **Schema dialogs** in the gallery. Font-growth and look-and-feel-refresh tests protect sizing; numeric-editor tests protect invalid-value rejection, typed commits and cancellation.

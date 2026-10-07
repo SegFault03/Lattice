@@ -9,6 +9,8 @@ import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.model.DatabaseType;
 import org.jetbrains.annotations.Nullable;
 
+import com.segfault03.ideadb.ui.DatabaseInputs;
+
 import javax.swing.*;
 import java.awt.*;
 
@@ -39,7 +41,7 @@ public class CreateDatabaseDialog extends DialogWrapper {
         panel.add(new JBLabel(config.getType() == DatabaseType.MYSQL ? "Database Name:" : "Schema Name:"), gbc);
 
         gbc.gridx = 1; gbc.gridy = 0; gbc.weightx = 0.7;
-        nameField = new JBTextField();
+        nameField = DatabaseInputs.textField();
         panel.add(nameField, gbc);
 
         return panel;

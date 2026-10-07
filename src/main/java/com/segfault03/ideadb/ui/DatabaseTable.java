@@ -22,6 +22,7 @@ public final class DatabaseTable extends JBTable {
         setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         setRowHeight(JBUI.scale(28));
         setShowGrid(true);
+        DatabaseInputs.styleTableEditors(this);
         setGridColor(JBColor.namedColor("Table.gridColor", new JBColor(0xE8E9ED, 0x393B40)));
         // Clipped-cell expansion is another floating popup; cell tooltips supply
         // the full value and context without competing with it.

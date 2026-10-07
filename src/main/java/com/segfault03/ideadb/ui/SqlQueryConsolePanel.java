@@ -70,7 +70,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         heading.setBorder(JBUI.Borders.customLineBottom(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR));
         JPanel toolbar = new JPanel(new WrapLayout(FlowLayout.LEFT, JBUI.scale(4), JBUI.scale(4)));
         toolbar.setBorder(JBUI.Borders.empty(4, 8));
-        databaseCombo = new JComboBox<>();
+        databaseCombo = DatabaseInputs.comboBox();
         databaseCombo.setPrototypeDisplayValue("database_name_123");
         databaseCombo.setToolTipText("Database for the next query");
         if (allDatabases != null) {
@@ -96,7 +96,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         cancelBtn = DatabaseUi.action("Stop", AllIcons.Actions.Suspend, "Cancel the running query");
         cancelBtn.setEnabled(false);
         cancelBtn.addActionListener(e -> cancelExecution());
-        resultLimit = new JComboBox<>(new Integer[]{100, 1000, 10000});
+        resultLimit = DatabaseInputs.comboBox(new Integer[]{100, 1000, 10000});
         resultLimit.setSelectedItem(1000);
         resultLimit.setToolTipText("Maximum rows returned by the next query");
         JButton clearBtn = DatabaseUi.action("", AllIcons.Actions.GC, "Clear query text");
@@ -108,7 +108,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
 
         JPanel recall = new JPanel(new WrapLayout(FlowLayout.LEFT, JBUI.scale(8), JBUI.scale(4)));
         recall.setBorder(JBUI.Borders.empty(0, 8, 4, 8));
-        historyCombo = new JComboBox<>(new QueryHistoryEntry[]{new QueryHistoryEntry(null)});
+        historyCombo = DatabaseInputs.comboBox(new QueryHistoryEntry[]{new QueryHistoryEntry(null)});
         historyCombo.setPrototypeDisplayValue(new QueryHistoryEntry("SELECT … FROM customers"));
         historyCombo.addActionListener(e -> {
             if (historyCombo.getSelectedIndex() > 0) {
@@ -118,7 +118,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         });
         historyCombo.setToolTipText("Restore a recent query into the editor");
         recall.add(DatabaseUi.group(new JBLabel("History"), historyCombo));
-        JComboBox<String> snippetCombo = new JComboBox<>(new String[]{
+        JComboBox<String> snippetCombo = DatabaseInputs.comboBox(new String[]{
                 "Choose a template…",
                 "SELECT * FROM ... LIMIT 50;",
                 "SELECT COUNT(*) FROM ...;",

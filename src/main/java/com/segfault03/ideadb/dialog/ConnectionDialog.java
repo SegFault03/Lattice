@@ -25,6 +25,8 @@ import com.intellij.openapi.ui.ValidationInfo;
 import com.segfault03.ideadb.service.DatabaseConnectionManager;
 import org.jetbrains.annotations.Nullable;
 
+import com.segfault03.ideadb.ui.DatabaseInputs;
+
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
@@ -123,9 +125,9 @@ public class ConnectionDialog extends DialogWrapper {
         rootPanel.setBorder(JBUI.Borders.empty(0, 8));
         ConnectionFormPanel topPanel = new ConnectionFormPanel();
         topPanel.addSection(0, "Data source");
-        nameField = ConnectionFormPanel.width(new JBTextField(), 360);
+        nameField = ConnectionFormPanel.width(DatabaseInputs.textField(), 360);
         topPanel.addRow(1, "Name:", nameField, false);
-        typeCombo = ConnectionFormPanel.width(new JComboBox<>(DatabaseType.values()), 220);
+        typeCombo = ConnectionFormPanel.width(DatabaseInputs.comboBox(DatabaseType.values()), 220);
         topPanel.addRow(2, "Database Type:", typeCombo, false);
         topPanel.addSection(3, "Connection");
         JPanel radioPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
@@ -176,18 +178,17 @@ public class ConnectionDialog extends DialogWrapper {
         driverBody.add(summaryRow, BorderLayout.NORTH);
         driverToggle.addActionListener(e -> setDriverExpanded(!driverDetails.isVisible()));
         ConnectionFormPanel driverForm = new ConnectionFormPanel();
-        driverSourceCombo = ConnectionFormPanel.width(new JComboBox<>(DriverSource.values()), 220);
+        driverSourceCombo = ConnectionFormPanel.width(DatabaseInputs.comboBox(DriverSource.values()), 220);
         driverForm.addRow(0, "Source:", driverSourceCombo, false);
         driverCards = new VisibleCardPanel(driverLayout);
         driverCards.add(new JPanel(), DriverSource.BUNDLED.name());
         JPanel versionPanel = new JPanel(new BorderLayout(0, JBUI.scale(6)));
-        driverVersionCombo = ConnectionFormPanel.width(new JComboBox<>(), 220);
+        driverVersionCombo = ConnectionFormPanel.width(DatabaseInputs.comboBox(), 220);
         driverVersionCombo.setEditable(true);
         versionPanel.add(driverVersionCombo, BorderLayout.NORTH);
         versionPanel.add(DatabaseUi.group(listVersionsButton, downloadDriverButton), BorderLayout.SOUTH);
         driverCards.add(versionPanel, DriverSource.DOWNLOAD.name());
-        driverJarField = new TextFieldWithBrowseButton();
-        driverJarField.getTextField().setBorder(new RoundedInputBorder());
+        driverJarField = DatabaseInputs.browseField();
         ConnectionFormPanel.width(driverJarField, 360);
         driverJarField.setToolTipText("Choose the driver matching the server or HSQLDB file format.");
         driverJarField.addBrowseFolderListener(null, FileChooserDescriptorFactory.createSingleFileDescriptor("jar").withTitle("Select JDBC Driver JAR"));
@@ -279,16 +280,16 @@ public class ConnectionDialog extends DialogWrapper {
 
     private JPanel createMysqlPanel() {
         ConnectionFormPanel form = new ConnectionFormPanel();
-        mysqlHostField = ConnectionFormPanel.width(new JBTextField("localhost"), 220);
-        mysqlPortField = ConnectionFormPanel.width(new JBTextField("3306"), 76);
+        mysqlHostField = ConnectionFormPanel.width(DatabaseInputs.textField("localhost"), 220);
+        mysqlPortField = ConnectionFormPanel.width(DatabaseInputs.textField("3306"), 76);
         form.addRow(0, "Host:", mysqlHostField, false);
         form.addRow(1, "Port:", mysqlPortField, false);
-        mysqlDatabaseField = ConnectionFormPanel.width(new JBTextField(), 220);
+        mysqlDatabaseField = ConnectionFormPanel.width(DatabaseInputs.textField(), 220);
         form.addRow(2, "Database:", mysqlDatabaseField, false);
-        mysqlUserField = ConnectionFormPanel.width(new JBTextField(), 220);
+        mysqlUserField = ConnectionFormPanel.width(DatabaseInputs.textField(), 220);
         form.addSection(3, "Authentication");
         form.addRow(4, "User:", mysqlUserField, false);
-        mysqlPasswordField = ConnectionFormPanel.width(new JPasswordField(), 220);
+        mysqlPasswordField = ConnectionFormPanel.width(DatabaseInputs.passwordField(), 220);
         form.addRow(5, "Password:", mysqlPasswordField, false);
         return form;
     }
@@ -304,51 +305,50 @@ public class ConnectionDialog extends DialogWrapper {
 
     private JPanel createHsqlPanel() {
         ConnectionFormPanel form = new ConnectionFormPanel();
-        hsqlModeCombo = ConnectionFormPanel.width(new JComboBox<>(HsqlMode.values()), 220);
+        hsqlModeCombo = ConnectionFormPanel.width(DatabaseInputs.comboBox(HsqlMode.values()), 220);
         hsqlModeCombo.setSelectedItem(HsqlMode.SERVER);
         form.addRow(0, "Mode:", hsqlModeCombo, false);
 
         hsqlSubCardLayout = new CardLayout();
         hsqlSubCardPanel = new VisibleCardPanel(hsqlSubCardLayout);
         ConnectionFormPanel serverForm = new ConnectionFormPanel();
-        hsqlServerHostField = ConnectionFormPanel.width(new JBTextField("localhost"), 220);
-        hsqlServerPortField = ConnectionFormPanel.width(new JBTextField("9001"), 76);
+        hsqlServerHostField = ConnectionFormPanel.width(DatabaseInputs.textField("localhost"), 220);
+        hsqlServerPortField = ConnectionFormPanel.width(DatabaseInputs.textField("9001"), 76);
         serverForm.addRow(0, "Host:", hsqlServerHostField, false);
         serverForm.addRow(1, "Port:", hsqlServerPortField, false);
-        hsqlServerDbField = ConnectionFormPanel.width(new JBTextField(), 220);
+        hsqlServerDbField = ConnectionFormPanel.width(DatabaseInputs.textField(), 220);
         serverForm.addRow(2, "Database:", hsqlServerDbField, false);
         hsqlSubCardPanel.add(serverForm, HsqlMode.SERVER.name());
 
         ConnectionFormPanel fileForm = new ConnectionFormPanel();
-        hsqlFileField = new TextFieldWithBrowseButton();
-        hsqlFileField.getTextField().setBorder(new RoundedInputBorder());
+        hsqlFileField = DatabaseInputs.browseField();
         ConnectionFormPanel.width(hsqlFileField, 220);
         hsqlFileField.addBrowseFolderListener(null, FileChooserDescriptorFactory.createSingleFileOrFolderDescriptor().withTitle("Select Database File"));
         fileForm.addRow(0, "File / Path:", hsqlFileField, false);
         hsqlSubCardPanel.add(fileForm, HsqlMode.FILE.name());
 
         ConnectionFormPanel memoryForm = new ConnectionFormPanel();
-        hsqlMemNameField = ConnectionFormPanel.width(new JBTextField(), 220);
+        hsqlMemNameField = ConnectionFormPanel.width(DatabaseInputs.textField(), 220);
         memoryForm.addRow(0, "Database Name:", hsqlMemNameField, false);
         hsqlSubCardPanel.add(memoryForm, HsqlMode.MEM.name());
         form.addFullWidthRow(1, hsqlSubCardPanel);
 
-        hsqlUserField = ConnectionFormPanel.width(new JBTextField(), 220);
+        hsqlUserField = ConnectionFormPanel.width(DatabaseInputs.textField(), 220);
         form.addSection(2, "Authentication");
         form.addRow(3, "User:", hsqlUserField, false);
-        hsqlPasswordField = ConnectionFormPanel.width(new JPasswordField(), 220);
+        hsqlPasswordField = ConnectionFormPanel.width(DatabaseInputs.passwordField(), 220);
         form.addRow(4, "Password:", hsqlPasswordField, false);
         return form;
     }
 
     private JPanel createCustomUrlPanel() {
         ConnectionFormPanel form = new ConnectionFormPanel();
-        customUrlField = ConnectionFormPanel.width(new JBTextField(), 360);
+        customUrlField = ConnectionFormPanel.width(DatabaseInputs.textField(), 360);
         form.addRow(0, "JDBC URL:", customUrlField, false);
-        customUrlUserField = ConnectionFormPanel.width(new JBTextField(), 220);
+        customUrlUserField = ConnectionFormPanel.width(DatabaseInputs.textField(), 220);
         form.addSection(1, "Authentication");
         form.addRow(2, "User:", customUrlUserField, false);
-        customUrlPasswordField = ConnectionFormPanel.width(new JPasswordField(), 220);
+        customUrlPasswordField = ConnectionFormPanel.width(DatabaseInputs.passwordField(), 220);
         form.addRow(3, "Password:", customUrlPasswordField, false);
         JBLabel noteLabel = new JBLabel("<html><body width='340'>Enter the full JDBC connection string. Credentials entered above will be passed to the driver.</body></html>");
         noteLabel.setForeground(JBColor.GRAY);
