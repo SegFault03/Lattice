@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import tarfile
 import urllib.request
@@ -14,6 +15,10 @@ from common import ROOT, cache_directory, java_command
 VERIFIER_SHA256 = "59a5ef05cbdf0584cbfd6cb6ca802c74ecf340fdeadc5a73eac24af622c22010"
 VERIFIER_URL = "https://github.com/JetBrains/intellij-plugin-verifier/releases/download/1.410/verifier-cli-1.410-all.jar"
 SDK_LAYOUT = "Checksum-verified SDK extraction, layout 2\n"
+
+
+def compatible_verdict(text):
+    return re.match(r"^Compatible(?:$|\.\s)", text.strip()) is not None
 
 
 def digest(path):
@@ -98,7 +103,7 @@ def main():
         command += ["-runtime-dir", str(java_home.resolve())]
     subprocess.run(command, check=True)
     verdicts = list(reports.rglob("verification-verdict.txt"))
-    if len(verdicts) != 1 or verdicts[0].read_text(encoding="utf-8").strip() != "Compatible":
+    if len(verdicts) != 1 or not compatible_verdict(verdicts[0].read_text(encoding="utf-8")):
         raise ValueError("Plugin verification did not produce a Compatible verdict")
     if list(reports.rglob("compatibility-problems.txt")):
         raise ValueError("Plugin Verifier reported compatibility problems")

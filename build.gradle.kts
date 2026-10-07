@@ -28,6 +28,11 @@ dependencies {
 
     implementation("org.hsqldb:hsqldb:2.7.3")
     implementation("com.mysql:mysql-connector-j:9.0.0")
+    constraints {
+        implementation("com.google.protobuf:protobuf-java:4.28.2") {
+            because("Fix CVE-2024-7254 in Connector/J 9.0.0's protobuf runtime")
+        }
+    }
 
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")

@@ -12,7 +12,7 @@ def check(archive, version):
         files = distribution.namelist()
         allowed = {"Lattice/", "Lattice/lib/", "Lattice/lib/Lattice.jar", f"Lattice/lib/Lattice-{version}.jar",
                    f"Lattice/lib/Lattice-{version}-searchableOptions.jar", "Lattice/lib/mysql-connector-j-9.0.0.jar",
-                   "Lattice/lib/hsqldb-2.7.3.jar", "Lattice/lib/protobuf-java-4.26.1.jar"}
+                   "Lattice/lib/hsqldb-2.7.3.jar", "Lattice/lib/protobuf-java-4.28.2.jar"}
         for name in files:
             if "\\" in name or PurePosixPath(name).is_absolute() or ".." in PurePosixPath(name).parts:
                 raise ValueError("Archive contains a non-portable or unsafe path")
@@ -20,7 +20,8 @@ def check(archive, version):
                 raise ValueError("Unexpected distribution root")
             if name not in allowed:
                 raise ValueError(f"Unexpected release file: {name}")
-        required = {"Lattice/lib/mysql-connector-j-9.0.0.jar", "Lattice/lib/hsqldb-2.7.3.jar"}
+        required = {"Lattice/lib/mysql-connector-j-9.0.0.jar", "Lattice/lib/hsqldb-2.7.3.jar",
+                    "Lattice/lib/protobuf-java-4.28.2.jar"}
         if not required.issubset(files):
             raise ValueError("Missing production JDBC drivers")
         plugins = [name for name in files if name.endswith(".jar") and PurePosixPath(name).name.startswith("Lattice") and "searchableOptions" not in name]

@@ -18,6 +18,12 @@ spec.loader.exec_module(verifier)
 
 
 class SdkTests(unittest.TestCase):
+    def test_verdict_accepts_compatible_summary_but_not_other_statuses(self):
+        self.assertTrue(verifier.compatible_verdict("Compatible"))
+        self.assertTrue(verifier.compatible_verdict("Compatible. 2 usages of deprecated API."))
+        self.assertFalse(verifier.compatible_verdict("Not compatible"))
+        self.assertFalse(verifier.compatible_verdict("Compatibility problems found"))
+
     def sdk_archive(self, cache, unsafe=False):
         archive = cache / "archives/ides/idea-2025.1-linux.tar.gz"
         archive.parent.mkdir(parents=True)

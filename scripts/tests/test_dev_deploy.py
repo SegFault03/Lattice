@@ -68,6 +68,7 @@ class DeploymentTests(unittest.TestCase):
             archive.writestr("Lattice/lib/Lattice.jar", contents.getvalue())
             archive.writestr("Lattice/lib/mysql-connector-j-9.0.0.jar", "driver")
             archive.writestr("Lattice/lib/hsqldb-2.7.3.jar", "driver")
+            archive.writestr("Lattice/lib/protobuf-java-4.28.2.jar", "runtime")
             if extra:
                 archive.writestr(extra, "bad")
             if symlink:
