@@ -162,16 +162,7 @@ public class WelcomePanel extends JPanel implements AutoCloseable {
     }
 
     private void showAddConnectionMenu(Component invoker) {
-        JPopupMenu menu = new JPopupMenu();
-        JMenuItem mysqlItem = new JMenuItem("MySQL…");
-        mysqlItem.addActionListener(e -> showAddConnectionDialog(DatabaseType.MYSQL));
-        menu.add(mysqlItem);
-
-        JMenuItem hsqlItem = new JMenuItem("HSQLDB…");
-        hsqlItem.addActionListener(e -> showAddConnectionDialog(DatabaseType.HSQLDB));
-        menu.add(hsqlItem);
-
-        menu.show(invoker, 0, invoker.getHeight());
+        DatabaseUi.connectionMenu(this::showAddConnectionDialog).show(invoker, 0, invoker.getHeight());
     }
 
     private void showAddConnectionDialog(DatabaseType defaultType) {

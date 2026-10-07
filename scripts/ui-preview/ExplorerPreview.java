@@ -16,7 +16,7 @@ public final class ExplorerPreview {
                 () -> {}, () -> {}, () -> {}, () -> {});
         panel.add(toolbar, BorderLayout.NORTH);
         if (empty) {
-            panel.add(new EmptyConnectionPanel(() -> {}), BorderLayout.CENTER);
+            panel.add(new EmptyConnectionPanel(c -> {}), BorderLayout.CENTER);
             return panel;
         }
         DefaultMutableTreeNode root = new DefaultMutableTreeNode(TreeNodeData.root());

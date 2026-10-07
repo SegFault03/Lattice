@@ -7,6 +7,42 @@ import java.awt.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DatabaseInputsTest {
+    @Test void nativeTextAndPasswordDelegatesHaveTheSameTextOrigin() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            JTextField text = DatabaseInputs.textField("sample");
+            JPasswordField password = DatabaseInputs.passwordField();
+            password.setText("sample");
+            text.setUI(new com.intellij.ide.ui.laf.darcula.ui.DarculaTextFieldUI());
+            password.setUI(new com.intellij.ide.ui.laf.darcula.ui.DarculaPasswordFieldUI());
+            for (JTextField field : new JTextField[]{text, password}) {
+                field.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
+                field.setSize(220, field.getPreferredSize().height);
+            }
+            try {
+                assertEquals(password.modelToView2D(0).getX(), text.modelToView2D(0).getX(), 0.01);
+                assertEquals(text.getInsets().left, text.modelToView2D(0).getX(), 0.01);
+            } catch (javax.swing.text.BadLocationException error) { throw new AssertionError(error); }
+        });
+    }
+
+    @Test void browseButtonIsDistinctAndPreservesItsActionAndDisabledState() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            com.intellij.openapi.ui.TextFieldWithBrowseButton browse = DatabaseInputs.browseField();
+            JButton button = (JButton)java.util.Arrays.stream(browse.getComponents())
+                    .filter(JButton.class::isInstance).findFirst().orElseThrow();
+            assertNotNull(button.getIcon());
+            assertTrue(button.isContentAreaFilled());
+            assertTrue(button.getInsets().left > 0);
+            assertEquals("Browse files…", button.getToolTipText());
+            java.util.concurrent.atomic.AtomicInteger clicks = new java.util.concurrent.atomic.AtomicInteger();
+            browse.addActionListener(event -> clicks.incrementAndGet());
+            button.doClick(0);
+            assertEquals(1, clicks.get());
+            browse.setEnabled(false);
+            assertFalse(button.isEnabled());
+            assertFalse(browse.getTextField().isEnabled());
+        });
+    }
     @Test void fontGrowthAndLookAndFeelRefreshKeepInputsConsistentWithoutClipping() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             JComponent[] fields = {DatabaseInputs.textField("Connection"), DatabaseInputs.passwordField(),

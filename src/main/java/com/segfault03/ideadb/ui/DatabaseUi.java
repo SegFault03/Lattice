@@ -2,13 +2,26 @@ package com.segfault03.ideadb.ui;
 
 import com.intellij.ui.JBColor;
 import com.intellij.util.ui.JBUI;
+import com.segfault03.ideadb.model.DatabaseType;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.function.Consumer;
 
 /** Shared spacing and quiet native action styling for database editor controls. */
 public final class DatabaseUi {
     private DatabaseUi() {}
+
+    /** Every connection entry point offers the same database choice. */
+    public static JPopupMenu connectionMenu(Consumer<DatabaseType> choose) {
+        JPopupMenu menu = new JPopupMenu();
+        for (DatabaseType type : DatabaseType.values()) {
+            JMenuItem item = new JMenuItem(type.getDisplayName() + "…");
+            item.addActionListener(event -> choose.accept(type));
+            menu.add(item);
+        }
+        return menu;
+    }
 
     public enum Tone { NORMAL, BUSY, SUCCESS, WARNING, ERROR }
 

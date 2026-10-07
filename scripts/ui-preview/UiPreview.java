@@ -139,12 +139,40 @@ public final class UiPreview {
     }
     static void connection(String theme, String variant, int width) throws Exception {
         ConnectionConfig config = config(variant.startsWith("hsql") ? DatabaseType.HSQLDB : DatabaseType.MYSQL);
-        if (variant.equals("hsql-memory")) { config.setHsqlMode(HsqlMode.MEM); config.setDatabaseName("scratch"); }
-        if (variant.equals("hsql-file")) { config.setHsqlMode(HsqlMode.FILE); config.setDatabaseName("/home/developer/data/shop"); }
+        if (variant.startsWith("hsql-memory")) { config.setHsqlMode(HsqlMode.MEM); config.setDatabaseName("scratch"); }
+        if (variant.startsWith("hsql-file")) { config.setHsqlMode(HsqlMode.FILE); config.setDatabaseName("/home/developer/data/shop"); }
         if (variant.equals("jdbc-url")) config.setCustomUrl("jdbc:mysql://localhost:3306/shop?useSSL=true");
-        if (variant.equals("driver-download")) config.setDriverSource(DriverSource.DOWNLOAD);
+        if (variant.equals("driver-download")) { config.setDriverSource(DriverSource.DOWNLOAD); config.setDriverVersion("9.0.0"); }
         if (variant.equals("driver-local")) { config.setDriverSource(DriverSource.LOCAL_JAR); config.setDriverJarPath("/home/developer/drivers/mysql-connector-j.jar"); }
+        if (variant.equals("mysql-incomplete")) config.setUser("");
+        if (variant.equals("hsql-incomplete")) config.setDatabaseName("");
         ConnectionDialog dialog = new ConnectionDialog(null, config, variant.equals("new"));
+        if (variant.endsWith("bundled-expanded") || variant.equals("mysql-collapsed-after-expansion")) {
+            JPanel root = (JPanel)field(dialog, "rootPanel");
+            int collapsed = root.getPreferredSize().height;
+            invoke(dialog, "setDriverExpanded", new Class<?>[]{boolean.class}, true);
+            int expanded = root.getPreferredSize().height;
+            if (expanded <= collapsed) throw new AssertionError("Driver options must grow the form");
+            root.setSize(width - 56, expanded);
+            for (int pass = 0; pass < 4; pass++) layout(root);
+            JComponent source = (JComponent)field(dialog, "driverSourceCombo");
+            JLabel ready = (JLabel)field(dialog, "driverStatusLabel");
+            JPanel details = (JPanel)field(dialog, "driverDetails");
+            int gap = SwingUtilities.convertPoint(ready, 0, 0, details).y
+                    - SwingUtilities.convertPoint(source, 0, source.getHeight(), details).y;
+            if (gap > 12 || details.getHeight() - ready.getY() - ready.getHeight() > 8)
+                throw new AssertionError("Bundled driver reserves empty space: gap=" + gap);
+            if (variant.equals("mysql-collapsed-after-expansion")) {
+                invoke(dialog, "setDriverExpanded", new Class<?>[]{boolean.class}, false);
+                if (root.getPreferredSize().height != collapsed) throw new AssertionError("Collapsing must restore form height");
+            }
+        }
+        if (variant.equals("jdbc-url-incomplete")) ((JRadioButton)field(dialog, "customUrlRadio")).doClick(0);
+        JButton test = (JButton)field(dialog, "testButton");
+        if (!test.isVisible()) throw new AssertionError("Test connection must remain visible when disabled");
+        boolean incomplete = variant.endsWith("incomplete") || variant.equals("driver-local")
+                || variant.equals("driver-download") && !Files.isRegularFile(com.segfault03.ideadb.service.DriverCatalog.downloadedJar(config.getType(), config.getDriverVersion()));
+        if (test.isEnabled() == incomplete) throw new AssertionError("Incorrect Test connection availability: " + variant);
         if (variant.equals("success") || variant.equals("failed")) {
             JLabel status = (JLabel)field(dialog, "testStatusLabel");
             status.setVisible(true);
@@ -153,6 +181,14 @@ public final class UiPreview {
                     variant.equals("success") ? com.segfault03.ideadb.ui.DatabaseUi.Tone.SUCCESS : com.segfault03.ideadb.ui.DatabaseUi.Tone.ERROR);
         }
         JPanel panel = dialog.previewPanel();
+        if (variant.endsWith("bundled-expanded") || variant.equals("driver-local")) {
+            // Mirror the dialog's queued scroll-to-options after expansion, before painting.
+            panel.setSize(width, panel.getPreferredSize().height);
+            for (int pass = 0; pass < 4; pass++) layout(panel);
+            ((JComponent)field(dialog, "driverDetails")).scrollRectToVisible(
+                    new Rectangle(0, 0, ((JComponent)field(dialog, "driverDetails")).getWidth(),
+                            ((JComponent)field(dialog, "driverDetails")).getHeight()));
+        }
         render(panel, theme + "-connection-" + variant + "-" + width, width, panel.getPreferredSize().height);
         if (variant.equals("driver-download")) {
             render(panel, theme + "-connection-driver-download-expanded-" + width, width, panel.getPreferredSize().height + 200);
@@ -170,11 +206,37 @@ public final class UiPreview {
             int userTop = SwingUtilities.convertPoint(user, 0, 0, root).y;
             if (userTop - bottom > 70) throw new AssertionError("Empty HSQL server rows before credentials");
         }
-        if (!((JLabel)field(dialog, "urlPreviewLabel")).getText().equals(config.buildJdbcUrl()))
+        if (!variant.equals("jdbc-url-incomplete") && !((JLabel)field(dialog, "urlPreviewLabel")).getText().equals(config.buildJdbcUrl()))
             throw new AssertionError("Resolved URL must retain the full value");
         // Editing settings here is safe: dialog network/test actions are never invoked.
-        if (!dialog.getResultConfig().buildJdbcUrl().equals(config.buildJdbcUrl()))
+        if (!variant.equals("jdbc-url-incomplete") && !dialog.getResultConfig().buildJdbcUrl().equals(config.buildJdbcUrl()))
             throw new AssertionError("Preview changed the configured JDBC URL for " + variant);
+    }
+    static void verifyConnectionReadiness() throws Exception {
+        ConnectionDialog dialog = new ConnectionDialog(null, config(DatabaseType.MYSQL), true);
+        JButton test = (JButton)field(dialog, "testButton");
+        JTextField user = (JTextField)field(dialog, "mysqlUserField");
+        user.setText("");
+        if (test.isEnabled()) throw new AssertionError("Empty user must disable testing");
+        user.setText("developer");
+        if (!test.isEnabled()) throw new AssertionError("Filling user must enable testing");
+        JTextField port = (JTextField)field(dialog, "mysqlPortField");
+        for (String invalid : List.of("", "invalid", "65536")) {
+            port.setText(invalid);
+            if (test.isEnabled()) throw new AssertionError("Invalid port must disable testing");
+        }
+        port.setText("3306");
+        if (!test.isEnabled()) throw new AssertionError("Correcting port must enable testing");
+        ((JComboBox<?>)field(dialog, "driverSourceCombo")).setSelectedItem(DriverSource.DOWNLOAD);
+        ((JComboBox<?>)field(dialog, "driverVersionCombo")).getEditor().setItem("999.999.999");
+        if (test.isEnabled() || !((JButton)field(dialog, "downloadDriverButton")).isEnabled())
+            throw new AssertionError("Missing driver disables testing while allowing Download");
+        ((JComboBox<?>)field(dialog, "driverSourceCombo")).setSelectedItem(DriverSource.BUNDLED);
+        if (!test.isEnabled()) throw new AssertionError("Switching to bundled restores testing");
+        ((JRadioButton)field(dialog, "customUrlRadio")).doClick(0);
+        if (test.isEnabled()) throw new AssertionError("Empty JDBC URL disables testing");
+        ((JTextField)field(dialog, "customUrlField")).setText("jdbc:hsqldb:mem:scratch");
+        if (!test.isEnabled()) throw new AssertionError("Complete JDBC URL allows testing without separate credentials");
     }
     static TableDataEditorPanel table(boolean view) throws Exception {
         TableMetadata meta = new TableMetadata("shop", null, view ? "active_customers" : "customers", view ? "VIEW" : "TABLE");
@@ -397,6 +459,23 @@ public final class UiPreview {
                 verifyWelcome();
                 render(ExplorerPreview.create(config(DatabaseType.MYSQL), false), theme + "-side-panel-340", 340, 620);
                 render(ExplorerPreview.create(config(DatabaseType.MYSQL), true), theme + "-side-panel-empty-340", 340, 620);
+                JPanel empty = ExplorerPreview.create(config(DatabaseType.MYSQL), true);
+                empty.setBounds(0, 0, 340, 620);
+                layout(empty);
+                JButton addConnection = findButton(empty, "Add a connection…");
+                JPopupMenu choices = com.segfault03.ideadb.ui.DatabaseUi.connectionMenu(type -> {});
+                Point anchor = SwingUtilities.convertPoint(addConnection, 0, addConnection.getHeight(), empty);
+                choices.setBounds(anchor.x, anchor.y, choices.getPreferredSize().width, choices.getPreferredSize().height);
+                layout(choices);
+                // Paint the production popup directly without opening an OS popup window.
+                JComponent popupPreview = new JComponent() {
+                    @Override protected void paintComponent(Graphics graphics) { choices.paint(graphics); }
+                };
+                popupPreview.setBounds(choices.getBounds());
+                JLayeredPane menuPreview = new JLayeredPane();
+                menuPreview.add(empty, JLayeredPane.DEFAULT_LAYER);
+                menuPreview.add(popupPreview, JLayeredPane.POPUP_LAYER);
+                render(menuPreview, theme + "-side-panel-connection-menu-340", 340, 620);
                 render(ExplorerPreview.error(config(DatabaseType.MYSQL)), theme + "-side-panel-error-340", 340, 620);
                 SqlQueryConsolePanel console = console();
                 render(console, theme + "-sql-console-1100", 1100, 620);
@@ -420,7 +499,8 @@ public final class UiPreview {
                 emptyConsole.setSqlText("");
                 render(emptyConsole, theme + "-sql-console-empty-1100", 1100, 620);
                 verifyConsoleActions();
-                for (String variant : List.of("mysql", "new", "success", "failed", "hsql-server", "hsql-memory", "hsql-file", "jdbc-url", "driver-download", "driver-local")) connection(theme, variant, 600);
+                verifyConnectionReadiness();
+                for (String variant : List.of("mysql", "new", "success", "failed", "hsql-server", "hsql-memory", "hsql-file", "jdbc-url", "driver-download", "driver-local", "mysql-bundled-expanded", "hsql-bundled-expanded", "hsql-memory-bundled-expanded", "hsql-file-bundled-expanded", "mysql-collapsed-after-expansion", "mysql-incomplete", "hsql-incomplete", "jdbc-url-incomplete")) connection(theme, variant, 600);
                 connection(theme, "mysql", 800);
                 TableDataEditorPanel editor = table(false);
                 render(editor, theme + "-table-1100", 1100, 620);

@@ -52,8 +52,13 @@ public final class DatabaseInputs {
         Font font = UIManager.getFont("TextField.font");
         if (font != null && (input.getFont() == null || input.getFont() instanceof javax.swing.plaf.UIResource))
             input.setFont(font);
-        input.setBorder(new InputBorder());
-        if (input instanceof JTextField field) field.setMargin(JBUI.emptyInsets());
+        input.setBorder(input instanceof TextFieldWithBrowseButton ? JBUI.Borders.empty() : new InputBorder());
+        if (input instanceof JTextField field) {
+            field.setMargin(JBUI.emptyInsets());
+            // Darcula adds its own margins even when JTextField.margin is zero.
+            // Let the shared border provide the same text origin as password fields.
+            field.putClientProperty("TextFieldWithoutMargins", Boolean.TRUE);
+        }
         if (input instanceof JComboBox<?> combo) configureCombo(combo);
         if (!(input instanceof SizedInput)) {
             input.setPreferredSize(inputSize(input, input.getPreferredSize()));
@@ -78,6 +83,7 @@ public final class DatabaseInputs {
             field.setFont(combo.getFont());
             field.setBorder(JBUI.Borders.empty());
             field.setMargin(JBUI.emptyInsets());
+            field.putClientProperty("TextFieldWithoutMargins", Boolean.TRUE);
         }
     }
 
@@ -136,11 +142,17 @@ public final class DatabaseInputs {
     }
 
     private static final class InputTextField extends JBTextField implements SizedInput {
+        private boolean initialized;
         InputTextField(String text, int columns) {
             super();
             setText(text);
             setColumns(columns);
             style(this);
+            initialized = true;
+        }
+        @Override public void setUI(javax.swing.plaf.TextUI ui) {
+            super.setUI(ui);
+            if (initialized) style(this);
         }
         @Override public Dimension getPreferredSize() { return inputSize(this, super.getPreferredSize()); }
         @Override public Dimension getMinimumSize() { return inputSize(this, super.getMinimumSize()); }
@@ -148,7 +160,13 @@ public final class DatabaseInputs {
     }
 
     private static final class InputPasswordField extends JPasswordField implements SizedInput {
-        InputPasswordField() { style(this); }
+        private boolean initialized;
+        InputPasswordField() { style(this); initialized = true; }
+        @Override public void setUI(javax.swing.plaf.TextUI ui) {
+            super.setUI(ui);
+            // Darcula reinstalls its own margin even with a non-UIResource border.
+            if (initialized) style(this);
+        }
         @Override public Dimension getPreferredSize() { return inputSize(this, super.getPreferredSize()); }
         @Override public Dimension getMinimumSize() { return inputSize(this, super.getMinimumSize()); }
         @Override public void paint(Graphics graphics) { paintRounded(this, graphics, super::paint); }
@@ -175,14 +193,21 @@ public final class DatabaseInputs {
 
     private static final class InputBrowseField extends TextFieldWithBrowseButton implements SizedInput {
         InputBrowseField() {
-            super(new JBTextField());
-            setBackground(getTextField().getBackground());
-            setOpaque(true);
-            getTextField().setBorder(JBUI.Borders.empty());
-            getTextField().setMargin(JBUI.emptyInsets());
-            getButton().setBorder(JBUI.Borders.empty());
-            getButton().setContentAreaFilled(false);
-            getButton().setFocusPainted(false);
+            super(DatabaseInputs.textField());
+            ((BorderLayout)getLayout()).setHgap(JBUI.scale(6));
+            setOpaque(false);
+            setButtonIcon(com.intellij.icons.AllIcons.Nodes.Folder);
+            JButton browseButton = null;
+            for (Component child : getComponents()) {
+                if (child instanceof JButton button) browseButton = button;
+            }
+            if (browseButton == null) throw new IllegalStateException("Missing native browse button");
+            browseButton.setRolloverIcon(com.intellij.icons.AllIcons.Nodes.Folder);
+            browseButton.setBorder(new InputBorder());
+            browseButton.setContentAreaFilled(true);
+            browseButton.setFocusPainted(false);
+            browseButton.setToolTipText("Browse files…");
+            browseButton.getAccessibleContext().setAccessibleName("Browse files");
             style(this);
             getTextField().setFont(getFont());
             addPropertyChangeListener("font", event -> getTextField().setFont(getFont()));
@@ -191,7 +216,7 @@ public final class DatabaseInputs {
                 @Override public void focusLost(FocusEvent event) { repaint(); }
             };
             getTextField().addFocusListener(focus);
-            getButton().addFocusListener(focus);
+            browseButton.addFocusListener(focus);
             getTextField().addPropertyChangeListener("JComponent.outline", event -> repaint());
         }
         @Override public Dimension getPreferredSize() { return inputSize(this, super.getPreferredSize()); }

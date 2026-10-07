@@ -39,6 +39,7 @@ final class ConnectionFormPanel extends JPanel {
         cell.gridx = 0;
         JLabel fieldLabel = new JLabel(label);
         fieldLabel.setLabelFor(input);
+        fieldLabel.setVisible(!label.isEmpty());
         add(fieldLabel, cell);
 
         cell.gridx = 1;

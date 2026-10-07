@@ -51,6 +51,7 @@ public class ConnectionDialog extends DialogWrapper {
     private java.util.concurrent.Future<?> driverTask;
     private java.util.concurrent.Future<?> connectionTask;
     private boolean driverBusy;
+    private boolean connectionBusy;
 
     // Header fields
     private JBTextField nameField;
@@ -92,7 +93,7 @@ public class ConnectionDialog extends DialogWrapper {
 
     // Preview and Action components
     private JBLabel urlPreviewLabel;
-    private final JButton testButton = new ActionLink("Test connection");
+    private final ActionLink testButton = new ActionLink("Test connection");
     private final JBLabel testStatusLabel = new JBLabel("");
 
     public ConnectionDialog(@Nullable Project project, ConnectionConfig config) {
@@ -102,12 +103,14 @@ public class ConnectionDialog extends DialogWrapper {
     public ConnectionDialog(@Nullable Project project, ConnectionConfig config, boolean newConnection) {
         super(project, true);
         this.config = config.copy();
+        testButton.setAutoHideOnDisable(false);
         setTitle(newConnection ? "New connection" : "Edit connection");
         setOKButtonText(newConnection ? "Add connection" : "Save");
         init();
         loadValues();
         updatePreview();
         uiInitialized = true;
+        updateTestAvailability();
         setDriverExpanded(config.getDriverSource() != DriverSource.BUNDLED);
         refreshFormSize();
     }
@@ -261,7 +264,7 @@ public class ConnectionDialog extends DialogWrapper {
             Dimension preferred = window.getPreferredSize();
             window.setMinimumSize(new Dimension(JBUI.scale(560), preferred.height));
             if (!window.isShowing()) window.pack();
-            else if (window.getHeight() < preferred.height)
+            else
                 window.setSize(Math.max(window.getWidth(), JBUI.scale(560)), preferred.height);
         }
     }
@@ -301,6 +304,7 @@ public class ConnectionDialog extends DialogWrapper {
     private void showDriverCard(DriverSource source) {
         if (source == null || driverCards == null) return;
         driverLayout.show(driverCards, source.name());
+        driverCards.setVisible(source != DriverSource.BUNDLED);
         driverCards.revalidate();
         driverCards.repaint();
         if (driverCards.getParent() != null) driverCards.getParent().revalidate();
@@ -441,9 +445,14 @@ public class ConnectionDialog extends DialogWrapper {
         });
 
         customUrlUserField.getDocument().addDocumentListener(dl);
+        driverJarField.getTextField().getDocument().addDocumentListener(dl);
+        if (driverVersionCombo.getEditor().getEditorComponent() instanceof JTextField versionField)
+            versionField.getDocument().addDocumentListener(dl);
+        nameField.getDocument().addDocumentListener(dl);
     }
 
     private void updatePreview() {
+        updateTestAvailability();
         if (customUrlRadio.isSelected() && customUrlField.getText().trim().isEmpty()) {
             urlPreviewLabel.setText("Enter a JDBC URL");
             urlPreviewLabel.setToolTipText(null);
@@ -453,6 +462,15 @@ public class ConnectionDialog extends DialogWrapper {
         String resolvedUrl = temp.buildJdbcUrl();
         urlPreviewLabel.setText(resolvedUrl);
         urlPreviewLabel.setToolTipText(resolvedUrl);
+    }
+
+    private void updateTestAvailability() {
+        if (driverJarField == null || customUrlField == null) return;
+        String problem = ConnectionReadiness.problem(createTempConfig(), customUrlRadio.isSelected());
+        testButton.setEnabled(!driverBusy && !connectionBusy && problem == null);
+        testButton.setToolTipText(driverBusy ? "Wait for the driver download to finish"
+                : connectionBusy ? "A connection test is running"
+                : problem == null ? "Test these connection settings" : problem);
     }
 
     private void setDriverStatus(String message) {
@@ -490,7 +508,7 @@ public class ConnectionDialog extends DialogWrapper {
                 try {
                     c.setPort(Integer.parseInt(mysqlPortField.getText().trim()));
                 } catch (Exception ignored) {
-                    c.setPort(3306);
+                    c.setPort(0);
                 }
                 c.setDatabaseName(mysqlDatabaseField.getText().trim());
                 c.setUser(mysqlUserField.getText().trim());
@@ -507,7 +525,7 @@ public class ConnectionDialog extends DialogWrapper {
                     try {
                         c.setPort(Integer.parseInt(hsqlServerPortField.getText().trim()));
                     } catch (Exception ignored) {
-                        c.setPort(9001);
+                        c.setPort(0);
                     }
                     c.setDatabaseName(hsqlServerDbField.getText().trim());
                 }
@@ -536,9 +554,10 @@ public class ConnectionDialog extends DialogWrapper {
                 setDriverStatus(java.nio.file.Files.isRegularFile(path) ? "Downloaded and ready" : "Choose a version, then Download. You can also enter a release version.");
             } catch (IllegalArgumentException error) { setDriverStatus(error.getMessage()); }
         } else setDriverStatus(source == DriverSource.LOCAL_JAR ? "Select the driver JAR matching your database server." : type.getDisplayName() + " " + bundledVersion + " included and ready to use.");
+        updateTestAvailability();
     }
     private void runDriverAction(boolean listOnly) {
-        if (driverBusy || !testButton.isEnabled() || isDisposed()) return;
+        if (driverBusy || connectionBusy || isDisposed()) return;
         DatabaseType type = (DatabaseType)typeCombo.getSelectedItem();
         String version = String.valueOf(driverVersionCombo.getEditor().getItem()).trim();
         driverBusy = true; downloadDriverButton.setEnabled(false); listVersionsButton.setEnabled(false);
@@ -554,7 +573,7 @@ public class ConnectionDialog extends DialogWrapper {
                 if (isDisposed()) return;
                 driverBusy = false; downloadDriverButton.setEnabled(true); listVersionsButton.setEnabled(true);
                 driverSourceCombo.setEnabled(true); driverVersionCombo.setEnabled(true); typeCombo.setEnabled(true);
-                testButton.setEnabled(true); setOKActionEnabled(true);
+                setOKActionEnabled(true);
                 if (available != null) {
                     driverVersionCombo.removeAllItems(); available.forEach(driverVersionCombo::addItem); driverVersionCombo.setSelectedItem(version);
                 }
@@ -595,7 +614,7 @@ public class ConnectionDialog extends DialogWrapper {
     }
 
     private void doTestConnection() {
-        if (driverBusy || !testButton.isEnabled() || isDisposed()) return;
+        if (driverBusy || connectionBusy || !testButton.isEnabled() || isDisposed()) return;
         if (customUrlRadio.isSelected() && customUrlField.getText().trim().isEmpty()) {
             Messages.showErrorDialog("Enter a JDBC URL before testing the connection.", "Invalid Connection");
             return;
@@ -606,7 +625,9 @@ public class ConnectionDialog extends DialogWrapper {
         DatabaseUi.status(testStatusLabel, "Testing connection…", DatabaseUi.Tone.BUSY);
         testStatusLabel.setVisible(true);
 
-        testButton.setEnabled(false); downloadDriverButton.setEnabled(false); listVersionsButton.setEnabled(false);
+        connectionBusy = true;
+        updateTestAvailability();
+        downloadDriverButton.setEnabled(false); listVersionsButton.setEnabled(false);
 
         connectionTask = com.segfault03.ideadb.service.DatabaseTaskService.getInstance().submit(() -> {
                 if(isDisposed()) return;
@@ -614,7 +635,9 @@ public class ConnectionDialog extends DialogWrapper {
 
                 SwingUtilities.invokeLater(() -> {
                     if (isDisposed()) return;
-                    testButton.setEnabled(true); downloadDriverButton.setEnabled(true); listVersionsButton.setEnabled(true);
+                    connectionBusy = false;
+                    updateTestAvailability();
+                    downloadDriverButton.setEnabled(true); listVersionsButton.setEnabled(true);
                     if (!sameRequest(requested, createTempConfig())) {
                         DatabaseUi.status(testStatusLabel, "Settings changed · Test again", DatabaseUi.Tone.WARNING); return;
                     }
