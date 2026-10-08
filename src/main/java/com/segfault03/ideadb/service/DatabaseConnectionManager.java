@@ -31,8 +31,12 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
             String version = source == com.segfault03.ideadb.model.DriverSource.DOWNLOAD ? config.getDriverVersion()
                     : source == com.segfault03.ideadb.model.DriverSource.BUNDLED && DriverRegistry.retainedJar(config.getType(), config.getDriverVersion()) != null
                             ? config.getDriverVersion() : "";
+            String selectedJar = source == com.segfault03.ideadb.model.DriverSource.LOCAL_JAR
+                    || source == com.segfault03.ideadb.model.DriverSource.BUNDLED && !config.getDriverVersion().isBlank()
+                            && DriverRegistry.retainedJar(config.getType(), config.getDriverVersion()) == null
+                    ? config.getDriverJarPath() : "";
             return new Identity(config.buildJdbcUrl(), config.getUser(), config.getPassword(), config.isAutoCommit(), source, version,
-                    source == com.segfault03.ideadb.model.DriverSource.LOCAL_JAR ? config.getDriverJarPath() : "");
+                    selectedJar);
         }
     }
     public void registerConfiguration(ConnectionConfig config) {

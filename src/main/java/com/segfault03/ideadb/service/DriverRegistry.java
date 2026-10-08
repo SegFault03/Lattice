@@ -97,10 +97,12 @@ public class DriverRegistry implements com.intellij.openapi.Disposable {
         if (disposed) throw new IllegalStateException("Driver registry is disposed");
         if (config.getDriverSource() == DriverSource.BUNDLED) {
             if (config.getDriverVersion().isBlank()) return getDriver(config.getType());
-            // A named bundled driver is a retained download; never silently fall back to the packaged one.
+            // Named entries in the available-driver list are retained downloads or discovered Maven JARs.
             var retained = retainedJar(config.getType(), config.getDriverVersion());
-            if (retained == null) throw new IllegalStateException("The downloaded driver is no longer stored. Download " + config.getDriverVersion() + " again.");
-            return loadCached(config.getType(), retained);
+            if (retained != null) return loadCached(config.getType(), retained);
+            if (DriverStore.isAvailable(config.getType(), config.getDriverVersion(), config.getDriverJarPath()))
+                return loadCached(config.getType(), Path.of(config.getDriverJarPath()));
+            throw new IllegalStateException("The selected driver is no longer available. Download or discover " + config.getDriverVersion() + " again.");
         }
         Path path = config.getDriverSource() == DriverSource.DOWNLOAD
                 ? DriverCatalog.downloadedJar(config.getType(), config.getDriverVersion()) : Path.of(config.getDriverJarPath());

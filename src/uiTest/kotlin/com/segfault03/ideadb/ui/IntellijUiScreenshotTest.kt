@@ -40,10 +40,18 @@ class IntellijUiScreenshotTest {
     fun captureLatticeToolWindowFromRealIde() {
         val projectDirectory = Path.of(System.getProperty("user.dir"), "build", "ui-test-project")
         Files.createDirectories(projectDirectory)
+        projectDirectory.resolve(".idea").toFile().deleteRecursively()
         projectDirectory.resolve("README.md").writeText("Temporary project opened for the Lattice IDE UI screenshot test.\n")
 
         val screenshotsDirectory = Path.of(requireNotNull(System.getProperty("ui.screenshot.dir")))
         Files.createDirectories(screenshotsDirectory)
+        val mavenRepository = Path.of(requireNotNull(System.getProperty("ui.maven.repository"))).toAbsolutePath()
+        check(Files.isRegularFile(mavenRepository.resolve("org/hsqldb/hsqldb/2.7.2/hsqldb-2.7.2.jar"))) {
+            "Expected the HSQLDB Maven fixture in $mavenRepository"
+        }
+        check(listOf("9.0.0", "8.4.0", "8.0.33").all { version ->
+            Files.isRegularFile(mavenRepository.resolve("com/mysql/mysql-connector-j/$version/mysql-connector-j-$version.jar"))
+        }) { "Expected the MySQL Connector/J Maven fixtures in $mavenRepository" }
 
         val ideHome = Path.of(requireNotNull(System.getProperty("ui.ide.home")))
         val ideInfo = IdeProductProvider.IC.copy(
@@ -123,6 +131,63 @@ class IntellijUiScreenshotTest {
             lateinit var frame: IdeaFrameUI
             ideFrame { frame = this }
             pluginRoot.x { byVisibleText("Add a connection…") }.waitFound().click()
+            frame.x { byVisibleText("MySQL…") }.waitFound().click()
+
+            val mysqlDialog = frame.x(DialogUiComponent::class.java) {
+                byTitle("New connection")
+            }.waitFound()
+            mysqlDialog.x {
+                byVisibleText("MySQL · Available drivers · MySQL Connector/J 26.7.0")
+            }.waitFound()
+            mysqlDialog.x { byVisibleText("Driver options ▸") }.waitFound().click()
+            val mysqlAvailableDriverCombo = mysqlDialog.x(JComboBoxUiComponent::class.java) {
+                and(
+                    byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"),
+                    byAccessibleName("Available driver"),
+                )
+            }.waitFound()
+            clickComboArrow(mysqlAvailableDriverCombo)
+            Thread.sleep(300)
+            val mysqlAvailableDriverLabels = mysqlAvailableDriverCombo.listValues()
+            println("Available MySQL driver entries: ${mysqlAvailableDriverLabels.joinToString()}")
+            check(mysqlAvailableDriverLabels.containsAll(listOf(
+                "26.7.0 · BUNDLED", "9.0.0 · DISCOVERED", "8.4.0 · DISCOVERED", "8.0.33 · DISCOVERED",
+            ))) { "Expected bundled and Maven-discovered MySQL releases: $mysqlAvailableDriverLabels" }
+            captureScreen(screenshotsDirectory.resolve("mysql-connection-dialog-available-driver-list.png"))
+            pressEscape()
+
+            val mysqlDriverSourceCombo = mysqlDialog.x(JComboBoxUiComponent::class.java) {
+                and(
+                    byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"),
+                    byAccessibleName("Source:"),
+                )
+            }.waitFound()
+            mysqlDriverSourceCombo.selectItem("Download a version")
+            val mysqlDriverVersionCombo = mysqlDialog.x(JComboBoxUiComponent::class.java) {
+                and(
+                    byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"),
+                    byAccessibleName("Driver version"),
+                )
+            }.waitFound()
+            Thread.sleep(300)
+            clickComboArrow(mysqlDriverVersionCombo)
+            Thread.sleep(300)
+            val mysqlDownloadVersions = mysqlDriverVersionCombo.listValues()
+            println("MySQL download-version entries: ${mysqlDownloadVersions.joinToString()}")
+            check(mysqlDownloadVersions.containsAll(listOf(
+                "9.0.0 · DISCOVERED", "8.4.0 · DISCOVERED", "8.0.33 · DISCOVERED",
+            ))) { "Expected Maven-discovered MySQL releases in the download-version list: $mysqlDownloadVersions" }
+            captureScreen(screenshotsDirectory.resolve("mysql-connection-dialog-download-version-list.png"))
+            pressEscape()
+            clickComboArrow(mysqlDriverVersionCombo)
+            selectNextComboPopupRow()
+            waitUntil("discovered MySQL driver cannot be downloaded again") {
+                !mysqlDialog.x { byVisibleText("Download") }.waitFound().component.isEnabled()
+            }
+            mysqlDialog.pressButton("Cancel")
+            ideFrame { waitForNoOpenedDialogs() }
+
+            pluginRoot.x { byVisibleText("Add a connection…") }.waitFound().click()
             frame.x { byVisibleText("HSQLDB…") }.waitFound().click()
 
             val connectionDialog = frame.x(DialogUiComponent::class.java) {
@@ -168,6 +233,11 @@ class IntellijUiScreenshotTest {
             }.waitFound()
             clickComboArrow(availableDriverCombo)
             Thread.sleep(300)
+            val availableDriverLabels = availableDriverCombo.listValues()
+            println("Available driver entries: ${availableDriverLabels.joinToString()}")
+            check(availableDriverLabels.containsAll(listOf(
+                "2.7.4 · BUNDLED", "2.7.3-jdk8 · DOWNLOADED", "2.7.2 · DISCOVERED", "2.6.1-jdk8 · DISCOVERED", "2.4.1 · DISCOVERED",
+            ))) { "Expected bundled, downloaded, and Maven-discovered releases in the available-driver list: $availableDriverLabels" }
             captureScreen(screenshotsDirectory.resolve("connection-dialog-available-driver-list.png"))
             pressEscape()
 
@@ -187,6 +257,13 @@ class IntellijUiScreenshotTest {
             Thread.sleep(500)
             clickComboArrow(driverVersionCombo)
             Thread.sleep(300)
+            val downloadVersions = driverVersionCombo.listValues()
+            println("Download-version entries: ${downloadVersions.joinToString()}")
+            check(downloadVersions.containsAll(listOf(
+                "2.7.2 · DISCOVERED", "2.6.1-jdk8 · DISCOVERED", "2.4.1 · DISCOVERED",
+            ))) {
+                "Expected Maven-discovered releases in the download-version list: $downloadVersions"
+            }
             captureScreen(screenshotsDirectory.resolve("connection-dialog-download-version-list.png"))
             pressEscape()
             val sourceWidth = driverSourceCombo.component.width
@@ -302,6 +379,9 @@ class IntellijUiScreenshotTest {
             val evidence = buildString {
                 appendLine("IDE target: IntelliJ IDEA Community ${System.getProperty("ui.ide.version")} (${System.getProperty("ui.ide.build")})")
                 appendLine("UI driver: JetBrains Starter and Driver")
+                appendLine("Configured Maven local repository fixture: $mavenRepository")
+                appendLine("Discovered MySQL Connector/J releases: 9.0.0, 8.4.0, 8.0.33")
+                appendLine("Discovered HSQLDB releases: 2.7.2, 2.6.1-jdk8, 2.4.1")
                 appendLine("IDE display: ${displayBounds.width}x${displayBounds.height}")
                 appendLine("IDE frame bounds: $ideFrameBounds")
                 appendLine("Production root Swing class: com.segfault03.ideadb.ui.DatabaseMainPanel")

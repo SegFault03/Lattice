@@ -2,6 +2,7 @@ package com.segfault03.ideadb.service;
 
 import com.segfault03.ideadb.model.DatabaseType;
 import com.segfault03.ideadb.model.InstalledDriver;
+import com.intellij.openapi.project.Project;
 import com.intellij.ide.plugins.PluginManager;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -10,19 +11,35 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Drivers that are already on this machine: the packaged driver plus every retained download.
+ * Drivers already available on this machine: the packaged driver, retained downloads, and Maven
+ * local-repository artifacts.
  * <p>Retained JARs are never removed on startup or disposal, so a version is fetched at most once
- * and stays selectable in the bundled driver list across IDE restarts.
+ * and stays selectable in the available-driver list across IDE restarts.
  */
 public final class DriverStore {
     private DriverStore() {}
 
-    /** Every driver a connection can use without another download, packaged first then newest. */
+    /** Every driver a connection can use without another download, grouped by local source. */
     public static List<InstalledDriver> installed(DatabaseType type) {
+        return installed(type, null);
+    }
+
+    /** Every driver usable without another download, with the IDE project's Maven cache included. */
+    public static List<InstalledDriver> installed(DatabaseType type, Project project) {
         List<InstalledDriver> drivers = new ArrayList<>();
         drivers.add(packaged(type));
-        for (String version : DriverCatalog.downloadedVersions(type))
+        java.util.Set<String> knownVersions = new java.util.LinkedHashSet<>();
+        if (!drivers.get(0).version().isBlank()) knownVersions.add(drivers.get(0).version());
+        for (String version : DriverCatalog.downloadedVersions(type)) {
             drivers.add(new InstalledDriver(type, version, false, DriverCatalog.downloadedJar(type, version)));
+            knownVersions.add(version);
+        }
+        Path localRepository = MavenRepositoryLocator.localRepository(project);
+        for (String version : DriverCatalog.discoveredVersions(type, localRepository)) {
+            if (knownVersions.add(version))
+                drivers.add(new InstalledDriver(type, version, InstalledDriver.Kind.DISCOVERED,
+                        DriverCatalog.discoveredJar(type, version, localRepository)));
+        }
         return List.copyOf(drivers);
     }
 
@@ -91,5 +108,19 @@ public final class DriverStore {
     /** True when a selection names a retained download rather than the packaged driver. */
     public static boolean isRetained(DatabaseType type, String version) {
         return DriverRegistry.retainedJar(type, version) != null;
+    }
+
+    /** True for a retained download or a previously discovered Maven JAR that is still usable. */
+    public static boolean isAvailable(DatabaseType type, String version, String selectedJar) {
+        if (version == null || version.isBlank()) return false;
+        if (isRetained(type, version)) return true;
+        if (selectedJar == null || selectedJar.isBlank()) return false;
+        try {
+            Path jar = Path.of(selectedJar);
+            return version.equals(DriverCatalog.versionOf(type, jar.getFileName().toString()))
+                    && DriverCatalog.validateJar(type, jar) != null;
+        } catch (Exception | LinkageError unavailable) {
+            return false;
+        }
     }
 }

@@ -19,6 +19,9 @@ public final class DriverCatalog {
     private static final Map<DatabaseType, List<String>> ARTIFACTS = Map.of(
             DatabaseType.MYSQL, List.of("mysql-connector-j", "mysql-connector-java"),
             DatabaseType.HSQLDB, List.of("hsqldb"));
+    private static final Map<DatabaseType, List<String>> MAVEN_ARTIFACT_DIRECTORIES = Map.of(
+            DatabaseType.MYSQL, List.of("com/mysql/mysql-connector-j", "mysql/mysql-connector-java"),
+            DatabaseType.HSQLDB, List.of("org/hsqldb/hsqldb"));
     private DriverCatalog() {}
     public static List<String> suggestedVersions(DatabaseType type) {
         return type == DatabaseType.MYSQL ? List.of("26.7.0", "9.0.0", "8.4.0", "8.0.33", "5.1.49")
@@ -72,6 +75,56 @@ public final class DriverCatalog {
         }
         versions.sort(DriverCatalog::compareVersionsDescending);
         return List.copyOf(versions);
+    }
+
+    /**
+     * Find validated driver artifacts in Maven's local repository. The selected repository is
+     * supplied by the IDE's Maven project settings; Maven home itself contains the Maven
+     * installation, not dependency artifacts.
+     */
+    public static List<String> discoveredVersions(DatabaseType type, Path localRepository) {
+        if (localRepository == null || !Files.isDirectory(localRepository)) return List.of();
+        Set<String> versions = new LinkedHashSet<>();
+        for (String artifactDirectory : MAVEN_ARTIFACT_DIRECTORIES.get(type)) {
+            Path versionsDirectory = localRepository.resolve(artifactDirectory);
+            try (DirectoryStream<Path> entries = Files.newDirectoryStream(versionsDirectory)) {
+                for (Path entry : entries) {
+                    if (!Files.isDirectory(entry)) continue;
+                    String baseVersion = entry.getFileName().toString();
+                    if (!baseVersion.matches(RELEASE)) continue;
+                    addDiscoveredVersion(type, localRepository, baseVersion, versions);
+                    if (type == DatabaseType.HSQLDB)
+                        addDiscoveredVersion(type, localRepository, baseVersion + "-jdk8", versions);
+                }
+            } catch (IOException | SecurityException ignored) {
+                // A missing artifact directory is normal when the driver was never resolved by Maven.
+            }
+        }
+        List<String> sorted = new ArrayList<>(versions);
+        sorted.sort(DriverCatalog::compareVersionsDescending);
+        return List.copyOf(sorted);
+    }
+
+    private static void addDiscoveredVersion(DatabaseType type, Path localRepository, String version,
+                                             Set<String> versions) {
+        Path jar = discoveredJar(type, version, localRepository);
+        if (jar == null || !Files.isRegularFile(jar)) return;
+        try {
+            validateJar(type, jar);
+            versions.add(version);
+        } catch (IOException | SecurityException ignored) {
+            // Ignore incomplete downloads, source jars, and unrelated/corrupt files.
+        }
+    }
+
+    /** Canonical JAR path for a Maven-cached release, or null for an invalid version. */
+    public static Path discoveredJar(DatabaseType type, String version, Path localRepository) {
+        if (localRepository == null) return null;
+        try {
+            return localRepository.resolve(artifactPath(type, version));
+        } catch (IllegalArgumentException invalidVersion) {
+            return null;
+        }
     }
     /** A retained JAR is re-validated before reuse, so a damaged file is never handed to a class loader. */
     public static boolean isInstalled(DatabaseType type, String version) {

@@ -24,6 +24,9 @@ fi
 export GRADLE_OPTS="$gradle_jvm_options"
 
 ui_java_options="-Dsun.java2d.uiScale=1.0 -Dide.ui.scale=1.0 -Djb.consents.confirmation.enabled=false -Dide.no.platform.update=true -Dide.show.tips.on.startup.default=false -Didea.trust.all.projects=true"
+if [[ -n "${LATTICE_UI_MAVEN_REPOSITORY:-}" ]]; then
+    ui_java_options+=" -Dlattice.maven.repository=$LATTICE_UI_MAVEN_REPOSITORY"
+fi
 if [[ -n "$proxy_url" ]]; then
     ui_java_options+=" -Dhttps.proxyHost=$proxy_host -Dhttps.proxyPort=$proxy_port -Dhttp.proxyHost=$proxy_host -Dhttp.proxyPort=$proxy_port -Dhttp.nonProxyHosts=localhost|127.*"
 fi

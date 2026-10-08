@@ -237,7 +237,8 @@ public final class UiPreview {
             int userTop = SwingUtilities.convertPoint(user, 0, 0, root).y;
             if (userTop - bottom > 70) throw new AssertionError("Empty HSQL server rows before credentials");
         }
-        if (!variant.equals("jdbc-url-incomplete") && !((JLabel)field(dialog, "urlPreviewLabel")).getText().equals(config.buildJdbcUrl()))
+        if (!variant.equals("new") && !variant.equals("jdbc-url-incomplete")
+                && !((JLabel)field(dialog, "urlPreviewLabel")).getText().equals(config.buildJdbcUrl()))
             throw new AssertionError("Resolved URL must retain the full value");
         // Editing settings here is safe: dialog network/test actions are never invoked.
         if (!variant.equals("jdbc-url-incomplete") && !dialog.getResultConfig().buildJdbcUrl().equals(config.buildJdbcUrl()))
@@ -274,7 +275,7 @@ public final class UiPreview {
         // A stored release must be offered without downloading and stay usable after selection.
         Path retained = com.segfault03.ideadb.service.DriverCatalog.downloadedJar(DatabaseType.MYSQL, "8.4.0");
         java.nio.file.Files.createDirectories(retained.getParent());
-        java.nio.file.Files.copy(Path.of("lib", "mysql-connector-j-9.0.0.jar"), retained, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        java.nio.file.Files.copy(Path.of("lib", "mysql-connector-j-26.7.0.jar"), retained, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         var bundled = (JComboBox<?>)field(dialog, "bundledDriverCombo");
         // The dialog was built before the file existed; a refresh must pick it up like a new download does.
         invoke(dialog, "refillBundledDrivers", new Class<?>[0]);

@@ -165,6 +165,7 @@ val uiScreenshotTest by intellijPlatformTesting.testIdeUi.registering {
         useJUnitPlatform()
         systemProperty("java.awt.headless", "false")
         systemProperty("ui.screenshot.dir", layout.buildDirectory.dir("ui-test-results").get().asFile.absolutePath)
+        systemProperty("ui.maven.repository", layout.buildDirectory.dir("ui-test-maven/repository").get().asFile.absolutePath)
         val ide = tasks.named<RunIdeTask>("runIde").get()
         systemProperty("ui.ide.home", ide.platformPath.toString())
         systemProperty("ui.ide.build", ide.productInfo.buildNumber)
