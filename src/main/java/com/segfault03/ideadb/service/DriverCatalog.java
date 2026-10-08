@@ -17,7 +17,7 @@ public final class DriverCatalog {
     private static final long MAX_JAR_BYTES = 32L * 1024 * 1024;
     private DriverCatalog() {}
     public static List<String> suggestedVersions(DatabaseType type) {
-        return type == DatabaseType.MYSQL ? List.of("9.0.0", "8.4.0", "8.0.33", "5.1.49")
+        return type == DatabaseType.MYSQL ? List.of("26.7.0", "9.0.0", "8.4.0", "8.0.33", "5.1.49")
                 : List.of("2.7.4-jdk8", "2.7.3-jdk8", "2.6.1-jdk8", "2.5.2", "2.4.1", "2.3.6", "2.3.0", "2.2.9");
     }
     public static Path cacheDirectory() {

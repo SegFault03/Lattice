@@ -110,7 +110,7 @@ public final class UiPreview {
         large.setFont(large.getFont().deriveFont(20f));
         JPasswordField password = DatabaseInputs.passwordField();
         password.setText("sample-password");
-        JComboBox<String> editable = DatabaseInputs.comboBox(new String[]{"9.0.0", "8.4.0"});
+        JComboBox<String> editable = DatabaseInputs.comboBox(new String[]{"26.7.0", "9.0.0", "8.4.0"});
         editable.setEditable(true);
         com.intellij.openapi.ui.TextFieldWithBrowseButton browse = DatabaseInputs.browseField();
         browse.setText("/home/developer/drivers/mysql.jar");
@@ -146,7 +146,7 @@ public final class UiPreview {
         if (variant.startsWith("hsql-memory")) { config.setHsqlMode(HsqlMode.MEM); config.setDatabaseName("scratch"); }
         if (variant.startsWith("hsql-file")) { config.setHsqlMode(HsqlMode.FILE); config.setDatabaseName("/home/developer/data/shop"); }
         if (variant.equals("jdbc-url")) config.setCustomUrl("jdbc:mysql://localhost:3306/shop?useSSL=true");
-        if (variant.equals("driver-download")) { config.setDriverSource(DriverSource.DOWNLOAD); config.setDriverVersion("9.0.0"); }
+        if (variant.equals("driver-download")) { config.setDriverSource(DriverSource.DOWNLOAD); config.setDriverVersion("26.7.0"); }
         if (variant.equals("driver-local")) { config.setDriverSource(DriverSource.LOCAL_JAR); config.setDriverJarPath("/home/developer/drivers/mysql-connector-j.jar"); }
         if (variant.equals("mysql-incomplete")) config.setUser("");
         if (variant.equals("hsql-incomplete")) config.setDatabaseName("");
