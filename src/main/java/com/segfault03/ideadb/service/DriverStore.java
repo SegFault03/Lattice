@@ -14,8 +14,8 @@ import java.util.Optional;
 /**
  * Drivers already available on this machine: the packaged driver, retained downloads, and Maven
  * local-repository artifacts.
- * <p>Retained JARs are never removed on startup or disposal, so a version is fetched at most once
- * and stays selectable in the available-driver list across IDE restarts.
+ * <p>Valid retained JARs stay selectable across IDE restarts. Incomplete or damaged retained JARs
+ * are removed when the cache is checked so they cannot be reused as available drivers.
  */
 public final class DriverStore {
     private DriverStore() {}

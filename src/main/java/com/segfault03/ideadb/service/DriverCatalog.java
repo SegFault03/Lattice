@@ -8,6 +8,8 @@ import java.net.*;
 import java.nio.file.*;
 import java.security.MessageDigest;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.jar.JarFile;
 import java.util.regex.Pattern;
 
@@ -15,6 +17,7 @@ import java.util.regex.Pattern;
 public final class DriverCatalog {
     private static final String CENTRAL = "https://repo.maven.apache.org/maven2/";
     private static final long MAX_JAR_BYTES = 32L * 1024 * 1024;
+    private static final long ABANDONED_PART_MAX_AGE_MILLIS = 24L * 60 * 60 * 1000;
     private static final String RELEASE = "\\d+\\.\\d+\\.\\d+";
     private static final Map<DatabaseType, List<String>> ARTIFACTS = Map.of(
             DatabaseType.MYSQL, List.of("mysql-connector-j", "mysql-connector-java"),
@@ -22,6 +25,13 @@ public final class DriverCatalog {
     private static final Map<DatabaseType, List<String>> MAVEN_ARTIFACT_DIRECTORIES = Map.of(
             DatabaseType.MYSQL, List.of("com/mysql/mysql-connector-j", "mysql/mysql-connector-java"),
             DatabaseType.HSQLDB, List.of("org/hsqldb/hsqldb"));
+    private static final ConcurrentMap<Path, Object> DOWNLOAD_LOCKS = new ConcurrentHashMap<>();
+
+    @FunctionalInterface
+    public interface DownloadProgress {
+        void onProgress(long bytesReceived, long totalBytes);
+    }
+
     private DriverCatalog() {}
     public static List<String> suggestedVersions(DatabaseType type) {
         return type == DatabaseType.MYSQL ? List.of("26.7.0", "9.0.0", "8.4.0", "8.0.33", "5.1.49")
@@ -68,7 +78,8 @@ public final class DriverCatalog {
         try (DirectoryStream<Path> entries = Files.newDirectoryStream(directory, "*.jar")) {
             for (Path entry : entries) {
                 String version = versionOf(type, entry.getFileName().toString());
-                if (!version.isEmpty() && Files.isRegularFile(entry) && !versions.contains(version)) versions.add(version);
+                if (version.isEmpty() || !Files.isRegularFile(entry) || versions.contains(version)) continue;
+                if (isInstalled(type, version)) versions.add(version);
             }
         } catch (IOException absent) {
             return List.of();
@@ -150,7 +161,14 @@ public final class DriverCatalog {
     public static boolean isInstalled(DatabaseType type, String version) {
         try {
             Path jar = downloadedJar(type, version);
-            return Files.isRegularFile(jar) && validateJar(type, jar) != null;
+            if (!Files.isRegularFile(jar)) return false;
+            try {
+                validateJar(type, jar);
+                return true;
+            } catch (IOException invalidJar) {
+                Files.deleteIfExists(jar);
+                return false;
+            }
         } catch (IOException | IllegalArgumentException | SecurityException unusable) {
             return false;
         }
@@ -192,26 +210,115 @@ public final class DriverCatalog {
         return List.copyOf(versions);
     }
     public static Path download(DatabaseType type, String version) throws Exception {
+        return download(type, version, (bytesReceived, totalBytes) -> {});
+    }
+
+    /** Downloads and verifies an artifact before atomically adding it to the retained driver store. */
+    public static Path download(DatabaseType type, String version, DownloadProgress progress) throws Exception {
         String url = CENTRAL + artifactPath(type, version);
         Path target = downloadedJar(type, version);
-        // A retained JAR is already checksum-verified; reuse it instead of fetching it again.
-        if (isInstalled(type, version)) return target;
-        Files.createDirectories(target.getParent());
-        Path temporary = Files.createTempFile(target.getParent(), "jdbc-", ".part");
-        try {
-            byte[] bytes = readUrl(url, MAX_JAR_BYTES);
-            String algorithm = null, expected = null;
-            for (String candidate : List.of("SHA-512", "SHA-256", "SHA-1")) {
-                String suffix = candidate.toLowerCase(Locale.ROOT).replace("-", "");
-                try { expected = new String(readUrl(url + "." + suffix, 1024), java.nio.charset.StandardCharsets.US_ASCII).trim().split("\\s+")[0]; algorithm = candidate; break; }
-                catch (FileNotFoundException absent) { /* old Maven artifacts may only provide SHA-1 */ }
+        Path directory = target.getParent();
+        Object lock = DOWNLOAD_LOCKS.computeIfAbsent(directory.toAbsolutePath().normalize(), ignored -> new Object());
+        synchronized (lock) {
+            // A retained JAR is already checksum-verified; reuse it instead of fetching it again.
+            if (isInstalled(type, version)) return target;
+            Files.createDirectories(directory);
+            deleteAbandonedParts(directory);
+            if (Files.exists(target) && !Files.isRegularFile(target))
+                throw new IOException("Driver cache target is not a regular file: " + target);
+            // A damaged cache entry must not survive a failed retry or appear as an available driver.
+            Files.deleteIfExists(target);
+            Path temporary = Files.createTempFile(directory, "jdbc-", ".part");
+            try {
+                DownloadProgress listener = progress == null ? (received, total) -> {} : progress;
+                long bytesReceived = readUrlToFile(url, temporary, MAX_JAR_BYTES, listener);
+                String algorithm = null, expected = null;
+                for (String candidate : List.of("SHA-512", "SHA-256", "SHA-1")) {
+                    String suffix = candidate.toLowerCase(Locale.ROOT).replace("-", "");
+                    try {
+                        expected = new String(readUrl(url + "." + suffix, 1024), java.nio.charset.StandardCharsets.US_ASCII)
+                                .trim().split("\\s+")[0];
+                        algorithm = candidate;
+                        break;
+                    } catch (FileNotFoundException absent) {
+                        // Older Maven artifacts may only provide SHA-1.
+                    }
+                }
+                if (algorithm == null || !checksum(temporary, algorithm).equalsIgnoreCase(expected))
+                    throw new IOException("Driver download checksum verification failed");
+                validateJar(type, temporary);
+                try { Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING); }
+                catch (AtomicMoveNotSupportedException unsupported) { Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING); }
+                listener.onProgress(bytesReceived, bytesReceived);
+                return target;
+            } finally {
+                // Also removes incomplete data if the connection drops or the dialog is cancelled.
+                Files.deleteIfExists(temporary);
             }
-            if (algorithm == null || !HexFormat.of().formatHex(MessageDigest.getInstance(algorithm).digest(bytes)).equalsIgnoreCase(expected)) throw new IOException("Driver download checksum verification failed");
-            Files.write(temporary, bytes); validateJar(type, temporary);
-            try { Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING); }
-            catch (AtomicMoveNotSupportedException unsupported) { Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING); }
-            return target;
-        } finally { Files.deleteIfExists(temporary); }
+        }
+    }
+
+    private static void deleteAbandonedParts(Path directory) throws IOException {
+        long staleBefore = System.currentTimeMillis() - ABANDONED_PART_MAX_AGE_MILLIS;
+        try (DirectoryStream<Path> parts = Files.newDirectoryStream(directory, "jdbc-*.part")) {
+            for (Path part : parts) {
+                try {
+                    if (Files.getLastModifiedTime(part).toMillis() < staleBefore) Files.deleteIfExists(part);
+                } catch (IOException staleFileUnavailable) {
+                    // An unreadable stale file does not block an otherwise valid driver download.
+                }
+            }
+        }
+    }
+
+    private static long readUrlToFile(String address, Path destination, long limit, DownloadProgress progress) throws IOException {
+        HttpURLConnection connection = (HttpURLConnection) URI.create(address).toURL().openConnection();
+        connection.setConnectTimeout(15000);
+        connection.setReadTimeout(30000);
+        connection.setInstanceFollowRedirects(false);
+        try {
+            long totalBytes = connection.getContentLengthLong();
+            if (totalBytes > limit) throw new IOException("Download exceeds size limit");
+            progress.onProgress(0, totalBytes);
+            try (InputStream input = connection.getInputStream(); OutputStream output = Files.newOutputStream(destination)) {
+                byte[] buffer = new byte[8192];
+                long bytesReceived = 0;
+                long lastReportedBytes = 0;
+                long lastReportedAt = System.nanoTime();
+                int count;
+                while ((count = input.read(buffer)) >= 0) {
+                    if (Thread.currentThread().isInterrupted()) throw new InterruptedIOException("Download cancelled");
+                    bytesReceived += count;
+                    if (bytesReceived > limit) throw new IOException("Download exceeds size limit");
+                    output.write(buffer, 0, count);
+                    long now = System.nanoTime();
+                    if (bytesReceived - lastReportedBytes >= 256 * 1024 || now - lastReportedAt >= 100_000_000L) {
+                        progress.onProgress(bytesReceived, totalBytes);
+                        lastReportedBytes = bytesReceived;
+                        lastReportedAt = now;
+                    }
+                }
+                if (totalBytes >= 0 && bytesReceived != totalBytes)
+                    throw new IOException("Driver download ended before all bytes arrived");
+                progress.onProgress(bytesReceived, totalBytes);
+                return bytesReceived;
+            }
+        } finally {
+            connection.disconnect();
+        }
+    }
+
+    private static String checksum(Path file, String algorithm) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance(algorithm);
+        try (InputStream input = Files.newInputStream(file)) {
+            byte[] buffer = new byte[8192];
+            int count;
+            while ((count = input.read(buffer)) >= 0) {
+                if (Thread.currentThread().isInterrupted()) throw new InterruptedIOException("Download cancelled");
+                digest.update(buffer, 0, count);
+            }
+        }
+        return HexFormat.of().formatHex(digest.digest());
     }
     private static byte[] readUrl(String address, long limit) throws IOException {
         HttpURLConnection connection = (HttpURLConnection) URI.create(address).toURL().openConnection();

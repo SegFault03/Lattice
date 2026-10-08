@@ -55,6 +55,7 @@ class IntellijUiScreenshotTest {
         """.trimIndent())
 
         val screenshotsDirectory = Path.of(requireNotNull(System.getProperty("ui.screenshot.dir")))
+        screenshotsDirectory.toFile().deleteRecursively()
         Files.createDirectories(screenshotsDirectory)
         val mavenRepository = Path.of(requireNotNull(System.getProperty("ui.maven.repository"))).toAbsolutePath()
         check(Files.isRegularFile(mavenRepository.resolve("org/hsqldb/hsqldb/2.7.2/hsqldb-2.7.2.jar"))) {
@@ -137,7 +138,6 @@ class IntellijUiScreenshotTest {
 
             val robot = Robot()
             savePng(screenshotsDirectory.resolve("full-ide.png"), robot.createScreenCapture(displayBounds))
-            savePng(screenshotsDirectory.resolve("plugin-ui.png"), robot.createScreenCapture(rootBounds))
 
             lateinit var frame: IdeaFrameUI
             ideFrame { frame = this }
@@ -194,6 +194,30 @@ class IntellijUiScreenshotTest {
             selectNextComboPopupRow()
             waitUntil("discovered MySQL driver cannot be downloaded again") {
                 !mysqlDialog.x { byVisibleText("Download") }.waitFound().component.isEnabled()
+            }
+            val mysqlProgressVersion = "5.1.49"
+            mysqlDriverVersionCombo.selectItem(mysqlProgressVersion)
+            val mysqlDownloadButton = mysqlDialog.x { byVisibleText("Download") }.waitFound()
+            waitUntil("MySQL version $mysqlProgressVersion can be downloaded") {
+                mysqlDownloadButton.component.isEnabled()
+            }
+            mysqlDownloadButton.click()
+            val mysqlProgressBar = mysqlDialog.x(UiComponent::class.java) {
+                byAccessibleName("Driver download progress")
+            }.waitFound()
+            assertTrue(mysqlProgressBar.component.isVisible(), "The progress bar should appear during a driver download")
+            assertTrue(!mysqlDownloadButton.component.isEnabled(), "Download should be disabled during the transfer")
+            assertTrue(!mysqlDriverVersionCombo.component.isEnabled(), "The version selector should be disabled during the transfer")
+            assertTrue(
+                mysqlProgressBar.component.width == mysqlDriverVersionCombo.component.width,
+                "The progress bar should match the driver version selector width",
+            )
+            captureScreen(screenshotsDirectory.resolve("mysql-driver-download-progress.png"))
+            waitUntil("MySQL driver download and verification") {
+                mysqlDialog.hasSubtext("Downloaded and ready")
+            }
+            check(!mysqlDownloadButton.component.isEnabled()) {
+                "A successfully downloaded driver should not be offered for download again"
             }
             mysqlDialog.pressButton("Cancel")
             ideFrame { waitForNoOpenedDialogs() }
@@ -282,6 +306,15 @@ class IntellijUiScreenshotTest {
             val versionWidth = driverVersionCombo.component.width
             println("Download driver control widths: source=$sourceWidth, version=$versionWidth")
             assertTrue(sourceWidth == versionWidth, "Driver source and editable version controls should have equal widths")
+            val moreVersionsButton = connectionDialog.x { byVisibleText("More versions") }.waitFound()
+            val selectorLeft = driverVersionCombo.component.getLocationOnScreen().x
+            val sourceLeft = driverSourceCombo.component.getLocationOnScreen().x
+            val actionsLeft = moreVersionsButton.component.getLocationOnScreen().x
+            println("Download driver row alignment: source=$sourceLeft, version=$selectorLeft, actions=$actionsLeft")
+            assertTrue(
+                sourceLeft == selectorLeft && selectorLeft == actionsLeft,
+                "Source, version, and More versions controls should share a left edge",
+            )
             clickComboArrow(driverVersionCombo)
             Thread.sleep(200)
             selectNextComboPopupRow()
@@ -295,7 +328,6 @@ class IntellijUiScreenshotTest {
             }
             connectionDialog.x { byVisibleText("Downloaded and ready") }.waitFound()
             captureScreen(screenshotsDirectory.resolve("connection-dialog-download-driver-full.png"))
-            captureComponent(screenshotsDirectory.resolve("connection-dialog-download-driver.png"), connectionDialog)
             driverSourceCombo.selectItem("Available drivers")
 
             connectionDialog.x { byVisibleText("Test connection") }.waitFound().click()
@@ -322,7 +354,6 @@ class IntellijUiScreenshotTest {
                 databaseTree.pathExists(*publicSchemaPath)
             }
             captureScreen(screenshotsDirectory.resolve("connected-explorer.png"))
-            captureComponent(screenshotsDirectory.resolve("connected-plugin-ui.png"), pluginRoot)
 
             val publicSchemaPathText = publicSchemaPath.joinToString(databaseTree.fixture.separator())
             databaseTree.fixture.expandPath(publicSchemaPathText)
@@ -361,7 +392,6 @@ class IntellijUiScreenshotTest {
             waitUntil("empty table data loaded") { tableEditor.hasSubtext("0 rows") }
             check(dataGrid.rowCount() == 0) { "New LATTICE_PEOPLE table should start empty" }
             captureScreen(screenshotsDirectory.resolve("table-editor-empty.png"))
-            captureComponent(screenshotsDirectory.resolve("table-editor-empty-component.png"), tableEditor)
 
             tableEditor.x { byAccessibleName("Add a new row") }.waitFound().click()
             waitUntil("new editable row") { dataGrid.rowCount() == 1 }
@@ -373,7 +403,6 @@ class IntellijUiScreenshotTest {
             }
             tableEditor.x { byAccessibleName("Commit pending changes to the database") }.waitFound()
             captureScreen(screenshotsDirectory.resolve("table-edit-pending.png"))
-            captureComponent(screenshotsDirectory.resolve("table-edit-pending-component.png"), tableEditor)
 
             tableEditor.x { byAccessibleName("Commit pending changes to the database") }.waitFound().click()
             frame.x(DialogUiComponent::class.java) {
@@ -386,7 +415,6 @@ class IntellijUiScreenshotTest {
                 "Committed row should be visible in the live data grid"
             }
             captureScreen(screenshotsDirectory.resolve("table-edit-committed.png"))
-            captureComponent(screenshotsDirectory.resolve("table-edit-committed-component.png"), tableEditor)
 
             val evidence = buildString {
                 appendLine("IDE target: IntelliJ IDEA Community ${System.getProperty("ui.ide.version")} (${System.getProperty("ui.ide.build")})")
@@ -395,6 +423,7 @@ class IntellijUiScreenshotTest {
                 appendLine("Project POM default drivers: MySQL 8.4.0, HSQLDB 2.7.2")
                 appendLine("Discovered MySQL Connector/J releases: 9.0.0, 8.4.0, 8.0.33")
                 appendLine("Discovered HSQLDB releases: 2.7.2, 2.6.1-jdk8, 2.4.1")
+                appendLine("Driver download flow: MySQL 5.1.49 downloaded from Maven Central; progress bar displayed and download controls were disabled during transfer")
                 appendLine("IDE display: ${displayBounds.width}x${displayBounds.height}")
                 appendLine("IDE frame bounds: $ideFrameBounds")
                 appendLine("Production root Swing class: com.segfault03.ideadb.ui.DatabaseMainPanel")
@@ -420,15 +449,6 @@ class IntellijUiScreenshotTest {
 
     private fun captureScreen(path: Path) {
         val bounds = Rectangle(Toolkit.getDefaultToolkit().screenSize)
-        savePng(path, Robot().createScreenCapture(bounds))
-    }
-
-    private fun captureComponent(path: Path, component: UiComponent) {
-        val screen = Rectangle(Toolkit.getDefaultToolkit().screenSize)
-        val location = component.component.getLocationOnScreen()
-        val bounds = Rectangle(location.x, location.y, component.component.width, component.component.height)
-        assertTrue(bounds.width > 0 && bounds.height > 0, "Captured component must have a visible size")
-        assertTrue(screen.contains(bounds), "Captured component must remain inside the virtual display")
         savePng(path, Robot().createScreenCapture(bounds))
     }
 

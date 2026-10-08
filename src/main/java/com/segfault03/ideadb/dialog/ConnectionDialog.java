@@ -58,6 +58,7 @@ public class ConnectionDialog extends DialogWrapper {
     private final CardLayout driverLayout = new CardLayout();
     private final JButton downloadDriverButton = new JButton("Download");
     private final JButton listVersionsButton = new JButton("More versions");
+    private final JProgressBar driverProgressBar = new JProgressBar(0, 100);
     private final JBLabel driverStatusLabel = new JBLabel(" ");
     private java.util.concurrent.Future<?> driverTask;
     private java.util.concurrent.Future<?> connectionTask;
@@ -239,7 +240,20 @@ public class ConnectionDialog extends DialogWrapper {
         JPanel versionFieldRow = new JPanel(new FlowLayout(FlowLayout.LEADING, 0, 0));
         versionFieldRow.add(driverVersionCombo);
         versionPanel.add(versionFieldRow, BorderLayout.NORTH);
-        versionPanel.add(DatabaseUi.group(listVersionsButton, downloadDriverButton), BorderLayout.SOUTH);
+        JPanel versionActionsRow = new JPanel(new FlowLayout(FlowLayout.LEADING, 0, 0));
+        versionActionsRow.setOpaque(false);
+        versionActionsRow.add(listVersionsButton);
+        versionActionsRow.add(Box.createHorizontalStrut(JBUI.scale(8)));
+        versionActionsRow.add(downloadDriverButton);
+        versionPanel.add(versionActionsRow, BorderLayout.SOUTH);
+        driverProgressBar.setStringPainted(false);
+        driverProgressBar.setPreferredSize(new Dimension(JBUI.scale(220), JBUI.scale(4)));
+        driverProgressBar.getAccessibleContext().setAccessibleName("Driver download progress");
+        driverProgressBar.setVisible(false);
+        JPanel progressRow = new JPanel(new FlowLayout(FlowLayout.LEADING, 0, 0));
+        progressRow.setOpaque(false);
+        progressRow.add(driverProgressBar);
+        versionPanel.add(progressRow, BorderLayout.CENTER);
         driverCards.add(versionPanel, DriverSource.DOWNLOAD.name());
         driverJarField = DatabaseInputs.browseField();
         ConnectionFormPanel.width(driverJarField, 360);
@@ -538,6 +552,37 @@ public class ConnectionDialog extends DialogWrapper {
         refreshFormSize();
     }
 
+    private void setDriverControlsEnabled(boolean enabled) {
+        driverSourceCombo.setEnabled(enabled);
+        bundledDriverCombo.setEnabled(enabled);
+        driverVersionCombo.setEnabled(enabled);
+        typeCombo.setEnabled(enabled);
+        standardRadio.setEnabled(enabled);
+        customUrlRadio.setEnabled(enabled);
+        customUrlField.setEnabled(enabled);
+        setComponentTreeEnabled(driverJarField, enabled);
+        downloadDriverButton.setEnabled(enabled);
+        listVersionsButton.setEnabled(enabled);
+    }
+
+    private static void setComponentTreeEnabled(Component component, boolean enabled) {
+        component.setEnabled(enabled);
+        if (component instanceof Container container)
+            for (Component child : container.getComponents()) setComponentTreeEnabled(child, enabled);
+    }
+
+    private void updateDriverProgress(long bytesReceived, long totalBytes) {
+        if (isDisposed() || !driverBusy) return;
+        if (totalBytes > 0) {
+            driverProgressBar.setIndeterminate(false);
+            driverProgressBar.setValue((int) Math.min(100, bytesReceived * 100 / totalBytes));
+            driverProgressBar.setToolTipText(bytesReceived + " of " + totalBytes + " bytes");
+        } else {
+            driverProgressBar.setIndeterminate(true);
+            driverProgressBar.setToolTipText("Downloading driver");
+        }
+    }
+
     private static String escapeHtml(String text) {
         return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
@@ -745,19 +790,30 @@ public class ConnectionDialog extends DialogWrapper {
             updateDriverStatus();
             return;
         }
-        driverBusy = true; downloadDriverButton.setEnabled(false); listVersionsButton.setEnabled(false);
-        driverSourceCombo.setEnabled(false); driverVersionCombo.setEnabled(false); typeCombo.setEnabled(false);
+        driverBusy = true;
+        setDriverControlsEnabled(false);
+        driverProgressBar.setValue(0);
+        driverProgressBar.setIndeterminate(!listOnly);
+        driverProgressBar.setVisible(!listOnly);
         testButton.setEnabled(false); setOKActionEnabled(false);
+        refreshFormSize();
         setDriverStatus(listOnly ? "Loading versions from Maven Central..." : "Downloading and verifying " + version + "...");
         driverTask = com.segfault03.ideadb.service.DatabaseTaskService.getInstance().submit(() -> {
             String error = null; java.util.List<String> versions = null;
-            try { if (listOnly) versions = DriverCatalog.availableVersions(type); else DriverCatalog.download(type, version); }
+            try {
+                if (listOnly) versions = DriverCatalog.availableVersions(type);
+                else DriverCatalog.download(type, version, (bytesReceived, totalBytes) ->
+                        SwingUtilities.invokeLater(() -> updateDriverProgress(bytesReceived, totalBytes)));
+            }
             catch (Exception failure) { error = failure.getMessage(); }
             String failure = error; java.util.List<String> available = versions;
             SwingUtilities.invokeLater(() -> {
                 if (isDisposed()) return;
-                driverBusy = false; downloadDriverButton.setEnabled(true); listVersionsButton.setEnabled(true);
-                driverSourceCombo.setEnabled(true); driverVersionCombo.setEnabled(true); typeCombo.setEnabled(true);
+                driverBusy = false;
+                driverProgressBar.setVisible(false);
+                driverProgressBar.setIndeterminate(false);
+                driverProgressBar.setValue(0);
+                setDriverControlsEnabled(true);
                 setOKActionEnabled(true);
                 if (available != null) {
                     refreshDownloadedDriverVersions(type);
@@ -769,6 +825,7 @@ public class ConnectionDialog extends DialogWrapper {
                 // A new download joins the bundled list, so the next connection picks it up without fetching.
                 refillBundledDrivers();
                 updateDriverStatus();
+                refreshFormSize();
                 if (failure != null) { setDriverStatus(listOnly ? "Could not load versions; enter a version or retry." : "Download failed; use a local JAR or retry.");
                     driverStatusLabel.setIcon(com.intellij.icons.AllIcons.General.Error); Messages.showErrorDialog(failure, "JDBC Driver"); }
             });
