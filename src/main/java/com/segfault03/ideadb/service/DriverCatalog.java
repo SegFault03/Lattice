@@ -121,9 +121,29 @@ public final class DriverCatalog {
     public static Path discoveredJar(DatabaseType type, String version, Path localRepository) {
         if (localRepository == null) return null;
         try {
-            return localRepository.resolve(artifactPath(type, version));
+            Path preferred = localRepository.resolve(artifactPath(type, version));
+            if (isValidDiscoveredJar(type, version, preferred)) return preferred;
+            String folderVersion = type == DatabaseType.HSQLDB && version.endsWith("-jdk8")
+                    ? version.substring(0, version.length() - "-jdk8".length()) : version;
+            for (String artifactDirectory : MAVEN_ARTIFACT_DIRECTORIES.get(type)) {
+                String artifact = artifactDirectory.substring(artifactDirectory.lastIndexOf('/') + 1);
+                Path candidate = localRepository.resolve(artifactDirectory).resolve(folderVersion)
+                        .resolve(artifact + "-" + version + ".jar");
+                if (isValidDiscoveredJar(type, version, candidate)) return candidate;
+            }
+            return preferred;
         } catch (IllegalArgumentException invalidVersion) {
             return null;
+        }
+    }
+
+    private static boolean isValidDiscoveredJar(DatabaseType type, String version, Path jar) {
+        if (!Files.isRegularFile(jar) || !version.equals(versionOf(type, jar.getFileName().toString()))) return false;
+        try {
+            validateJar(type, jar);
+            return true;
+        } catch (IOException | SecurityException invalidJar) {
+            return false;
         }
     }
     /** A retained JAR is re-validated before reuse, so a damaged file is never handed to a class loader. */

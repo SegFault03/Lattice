@@ -115,6 +115,13 @@ public class ConnectionDialog extends DialogWrapper {
         super(project, true);
         this.project = project;
         this.config = config.copy();
+        if (newConnection && this.config.getDriverSource() == DriverSource.BUNDLED
+                && this.config.getDriverVersion().isBlank()) {
+            DriverStore.projectDefault(this.config.getType(), project).ifPresent(driver -> {
+                this.config.setDriverVersion(driver.version());
+                this.config.setDriverJarPath(driver.jar().toString());
+            });
+        }
         this.showUrlPreview = !newConnection;
         testButton.setAutoHideOnDisable(false);
         setTitle(newConnection ? "New connection" : "Edit connection");

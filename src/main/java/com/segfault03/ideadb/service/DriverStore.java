@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Drivers already available on this machine: the packaged driver, retained downloads, and Maven
@@ -41,6 +42,15 @@ public final class DriverStore {
                         DriverCatalog.discoveredJar(type, version, localRepository)));
         }
         return List.copyOf(drivers);
+    }
+
+    /** A validated driver declared by the current project's POM and present in its configured Maven repository. */
+    public static Optional<InstalledDriver> projectDefault(DatabaseType type, Project project) {
+        if (project == null || project.getBasePath() == null || project.getBasePath().isBlank()) return Optional.empty();
+        Path pom = Path.of(project.getBasePath()).resolve("pom.xml");
+        return MavenPomDriverResolver.find(type, project, pom, MavenRepositoryLocator.localRepository(project))
+                // There is no benefit in creating a duplicate available-driver entry for the exact bundled release.
+                .filter(driver -> !driver.version().equals(packagedVersion(type)));
     }
 
     public static InstalledDriver packaged(DatabaseType type) {

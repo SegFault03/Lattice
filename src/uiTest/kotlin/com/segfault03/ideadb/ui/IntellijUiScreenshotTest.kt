@@ -42,6 +42,17 @@ class IntellijUiScreenshotTest {
         Files.createDirectories(projectDirectory)
         projectDirectory.resolve(".idea").toFile().deleteRecursively()
         projectDirectory.resolve("README.md").writeText("Temporary project opened for the Lattice IDE UI screenshot test.\n")
+        projectDirectory.resolve("pom.xml").writeText("""
+            <project xmlns="http://maven.apache.org/POM/4.0.0">
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>example</groupId><artifactId>lattice-ui-test</artifactId><version>1.0.0</version>
+              <properties><mysql.version>8.4.0</mysql.version><hsqldb.version>2.7.2</hsqldb.version></properties>
+              <dependencies>
+                <dependency><groupId>com.mysql</groupId><artifactId>mysql-connector-j</artifactId><version>${'$'}{mysql.version}</version></dependency>
+                <dependency><groupId>org.hsqldb</groupId><artifactId>hsqldb</artifactId><version>${'$'}{hsqldb.version}</version></dependency>
+              </dependencies>
+            </project>
+        """.trimIndent())
 
         val screenshotsDirectory = Path.of(requireNotNull(System.getProperty("ui.screenshot.dir")))
         Files.createDirectories(screenshotsDirectory)
@@ -137,7 +148,7 @@ class IntellijUiScreenshotTest {
                 byTitle("New connection")
             }.waitFound()
             mysqlDialog.x {
-                byVisibleText("MySQL · Available drivers · MySQL Connector/J 26.7.0")
+                byVisibleText("MySQL · Available drivers · MySQL Connector/J 8.4.0")
             }.waitFound()
             mysqlDialog.x { byVisibleText("Driver options ▸") }.waitFound().click()
             val mysqlAvailableDriverCombo = mysqlDialog.x(JComboBoxUiComponent::class.java) {
@@ -194,8 +205,9 @@ class IntellijUiScreenshotTest {
                 byTitle("New connection")
             }.waitFound()
             connectionDialog.x {
-                byVisibleText("HSQLDB · Available drivers · HSQLDB 2.7.4")
+                byVisibleText("HSQLDB · Available drivers · HSQLDB 2.7.2")
             }.waitFound()
+            Thread.sleep(750)
             captureScreen(screenshotsDirectory.resolve("connection-dialog-default-driver.png"))
             val modeCombo = connectionDialog.x(JComboBoxUiComponent::class.java) {
                 and(
@@ -380,6 +392,7 @@ class IntellijUiScreenshotTest {
                 appendLine("IDE target: IntelliJ IDEA Community ${System.getProperty("ui.ide.version")} (${System.getProperty("ui.ide.build")})")
                 appendLine("UI driver: JetBrains Starter and Driver")
                 appendLine("Configured Maven local repository fixture: $mavenRepository")
+                appendLine("Project POM default drivers: MySQL 8.4.0, HSQLDB 2.7.2")
                 appendLine("Discovered MySQL Connector/J releases: 9.0.0, 8.4.0, 8.0.33")
                 appendLine("Discovered HSQLDB releases: 2.7.2, 2.6.1-jdk8, 2.4.1")
                 appendLine("IDE display: ${displayBounds.width}x${displayBounds.height}")
