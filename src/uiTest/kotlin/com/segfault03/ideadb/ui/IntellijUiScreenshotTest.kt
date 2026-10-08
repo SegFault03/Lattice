@@ -145,6 +145,29 @@ class IntellijUiScreenshotTest {
             }.waitFound().text = "SA"
             captureScreen(screenshotsDirectory.resolve("connection-dialog.png"))
 
+            connectionDialog.x { byVisibleText("Driver options ▸") }.waitFound().click()
+            val driverSourceCombo = connectionDialog.x(JComboBoxUiComponent::class.java) {
+                and(
+                    byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"),
+                    byAccessibleName("Source:"),
+                )
+            }.waitFound()
+            driverSourceCombo.selectItem("Download a version")
+            val driverVersionCombo = connectionDialog.x(JComboBoxUiComponent::class.java) {
+                and(
+                    byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"),
+                    byAccessibleName("Driver version"),
+                )
+            }.waitFound()
+            Thread.sleep(500)
+            val sourceWidth = driverSourceCombo.component.width
+            val versionWidth = driverVersionCombo.component.width
+            println("Download driver control widths: source=$sourceWidth, version=$versionWidth")
+            assertTrue(sourceWidth == versionWidth, "Driver source and editable version controls should have equal widths")
+            captureScreen(screenshotsDirectory.resolve("connection-dialog-download-driver-full.png"))
+            captureComponent(screenshotsDirectory.resolve("connection-dialog-download-driver.png"), connectionDialog)
+            driverSourceCombo.selectItem("Available drivers")
+
             connectionDialog.x { byVisibleText("Test connection") }.waitFound().click()
             waitUntil("successful HSQLDB connection test") {
                 connectionDialog.hasSubtext("Connected · HSQL Database Engine")

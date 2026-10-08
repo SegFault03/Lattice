@@ -203,9 +203,16 @@ public class ConnectionDialog extends DialogWrapper {
         bundledDriverCombo.setToolTipText("Drivers already available here, including previously downloaded versions.");
         driverCards.add(bundledDriverCombo, DriverSource.BUNDLED.name());
         JPanel versionPanel = new JPanel(new BorderLayout(0, JBUI.scale(6)));
-        driverVersionCombo = ConnectionFormPanel.width(DatabaseInputs.comboBox(), 220);
+        driverVersionCombo = DatabaseInputs.comboBox();
         driverVersionCombo.setEditable(true);
-        versionPanel.add(driverVersionCombo, BorderLayout.NORTH);
+        driverVersionCombo.getAccessibleContext().setAccessibleName("Driver version");
+        // Editable combo-box UIs can change their preferred width when the editor is installed.
+        ConnectionFormPanel.width(driverVersionCombo, 220);
+        // The action buttons below can make this card wider than the fields. Avoid BorderLayout.NORTH
+        // stretching the version editor to the button row's width; keep it aligned with Source.
+        JPanel versionFieldRow = new JPanel(new FlowLayout(FlowLayout.LEADING, 0, 0));
+        versionFieldRow.add(driverVersionCombo);
+        versionPanel.add(versionFieldRow, BorderLayout.NORTH);
         versionPanel.add(DatabaseUi.group(listVersionsButton, downloadDriverButton), BorderLayout.SOUTH);
         driverCards.add(versionPanel, DriverSource.DOWNLOAD.name());
         driverJarField = DatabaseInputs.browseField();
