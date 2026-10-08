@@ -393,18 +393,24 @@ class IntellijUiScreenshotTest {
             check(dataGrid.rowCount() == 0) { "New LATTICE_PEOPLE table should start empty" }
             captureScreen(screenshotsDirectory.resolve("table-editor-empty.png"))
 
+            val commitButton = tableEditor.x { byAccessibleName("Commit pending changes to the database") }.waitFound()
+            val revertButton = tableEditor.x { byAccessibleName("Revert pending changes") }.waitFound()
             tableEditor.x { byAccessibleName("Add a new row") }.waitFound().click()
-            waitUntil("new editable row") { dataGrid.rowCount() == 1 }
-            dataGrid.doubleClickCell(0, 1)
-            dataGrid.keyboard { typeText("Ada Lovelace") }
-            dataGrid.keyboard { enter() }
-            waitUntil("edited cell text") {
-                dataGrid.content().values.any { row -> row.values.any { "Ada" in it } }
+            waitUntil("empty insert row validates required fields") {
+                dataGrid.rowCount() == 1 && tableEditor.hasSubtext("1 invalid cell") && !commitButton.component.isEnabled()
             }
-            tableEditor.x { byAccessibleName("Commit pending changes to the database") }.waitFound()
-            captureScreen(screenshotsDirectory.resolve("table-edit-pending.png"))
+            assertTrue(revertButton.component.isEnabled(), "An invalid empty row should remain revertible")
+            val emptyRowValues = dataGrid.content().values.single().values
+            println("Empty new-row cell values: ${emptyRowValues.joinToString()}")
+            captureScreen(screenshotsDirectory.resolve("table-add-empty-row.png"))
 
-            tableEditor.x { byAccessibleName("Commit pending changes to the database") }.waitFound().click()
+            replaceCellValue(dataGrid, row = 0, column = 1, value = "Ada Lovelace")
+            waitUntil("valid required value enables insert") {
+                commitButton.component.isEnabled() && !tableEditor.hasSubtext("invalid cell")
+            }
+            captureScreen(screenshotsDirectory.resolve("table-add-row-valid.png"))
+
+            commitButton.click()
             frame.x(DialogUiComponent::class.java) {
                 byTitle("Changes Saved")
             }.waitFound().pressButton("OK")
@@ -413,6 +419,46 @@ class IntellijUiScreenshotTest {
             }
             check(dataGrid.content().values.any { row -> row.values.any { "Ada" in it } }) {
                 "Committed row should be visible in the live data grid"
+            }
+
+            val initialId = tableCellText(dataGrid, row = 0, column = 0).toLong()
+            dataGrid.doubleClickCell(0, 0)
+            dataGrid.keyboard { enter() }
+            waitUntil("opening and closing an unchanged integer cell stays clean") {
+                !commitButton.component.isEnabled() && !tableEditor.hasSubtext("invalid cell")
+            }
+            assertTrue(!revertButton.component.isEnabled(), "An unchanged cell should not enable Revert")
+            captureScreen(screenshotsDirectory.resolve("table-edit-unchanged-value.png"))
+
+            replaceCellValue(dataGrid, row = 0, column = 0, value = "not-an-integer")
+            waitUntil("invalid integer is marked and blocks commit") {
+                tableEditor.hasSubtext("1 invalid cell") && !commitButton.component.isEnabled()
+            }
+            captureScreen(screenshotsDirectory.resolve("table-edit-invalid-integer.png"))
+
+            replaceCellValue(dataGrid, row = 0, column = 0, value = initialId.toString())
+            waitUntil("restoring the original integer clears invalid and pending state") {
+                !tableEditor.hasSubtext("invalid cell") && !commitButton.component.isEnabled()
+            }
+            assertTrue(!revertButton.component.isEnabled(), "Restoring the original value should leave no pending edit")
+            captureScreen(screenshotsDirectory.resolve("table-edit-restored-original.png"))
+
+            val changedId = initialId + 1
+            replaceCellValue(dataGrid, row = 0, column = 0, value = changedId.toString())
+            waitUntil("valid changed integer is marked pending and enables commit") {
+                tableEditor.hasSubtext("1 pending change") && commitButton.component.isEnabled()
+            }
+            captureScreen(screenshotsDirectory.resolve("table-edit-pending.png"))
+
+            commitButton.click()
+            frame.x(DialogUiComponent::class.java) {
+                byTitle("Changes Saved")
+            }.waitFound().pressButton("OK")
+            waitUntil("valid integer change is committed and reloaded") {
+                dataGrid.rowCount() == 1 && tableEditor.hasSubtext("1 rows") && tableCellText(dataGrid, 0, 0).toLongOrNull() == changedId
+            }
+            check(dataGrid.content().values.any { row -> row.values.any { "Ada" in it } }) {
+                "Committing the integer edit should preserve the other row values"
             }
             captureScreen(screenshotsDirectory.resolve("table-edit-committed.png"))
 
@@ -433,7 +479,9 @@ class IntellijUiScreenshotTest {
                 appendLine("IDE JBR release: ${Files.readString(ideHome.resolve("jbr/release")).lineSequence().filter { it.startsWith("JAVA_VERSION=") || it.startsWith("IMPLEMENTOR=") }.joinToString(", ")}")
                 appendLine("Test worker JVM: ${System.getProperty("java.version")} (${System.getProperty("java.vendor")})")
                 appendLine("Connection flow: Driver-created HSQLDB in-memory connection, live test connection succeeded")
-                appendLine("Table flow: created LATTICE_PEOPLE through the production dialog, inserted Ada Lovelace through the production data grid, committed, and reloaded")
+                appendLine("Table insert validation: empty row displayed its auto ID and nullable timestamp defaults, marked its missing required name invalid, and kept Commit disabled until the name was supplied")
+                appendLine("Table edit validation: unchanged integer stayed clean; invalid integer was highlighted and blocked Commit; restoring the original stayed clean; a valid changed integer committed and reloaded")
+                appendLine("Table flow: created LATTICE_PEOPLE through the production dialog, inserted Ada Lovelace, and edited its ID through the production data grid")
                 appendLine("Table editor production Swing class: com.segfault03.ideadb.ui.TableDataEditorPanel")
                 appendLine("Database grid production Swing class: com.segfault03.ideadb.ui.DatabaseTable")
             }
@@ -451,6 +499,21 @@ class IntellijUiScreenshotTest {
         val bounds = Rectangle(Toolkit.getDefaultToolkit().screenSize)
         savePng(path, Robot().createScreenCapture(bounds))
     }
+
+    private fun replaceCellValue(table: JTableUiComponent, row: Int, column: Int, value: String) {
+        table.doubleClickCell(row, column)
+        val robot = Robot()
+        robot.keyPress(KeyEvent.VK_CONTROL)
+        robot.keyPress(KeyEvent.VK_A)
+        robot.keyRelease(KeyEvent.VK_A)
+        robot.keyRelease(KeyEvent.VK_CONTROL)
+        robot.waitForIdle()
+        table.keyboard { typeText(value) }
+        table.keyboard { enter() }
+    }
+
+    private fun tableCellText(table: JTableUiComponent, row: Int, column: Int): String =
+        table.content().values.elementAt(row).values.elementAt(column)
 
     private fun clickComboArrow(combo: JComboBoxUiComponent) {
         val location = combo.component.getLocationOnScreen()

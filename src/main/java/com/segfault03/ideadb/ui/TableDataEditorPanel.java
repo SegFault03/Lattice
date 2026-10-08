@@ -429,7 +429,13 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         } else {
             saveBtn.setEnabled(hasPending && !mutationRunning);
             saveBtn.setToolTipText("Commit pending changes to the database");
-            DatabaseUi.status(statusLabel, statusLabel.getText(), DatabaseUi.Tone.NORMAL);
+            String previousStatus = statusLabel.getText();
+            if (previousStatus.contains("invalid cell") || previousStatus.contains("Fix before committing")) {
+                DatabaseUi.status(statusLabel, " ", DatabaseUi.Tone.NORMAL);
+                statusLabel.setToolTipText(null);
+            } else {
+                DatabaseUi.status(statusLabel, previousStatus, DatabaseUi.Tone.NORMAL);
+            }
             if (hasPending) {
                 saveBtn.setText("Commit (" + tableModel.getPendingChangesCount() + ")");
                 int count = tableModel.getPendingChangesCount();
@@ -877,7 +883,13 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     newRows.add(values);
                 } else {
                     for (int col = 0; col < columns.size(); col++) {
-                        if (!Objects.deepEquals(rows.get(row).get(col),originalRows.get(row).get(col))) modifiedCells.put(new CellCoord(row,col),rows.get(row).get(col));
+                        Object original = originalRows.get(row).get(col);
+                        Object restored = rows.get(row).get(col);
+                        if (sameDatabaseValue(getColumnMeta(col), original, restored)) {
+                            rows.get(row).set(col, original);
+                        } else {
+                            modifiedCells.put(new CellCoord(row,col), restored);
+                        }
                     }
                 }
             }
@@ -1031,29 +1043,30 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 ColumnMetadata cm = getColumnMeta(col);
                 if (!isCellEditable(row, col)) return;
 
-                Object processedVal = val;
+                CellCoord coord = new CellCoord(row, col);
+                boolean existingRow = row < originalRows.size();
+                Object originalValue = existingRow ? originalRows.get(row).get(col) : null;
+                boolean unchanged = existingRow && sameDatabaseValue(cm, originalValue, val);
+                Object processedVal = unchanged ? originalValue : val;
                 rows.get(row).set(col, processedVal);
 
-                CellCoord coord = new CellCoord(row, col);
-
-                // Type validation
-                String validationError = validateInput(cm, processedVal);
+                // An unchanged database value is already valid as stored, even if its JDBC
+                // representation differs from the editor's String value.
+                String validationError = unchanged ? null : validateInput(cm, processedVal);
                 if (validationError != null) {
                     validationErrors.put(coord, validationError);
                 } else {
                     validationErrors.remove(coord);
                 }
 
-                int originalCount = originalRows.size();
-                if (row < originalCount) {
-                    Object origVal = originalRows.get(row).get(col);
-                    if (Objects.equals(processedVal, origVal)) {
+                if (existingRow) {
+                    if (unchanged) {
                         modifiedCells.remove(coord);
                     } else {
                         modifiedCells.put(coord, processedVal);
                     }
                 } else {
-                    int newRowIdx = row - originalCount;
+                    int newRowIdx = row - originalRows.size();
                     if (newRowIdx < newRows.size()) {
                         newRows.get(newRowIdx).put(columns.get(col), processedVal);
                     }
@@ -1061,6 +1074,25 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 fireTableCellUpdated(row, col);
                 updatePendingChangesState();
             }
+        }
+    }
+
+    private boolean sameDatabaseValue(ColumnMetadata column, Object original, Object candidate) {
+        if (Objects.deepEquals(original, candidate)) return true;
+        if (original == null || candidate == null) return false;
+        if (column == null) return Objects.equals(String.valueOf(original), String.valueOf(candidate));
+
+        try {
+            Object originalTyped = convertInput(column, original);
+            Object candidateTyped = convertInput(column, candidate);
+            if (originalTyped instanceof BigDecimal originalDecimal
+                    && candidateTyped instanceof BigDecimal candidateDecimal) {
+                return originalDecimal.compareTo(candidateDecimal) == 0;
+            }
+            return Objects.deepEquals(originalTyped, candidateTyped);
+        } catch (IllegalArgumentException invalidValue) {
+            // Preserve an uneditable legacy database value until the user actually changes it.
+            return Objects.equals(String.valueOf(original), String.valueOf(candidate));
         }
     }
 
