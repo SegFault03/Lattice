@@ -125,6 +125,18 @@ class DriverStoreTest {
                 "Fields unused by the packaged driver must not retire sessions");
         assertNotEquals(method.invoke(null, packaged), method.invoke(null, named),
                 "Switching to a stored driver must retire sessions");
+
+        Path discoveredJar;
+        try (var jars = Files.list(Path.of("lib"))) {
+            discoveredJar = jars.filter(path -> path.getFileName().toString().startsWith("mysql-connector")
+                            && path.getFileName().toString().endsWith(".jar"))
+                    .findFirst().orElseThrow();
+        }
+        var discovered = packaged.copy();
+        discovered.setDriverVersion(DriverCatalog.versionOf(DatabaseType.MYSQL, discoveredJar.getFileName().toString()));
+        discovered.setDriverJarPath(discoveredJar.toString());
+        assertNotEquals(method.invoke(null, packaged), method.invoke(null, discovered),
+                "Switching to a valid discovered driver must retire sessions");
     }
 
     @Test void versionOrderingMatchesMavenReleaseOrder() {

@@ -27,13 +27,16 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
     private record Identity(String url, String user, String password, boolean autoCommit, com.segfault03.ideadb.model.DriverSource driverSource, String driverVersion, String driverJarPath) {
         static Identity of(ConnectionConfig config) {
             var source = config.getDriverSource();
-            // A bundled selection carries a version only when it names a retained download.
+            var retained = source == com.segfault03.ideadb.model.DriverSource.BUNDLED
+                    ? DriverRegistry.retainedJar(config.getType(), config.getDriverVersion()) : null;
+            boolean discovered = source == com.segfault03.ideadb.model.DriverSource.BUNDLED && retained == null
+                    && DriverStore.isAvailable(config.getType(), config.getDriverVersion(), config.getDriverJarPath());
+            // BUNDLED can represent the packaged driver, a retained download, or a selected Maven JAR.
+            // Ignore stale version/path fields unless they identify a driver that is still usable.
             String version = source == com.segfault03.ideadb.model.DriverSource.DOWNLOAD ? config.getDriverVersion()
-                    : source == com.segfault03.ideadb.model.DriverSource.BUNDLED && DriverRegistry.retainedJar(config.getType(), config.getDriverVersion()) != null
-                            ? config.getDriverVersion() : "";
+                    : retained != null || discovered ? config.getDriverVersion() : "";
             String selectedJar = source == com.segfault03.ideadb.model.DriverSource.LOCAL_JAR
-                    || source == com.segfault03.ideadb.model.DriverSource.BUNDLED && !config.getDriverVersion().isBlank()
-                            && DriverRegistry.retainedJar(config.getType(), config.getDriverVersion()) == null
+                    || discovered
                     ? config.getDriverJarPath() : "";
             return new Identity(config.buildJdbcUrl(), config.getUser(), config.getPassword(), config.isAutoCommit(), source, version,
                     selectedJar);
