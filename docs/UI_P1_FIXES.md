@@ -85,6 +85,8 @@ Deprecated Gradle features were used in this build, making it incompatible with 
 
 The network warning comes from cached Maven importer failures resolving Maven build plugins. The driver fixture downloads and live plugin driver-download flow completed; the UI checks used those real jars. The attachment warning is from Allure's teardown reporting. PNGs and JUnit results are saved independently. These warnings remain outside the P1 production fixes.
 
+The first push's cross-platform workflow failed before building because the documentation-link check required generated `build/` reports/screenshots to exist in a fresh checkout. The check now exempts resolved paths inside the ignored build-output directory while continuing to reject missing source-controlled documents, including paths that traverse back out of `build/`. A regression check covers the fresh-checkout case.
+
 An initial Darcula run failed with `Timeout(15s): ... New connection ... none`. The error screenshot showed that the dialog had closed: an extra Escape after Enter accepted a driver version could dismiss the dialog, depending on when its dropdown closed. Removing that redundant keystroke lets the following live component lookup wait for the selection. Darcula and the remaining themes passed after the fix. The failure log, JUnit result and screenshot are preserved under `build/ui-review-p1-investigations/darcula-extra-escape/`.
 
 The tested IDE sizes are 1000×800, 1400×1000 and 1900×1000; the narrow editor retains both side tool windows and has about 190 pixels available. Other OS font rendering, enlarged fonts, HiDPI scales and extremely small editor dimensions require separate coverage. The original review's P2/P3 findings remain the next approval phases.
