@@ -20,7 +20,7 @@ public record InstalledDriver(DatabaseType type, String version, boolean package
 
     public String label() {
         String name = version.isBlank() ? "Packaged with plugin" : version;
-        return packaged ? name : name + " · downloaded";
+        return packaged ? name : name + " · DOWNLOADED";
     }
 
     @Override public String toString() {

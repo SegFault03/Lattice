@@ -25,7 +25,15 @@ class DriverStoreTest {
     private Path stored(DatabaseType type, String version) throws Exception {
         Path jar = DriverCatalog.downloadedJar(type, version);
         Files.createDirectories(jar.getParent());
-        Path source = Path.of("lib", type == DatabaseType.MYSQL ? "mysql-connector-j-9.0.0.jar" : "hsqldb-2.7.3.jar");
+        String prefix = type == DatabaseType.MYSQL ? "mysql-connector" : "hsqldb-";
+        Path source;
+        try (var jars = Files.list(Path.of("lib"))) {
+            source = jars.filter(path -> path.getFileName().toString().startsWith(prefix)
+                            && path.getFileName().toString().endsWith(".jar"))
+                    .sorted()
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalStateException("No packaged " + type + " test driver found under lib"));
+        }
         Files.copy(source, jar, StandardCopyOption.REPLACE_EXISTING);
         return jar;
     }
@@ -54,6 +62,7 @@ class DriverStoreTest {
                 installed.stream().skip(1).map(InstalledDriver::version).toList());
         assertTrue(installed.stream().skip(1).allMatch(driver -> driver.jar() != null && !driver.packaged()),
                 "Stored drivers expose the retained JAR they load from");
+        assertEquals("9.0.0 · DOWNLOADED", installed.get(1).label(), "Retained driver hint is uppercase in the available driver list");
     }
 
     @Test void downloadsAreNeverFetchedTwiceAndUnusableFilesAreNotTrusted() throws Exception {

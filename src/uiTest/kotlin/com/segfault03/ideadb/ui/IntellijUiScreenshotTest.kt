@@ -23,6 +23,8 @@ import com.intellij.ide.starter.runner.CurrentTestMethod
 import com.intellij.ide.starter.runner.Starter
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.awt.event.InputEvent
+import java.awt.event.KeyEvent
 import java.awt.Rectangle
 import java.awt.Robot
 import java.awt.Toolkit
@@ -63,6 +65,14 @@ class IntellijUiScreenshotTest {
             )
         }.runIdeWithDriver().useDriverAndCloseIde {
             waitForIndicators(5.minutes)
+            val retainedHsqlFixture = testContext.paths.systemDir
+                .resolve("lattice/jdbc/hsqldb/hsqldb-2.7.3-jdk8.jar")
+            Files.createDirectories(retainedHsqlFixture.parent)
+            Files.copy(
+                Path.of(System.getProperty("user.dir"), "lib", "hsqldb-2.7.4.jar"),
+                retainedHsqlFixture,
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+            )
             ideFrame {
                 waitForNoOpenedDialogs()
             }
@@ -118,6 +128,10 @@ class IntellijUiScreenshotTest {
             val connectionDialog = frame.x(DialogUiComponent::class.java) {
                 byTitle("New connection")
             }.waitFound()
+            connectionDialog.x {
+                byVisibleText("HSQLDB · Available drivers · HSQLDB 2.7.4")
+            }.waitFound()
+            captureScreen(screenshotsDirectory.resolve("connection-dialog-default-driver.png"))
             val modeCombo = connectionDialog.x(JComboBoxUiComponent::class.java) {
                 and(
                     byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"),
@@ -146,6 +160,17 @@ class IntellijUiScreenshotTest {
             captureScreen(screenshotsDirectory.resolve("connection-dialog.png"))
 
             connectionDialog.x { byVisibleText("Driver options ▸") }.waitFound().click()
+            val availableDriverCombo = connectionDialog.x(JComboBoxUiComponent::class.java) {
+                and(
+                    byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"),
+                    byAccessibleName("Available driver"),
+                )
+            }.waitFound()
+            clickComboArrow(availableDriverCombo)
+            Thread.sleep(300)
+            captureScreen(screenshotsDirectory.resolve("connection-dialog-available-driver-list.png"))
+            pressEscape()
+
             val driverSourceCombo = connectionDialog.x(JComboBoxUiComponent::class.java) {
                 and(
                     byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"),
@@ -160,10 +185,26 @@ class IntellijUiScreenshotTest {
                 )
             }.waitFound()
             Thread.sleep(500)
+            clickComboArrow(driverVersionCombo)
+            Thread.sleep(300)
+            captureScreen(screenshotsDirectory.resolve("connection-dialog-download-version-list.png"))
+            pressEscape()
             val sourceWidth = driverSourceCombo.component.width
             val versionWidth = driverVersionCombo.component.width
             println("Download driver control widths: source=$sourceWidth, version=$versionWidth")
             assertTrue(sourceWidth == versionWidth, "Driver source and editable version controls should have equal widths")
+            clickComboArrow(driverVersionCombo)
+            Thread.sleep(200)
+            selectNextComboPopupRow()
+            pressEscape()
+            connectionDialog.x {
+                byVisibleText("HSQLDB · Download a version · HSQLDB 2.7.3-jdk8")
+            }.waitFound()
+            val downloadButton = connectionDialog.x { byVisibleText("Download") }.waitFound()
+            waitUntil("Download disabled for an already downloaded driver") {
+                !downloadButton.component.isEnabled()
+            }
+            connectionDialog.x { byVisibleText("Downloaded and ready") }.waitFound()
             captureScreen(screenshotsDirectory.resolve("connection-dialog-download-driver-full.png"))
             captureComponent(screenshotsDirectory.resolve("connection-dialog-download-driver.png"), connectionDialog)
             driverSourceCombo.selectItem("Available drivers")
@@ -296,6 +337,31 @@ class IntellijUiScreenshotTest {
         assertTrue(bounds.width > 0 && bounds.height > 0, "Captured component must have a visible size")
         assertTrue(screen.contains(bounds), "Captured component must remain inside the virtual display")
         savePng(path, Robot().createScreenCapture(bounds))
+    }
+
+    private fun clickComboArrow(combo: JComboBoxUiComponent) {
+        val location = combo.component.getLocationOnScreen()
+        val robot = Robot()
+        robot.mouseMove(location.x + combo.component.width - 6, location.y + combo.component.height / 2)
+        robot.mousePress(InputEvent.BUTTON1_DOWN_MASK)
+        robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
+        robot.waitForIdle()
+    }
+
+    private fun selectNextComboPopupRow() {
+        val robot = Robot()
+        robot.keyPress(KeyEvent.VK_DOWN)
+        robot.keyRelease(KeyEvent.VK_DOWN)
+        robot.keyPress(KeyEvent.VK_ENTER)
+        robot.keyRelease(KeyEvent.VK_ENTER)
+        robot.waitForIdle()
+    }
+
+    private fun pressEscape() {
+        val robot = Robot()
+        robot.keyPress(KeyEvent.VK_ESCAPE)
+        robot.keyRelease(KeyEvent.VK_ESCAPE)
+        robot.waitForIdle()
     }
 
     private fun waitUntil(description: String, timeoutMillis: Long = 20_000, condition: () -> Boolean) {

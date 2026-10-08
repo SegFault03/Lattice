@@ -35,7 +35,9 @@ import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.awt.event.ItemEvent;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 public class ConnectionDialog extends DialogWrapper {
     private final ConnectionConfig config;
@@ -48,6 +50,7 @@ public class ConnectionDialog extends DialogWrapper {
     private JComboBox<DriverSource> driverSourceCombo;
     private JComboBox<InstalledDriver> bundledDriverCombo;
     private JComboBox<String> driverVersionCombo;
+    private Set<String> downloadedDriverVersions = Set.of();
     private TextFieldWithBrowseButton driverJarField;
     private JPanel driverCards;
     private final CardLayout driverLayout = new CardLayout();
@@ -200,14 +203,26 @@ public class ConnectionDialog extends DialogWrapper {
         driverCards = new VisibleCardPanel(driverLayout);
         // Every driver already on this machine, so a downloaded release is picked without downloading again.
         bundledDriverCombo = ConnectionFormPanel.width(DatabaseInputs.comboBox(), 220);
+        bundledDriverCombo.getAccessibleContext().setAccessibleName("Available driver");
         bundledDriverCombo.setToolTipText("Drivers already available here, including previously downloaded versions.");
         driverCards.add(bundledDriverCombo, DriverSource.BUNDLED.name());
         JPanel versionPanel = new JPanel(new BorderLayout(0, JBUI.scale(6)));
         driverVersionCombo = DatabaseInputs.comboBox();
         driverVersionCombo.setEditable(true);
         driverVersionCombo.getAccessibleContext().setAccessibleName("Driver version");
-        // Editable combo-box UIs can change their preferred width when the editor is installed.
+        // Styling editable combos resets their renderer, so apply our downloaded marker afterward.
         ConnectionFormPanel.width(driverVersionCombo, 220);
+        ListCellRenderer<? super String> versionRenderer = driverVersionCombo.getRenderer();
+        driverVersionCombo.setRenderer((list, value, index, selected, focus) -> {
+            Component rendered = versionRenderer.getListCellRendererComponent(list, value, index, selected, focus);
+            if (value instanceof String version && downloadedDriverVersions.contains(version)
+                    && rendered instanceof JLabel label) {
+                label.setText(version + " · DOWNLOADED");
+                label.setForeground(JBColor.namedColor("Label.disabledForeground", new JBColor(0x8C8C8C, 0x777777)));
+                label.setEnabled(false);
+            }
+            return rendered;
+        });
         // The action buttons below can make this card wider than the fields. Avoid BorderLayout.NORTH
         // stretching the version editor to the button row's width; keep it aligned with Source.
         JPanel versionFieldRow = new JPanel(new FlowLayout(FlowLayout.LEADING, 0, 0));
@@ -571,15 +586,20 @@ public class ConnectionDialog extends DialogWrapper {
     private void refillDriverVersions() {
         DatabaseType type = (DatabaseType) typeCombo.getSelectedItem();
         refillBundledDrivers();
+        refreshDownloadedDriverVersions(type);
         driverVersionCombo.removeAllItems();
         for (String version : suggestedVersions(type)) driverVersionCombo.addItem(version);
         updateDriverStatus();
     }
-    /** Retained downloads lead, so an already downloaded release never has to be fetched again. */
+    /** Keep choices that can be downloaded first; retained releases remain visible as disabled entries. */
     private List<String> suggestedVersions(DatabaseType type) {
-        List<String> versions = new ArrayList<>(DriverCatalog.downloadedVersions(type));
-        for (String version : DriverCatalog.suggestedVersions(type)) if (!versions.contains(version)) versions.add(version);
-        return versions;
+        LinkedHashSet<String> versions = new LinkedHashSet<>(DriverCatalog.suggestedVersions(type));
+        versions.addAll(DriverCatalog.downloadedVersions(type));
+        return new ArrayList<>(versions);
+    }
+    private void refreshDownloadedDriverVersions(DatabaseType type) {
+        downloadedDriverVersions = Set.copyOf(DriverCatalog.downloadedVersions(type));
+        if (driverVersionCombo != null) driverVersionCombo.repaint();
     }
     private void refillBundledDrivers() {
         DatabaseType type = (DatabaseType) typeCombo.getSelectedItem();
@@ -599,7 +619,7 @@ public class ConnectionDialog extends DialogWrapper {
         DriverSource source = (DriverSource)driverSourceCombo.getSelectedItem();
         if (source == null) return;
         String selectedDriver = switch (source) {
-            case BUNDLED -> formatDriverLabel(type, selectedBundledLabel());
+            case BUNDLED -> formatDriverLabel(type, selectedBundledLabel(type));
             case DOWNLOAD -> formatDriverLabel(type, selectedDriverVersion());
             case LOCAL_JAR -> selectedLocalDriverLabel(type);
         };
@@ -615,7 +635,11 @@ public class ConnectionDialog extends DialogWrapper {
                             + " is packaged with the plugin and ready to use.");
         } else if (source == DriverSource.DOWNLOAD) {
             String version = selectedDriverVersion();
-            try {
+            refreshDownloadedDriverVersions(type);
+            boolean alreadyDownloaded = downloadedDriverVersions.contains(version);
+            downloadDriverButton.setEnabled(!driverBusy && !alreadyDownloaded);
+            if (alreadyDownloaded) setDriverStatus("Downloaded and ready");
+            else try {
                 var path = DriverCatalog.downloadedJar(type, version);
                 setDriverStatus(java.nio.file.Files.isRegularFile(path) ? "Downloaded and ready" : "Choose a version, then Download. You can also enter a release version.");
             } catch (IllegalArgumentException error) { setDriverStatus(error.getMessage()); }
@@ -631,9 +655,10 @@ public class ConnectionDialog extends DialogWrapper {
         var selected = (InstalledDriver) bundledDriverCombo.getSelectedItem();
         return selected != null && !selected.packaged() ? selected.version() : "";
     }
-    private String selectedBundledLabel() {
+    private String selectedBundledLabel(DatabaseType type) {
         var selected = (InstalledDriver) bundledDriverCombo.getSelectedItem();
-        return selected == null ? "" : selected.version();
+        String version = selected == null ? "" : selected.version();
+        return version.isBlank() ? DriverStore.packagedVersion(type) : version;
     }
     private String formatDriverLabel(DatabaseType type, String version) {
         String name = type == DatabaseType.MYSQL ? "MySQL Connector/J" : "HSQLDB";
@@ -672,6 +697,10 @@ public class ConnectionDialog extends DialogWrapper {
         if (driverBusy || connectionBusy || isDisposed()) return;
         DatabaseType type = (DatabaseType)typeCombo.getSelectedItem();
         String version = selectedDriverVersion();
+        if (!listOnly && downloadedDriverVersions.contains(version)) {
+            updateDriverStatus();
+            return;
+        }
         driverBusy = true; downloadDriverButton.setEnabled(false); listVersionsButton.setEnabled(false);
         driverSourceCombo.setEnabled(false); driverVersionCombo.setEnabled(false); typeCombo.setEnabled(false);
         testButton.setEnabled(false); setOKActionEnabled(false);
@@ -687,8 +716,12 @@ public class ConnectionDialog extends DialogWrapper {
                 driverSourceCombo.setEnabled(true); driverVersionCombo.setEnabled(true); typeCombo.setEnabled(true);
                 setOKActionEnabled(true);
                 if (available != null) {
-                    driverVersionCombo.removeAllItems(); available.forEach(driverVersionCombo::addItem); driverVersionCombo.setSelectedItem(version);
+                    refreshDownloadedDriverVersions(type);
+                    LinkedHashSet<String> mergedVersions = new LinkedHashSet<>(available);
+                    mergedVersions.addAll(DriverCatalog.downloadedVersions(type));
+                    driverVersionCombo.removeAllItems(); mergedVersions.forEach(driverVersionCombo::addItem); driverVersionCombo.setSelectedItem(version);
                 }
+                refreshDownloadedDriverVersions(type);
                 // A new download joins the bundled list, so the next connection picks it up without fetching.
                 refillBundledDrivers();
                 updateDriverStatus();
