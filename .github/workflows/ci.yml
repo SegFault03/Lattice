@@ -39,9 +39,12 @@ jobs:
       - name: Build and run UI tests
         if: matrix.os != 'ubuntu-24.04'
         run: python scripts/test.py --build
-      - name: Render the five UI previews
+      - name: Render UI inside IntelliJ IDEA
         if: matrix.os == 'ubuntu-24.04'
-        run: python3 scripts/ui-preview.py --output build/ui-preview
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xfwm4
+          ./scripts/review-intellij-ui.sh ExperimentalDark
       - name: Retain test reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -52,6 +55,7 @@ jobs:
             build/test-results/
             build/fixtures/
             build/ui-preview/
+            build/ui-review/
           retention-days: 7
 
   compatibility:
