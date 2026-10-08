@@ -1,6 +1,7 @@
 package com.segfault03.ideadb.ui
 
 import com.intellij.driver.sdk.invokeAction
+import com.intellij.driver.sdk.ui.ui
 import com.intellij.driver.client.Remote
 import com.intellij.driver.model.OnDispatcher
 import com.intellij.driver.sdk.ui.components.UiComponent.Companion.waitFound
@@ -30,6 +31,7 @@ import org.junit.jupiter.api.Test
 import java.awt.event.InputEvent
 import java.awt.event.KeyEvent
 import java.awt.Rectangle
+import java.awt.Point
 import java.awt.Robot
 import java.awt.Toolkit
 import java.awt.image.BufferedImage
@@ -272,7 +274,12 @@ class IntellijUiScreenshotTest {
                 }
                 captureScreen(screenshotsDirectory.resolve("mysql-connection-failure-inline.png"))
                 downloadedButtonEnabledAfterModeSwitch = mysqlDownloadButton.component.isEnabled()
-                println("Review observation: downloaded MySQL Download button enabled after JDBC URL / failed test = $downloadedButtonEnabledAfterModeSwitch")
+                check(downloadedButtonEnabledAfterModeSwitch == false) {
+                    "A retained driver must remain unavailable for download after a failed connection test"
+                }
+                check(mysqlDialog.x { byVisibleText("More versions") }.waitFound().component.isEnabled()) {
+                    "More versions must unlock after connection testing"
+                }
             }
             mysqlDialog.pressButton("Cancel")
             ideFrame { waitForNoOpenedDialogs() }
@@ -385,7 +392,6 @@ class IntellijUiScreenshotTest {
             clickComboArrow(driverVersionCombo)
             Thread.sleep(200)
             selectNextComboPopupRow()
-            pressEscape()
             connectionDialog.x {
                 byVisibleText("HSQLDB · Download a version · HSQLDB 2.7.3-jdk8")
             }.waitFound()
@@ -645,10 +651,40 @@ class IntellijUiScreenshotTest {
                 }
                 frame.resize(1000, 800)
                 captureScreen(screenshotsDirectory.resolve("table-narrow.png"))
+                assertEditorControlsVisible(tableEditor, "narrow table")
+                assertToolbarSingleRow(tableEditor.x { byAccessibleName("Table actions") }.waitFound(), "collapsed table")
+                openToolbarOverflow(tableEditor, "Table actions").also {
+                    captureScreen(screenshotsDirectory.resolve("table-narrow-toolbar-expanded.png"))
+                    assertToolbarSingleRow(it, "expanded table")
+                    assertIconOnlyOverflow(tableEditor.x { byAccessibleName("Table actions") }.waitFound(), it)
+                    pressEscape()
+                }
+                replaceCellValue(dataGrid, 0, 1, "Narrow layout edit")
+                waitUntil("narrow edit can be committed") { commitButton.component.isEnabled() }
+                captureScreen(screenshotsDirectory.resolve("table-narrow-pending.png"))
+                assertEditorControlsVisible(tableEditor, "narrow table with pending edit")
+                openToolbarOverflow(tableEditor, "Table actions").also {
+                    captureScreen(screenshotsDirectory.resolve("table-narrow-toolbar-expanded-pending.png"))
+                    assertIconOnlyOverflow(tableEditor.x { byAccessibleName("Table actions") }.waitFound(), it)
+                    assertTrue(it.x { byAccessibleName("Commit pending changes to the database") }.waitFound().component.isEnabled())
+                    it.x { byAccessibleName("Revert pending changes") }.waitFound().click()
+                }
+                waitUntil("narrow Revert restores row") { tableCellText(dataGrid, 0, 1) == "Ada Lovelace" }
+                whereInput.text = "\"id\" = -999"
+                tableEditor.x { byVisibleText("Apply") }.waitFound().click()
+                waitUntil("narrow Apply filters rows") { dataGrid.rowCount() == 0 }
+                captureScreen(screenshotsDirectory.resolve("table-narrow-filter.png"))
+                assertEditorControlsVisible(tableEditor, "narrow filtered table")
+                whereInput.text = ""
+                tableEditor.x { byVisibleText("Apply") }.waitFound().click()
+                waitUntil("narrow filter reset") { dataGrid.rowCount() == 1 }
                 val ideWindow = cast(frame.component, Window::class)
                 withContext(OnDispatcher.EDT) { ideWindow.setBounds(10, 40, 1900, 1000) }
                 captureScreen(screenshotsDirectory.resolve("table-wide.png"))
+                assertEditorControlsVisible(tableEditor, "wide table")
                 withContext(OnDispatcher.EDT) { ideWindow.setBounds(260, 40, 1400, 1000) }
+                captureScreen(screenshotsDirectory.resolve("table-normal-after-resize.png"))
+                assertEditorControlsVisible(tableEditor, "restored table")
                 databaseTree.fixture.rightClickPath(pathText)
                 frame.x { byVisibleText("Open in SQL console") }.waitFound().click()
                 val console = frame.x { byJavaClass("com.segfault03.ideadb.ui.SqlQueryConsolePanel") }.waitFound()
@@ -709,9 +745,29 @@ class IntellijUiScreenshotTest {
                 }
                 frame.resize(1000, 800)
                 captureScreen(screenshotsDirectory.resolve("sql-console-narrow.png"))
+                assertEditorControlsVisible(console, "narrow SQL console")
+                assertToolbarSingleRow(console.x { byAccessibleName("SQL actions") }.waitFound(), "collapsed SQL")
+                openToolbarOverflow(console, "SQL actions").also {
+                    captureScreen(screenshotsDirectory.resolve("sql-console-narrow-toolbar-expanded.png"))
+                    assertToolbarSingleRow(it, "expanded SQL")
+                    assertIconOnlyOverflow(console.x { byAccessibleName("SQL actions") }.waitFound(), it)
+                    pressEscape()
+                }
+                for ((label, file) in listOf("History" to "sql-history-narrow-popup", "Template" to "sql-template-narrow-popup")) {
+                    console.x(JComboBoxUiComponent::class.java) {
+                        and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"), byAccessibleName(label))
+                    }.waitFound().also {
+                        clickComboArrow(it)
+                        captureScreen(screenshotsDirectory.resolve("$file.png"))
+                        pressEscape()
+                    }
+                }
                 withContext(OnDispatcher.EDT) { ideWindow.setBounds(10, 40, 1900, 1000) }
                 captureScreen(screenshotsDirectory.resolve("sql-console-wide.png"))
+                assertEditorControlsVisible(console, "wide SQL console")
                 withContext(OnDispatcher.EDT) { ideWindow.setBounds(260, 40, 1400, 1000) }
+                captureScreen(screenshotsDirectory.resolve("sql-console-normal-after-resize.png"))
+                assertEditorControlsVisible(console, "restored SQL console")
                 databaseTree.fixture.rightClickPath(connectionPath.joinToString(databaseTree.fixture.separator()))
                 frame.x { byVisibleText("Remove connection") }.waitFound().click()
                 frame.x(DialogUiComponent::class.java) { byTitle("Remove connection") }.waitFound().also {
@@ -759,6 +815,76 @@ class IntellijUiScreenshotTest {
 
     private fun savePng(path: Path, image: BufferedImage) {
         check(ImageIO.write(image, "png", path.toFile())) { "No PNG ImageIO writer available" }
+    }
+
+    private fun assertEditorControlsVisible(editor: UiComponent, description: String) {
+        val controls = editor.xx {
+            or(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"),
+                byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"),
+                byJavaClass("com.segfault03.ideadb.ui.DatabaseUi\$ActionButton"),
+                byJavaClass("com.segfault03.ideadb.ui.WrappingLabel"),
+                byJavaClass("com.intellij.ui.components.JBLabel"))
+        }.list()
+        check(controls.size >= 10) { "Expected production controls in $description" }
+        editor.driver.withContext(OnDispatcher.EDT) {
+            for (control in controls) {
+                val live = cast(control.component, LiveSwingComponent::class)
+                val bounds = control.component.getBounds()
+                if (live.getClientProperty("lattice.toolbar.control") == true && live.getVisibleRect().isEmpty) continue
+                check(live.getVisibleRect() == Rectangle(0, 0, bounds.width, bounds.height)) {
+                    "$description clips a control: bounds=$bounds, visible=${live.getVisibleRect()}"
+                }
+                check(live.getPreferredSize().getHeight() <= bounds.height) {
+                    "$description clips control content vertically: preferred height=${live.getPreferredSize().getHeight()}, bounds=$bounds"
+                }
+            }
+        }
+        println("P1 visibility checked: $description, ${controls.size} real Swing controls")
+    }
+
+    private fun openToolbarOverflow(editor: UiComponent, title: String): UiComponent {
+        val toolbar = editor.x { byAccessibleName(title) }.waitFound()
+        val bounds = toolbar.component.getBounds()
+        toolbar.moveMouse(Point(bounds.width - 16, bounds.height / 2))
+        return editor.driver.ui.x { byType("com.intellij.openapi.actionSystem.impl.ActionToolbarImpl\$PopupToolbar") }.waitFound()
+    }
+
+    private fun assertIconOnlyOverflow(originalToolbar: UiComponent, toolbar: UiComponent) {
+        var checked = 0
+        for (original in originalToolbar.xx { byJavaClass("com.segfault03.ideadb.ui.DatabaseUi\$ActionButton") }.list()) {
+            val source = toolbar.driver.cast(original.component, LiveToolbarButton::class)
+            if (source.getText().isEmpty() || source.getIcon() == null) continue
+            val tooltip = source.getToolTipText()
+            val button = toolbar.x { byTooltip(tooltip) }.waitFound()
+            val live = toolbar.driver.cast(button.component, LiveToolbarButton::class)
+            check(live.getText().isEmpty() && live.getToolTipText() == tooltip) { "Overflow action should show only its icon and retain its tooltip" }
+            val bounds = button.component.getBounds()
+            check(bounds.width == 28 && bounds.height == 28) { "Expected a compact 28x28 overflow action" }
+            check(live.getIcon() != null) { "Overflow action must keep its icon" }
+            checked++
+        }
+        check(checked >= 3) { "Expected all three labelled toolbar buttons to use their icon-only overflow view" }
+        println("P1 native icon-only overflow checked: $checked labelled actions retain their icons/tooltips")
+    }
+
+    private fun assertToolbarSingleRow(toolbar: UiComponent, description: String) {
+        val controls = toolbar.xx {
+            or(byJavaClass("com.segfault03.ideadb.ui.DatabaseUi\$ActionButton"),
+                byType("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"))
+        }.list()
+        val centers = mutableListOf<Int>()
+        toolbar.driver.withContext(OnDispatcher.EDT) {
+            for (control in controls) {
+                val live = cast(control.component, LiveSwingComponent::class)
+                val visible = live.getVisibleRect()
+                if (visible.isEmpty) continue // Native AUTO_LAYOUT deliberately moves overflow controls offscreen.
+                val bounds = control.component.getBounds()
+                check(visible == Rectangle(0, 0, bounds.width, bounds.height)) { "$description partially clips an action" }
+                centers += control.component.getLocationOnScreen().y + bounds.height / 2
+            }
+        }
+        check(centers.size >= 2 && centers.max() - centers.min() <= 3) { "$description wraps actions: $centers" }
+        println("P1 native single-row toolbar checked: $description, ${centers.size} visible controls")
     }
 
     private fun openConnectionMenu(root: UiComponent, frame: IdeaFrameUI, itemText: String) {
@@ -840,6 +966,28 @@ class IntellijUiScreenshotTest {
 interface LiveFrame {
     fun repaint()
 }
+
+@Remote("javax.swing.JComponent")
+interface LiveSwingComponent {
+    fun getVisibleRect(): Rectangle
+    fun getPreferredSize(): LiveDimension
+    fun getClientProperty(key: String): Boolean?
+}
+
+@Remote("java.awt.Dimension")
+interface LiveDimension {
+    fun getHeight(): Double
+}
+
+@Remote("javax.swing.JButton")
+interface LiveToolbarButton {
+    fun getText(): String
+    fun getToolTipText(): String
+    fun getIcon(): LiveIcon?
+}
+
+@Remote("javax.swing.Icon")
+interface LiveIcon
 
 @Remote("com.intellij.ide.ui.LafManager")
 interface LiveLafManager {

@@ -9,6 +9,8 @@ import javax.swing.*;
 import java.awt.*;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.beans.PropertyChangeListener;
+import java.awt.event.ActionEvent;
 
 /** Shared spacing and quiet native action styling for database editor controls. */
 public final class DatabaseUi {
@@ -75,13 +77,55 @@ public final class DatabaseUi {
         if (button instanceof ActionButton actionButton) actionButton.setEmphasisColor(color);
     }
 
+    /** A popup view of an existing action; state and callbacks still belong to that action. */
+    static JButton mirrorAction(JButton source) {
+        Icon icon = source instanceof ActionButton action ? action.defaultIcon : source.getIcon();
+        ActionButton copy = (ActionButton) action(source.getText(), icon, source.getToolTipText());
+        copy.source = source;
+        copy.iconOnly = source.getIcon() != null && !source.getText().isEmpty();
+        copy.copySourceState();
+        copy.addActionListener(event -> {
+            if (!source.isEnabled()) return;
+            ActionEvent forwarded = new ActionEvent(copy, event.getID(), event.getActionCommand(), event.getWhen(), event.getModifiers());
+            for (var listener : source.getActionListeners()) listener.actionPerformed(forwarded);
+        });
+        return copy;
+    }
+
     private static final class ActionButton extends JButton {
         private final Icon defaultIcon;
         private Color emphasisColor;
+        private JButton source;
+        private boolean iconOnly;
+        private final PropertyChangeListener sourceChanges = event -> copySourceState();
 
         private ActionButton(String text, Icon icon) {
             super(text, icon);
             defaultIcon = icon;
+        }
+
+        private void copySourceState() {
+            if (source == null) return;
+            setText(iconOnly ? "" : source.getText());
+            setEnabled(source.isEnabled());
+            setBorder(iconOnly ? JBUI.Borders.empty(4, 6) : source.getBorder());
+            setIconTextGap(source.getIconTextGap());
+            setToolTipText(source.getToolTipText());
+            getAccessibleContext().setAccessibleName(source.getAccessibleContext().getAccessibleName());
+            setEmphasisColor(source instanceof ActionButton action ? action.emphasisColor : null);
+        }
+
+        @Override public void addNotify() {
+            super.addNotify();
+            if (source != null) {
+                source.addPropertyChangeListener(sourceChanges);
+                copySourceState();
+            }
+        }
+
+        @Override public void removeNotify() {
+            if (source != null) source.removePropertyChangeListener(sourceChanges);
+            super.removeNotify();
         }
 
         private void setEmphasisColor(Color color) {
@@ -151,6 +195,16 @@ public final class DatabaseUi {
         JPanel group = new JPanel(layout);
         group.setOpaque(false);
         for (Component control : controls) group.add(control);
+        return group;
+    }
+
+    /** Keeps the label visible while allowing the field to shrink in a narrow editor. */
+    public static JPanel labeledInput(JLabel label, JComponent input) {
+        JPanel group = new JPanel(new BorderLayout(JBUI.scale(4), 0));
+        group.setOpaque(false);
+        label.setLabelFor(input);
+        group.add(label, BorderLayout.WEST);
+        group.add(input, BorderLayout.CENTER);
         return group;
     }
 

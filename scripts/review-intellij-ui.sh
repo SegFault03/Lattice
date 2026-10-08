@@ -25,6 +25,9 @@ fetch_jar org/hsqldb/hsqldb/2.6.1/hsqldb-2.6.1-jdk8.jar
 fetch_jar org/hsqldb/hsqldb/2.4.1/hsqldb-2.4.1.jar
 
 themes=("$@")
+result_root="${LATTICE_UI_REVIEW_OUTPUT:-$repo_root/build/ui-review}"
+mkdir -p "$result_root"
+result_root="$(cd "$result_root" && pwd)"
 if [[ ${#themes[@]} -eq 0 ]]; then
     themes=(ExperimentalDark ExperimentalLight ExperimentalLightWithLightHeader JetBrainsHighContrastTheme Darcula IntelliJ JetBrainsLightTheme)
 fi
@@ -33,17 +36,18 @@ for theme in "${themes[@]}"; do
         ExperimentalDark|ExperimentalLight|ExperimentalLightWithLightHeader|JetBrainsHighContrastTheme|Darcula|IntelliJ|JetBrainsLightTheme) ;;
         *) echo "Unsupported theme: $theme" >&2; exit 2 ;;
     esac
-    result_dir="$repo_root/build/ui-review/$theme"
+    result_dir="$result_root/$theme"
     mkdir -p "$result_dir"
     # Each theme uses the same isolated test project and a fresh IDE system sandbox.
     # Preserve the log outside the directory cleared by the screenshot test.
     ./scripts/capture-intellij-ui.sh -Plattice.ui.review=true -Plattice.ui.theme="$theme" \
-        -Plattice.ui.output="$result_dir" 2>&1 | tee "$repo_root/build/ui-review/$theme.log"
+        -Plattice.ui.output="$result_dir" 2>&1 | tee "$result_root/$theme.log"
     cp build/test-results/uiScreenshotTest/TEST-com.segfault03.ideadb.ui.IntellijUiScreenshotTest.xml "$result_dir/test-result.xml"
 done
-python3 - <<'PY'
+python3 - "$result_root" <<'PY'
 from pathlib import Path
-root = Path('build/ui-review')
+import sys
+root = Path(sys.argv[1])
 lines = ['# Real IntelliJ UI captures', '', 'Every image is a full virtual-desktop capture of the running IDE.', '']
 for directory in sorted(p for p in root.iterdir() if p.is_dir()):
     lines += [f'## {directory.name}', '']
@@ -52,4 +56,4 @@ for directory in sorted(p for p in root.iterdir() if p.is_dir()):
     lines += [f'- [Runtime evidence]({directory.name}/runtime-evidence.txt)', f'- [JUnit result]({directory.name}/test-result.xml)', '']
 (root / 'index.md').write_text('\n'.join(lines) + '\n')
 PY
-echo "Screenshots and live-runtime evidence: $repo_root/build/ui-review"
+echo "Screenshots and live-runtime evidence: $result_root"

@@ -66,6 +66,14 @@ For the complete real-IDE visual review, including theme variants and more dialo
 
 Results stay separate under `build/ui-review/<theme-id>/`, with an `index.md`, per-theme logs, JUnit results and live-runtime evidence. A fresh IDE run is forced without rebuilding unchanged production classes. Xvfb uses 1920×1080 at 24 bits and scale 1; the script starts an available window manager for real modal title bars and borders. See [the IDE review](IDE_UI_REVIEW.md) for coverage, findings and remaining limits.
 
+To preserve an earlier capture set, select another result directory:
+
+```sh
+LATTICE_UI_REVIEW_OUTPUT="$PWD/build/ui-review-p1" ./scripts/review-intellij-ui.sh
+```
+
+The live resize checks cover visible fields/status, native toolbar overflow on mouse hover, icon-only popup actions with their tooltips, and Revert from the expanded toolbar. [P1 fixes](UI_P1_FIXES.md) records the changes and validation.
+
 Open `build/ui-preview/index.html` to review the five featured screens. Pass `--all-previews` to include light/dark variants for the **Welcome**, **Input controls**, **Schema dialogs**, connection states, table editor/viewer and SQL console. Every successful run updates only the five fixed README image files in `screenshots/`; extra generated images stay under `build/`. Commit changed featured PNGs with UI changes. `--output` changes the gallery/build directory while still updating `screenshots/`; use `--all-previews` for `--compare-with` before/after baselines.
 
 See [UI preview instructions](UI_PREVIEW.md) for SDK setup, explicit paths, the featured-image mapping and preview limitations.

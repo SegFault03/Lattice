@@ -699,6 +699,8 @@ public class ConnectionDialog extends DialogWrapper {
         DatabaseType type = (DatabaseType) typeCombo.getSelectedItem();
         DriverSource source = (DriverSource)driverSourceCombo.getSelectedItem();
         if (source == null) return;
+        downloadDriverButton.setEnabled(!driverBusy && !connectionBusy);
+        listVersionsButton.setEnabled(!driverBusy && !connectionBusy);
         String selectedDriver = switch (source) {
             case BUNDLED -> formatDriverLabel(type, selectedBundledLabel(type));
             case DOWNLOAD -> formatDriverLabel(type, selectedDriverVersion());
@@ -721,7 +723,7 @@ public class ConnectionDialog extends DialogWrapper {
             refreshDownloadedDriverVersions(type);
             boolean alreadyDownloaded = downloadedDriverVersions.contains(version);
             boolean alreadyDiscovered = discoveredDriverVersions.contains(version);
-            downloadDriverButton.setEnabled(!driverBusy && !alreadyDownloaded && !alreadyDiscovered);
+            downloadDriverButton.setEnabled(!driverBusy && !connectionBusy && !alreadyDownloaded && !alreadyDiscovered);
             if (alreadyDownloaded) setDriverStatus("Downloaded and ready");
             else if (alreadyDiscovered) setDriverStatus("Discovered in the Maven local repository; select it under Available drivers.");
             else try {
@@ -879,8 +881,7 @@ public class ConnectionDialog extends DialogWrapper {
         testStatusLabel.setVisible(true);
 
         connectionBusy = true;
-        updateTestAvailability();
-        downloadDriverButton.setEnabled(false); listVersionsButton.setEnabled(false);
+        updateDriverStatus();
 
         connectionTask = com.segfault03.ideadb.service.DatabaseTaskService.getInstance().submit(() -> {
                 if(isDisposed()) return;
@@ -889,8 +890,7 @@ public class ConnectionDialog extends DialogWrapper {
                 SwingUtilities.invokeLater(() -> {
                     if (isDisposed()) return;
                     connectionBusy = false;
-                    updateTestAvailability();
-                    downloadDriverButton.setEnabled(true); listVersionsButton.setEnabled(true);
+                    updateDriverStatus();
                     if (!sameRequest(requested, createTempConfig())) {
                         DatabaseUi.status(testStatusLabel, "Settings changed · Test again", DatabaseUi.Tone.WARNING); return;
                     }

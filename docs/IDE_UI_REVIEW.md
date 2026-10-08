@@ -85,6 +85,8 @@ This is broad flow/state coverage, not an exhaustive combination of every databa
 
 Priorities: P1 blocks or misleads an operation; P2 materially affects readability or consistency; P3 is polish. Screenshot links below point to generated artifacts and become available after running the script. They are observations and proposed follow-up work, not production fixes made by this review.
 
+The subsequent [P1 implementation and real-IDE validation](UI_P1_FIXES.md) addresses the three P1 findings below. This review preserves the original evidence; P2 and P3 remain separate approval phases.
+
 | Priority | Finding | Evidence / suggested improvement |
 |---|---|---|
 | P1 | Narrow table editor clips whole toolbar/filter regions and footer text. | [Table narrow](../build/ui-review/ExperimentalDark/table-narrow.png): at a 1000-pixel IDE width with both side windows open, Export is partly behind the grid header, WHERE/ORDER BY disappear, and the Rows selector/status are clipped. Make heading height follow the wrapped layout, use overflow for action groups, and make the footer wrap or compact. [Wide comparison](../build/ui-review/ExperimentalDark/table-wide.png). |

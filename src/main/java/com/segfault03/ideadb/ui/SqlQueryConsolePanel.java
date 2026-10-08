@@ -53,7 +53,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     private final List<String> queryHistory = new ArrayList<>();
 
     public SqlQueryConsolePanel(Project project, ConnectionConfig config, String initialDatabase, List<String> allDatabases) {
-        super(new BorderLayout(0, 0));
+        super(new WidthAwareBorderLayout());
         this.project = project;
         this.config = config;
         this.session = DatabaseConnectionManager.getInstance().createSession(config);
@@ -63,10 +63,8 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     }
 
     private void initUI(List<String> allDatabases) {
-        JPanel heading = new JPanel(new BorderLayout());
+        JPanel heading = new JPanel(new WidthAwareBorderLayout());
         heading.setBorder(JBUI.Borders.customLineBottom(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR));
-        JPanel toolbar = new JPanel(new WrapLayout(FlowLayout.LEFT, JBUI.scale(4), JBUI.scale(4)));
-        toolbar.setBorder(JBUI.Borders.empty(4, 8));
         databaseCombo = DatabaseInputs.comboBox();
         databaseCombo.setPrototypeDisplayValue("database_name_123");
         databaseCombo.setToolTipText("Database for the next query");
@@ -98,9 +96,8 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         resultLimit.setToolTipText("Maximum rows returned by the next query");
         JButton clearBtn = DatabaseUi.action("Clear", Icons.CLEAR, "Clear query text");
         clearBtn.addActionListener(e -> editorArea.setText(""));
-        toolbar.add(labeledPicker("Database", databaseCombo));
-        toolbar.add(DatabaseUi.group(DatabaseUi.separator(), runBtn, cancelBtn));
-        toolbar.add(DatabaseUi.group(DatabaseUi.separator(), clearBtn));
+        JComponent toolbar = DatabaseActionToolbar.create(this, "SQL actions", runBtn, cancelBtn, null,
+                clearBtn, null, DatabaseActionToolbar.picker("Database", databaseCombo));
         heading.add(toolbar, BorderLayout.NORTH);
 
         JPanel recall = new JPanel(new WrapLayout(FlowLayout.LEFT, JBUI.scale(4), JBUI.scale(4)));
@@ -159,13 +156,13 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
             }
         });
 
-        JPanel queryPanel = new JPanel(new BorderLayout());
+        JPanel queryPanel = new JPanel(new WidthAwareBorderLayout());
         JPanel queryCaption = new JPanel(new WrapLayout(FlowLayout.LEFT, JBUI.scale(8), JBUI.scale(4)));
         queryCaption.setBorder(JBUI.Borders.empty(2, 8));
         JBLabel queryTitle = new JBLabel("SQL query");
         queryTitle.setFont(queryTitle.getFont().deriveFont(Font.BOLD));
         queryCaption.add(queryTitle);
-        JBLabel shortcutHint = new JBLabel(runShortcut + " · Run selection or query");
+        JBLabel shortcutHint = new WrappingLabel(runShortcut + " · Run selection or query");
         shortcutHint.setForeground(JBColor.namedColor("Label.infoForeground", JBColor.GRAY));
         queryCaption.add(shortcutHint);
         queryPanel.add(queryCaption, BorderLayout.NORTH);
@@ -200,14 +197,15 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         add(splitter, BorderLayout.CENTER);
 
         // South: Status Bar
-        JPanel statusBar = new JPanel(new BorderLayout(JBUI.scale(12), 0));
+        JPanel statusBar = new JPanel(new WidthAwareBorderLayout(0, JBUI.scale(4)));
         statusBar.setBorder(BorderFactory.createCompoundBorder(
                 JBUI.Borders.customLineTop(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR), JBUI.Borders.empty(4, 12)));
-        statusLabel = new JBLabel("Ready") {
-            @Override public void setText(String text) { super.setText(text); setToolTipText(text); }
-        };
-        statusBar.add(statusLabel, BorderLayout.CENTER);
-        statusBar.add(DatabaseUi.group(new JBLabel("Max rows"), resultLimit), BorderLayout.EAST);
+        statusLabel = new WrappingLabel("Ready");
+        statusBar.add(statusLabel, BorderLayout.NORTH);
+        JPanel limitRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 0, 0));
+        limitRow.setOpaque(false);
+        limitRow.add(DatabaseUi.labeledInput(new JBLabel("Max rows"), resultLimit));
+        statusBar.add(limitRow, BorderLayout.CENTER);
         add(statusBar, BorderLayout.SOUTH);
     }
 
@@ -218,7 +216,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
             width = Math.max(width, new JBLabel(title).getPreferredSize().width);
         label.setPreferredSize(new Dimension(width, label.getPreferredSize().height));
         label.setLabelFor(picker);
-        return DatabaseUi.group(label, picker);
+        return DatabaseUi.labeledInput(label, picker);
     }
 
     public void setSqlText(String sql) {

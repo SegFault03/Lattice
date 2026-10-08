@@ -6,6 +6,30 @@ import java.awt.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DatabaseUiTest {
+    @Test void overflowActionMirrorsStateAndInvokesTheVisibleButtonWithoutRetainingClosedViews() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            JButton source = DatabaseUi.action("Commit", com.intellij.icons.AllIcons.Actions.Checked, "Commit changes");
+            source.setEnabled(false);
+            java.util.List<Object> invokers = new java.util.ArrayList<>();
+            source.addActionListener(event -> invokers.add(event.getSource()));
+            int listeners = source.getPropertyChangeListeners().length;
+            JButton popup = DatabaseUi.mirrorAction(source);
+            popup.addNotify();
+            assertFalse(popup.isEnabled());
+            source.setEnabled(true);
+            DatabaseUi.setActionEmphasis(source, DatabaseUi.POSITIVE_ACTION_COLOR);
+            assertTrue(popup.isEnabled());
+            assertEquals("", popup.getText(), "The overflow view must stay icon-only after state updates");
+            assertEquals("Commit", source.getText());
+            assertEquals("Commit changes", popup.getToolTipText());
+            assertEquals(DatabaseUi.POSITIVE_ACTION_COLOR, popup.getClientProperty("lattice.action.emphasis"));
+            popup.doClick(0);
+            assertEquals(java.util.List.of(popup), invokers, "Menus must receive their actual popup invoker");
+            popup.removeNotify();
+            assertEquals(listeners, source.getPropertyChangeListeners().length, "Closing overflow must detach its state listener");
+        });
+    }
+
     @Test void nativeToolbarActionsStayCompactAndLabelBaselinesAlignWithFields() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             Icon icon = new Icon() {

@@ -28,6 +28,25 @@ public final class DatabaseInputs {
     public static JPasswordField passwordField() { return new InputPasswordField(); }
     public static <E> JComboBox<E> comboBox() { return new InputComboBox<>(); }
     public static <E> JComboBox<E> comboBox(E[] items) { return new InputComboBox<>(items); }
+    /** Share the real selection model with a native overflow popup, detaching when it closes. */
+    static <E> JComboBox<E> mirrorComboBox(JComboBox<E> source) {
+        JComboBox<E> copy = new InputComboBox<>() {
+            @Override public void addNotify() {
+                setModel(source.getModel());
+                super.addNotify();
+            }
+            @Override public void removeNotify() {
+                super.removeNotify();
+                setModel(new DefaultComboBoxModel<>());
+            }
+        };
+        copy.setModel(source.getModel());
+        copy.setPrototypeDisplayValue(source.getPrototypeDisplayValue());
+        copy.setEnabled(source.isEnabled());
+        copy.setToolTipText(source.getToolTipText());
+        copy.getAccessibleContext().setAccessibleName(source.getAccessibleContext().getAccessibleName());
+        return copy;
+    }
     public static TextFieldWithBrowseButton browseField() { return new InputBrowseField(); }
 
     public static void styleTableEditors(JTable table) {
@@ -172,7 +191,7 @@ public final class DatabaseInputs {
         @Override public void paint(Graphics graphics) { paintRounded(this, graphics, super::paint); }
     }
 
-    private static final class InputComboBox<E> extends JComboBox<E> implements SizedInput {
+    private static class InputComboBox<E> extends JComboBox<E> implements SizedInput {
         private boolean initialized;
         InputComboBox() { initialize(); }
         InputComboBox(E[] items) { super(items); initialize(); }

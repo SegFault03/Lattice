@@ -80,7 +80,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     private boolean wasModified;
 
     public TableDataEditorPanel(Project project, ConnectionConfig config, String databaseName, TableMetadata tableMetadata) {
-        super(new BorderLayout(0, 0));
+        super(new WidthAwareBorderLayout());
         this.project = project;
         this.config = config;
         this.databaseName = databaseName;
@@ -115,9 +115,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     }
 
     private void initUI() {
-        JPanel heading = new JPanel(new BorderLayout());
-        JPanel toolbar = new JPanel(new WrapLayout(FlowLayout.LEFT, JBUI.scale(2), JBUI.scale(4)));
-        toolbar.setBorder(JBUI.Borders.empty(2, 8));
+        JPanel heading = new JPanel(new WidthAwareBorderLayout());
 
         JButton refreshBtn = DatabaseUi.action("", AllIcons.Actions.Refresh, "Refresh table data");
         refreshBtn.addActionListener(e -> loadData());
@@ -137,8 +135,13 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         filters.setBorder(BorderFactory.createCompoundBorder(
                 JBUI.Borders.customLineBottom(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR),
                 JBUI.Borders.empty(2, 8, 6, 8)));
-        filters.add(DatabaseUi.group(new JBLabel("WHERE"), whereField));
-        filters.add(DatabaseUi.group(new JBLabel("ORDER BY"), orderField));
+        JBLabel whereLabel = new JBLabel("WHERE");
+        JBLabel orderLabel = new JBLabel("ORDER BY");
+        int filterLabelWidth = Math.max(whereLabel.getPreferredSize().width, orderLabel.getPreferredSize().width);
+        whereLabel.setPreferredSize(new Dimension(filterLabelWidth, whereLabel.getPreferredSize().height));
+        orderLabel.setPreferredSize(new Dimension(filterLabelWidth, orderLabel.getPreferredSize().height));
+        filters.add(DatabaseUi.labeledInput(whereLabel, whereField));
+        filters.add(DatabaseUi.labeledInput(orderLabel, orderField));
         filters.add(filterBtn);
 
         pageSizeCombo = DatabaseInputs.comboBox(new String[]{"50", "100", "250", "500", "1000"});
@@ -208,7 +211,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         exportBtn.setBorder(JBUI.Borders.empty(4, 3));
         exportBtn.setIconTextGap(JBUI.scale(3));
         exportBtn.setToolTipText("Choose current page, selected rows, or all persisted rows for export");
-        exportBtn.addActionListener(e -> showExportMenu(exportBtn));
+        exportBtn.addActionListener(e -> showExportMenu((Component) e.getSource()));
 
         JMenuItem truncateBtn = new JMenuItem("Truncate table…", AllIcons.General.Remove);
         truncateBtn.setToolTipText("Truncate table (permanently delete all rows)");
@@ -225,11 +228,13 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         options.add(countItem);
         options.addSeparator();
         options.add(truncateBtn);
-        optionsBtn.addActionListener(e -> options.show(optionsBtn, 0, optionsBtn.getHeight()));
-        toolbar.add(DatabaseUi.group(2, refreshBtn, autoRefreshCombo));
-        toolbar.add(DatabaseUi.group(2, DatabaseUi.separator(), addRowBtn, delRowBtn));
-        toolbar.add(DatabaseUi.group(4, DatabaseUi.separator(), saveBtn, revertBtn));
-        toolbar.add(DatabaseUi.group(2, DatabaseUi.separator(), exportBtn, consoleBtn, optionsBtn));
+        optionsBtn.addActionListener(e -> {
+            Component invoker = (Component) e.getSource();
+            options.show(invoker, 0, invoker.getHeight());
+        });
+        JComponent toolbar = DatabaseActionToolbar.create(this, "Table actions",
+                refreshBtn, null, addRowBtn, delRowBtn, null, saveBtn, revertBtn, null,
+                exportBtn, consoleBtn, optionsBtn, null, autoRefreshCombo);
         heading.add(toolbar, BorderLayout.NORTH);
         heading.add(filters, BorderLayout.CENTER);
         add(heading, BorderLayout.NORTH);
@@ -274,15 +279,16 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         JBScrollPane scroll = dataTable.createScrollPane();
         add(scroll, BorderLayout.CENTER);
 
-        JPanel footer = new JPanel(new BorderLayout(JBUI.scale(12), 0));
+        JPanel footer = new JPanel(new WidthAwareBorderLayout(0, JBUI.scale(4)));
         footer.setBorder(BorderFactory.createCompoundBorder(
                 JBUI.Borders.customLineTop(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR), JBUI.Borders.empty(4, 12)));
-        statusLabel = new JBLabel("Ready") {
-            @Override public void setText(String text) { super.setText(text); setToolTipText(text); }
-        };
-        JPanel navigation = DatabaseUi.group(new JBLabel("Rows"), pageSizeCombo, prevPageBtn, pageLabel, nextPageBtn);
-        footer.add(statusLabel, BorderLayout.CENTER);
-        footer.add(navigation, BorderLayout.EAST);
+        statusLabel = new WrappingLabel("Ready");
+        JPanel navigation = new JPanel(new WrapLayout(FlowLayout.LEFT, JBUI.scale(4), 0));
+        navigation.setOpaque(false);
+        navigation.add(DatabaseUi.group(new JBLabel("Rows"), pageSizeCombo));
+        navigation.add(DatabaseUi.group(prevPageBtn, pageLabel, nextPageBtn));
+        footer.add(statusLabel, BorderLayout.NORTH);
+        footer.add(navigation, BorderLayout.CENTER);
         add(footer, BorderLayout.SOUTH);
     }
 

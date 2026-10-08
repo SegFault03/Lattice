@@ -7,6 +7,30 @@ import java.awt.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DatabaseInputsTest {
+    @Test void overflowPickerUsesTheRealSelectionAndDetachesItsModelWhenClosed() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            JComboBox<String> source = DatabaseInputs.comboBox(new String[]{"Auto: Off", "10s"});
+            DefaultComboBoxModel<String> model = (DefaultComboBoxModel<String>) source.getModel();
+            java.util.concurrent.atomic.AtomicInteger changes = new java.util.concurrent.atomic.AtomicInteger();
+            source.addActionListener(event -> changes.incrementAndGet());
+            JComboBox<String> popup = DatabaseInputs.mirrorComboBox(source);
+            popup.setSelectedItem("10s");
+            assertEquals("10s", source.getSelectedItem());
+            assertEquals(1, changes.get(), "The production selection listener must run once");
+            popup.removeNotify();
+            assertFalse(java.util.Arrays.asList(model.getListDataListeners()).contains(popup));
+            // The first selection initializes the source popup's accessible list.
+            // Reopening/closing overflow must not accumulate further model listeners.
+            int listeners = model.getListDataListeners().length;
+            for (int i = 0; i < 3; i++) {
+                JComboBox<String> reopened = DatabaseInputs.mirrorComboBox(source);
+                reopened.setSelectedItem(i % 2 == 0 ? "Auto: Off" : "10s");
+                reopened.removeNotify();
+                assertEquals(listeners, model.getListDataListeners().length);
+            }
+        });
+    }
+
     @Test void openingAndLeavingAnAutomaticCellPreservesDatabaseGeneration() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             Object automatic = com.segfault03.ideadb.model.RowDefaults.Value.USE_DEFAULT;
