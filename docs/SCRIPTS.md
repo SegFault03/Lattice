@@ -1,16 +1,18 @@
 # Script reference
 
-All public helper scripts use Python's standard library and run on Windows, Linux and macOS. Install Python 3.11+; use `python3` where appropriate. Java tasks require JDK 21. Commands below are run from the repository root; helper output paths are resolved from their own repository location, so they also work when invoked by absolute path from another directory.
+Python helper scripts use Python's standard library and run on Windows, Linux and macOS. Install Python 3.11+; use `python3` where appropriate. The real IDE UI capture helper is Bash-only and requires a Linux display. Java tasks require JDK 21. Commands below are run from the repository root; helper output paths are resolved from their own repository location, so they also work when invoked by absolute path from another directory.
 
 | Script | Purpose | Additional requirements |
 |---|---|---|
 | `test.py` | Gradle tests and optional packaging; owns optional database fixtures | JDK 21; Docker only for `--mysql` |
+| `one-shot-test.py` | Linux validation runner with full, routine-check and compatibility-only modes | Linux, Python 3.11+, Docker, network access, at least 10 GiB free; JDK 21 is found or downloaded |
 | `ui-preview.py` | Refresh the five featured README screenshots; optionally build the full light/dark preview gallery with `--all-previews` | JDK 21; cached IntelliJ 2025.1 SDK or `--ide-home`; network on first use for preview-only FlatLaf |
 | `dev-deploy.py` | Test, build, discover a local IDEA, deploy Lattice and restart a running IDE | Installed IntelliJ IDEA 2025.1+; JDK 21; Git for tooling tests |
 | `release.py` | Validate a stable version/tag and generate patch notes/commit history | Git |
 | `check-release-archive.py` | Check ZIP layout, descriptor, bytecode, licenses; generate checksums | Built plugin ZIP |
 | `prepare-source-asset.py` | Download/check the pinned corresponding MySQL source archive | Network on first use |
 | `verify-plugin.py` | Check exact ZIP against an IntelliJ SDK | JDK 21; network on first use or `--ide-home` |
+| `capture-intellij-ui.sh` | Launch IDEA with the built plugin under Xvfb and capture the actual tool window | Linux; JDK 21; Xvfb or a graphical display; network on first IDE build |
 | `common.py` | Shared cache paths, Java and Gradle discovery | Imported helper |
 | `tests/` | Regression tests for development/release tooling | Git for history tests |
 
@@ -18,13 +20,24 @@ All public helper scripts use Python's standard library and run on Windows, Linu
 python scripts/test.py --build
 python scripts/dev-deploy.py
 python scripts/test.py --live --mysql --hsqldb --build
+python scripts/one-shot-test.py
 python scripts/release.py --version 1.0.1
 python scripts/prepare-source-asset.py
 python scripts/check-release-archive.py build/distributions/Lattice-1.0.1.zip --version 1.0.1
 python scripts/verify-plugin.py build/distributions/Lattice-1.0.1.zip --ide-version 2025.1
 ```
 
-`test.py` accepts `--ide-home`, `--version` and `--notes-file`. Gradle downloads its SDK unless an override is provided. Fixture options require `--live`; omit them to use your own isolated test servers. Tests must never run against production data.
+`test.py` accepts `--ide-home`, `--version` and `--notes-file`. `--integration-only` runs only the live integration and fallback-driver suites; it requires `--live`. Gradle downloads its SDK unless an override is provided. Fixture options require `--live`; omit them to use your own isolated test servers. Tests must never run against production data.
+
+## Linux one-shot validation
+
+Run `python scripts/one-shot-test.py` to execute the complete documented validation matrix. The script first checks Linux, Docker and required ports, then creates a temporary workspace containing isolated Gradle, development and JDBC caches. It uses a JDK 21 from `--java-home`, `JAVA_HOME` or `PATH`, and downloads a temporary JDK 21 only when none is available. Java 8 is downloaded only for compatibility modes. Python/Gradle/preview/verifier downloads are directed into the temporary workspace.
+
+The default nine visible steps run Python tooling tests; Gradle unit/UI tests and plugin packaging; the five headless UI previews; MySQL 8.4/HSQLDB functional fixtures plus fallback-driver checks; the IntelliJ 2025.1–2025.3 verifier matrix; four MySQL server versions with three Connector/J versions each; and ten HSQLDB driver/server versions. Database servers and each IDE SDK are processed serially. A fetched Docker image is removed after its server case, and each compatibility driver JAR is removed after its checks. An image already present before the run is left untouched. IntelliJ is never launched.
+
+Use `--skip-compatibility` for the six-step isolated build, UI preview and live functional checks without downloading compatibility SDKs and JDBC drivers. Actions runs routine checks through `scripts/test.py` so the enhanced Gradle cache remains effective. Its pull-request compatibility job uses `--compatibility-only` to run IDE and JDBC matrices without repeating unit, UI or live functional tests; it builds the archive needed by Plugin Verifier. The release workflow already verifies its exact archive, so it uses `--database-compatibility-only` to run only the MySQL and HSQLDB/Java 8 matrix.
+
+Every failed command stops the run and returns a nonzero exit status. The temporary workspace is still removed; command logs and a failure summary are copied to `build/one-shot-test/failure-<UTC timestamp>/`. On success all runner-created caches and downloaded tools are removed. The script requires network access, Docker and at least 10 GiB free workspace space. Port 3306 is needed for either functional or MySQL matrix checks; port 9001 for base HSQLDB functional checks; and ports 19020–19029 for Plugin Verifier. The temporary workspace is created under ignored `build/`, which avoids small `/tmp` mounts.
 
 ## UI previews and README screenshots
 
@@ -33,6 +46,14 @@ With JDK 21 and the cached IntelliJ 2025.1 SDK, run:
 ```text
 python scripts/ui-preview.py
 ```
+
+To capture the real plugin Swing UI from a running IntelliJ instance under Xvfb, run:
+
+```text
+./scripts/capture-intellij-ui.sh
+```
+
+This runs the Gradle `uiScreenshotTest` task and writes the complete IDE window, the live Lattice tool-window component, and runtime evidence under `build/ui-test-results/`. It uses JetBrains Starter and Driver UI automation; the plugin is built and installed into the test IDE before the test opens it.
 
 Open `build/ui-preview/index.html` to review the five featured screens. Pass `--all-previews` to include light/dark variants for the **Welcome**, **Input controls**, **Schema dialogs**, connection states, table editor/viewer and SQL console. Every successful run updates only the five fixed README image files in `screenshots/`; extra generated images stay under `build/`. Commit changed featured PNGs with UI changes. `--output` changes the gallery/build directory while still updating `screenshots/`; use `--all-previews` for `--compare-with` before/after baselines.
 

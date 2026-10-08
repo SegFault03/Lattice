@@ -11,8 +11,8 @@ def check(archive, version):
     with zipfile.ZipFile(archive) as distribution:
         files = distribution.namelist()
         allowed = {"Lattice/", "Lattice/lib/", "Lattice/lib/Lattice.jar", f"Lattice/lib/Lattice-{version}.jar",
-                   f"Lattice/lib/Lattice-{version}-searchableOptions.jar", "Lattice/lib/mysql-connector-j-9.0.0.jar",
-                   "Lattice/lib/hsqldb-2.7.3.jar", "Lattice/lib/protobuf-java-4.28.2.jar"}
+                   f"Lattice/lib/Lattice-{version}-searchableOptions.jar", "Lattice/lib/mysql-connector-j-26.7.0.jar",
+                   "Lattice/lib/hsqldb-2.7.4.jar", "Lattice/lib/protobuf-java-4.36.2.jar"}
         for name in files:
             if "\\" in name or PurePosixPath(name).is_absolute() or ".." in PurePosixPath(name).parts:
                 raise ValueError("Archive contains a non-portable or unsafe path")
@@ -20,8 +20,8 @@ def check(archive, version):
                 raise ValueError("Unexpected distribution root")
             if name not in allowed:
                 raise ValueError(f"Unexpected release file: {name}")
-        required = {"Lattice/lib/mysql-connector-j-9.0.0.jar", "Lattice/lib/hsqldb-2.7.3.jar",
-                    "Lattice/lib/protobuf-java-4.28.2.jar"}
+        required = {"Lattice/lib/mysql-connector-j-26.7.0.jar", "Lattice/lib/hsqldb-2.7.4.jar",
+                    "Lattice/lib/protobuf-java-4.36.2.jar"}
         if not required.issubset(files):
             raise ValueError("Missing production JDBC drivers")
         plugins = [name for name in files if name.endswith(".jar") and PurePosixPath(name).name.startswith("Lattice") and "searchableOptions" not in name]
@@ -31,7 +31,7 @@ def check(archive, version):
             descriptor = ET.fromstring(plugin.read("META-INF/plugin.xml"))
             if descriptor.findtext("version") != version or descriptor.find("idea-version").get("since-build") != "251":
                 raise ValueError("Plugin version or IntelliJ baseline mismatch")
-            for notice in ("LICENSE", "THIRD_PARTY_NOTICES.md", "licenses/mysql-connector-j-9.0.0-LICENSE.txt", "licenses/hsqldb-LICENSE.txt", "licenses/protobuf-LICENSE.txt"):
+            for notice in ("LICENSE", "THIRD_PARTY_NOTICES.md", "licenses/mysql-connector-j-26.7.0-LICENSE.txt", "licenses/hsqldb-LICENSE.txt", "licenses/protobuf-LICENSE.txt"):
                 if not plugin.read(notice):
                     raise ValueError("Empty bundled license notice")
             for name in plugin.namelist():

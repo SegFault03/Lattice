@@ -119,7 +119,7 @@ public class RegressionSuitesTest {
             manager.registerConfiguration(unchanged);
             assertSame(previous, manager.getConnection(config), "Unused driver fields must not retire sessions");
             var updated = config.copy(); updated.setDriverSource(DriverSource.LOCAL_JAR);
-            updated.setDriverJarPath(new java.io.File("lib/hsqldb-2.7.3.jar").getAbsolutePath());
+            updated.setDriverJarPath(new java.io.File("lib/hsqldb-2.7.4.jar").getAbsolutePath());
             manager.registerConfiguration(updated);
             assertTrue(previous.isClosed());
             assertThrows(java.sql.SQLException.class, () -> manager.getConnection(config));

@@ -17,18 +17,18 @@ Reviewed the tracked Java services/models, Swing/editor lifecycle paths, databas
 ## Validation
 
 - Windows/JDK 21: Gradle pure tests, integration tests, fallback-driver lifecycle and version-override ZIP packaging passed through the public Python runner.
-- 10 pure and 3 integration JUnit methods passed; the live suite retained all 300 functional assertions. Wrong-protocol behavior, explicit HSQLDB metadata detection, locale-independent DDL and credential-free URL rejection are covered.
-- 14 Python tooling tests passed, including platform cache selection, wrapper launch with spaces, fixture failure cleanup, occupied-port rejection, SDK traversal rejection, completed-cache reuse and verifier report/scratch isolation.
+- Linux/JDK 21: Gradle 9.8.0 with IntelliJ Platform Gradle Plugin 2.19.0 passed clean-cache unit tests, ZIP packaging, the five UI previews, and live MySQL 8.4/HSQLDB 2.7.4 functional tests.
+- 11 JUnit methods and 300 live functional assertions passed. The 55 Python tooling tests passed with one Windows-only skip; coverage includes the new proxy-truststore setup path.
+- All 23 JDBC/server combinations and Java 8 driver probes passed, including Connector/J 26.7.0 against MySQL 8.4.2 and HSQLDB 2.7.4.
 - Workflow actionlint passed for both release and Windows/Linux/macOS CI definitions.
-- Final ZIP validation checked portable paths, version/baseline, Java 21 bytecode, production dependencies and license notices. Plugin Verifier returned Compatible on IntelliJ 2025.1, 2025.2 and 2025.3.
+- Final ZIP validation checked portable paths, version/baseline, Java 21 bytecode, production dependencies and license notices. Plugin Verifier 1.410 returned Compatible on IntelliJ 2025.1, 2025.2 and 2025.3.
 - Checked public Markdown links, descriptor-declared implementation/resource paths, unchanged branding image content and absence of native test executables/libraries or private setup paths in the publication tree.
-- Earlier legacy validation passed 22 database/driver combinations and 22 Java 8 probes; that matrix was not repeated for these publication changes.
 
 ## Remaining release gates and limits
 
-Hosted Windows/Linux/macOS CI and the tag release pipeline need their first GitHub runs. This host does not provide a Docker engine; owned MySQL orchestration was reviewed, while the live run used an isolated MySQL fixture and the runner's owned HSQLDB process. No Linux/macOS execution is claimed from Windows.
+Hosted Windows/Linux/macOS CI and the tag release pipeline still need their GitHub runs. Local Linux validation used the disposable Docker fixtures and cleaned the images it downloaded. Interactive IntelliJ UI/keymap/scale/theme behavior, project close and dynamic unload remain deferred.
 
-Interactive IntelliJ UI/keymap/scale/theme behavior, project close and dynamic unload remain deferred. Plugin Verifier cannot establish these behaviors. The pinned IntelliJ Gradle plugin emits an outdated-version warning and Gradle deprecation warnings; a dependency upgrade requires a separate compatibility pass.
+Plugin Verifier cannot establish those interactive behaviors. It still reports two deprecated IntelliJ API usages and one internal hover-painting API use; these are existing product-code API notices, separate from the upgraded build dependencies.
 
 Generated MySQL URLs disable TLS; remote/TLS-required connections should use explicit custom URL security settings. HSQLDB multi-statement DDL is not atomic, tables without primary keys require an explicit unique order for stable paging, and connection loss during commit can leave an uncertain server outcome. Known limits are also recorded in README.
 

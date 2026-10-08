@@ -32,7 +32,7 @@ The tag workflow:
 5. Verifies that exact ZIP against IDEA 2025.1, 2025.2 and 2025.3 in separate jobs with checksum-verified official SDK downloads. Every verdict must be Compatible.
 6. Publishes a GitHub Release only when all build/test/verification jobs succeed.
 
-Release assets are the plugin ZIP, the unmodified MySQL Connector/J 9.0.0 corresponding-source archive and `SHA256SUMS`. The description combines the matching changelog section (or populated Unreleased notes) with all commits since the preceding reachable lower-version release tag. The first release includes the reachable commit history.
+Release assets are the plugin ZIP, the unmodified MySQL Connector/J 26.7.0 corresponding-source archive and `SHA256SUMS`. The description combines the matching changelog section (or populated Unreleased notes) with all commits since the preceding reachable lower-version release tag. The first release includes the reachable commit history.
 
 Build/test/verification failures publish no release. The publish job uploads assets to a draft, then makes it public after successful upload. A failed publish can leave a draft; remove that failed draft before retrying. Diagnostics and candidate artifacts are retained for seven days. A retry fails if a release already exists; it does not overwrite published assets. Use a new version for changed published artifacts. The workflow does not publish to JetBrains Marketplace, sign the plugin, or run interactive UI tests.
 
@@ -44,7 +44,7 @@ Python 3.11+ is required (3.12 recommended for SDK archive extraction).
 python scripts/release.py --version 1.0.0
 python scripts/test.py --live --mysql --hsqldb --build --version 1.0.0 --notes-file build/release/patch-notes.html
 python scripts/prepare-source-asset.py
-python scripts/check-release-archive.py build/distributions/Lattice-1.0.0.zip --version 1.0.0 --source build/release/mysql-connector-j-9.0.0-source.tar.gz --checksums build/release/SHA256SUMS
+python scripts/check-release-archive.py build/distributions/Lattice-1.0.0.zip --version 1.0.0 --source build/release/mysql-connector-j-26.7.0-source.tar.gz --checksums build/release/SHA256SUMS
 python scripts/verify-plugin.py build/distributions/Lattice-1.0.0.zip --ide-version 2025.1
 ```
 

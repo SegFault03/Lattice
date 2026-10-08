@@ -6,9 +6,9 @@ from pathlib import Path
 import urllib.request
 from common import ROOT, cache_directory
 
-NAME = "mysql-connector-j-9.0.0-source.tar.gz"
-URL = "https://codeload.github.com/mysql/mysql-connector-j/tar.gz/refs/tags/9.0.0"
-SHA256 = "f7b980c67063200f20a8611d57f33b51623b99ad0b852d110c7280c3a4c7b955"
+NAME = "mysql-connector-j-26.7.0-source.tar.gz"
+URL = "https://codeload.github.com/mysql/mysql-connector-j/tar.gz/refs/tags/26.7.0"
+SHA256 = "8c739fa84f8031bc14b3e6f5e2de27da2b8f6ec24480075e7393490758e5d1e5"
 
 
 def main():

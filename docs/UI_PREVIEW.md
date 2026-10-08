@@ -42,7 +42,7 @@ Explicit paths are also supported; quote paths containing spaces:
 python scripts/ui-preview.py --java-home "/path/to/jdk-21" --ide-home "/path/to/idea-2025.1"
 ```
 
-On macOS, `--ide-home` points to the SDK's `Contents` directory and `--java-home` to the JDK's `Contents/Home` directory. The first run in a new output directory downloads the pinned, checksum-verified FlatLaf 3.5.4 JAR from Maven Central. The dependency is reused on subsequent runs and is only used by the preview helper.
+On macOS, `--ide-home` points to the SDK's `Contents` directory and `--java-home` to the JDK's `Contents/Home` directory. The first run in a new output directory downloads the pinned, checksum-verified FlatLaf 3.7.2 JAR from Maven Central. The dependency is reused on subsequent runs and is only used by the preview helper.
 
 ## View and share
 

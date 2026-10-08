@@ -59,16 +59,16 @@ class DeploymentTests(unittest.TestCase):
         contents = io.BytesIO()
         with zipfile.ZipFile(contents, "w") as jar:
             jar.writestr("META-INF/plugin.xml", f"<idea-plugin><id>{deploy.PLUGIN_ID}</id><version>{version}</version><idea-version since-build='251'/></idea-plugin>")
-            for name in ("LICENSE", "THIRD_PARTY_NOTICES.md", "licenses/mysql-connector-j-9.0.0-LICENSE.txt",
+            for name in ("LICENSE", "THIRD_PARTY_NOTICES.md", "licenses/mysql-connector-j-26.7.0-LICENSE.txt",
                          "licenses/hsqldb-LICENSE.txt", "licenses/protobuf-LICENSE.txt"):
                 jar.writestr(name, "notice")
             jar.writestr("sample.class", b"\xca\xfe\xba\xbe\x00\x00\x00\x41")
         path = self.root / "new plugin.zip"
         with zipfile.ZipFile(path, "w") as archive:
             archive.writestr("Lattice/lib/Lattice.jar", contents.getvalue())
-            archive.writestr("Lattice/lib/mysql-connector-j-9.0.0.jar", "driver")
-            archive.writestr("Lattice/lib/hsqldb-2.7.3.jar", "driver")
-            archive.writestr("Lattice/lib/protobuf-java-4.28.2.jar", "runtime")
+            archive.writestr("Lattice/lib/mysql-connector-j-26.7.0.jar", "driver")
+            archive.writestr("Lattice/lib/hsqldb-2.7.4.jar", "driver")
+            archive.writestr("Lattice/lib/protobuf-java-4.36.2.jar", "runtime")
             if extra:
                 archive.writestr(extra, "bad")
             if symlink:

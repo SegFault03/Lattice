@@ -1,4 +1,4 @@
-name: Cross-platform checks
+name: Build and compatibility checks
 
 on:
   push:
@@ -10,13 +10,16 @@ permissions:
   contents: read
 
 jobs:
-  check:
+  commit-checks:
+    # Internal PR commits are already checked by their push event. For fork PRs,
+    # run the baseline here because their push event belongs to the fork repository.
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, windows-2025, macos-15]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -30,12 +33,51 @@ jobs:
           cache-provider: enhanced
       - name: Test development tools
         run: python -m unittest discover -s scripts/tests -v
-      - name: Compile, test and package
+      - name: Build, run UI and functional tests
+        if: matrix.os == 'ubuntu-24.04'
+        run: python3 scripts/test.py --live --mysql --hsqldb --build
+      - name: Build and run UI tests
+        if: matrix.os != 'ubuntu-24.04'
         run: python scripts/test.py --build
+      - name: Render the five UI previews
+        if: matrix.os == 'ubuntu-24.04'
+        run: python3 scripts/ui-preview.py --output build/ui-preview
       - name: Retain test reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: tests-${{ matrix.os }}
-          path: build/reports/tests/
+          path: |
+            build/reports/tests/
+            build/test-results/
+            build/fixtures/
+            build/ui-preview/
+          retention-days: 7
+
+  compatibility:
+    needs: commit-checks
+    # For internal PRs, commit-checks ran on the push event for this same SHA.
+    # Fork PRs run the baseline job above before reaching this compatibility gate.
+    if: ${{ always() && github.event_name == 'pull_request' && (needs.commit-checks.result == 'success' || needs.commit-checks.result == 'skipped') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Run IntelliJ and JDBC compatibility matrices
+        run: python3 scripts/one-shot-test.py --compatibility-only
+      - name: Retain compatibility reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: compatibility-pr
+          if-no-files-found: ignore
+          path: |
+            build/compatibility/
+            build/one-shot-test/
           retention-days: 7

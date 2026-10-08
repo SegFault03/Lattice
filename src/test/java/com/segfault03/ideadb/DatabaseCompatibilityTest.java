@@ -2,6 +2,7 @@ package com.segfault03.ideadb;
 
 import com.segfault03.ideadb.model.*;
 import com.segfault03.ideadb.service.*;
+import java.io.File;
 import java.nio.file.*;
 import java.sql.*;
 import java.util.*;
@@ -9,7 +10,7 @@ import java.util.concurrent.TimeUnit;
 
 /** Opt-in downloadable driver/server matrix; uses only dedicated test fixtures and temporary schemas. */
 public final class DatabaseCompatibilityTest {
-    private static final List<String> MYSQL = List.of("5.1.49", "6.0.6", "8.0.33", "8.4.0", "9.0.0");
+    private static final List<String> MYSQL = List.of("5.1.49", "6.0.6", "8.0.33", "8.4.0", "9.0.0", "26.7.0");
     private static final List<String> HSQL = List.of("2.2.9", "2.3.0", "2.3.6", "2.4.1", "2.5.0", "2.5.2", "2.6.1-jdk8", "2.7.0-jdk8", "2.7.3-jdk8", "2.7.4-jdk8");
     private static final DatabaseConnectionManager MANAGER = DatabaseConnectionManager.getInstance();
     private static final DataService DATA = DataService.getInstance();
@@ -19,15 +20,15 @@ public final class DatabaseCompatibilityTest {
         try (Statement statement = connection.createStatement(); ResultSet result = statement.executeQuery(sql)) { require(result.next(), "Missing scalar"); return result.getObject(1); }
     }
     private static void execute(Connection connection, String sql) throws Exception { try (Statement statement = connection.createStatement()) { statement.execute(sql); } }
-    private static void flow(ConnectionConfig config, String version) throws Exception {
+    private static void flow(ConnectionConfig config, String version, Path selectedJar) throws Exception {
         var test = MANAGER.testConnection(config);
         require(test.isSuccess(), test.getSummaryMessage());
         require(test.getDriverVersion() != null && !test.getDriverVersion().isBlank(), "No reported driver version");
         require(test.getDatabaseProductVersion() != null && !test.getDatabaseProductVersion().isBlank(), "No detected server version");
         var driver = DriverRegistry.getInstance().getDriver(config);
-        require(Path.of(driver.getClass().getProtectionDomain().getCodeSource().getLocation().toURI()).toRealPath().equals(DriverCatalog.downloadedJar(config.getType(),version).toRealPath()),"Selected artifact was overridden");
+        require(Path.of(driver.getClass().getProtectionDomain().getCodeSource().getLocation().toURI()).toRealPath().equals(selectedJar.toRealPath()),"Selected artifact was overridden");
         require(driver.getClass().getClassLoader() != DriverRegistry.class.getClassLoader(), "Explicit driver must be isolated from bundled driver");
-        var local = config.copy(); local.setDriverSource(DriverSource.LOCAL_JAR); local.setDriverJarPath(DriverCatalog.downloadedJar(config.getType(), version).toString());
+        var local = config.copy(); local.setDriverSource(DriverSource.LOCAL_JAR); local.setDriverJarPath(selectedJar.toString());
         require(DriverRegistry.getInstance().getDriver(local) == driver, "Local JAR selection should load the same selected artifact");
         String schema = "compat_" + UUID.randomUUID().toString().replace("-", "");
         try (Connection c = MANAGER.openConnection(config)) {
@@ -72,6 +73,12 @@ public final class DatabaseCompatibilityTest {
         }
         System.out.println("PASS matrix " + test.getDatabaseProductName() + " " + test.getDatabaseProductVersion() + " / driver " + version);
     }
+    private static void java8Probe(Path java8, Path tests, Path jar, String type, String url) throws Exception {
+        Process probe=new ProcessBuilder(java8.toString(),"-cp",tests+File.pathSeparator+jar,
+                "com.segfault03.ideadb.Java8DriverProbe",type,url).inheritIO().start();
+        require(probe.waitFor(45,TimeUnit.SECONDS) && probe.exitValue()==0,"Java 8 driver failed: " + type + " / " + jar.getFileName());
+    }
+    private static void delete(Path path) throws Exception { if (path != null) Files.deleteIfExists(path); }
     public static void main(String[] args) throws Exception {
         if(args[0].equals("download")) {
             for(DatabaseType type:DatabaseType.values()) {
@@ -83,21 +90,29 @@ public final class DatabaseCompatibilityTest {
         List<Throwable> failures=new ArrayList<>();
         if(args[0].equals("mysql")) {
             int port=Integer.parseInt(args[1]); String server=args[2];
-            for(String version:server.startsWith("8.") ? List.of("8.0.33","8.4.0","9.0.0") : List.of("5.1.49","6.0.6","8.0.33")) {
+            Path java8=args.length > 3 ? Path.of(args[3]) : null;
+            Path tests=args.length > 4 ? Path.of(args[4]) : null;
+            for(String version:server.startsWith("8.") ? List.of("8.0.33","8.4.0","9.0.0","26.7.0") : List.of("5.1.49","6.0.6","8.0.33")) {
+                Path jar=null;
                 try {
-                    var config=new ConnectionConfig(DatabaseType.MYSQL,"compatibility"); config.setPort(port); config.setDriverSource(DriverSource.DOWNLOAD); config.setDriverVersion(version); flow(config,version);
+                    jar=DriverCatalog.download(DatabaseType.MYSQL,version);
+                    if (java8 != null && tests != null) java8Probe(java8,tests,jar,"MYSQL","jdbc:mysql://127.0.0.1:"+port+"/?useSSL=false");
+                    var config=new ConnectionConfig(DatabaseType.MYSQL,"compatibility"); config.setPort(port); config.setDriverSource(DriverSource.DOWNLOAD); config.setDriverVersion(version); flow(config,version,jar);
                 } catch(Throwable failure) { failure.printStackTrace(); failures.add(failure); }
+                finally { try { delete(jar); } catch(Exception cleanup) { failures.add(cleanup); } }
             }
         } else {
             Path java8=Path.of(args[1]), tests=Path.of(args[2]); int port=19020;
             for(String version:args.length > 3 ? List.of(args[3]) : HSQL) {
-                Path jar=DriverCatalog.downloadedJar(DatabaseType.HSQLDB,version);
+                Path jar=null;
                 int selectedPort=port++;
                 Path logs = Path.of(System.getProperty("lattice.test.output", "build/compatibility"));
                 Files.createDirectories(logs);
-                Process server=new ProcessBuilder(java8.toString(),"-cp",jar.toString(),"org.hsqldb.server.Server","--address","127.0.0.1","--database.0","mem:compat","--dbname.0","compat","--port",String.valueOf(selectedPort),"--silent","true")
-                        .redirectErrorStream(true).redirectOutput(logs.resolve("server-"+version+".log").toFile()).start();
+                Process server=null;
                 try {
+                    jar=DriverCatalog.download(DatabaseType.HSQLDB,version);
+                    server=new ProcessBuilder(java8.toString(),"-cp",jar.toString(),"org.hsqldb.server.Server","--address","127.0.0.1","--database.0","mem:compat","--dbname.0","compat","--port",String.valueOf(selectedPort),"--silent","true")
+                            .redirectErrorStream(true).redirectOutput(logs.resolve("server-"+version+".log").toFile()).start();
                     boolean ready=false;
                     for(int attempt=0;attempt<80;attempt++) {
                         if(!server.isAlive()) break;
@@ -105,15 +120,17 @@ public final class DatabaseCompatibilityTest {
                         catch(java.io.IOException pending) { Thread.sleep(100); }
                     }
                     require(ready,"Java 8 HSQLDB server did not start: " + version);
-                    Process probe=new ProcessBuilder(java8.toString(),"-cp",tests+java.io.File.pathSeparator+jar,"com.segfault03.ideadb.Java8DriverProbe","HSQLDB","jdbc:hsqldb:hsql://localhost:"+selectedPort+"/compat").inheritIO().start();
-                    require(probe.waitFor(30,TimeUnit.SECONDS) && probe.exitValue()==0,"Java 8 driver failed");
-                    var config=new ConnectionConfig(DatabaseType.HSQLDB,"compatibility"); config.setPort(selectedPort); config.setDatabaseName("compat"); config.setDriverSource(DriverSource.DOWNLOAD); config.setDriverVersion(version); flow(config,version);
+                    java8Probe(java8,tests,jar,"HSQLDB","jdbc:hsqldb:hsql://localhost:"+selectedPort+"/compat");
+                    var config=new ConnectionConfig(DatabaseType.HSQLDB,"compatibility"); config.setPort(selectedPort); config.setDatabaseName("compat"); config.setDriverSource(DriverSource.DOWNLOAD); config.setDriverVersion(version); flow(config,version,jar);
                     try(Connection c=MANAGER.openConnection(config)) {
                         try { execute(c,"SHUTDOWN"); }
                         catch(SQLException shutdownDisconnect) { if(!server.waitFor(5,TimeUnit.SECONDS)) throw shutdownDisconnect; }
                     }
                 } catch(Throwable failure) { failure.printStackTrace(); failures.add(failure); }
-                finally { if(!server.waitFor(5,TimeUnit.SECONDS)) { server.destroy(); server.waitFor(5,TimeUnit.SECONDS); } }
+                finally {
+                    if(server!=null && !server.waitFor(5,TimeUnit.SECONDS)) { server.destroy(); server.waitFor(5,TimeUnit.SECONDS); }
+                    try { delete(jar); } catch(Exception cleanup) { failures.add(cleanup); }
+                }
             }
         }
         MANAGER.closeAll(); DriverRegistry.getInstance().dispose();

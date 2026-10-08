@@ -110,7 +110,7 @@ public final class UiPreview {
         large.setFont(large.getFont().deriveFont(20f));
         JPasswordField password = DatabaseInputs.passwordField();
         password.setText("sample-password");
-        JComboBox<String> editable = DatabaseInputs.comboBox(new String[]{"9.0.0", "8.4.0"});
+        JComboBox<String> editable = DatabaseInputs.comboBox(new String[]{"26.7.0", "9.0.0", "8.4.0"});
         editable.setEditable(true);
         com.intellij.openapi.ui.TextFieldWithBrowseButton browse = DatabaseInputs.browseField();
         browse.setText("/home/developer/drivers/mysql.jar");
@@ -146,7 +146,7 @@ public final class UiPreview {
         if (variant.startsWith("hsql-memory")) { config.setHsqlMode(HsqlMode.MEM); config.setDatabaseName("scratch"); }
         if (variant.startsWith("hsql-file")) { config.setHsqlMode(HsqlMode.FILE); config.setDatabaseName("/home/developer/data/shop"); }
         if (variant.equals("jdbc-url")) config.setCustomUrl("jdbc:mysql://localhost:3306/shop?useSSL=true");
-        if (variant.equals("driver-download")) { config.setDriverSource(DriverSource.DOWNLOAD); config.setDriverVersion("9.0.0"); }
+        if (variant.equals("driver-download")) { config.setDriverSource(DriverSource.DOWNLOAD); config.setDriverVersion("26.7.0"); }
         if (variant.startsWith("driver-retained")) {
             // A download kept on this machine stays selectable in the bundled list.
             // The staged JAR is a copy of a packaged driver; the name is a display fixture.
@@ -155,7 +155,7 @@ public final class UiPreview {
                     variant.endsWith("-hsqldb") ? DatabaseType.HSQLDB : DatabaseType.MYSQL, version);
             try {
                 java.nio.file.Files.createDirectories(jar.getParent());
-                java.nio.file.Files.copy(Path.of("lib", variant.endsWith("-hsqldb") ? "hsqldb-2.7.3.jar" : "mysql-connector-j-9.0.0.jar"), jar,
+                java.nio.file.Files.copy(Path.of("lib", variant.endsWith("-hsqldb") ? "hsqldb-2.7.4.jar" : "mysql-connector-j-26.7.0.jar"), jar,
                         java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             } catch (Exception absent) {
                 throw new AssertionError("Could not stage a retained driver preview", absent);
