@@ -36,6 +36,10 @@ fi
 export JDK_JAVA_OPTIONS="${JDK_JAVA_OPTIONS:+$JDK_JAVA_OPTIONS }$ui_java_options"
 
 if command -v Xvfb >/dev/null 2>&1; then
+    if ! command -v xdpyinfo >/dev/null 2>&1; then
+        echo "xdpyinfo is required to wait for Xvfb; install x11-utils." >&2
+        exit 2
+    fi
     xvfb_display="${XVFB_DISPLAY:-:99}"
     display_number="${xvfb_display#:}"
     if [[ -e "/tmp/.X${display_number}-lock" || -S "/tmp/.X11-unix/X${display_number}" ]]; then
