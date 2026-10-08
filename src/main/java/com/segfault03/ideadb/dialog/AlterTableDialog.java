@@ -18,6 +18,7 @@ import com.segfault03.ideadb.service.MetadataService;
 import org.jetbrains.annotations.Nullable;
 
 import com.segfault03.ideadb.ui.DatabaseInputs;
+import com.intellij.util.ui.JBUI;
 
 import javax.swing.*;
 import java.awt.*;
@@ -90,181 +91,86 @@ public class AlterTableDialog extends DialogWrapper {
 
     @Override
     protected @Nullable JComponent createCenterPanel() {
-        JPanel root = new JPanel(new BorderLayout(0, 10));
+        JPanel root = new JPanel(new BorderLayout(0, JBUI.scale(10)));
         centerPanel = root;
-        root.setPreferredSize(new Dimension(740, 420));
-        root.setMinimumSize(new Dimension(680, 380));
+        root.setPreferredSize(JBUI.size(740, 420));
+        root.setMinimumSize(JBUI.size(680, 380));
 
         String[] colNames = tableMetadata.getColumns().stream().map(ColumnMetadata::getName).toArray(String[]::new);
 
-        // 1. Add column Panel
-        JPanel addPanel = new JPanel(new GridBagLayout());
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(6, 6, 6, 6);
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-
-        gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0.3;
-        addPanel.add(new JBLabel("Column name:"), gbc);
-        gbc.gridx = 1; gbc.gridy = 0; gbc.weightx = 0.7;
+        // Every card uses the same rendered label column and top-aligned rows.
+        ConnectionFormPanel addPanel = alterForm();
         addColNameField = DatabaseInputs.textField();
-        addPanel.add(addColNameField, gbc);
-
-        gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0.3;
-        addPanel.add(new JBLabel("Type:"), gbc);
-        gbc.gridx = 1; gbc.gridy = 1; gbc.weightx = 0.7;
         addColTypeCombo = DatabaseInputs.comboBox(DATA_TYPES);
-        addPanel.add(addColTypeCombo, gbc);
-
-        gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 0.3;
-        addPanel.add(new JBLabel("Size / length:"), gbc);
-        gbc.gridx = 1; gbc.gridy = 2; gbc.weightx = 0.7;
         addColSizeField = DatabaseInputs.textField("255");
-        addPanel.add(addColSizeField, gbc);
-
-        gbc.gridx = 0; gbc.gridy = 3; gbc.weightx = 0.3;
-        addPanel.add(new JBLabel("Nullable:"), gbc);
-        gbc.gridx = 1; gbc.gridy = 3; gbc.weightx = 0.7;
         addColNullableCheck = new JBCheckBox("Allow NULL values", true);
-        addPanel.add(addColNullableCheck, gbc);
-
-        gbc.gridx = 0; gbc.gridy = 4; gbc.weightx = 0.3;
-        addPanel.add(new JBLabel("Default value:"), gbc);
-        gbc.gridx = 1; gbc.gridy = 4; gbc.weightx = 0.7;
         addColDefaultField = DatabaseInputs.textField();
         addColDefaultField.setToolTipText("Use TEXT: for a literal, SQL: for an expression; blank removes the default.");
-        addPanel.add(addColDefaultField, gbc);
-
+        addPanel.addRow(0, "Column name:", addColNameField, true);
+        addPanel.addRow(1, "Type:", addColTypeCombo, true);
+        addPanel.addRow(2, "Size / length:", addColSizeField, true);
+        addPanel.addRow(3, "Nullable:", addColNullableCheck, false);
+        addPanel.addRow(4, "Default value:", addColDefaultField, true);
         JButton executeAddBtn = new JButton("Add column");
         executeAddBtn.addActionListener(e -> doAddColumn());
-        gbc.gridx = 1; gbc.gridy = 5;
-        addPanel.add(executeAddBtn, gbc);
+        addPanel.addRow(5, "", executeAddBtn, false);
 
-        // 2. Rename column Panel
-        JPanel renameColPanel = new JPanel(new GridBagLayout());
-        GridBagConstraints rcgbc = new GridBagConstraints();
-        rcgbc.insets = new Insets(8, 8, 8, 8);
-        rcgbc.fill = GridBagConstraints.HORIZONTAL;
-
-        rcgbc.gridx = 0; rcgbc.gridy = 0; rcgbc.weightx = 0.3;
-        renameColPanel.add(new JBLabel("Column:"), rcgbc);
-        rcgbc.gridx = 1; rcgbc.gridy = 0; rcgbc.weightx = 0.7;
+        ConnectionFormPanel renameColPanel = alterForm();
         renameColCombo = DatabaseInputs.comboBox(colNames);
-        renameColPanel.add(renameColCombo, rcgbc);
-
-        rcgbc.gridx = 0; rcgbc.gridy = 1; rcgbc.weightx = 0.3;
-        renameColPanel.add(new JBLabel("New Column name:"), rcgbc);
-        rcgbc.gridx = 1; rcgbc.gridy = 1; rcgbc.weightx = 0.7;
         renameColNewNameField = DatabaseInputs.textField(colNames.length > 0 ? colNames[0] : "");
-        renameColPanel.add(renameColNewNameField, rcgbc);
-
+        renameColPanel.addRow(0, "Column:", renameColCombo, true);
+        renameColPanel.addRow(1, "New Column name:", renameColNewNameField, true);
         renameColCombo.addActionListener(e -> {
-            String sel = (String) renameColCombo.getSelectedItem();
-            if (sel != null) {
-                renameColNewNameField.setText(sel);
-            }
+            String selected = (String) renameColCombo.getSelectedItem();
+            if (selected != null) renameColNewNameField.setText(selected);
         });
-
         JButton executeRenameColBtn = new JButton("Rename column");
         executeRenameColBtn.addActionListener(e -> doRenameColumn());
-        rcgbc.gridx = 1; rcgbc.gridy = 2;
-        renameColPanel.add(executeRenameColBtn, rcgbc);
+        renameColPanel.addRow(2, "", executeRenameColBtn, false);
 
-        // 3. Modify column Panel
-        JPanel modifyColPanel = new JPanel(new GridBagLayout());
-        GridBagConstraints mcgbc = new GridBagConstraints();
-        mcgbc.insets = new Insets(6, 6, 6, 6);
-        mcgbc.fill = GridBagConstraints.HORIZONTAL;
-
-        mcgbc.gridx = 0; mcgbc.gridy = 0; mcgbc.weightx = 0.3;
-        modifyColPanel.add(new JBLabel("Column:"), mcgbc);
-        mcgbc.gridx = 1; mcgbc.gridy = 0; mcgbc.weightx = 0.7;
+        ConnectionFormPanel modifyColPanel = alterForm();
         modifyColCombo = DatabaseInputs.comboBox(colNames);
-        modifyColPanel.add(modifyColCombo, mcgbc);
-
-        mcgbc.gridx = 0; mcgbc.gridy = 1; mcgbc.weightx = 0.3;
-        modifyColPanel.add(new JBLabel("Type:"), mcgbc);
-        mcgbc.gridx = 1; mcgbc.gridy = 1; mcgbc.weightx = 0.7;
         modifyColTypeCombo = DatabaseInputs.comboBox(DATA_TYPES);
         modifyColTypeCombo.setEditable(true);
-        modifyColPanel.add(modifyColTypeCombo, mcgbc);
-
-        mcgbc.gridx = 0; mcgbc.gridy = 2; mcgbc.weightx = 0.3;
-        modifyColPanel.add(new JBLabel("Size / length:"), mcgbc);
-        mcgbc.gridx = 1; mcgbc.gridy = 2; mcgbc.weightx = 0.7;
         modifyColSizeField = DatabaseInputs.textField("255");
-        modifyColPanel.add(modifyColSizeField, mcgbc);
-
-        mcgbc.gridx = 0; mcgbc.gridy = 3; mcgbc.weightx = 0.3;
-        modifyColPanel.add(new JBLabel("Nullable:"), mcgbc);
-        mcgbc.gridx = 1; mcgbc.gridy = 3; mcgbc.weightx = 0.7;
         modifyColNullableCheck = new JBCheckBox("Allow NULL values", true);
-        modifyColPanel.add(modifyColNullableCheck, mcgbc);
-
-        mcgbc.gridx = 0; mcgbc.gridy = 4; mcgbc.weightx = 0.3;
-        modifyColPanel.add(new JBLabel("Default value:"), mcgbc);
-        mcgbc.gridx = 1; mcgbc.gridy = 4; mcgbc.weightx = 0.7;
         modifyColDefaultField = DatabaseInputs.textField();
         modifyColDefaultField.setToolTipText("Use TEXT: for a literal, SQL: for an expression; blank removes the default.");
-        modifyColPanel.add(modifyColDefaultField, mcgbc);
-
+        modifyColPanel.addRow(0, "Column:", modifyColCombo, true);
+        modifyColPanel.addRow(1, "Type:", modifyColTypeCombo, true);
+        modifyColPanel.addRow(2, "Size / length:", modifyColSizeField, true);
+        modifyColPanel.addRow(3, "Nullable:", modifyColNullableCheck, false);
+        modifyColPanel.addRow(4, "Default value:", modifyColDefaultField, true);
         modifyColCombo.addActionListener(e -> {
-            String sel = (String) modifyColCombo.getSelectedItem();
-            if (sel != null) {
-                populateModifyFields(sel);
-            }
+            String selected = (String) modifyColCombo.getSelectedItem();
+            if (selected != null) populateModifyFields(selected);
         });
-        if (colNames.length > 0) {
-            populateModifyFields(colNames[0]);
-        }
-
+        if (colNames.length > 0) populateModifyFields(colNames[0]);
         JButton executeModifyColBtn = new JButton("Apply column changes");
         executeModifyColBtn.addActionListener(e -> doModifyColumn());
-        mcgbc.gridx = 1; mcgbc.gridy = 5;
-        modifyColPanel.add(executeModifyColBtn, mcgbc);
+        modifyColPanel.addRow(5, "", executeModifyColBtn, false);
 
-        // 4. Drop column Panel
-        JPanel dropPanel = new JPanel(new GridBagLayout());
-        GridBagConstraints dgbc = new GridBagConstraints();
-        dgbc.insets = new Insets(8, 8, 8, 8);
-        dgbc.fill = GridBagConstraints.HORIZONTAL;
-
-        dgbc.gridx = 0; dgbc.gridy = 0; dgbc.weightx = 0.3;
-        dropPanel.add(new JBLabel("Column to drop:"), dgbc);
-        dgbc.gridx = 1; dgbc.gridy = 0; dgbc.weightx = 0.7;
+        ConnectionFormPanel dropPanel = alterForm();
         dropColCombo = DatabaseInputs.comboBox(colNames);
-        dropPanel.add(dropColCombo, dgbc);
-
-        JButton executeDropBtn = new JButton("Drop column");
-        executeDropBtn.setIcon(com.intellij.icons.AllIcons.General.Warning);
+        dropPanel.addRow(0, "Column to drop:", dropColCombo, true);
+        JButton executeDropBtn = new JButton("Drop column", com.intellij.icons.AllIcons.General.Warning);
         executeDropBtn.addActionListener(e -> doDropColumn());
-        dgbc.gridx = 1; dgbc.gridy = 1;
-        dropPanel.add(executeDropBtn, dgbc);
-        dgbc.gridy = 2;
+        dropPanel.addRow(1, "", executeDropBtn, false);
         JBLabel warning = new JBLabel("<html>Dropping a column permanently deletes its values.<br>You will be asked to confirm.</html>");
         warning.setForeground(JBColor.namedColor("Label.infoForeground", JBColor.GRAY));
-        dropPanel.add(warning, dgbc);
+        dropPanel.addRow(2, "", warning, true);
 
-        // 5. Rename table Panel
-        JPanel renamePanel = new JPanel(new GridBagLayout());
-        GridBagConstraints rgbc = new GridBagConstraints();
-        rgbc.insets = new Insets(8, 8, 8, 8);
-        rgbc.fill = GridBagConstraints.HORIZONTAL;
-
-        rgbc.gridx = 0; rgbc.gridy = 0; rgbc.weightx = 0.3;
-        renamePanel.add(new JBLabel("New Table name:"), rgbc);
-        rgbc.gridx = 1; rgbc.gridy = 0; rgbc.weightx = 0.7;
+        ConnectionFormPanel renamePanel = alterForm();
         renameTableField = DatabaseInputs.textField(tableMetadata.getName());
-        renamePanel.add(renameTableField, rgbc);
-
+        renamePanel.addRow(0, "New Table name:", renameTableField, true);
         JButton executeRenameBtn = new JButton("Rename table");
         executeRenameBtn.addActionListener(e -> doRenameTable());
-        rgbc.gridx = 1; rgbc.gridy = 1;
-        renamePanel.add(executeRenameBtn, rgbc);
+        renamePanel.addRow(1, "", executeRenameBtn, false);
 
         // Content Cards
         CardLayout cardLayout = new CardLayout();
         JPanel contentCards = new JPanel(cardLayout);
-        contentCards.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        contentCards.setBorder(JBUI.Borders.empty(8));
 
         contentCards.add(addPanel, "ADD");
         contentCards.add(renameColPanel, "RENAME_COL");
@@ -325,6 +231,11 @@ public class AlterTableDialog extends DialogWrapper {
         root.add(tabScrollPane, BorderLayout.NORTH);
         root.add(contentCards, BorderLayout.CENTER);
         return root;
+    }
+
+    private static ConnectionFormPanel alterForm() {
+        return new ConnectionFormPanel("Column name:", "Type:", "Size / length:", "Nullable:",
+                "Default value:", "Column:", "New Column name:", "Column to drop:", "New Table name:");
     }
 
     private void populateModifyFields(String colName) {

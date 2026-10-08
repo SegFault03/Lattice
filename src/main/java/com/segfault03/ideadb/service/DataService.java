@@ -291,7 +291,7 @@ public class DataService {
                 }
             }
         } catch (Exception error) {
-            String message = error.getMessage();
+            String message = execution.isCancellationRequested() ? "Query cancelled" : error.getMessage();
             return QueryResult.forError(message == null || message.isEmpty() ? error.toString() : message, elapsed(start));
         } finally { execution.detach(); }
     }

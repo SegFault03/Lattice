@@ -322,7 +322,11 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
 
     private void cancelExecution() {
         var current = execution;
-        if (current != null) com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(current::cancel);
+        if (current != null && current.requestCancellation()) {
+            cancelBtn.setEnabled(false);
+            if (!disposed) DatabaseUi.status(statusLabel, "Cancelling query… · Waiting for the driver", DatabaseUi.Tone.BUSY);
+            com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(current::cancel);
+        }
     }
     @Override public void close() {
         disposed = true; cancelExecution();
@@ -340,15 +344,13 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     }
 
     private static class ConsoleResultCellRenderer extends DefaultTableCellRenderer {
-        private final JBColor nullFg = new JBColor(0x777D86, 0xA0A5AE);
-
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
                                                        boolean hasFocus, int row, int column) {
             super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
             setFont(table.getFont().deriveFont(value == null ? Font.ITALIC : Font.PLAIN));
             setBackground(isSelected ? table.getSelectionBackground() : table.getBackground());
-            setForeground(isSelected ? table.getSelectionForeground() : value == null ? nullFg : table.getForeground());
+            setForeground(isSelected ? table.getSelectionForeground() : table.getForeground());
             setHorizontalAlignment(value instanceof Number ? SwingConstants.RIGHT : SwingConstants.LEFT);
             setBorder(hasFocus ? BorderFactory.createCompoundBorder(
                     JBUI.Borders.customLine(JBColor.namedColor("Component.focusColor", new JBColor(0x3574F0, 0x548AF7))),

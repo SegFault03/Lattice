@@ -14,6 +14,7 @@ import com.segfault03.ideadb.service.DdlService;
 import org.jetbrains.annotations.Nullable;
 
 import com.segfault03.ideadb.ui.DatabaseInputs;
+import com.intellij.util.ui.JBUI;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
@@ -44,6 +45,7 @@ public class CreateTableDialog extends DialogWrapper {
         this.databaseName = databaseName;
         setTitle("Create table in " + databaseName);
         setOKButtonText("Create table");
+        setResizable(true);
         init();
         updatePreview();
     }
@@ -59,7 +61,8 @@ public class CreateTableDialog extends DialogWrapper {
     @Override
     protected @Nullable JComponent createCenterPanel() {
         JPanel root = new JPanel(new BorderLayout(8, 8));
-        root.setPreferredSize(new Dimension(650, 480));
+        root.setPreferredSize(JBUI.size(800, 520));
+        root.setMinimumSize(JBUI.size(720, 400));
 
         // Top: Table Name
         JPanel topPanel = new JPanel(new GridBagLayout());
@@ -92,6 +95,7 @@ public class CreateTableDialog extends DialogWrapper {
         // Setup combo box editor for Type column
         JComboBox<String> typeEditor = DatabaseInputs.comboBox(DATA_TYPES);
         columnsTable.getColumnModel().getColumn(1).setCellEditor(new DefaultCellEditor(typeEditor));
+        sizeColumnHeaders();
 
         JBScrollPane scrollPane = new JBScrollPane(columnsTable);
         centerPanel.add(scrollPane, BorderLayout.CENTER);
@@ -145,8 +149,9 @@ public class CreateTableDialog extends DialogWrapper {
         // South: SQL Preview
         JPanel previewPanel = new JPanel(new BorderLayout(4, 4));
         previewPanel.setBorder(BorderFactory.createTitledBorder("SQL DDL Preview"));
-        sqlPreviewArea = new JBTextArea(5, 40);
+        sqlPreviewArea = new JBTextArea(8, 40);
         sqlPreviewArea.setEditable(false);
+        sqlPreviewArea.getAccessibleContext().setAccessibleName("Create table SQL preview");
         sqlPreviewArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         previewPanel.add(new JBScrollPane(sqlPreviewArea), BorderLayout.CENTER);
 
@@ -169,6 +174,20 @@ public class CreateTableDialog extends DialogWrapper {
         if (tName.isEmpty()) tName = "unnamed_table";
         String ddl = DdlService.getInstance().buildCreateTableSql(config, databaseName, tName, tableModel.getColumns());
         sqlPreviewArea.setText(ddl);
+        sqlPreviewArea.setCaretPosition(0);
+    }
+
+    private void sizeColumnHeaders() {
+        int[] preferred = {150, 110, 50, 80, 42, 86, 160};
+        for (int i = 0; i < columnsTable.getColumnCount(); i++) {
+            var column = columnsTable.getColumnModel().getColumn(i);
+            var renderer = column.getHeaderRenderer();
+            if (renderer == null) renderer = columnsTable.getTableHeader().getDefaultRenderer();
+            Component header = renderer.getTableCellRendererComponent(columnsTable, column.getHeaderValue(), false, false, -1, i);
+            int minimum = header.getPreferredSize().width + JBUI.scale(16);
+            column.setMinWidth(minimum);
+            column.setPreferredWidth(Math.max(minimum, JBUI.scale(preferred[i])));
+        }
     }
 
     @Override

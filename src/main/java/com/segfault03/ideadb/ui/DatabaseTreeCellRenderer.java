@@ -3,6 +3,7 @@ package com.segfault03.ideadb.ui;
 import com.intellij.icons.AllIcons;
 import com.intellij.ui.ColoredTreeCellRenderer;
 import com.intellij.ui.SimpleTextAttributes;
+import com.intellij.ui.RowIcon;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
@@ -14,6 +15,7 @@ public class DatabaseTreeCellRenderer extends ColoredTreeCellRenderer {
     public void customizeCellRenderer(@NotNull JTree tree, Object value, boolean selected, boolean expanded,
                                       boolean leaf, int row, boolean hasFocus) {
         setToolTipText(null);
+        getAccessibleContext().setAccessibleDescription(null);
         if (!(value instanceof DefaultMutableTreeNode)) {
             return;
         }
@@ -35,15 +37,12 @@ public class DatabaseTreeCellRenderer extends ColoredTreeCellRenderer {
                 break;
 
             case CONNECTION:
-                setToolTipText(data.isConnected() ? "Connected · Expand to browse databases" : "Disconnected · Expand to connect");
-                setIcon(Icons.DATABASE);
+                String product = data.getConnectionConfig() == null ? "" : " · " + data.getConnectionConfig().getType().getDisplayName();
+                setToolTipText(data.getName() + product + (data.isConnected()
+                        ? " · Connected · Expand to browse databases" : " · Disconnected · Expand to connect"));
+                setIcon(new RowIcon(Icons.DATABASE, data.isConnected() ? AllIcons.General.GreenCheckmark : AllIcons.Actions.OfflineMode));
                 append(data.getName(), data.isConnected() ? SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES : SimpleTextAttributes.REGULAR_ATTRIBUTES);
-                if (data.getConnectionConfig() != null) {
-                    append(" [" + data.getConnectionConfig().getType().getDisplayName() + "]", SimpleTextAttributes.GRAYED_ATTRIBUTES);
-                    if (data.isConnected()) {
-                        append(" (connected)", SimpleTextAttributes.LINK_PLAIN_ATTRIBUTES);
-                    }
-                }
+                getAccessibleContext().setAccessibleDescription(getToolTipText());
                 break;
 
             case DATABASE:

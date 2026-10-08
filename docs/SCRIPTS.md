@@ -12,8 +12,9 @@ Python helper scripts use Python's standard library and run on Windows, Linux an
 | `check-release-archive.py` | Check ZIP layout, descriptor, bytecode, licenses; generate checksums | Built plugin ZIP |
 | `prepare-source-asset.py` | Download/check the pinned corresponding MySQL source archive | Network on first use |
 | `verify-plugin.py` | Check exact ZIP against an IntelliJ SDK | JDK 21; network on first use or `--ide-home` |
-| `capture-intellij-ui.sh` | Launch IDEA with the built plugin under Xvfb and capture the actual tool window | Linux; JDK 21; Xvfb or a graphical display; network on first IDE build |
-| `review-intellij-ui.sh` | Capture connection, schema, table and SQL flows in all seven bundled IDE themes | Linux; JDK 21; Xvfb; xfwm4 or Openbox; Python 3; curl; network for real JDBC fixtures/downloads |
+| `capture-intellij-ui.sh` | Launch IDEA with the built plugin under Xvfb and capture the actual tool window | Linux; JDK 21; Xvfb and `xdpyinfo` (x11-utils), or a graphical display; network on first IDE build |
+| `review-intellij-ui.sh` | Capture connection, schema, table and SQL flows in all seven bundled IDE themes | Linux; JDK 21; Xvfb; x11-utils; xfwm4 or Openbox; Python 3; curl; network for real JDBC fixtures/downloads |
+| `probe-hsqldb-cancellation.sh` | Measure real HSQLDB JDBC cancellation and subsequent connection usability in an isolated in-memory database | Bash; JDK 21; `timeout`; optional HSQLDB jar path (bundled 2.7.4 by default) |
 | `common.py` | Shared cache paths, Java and Gradle discovery | Imported helper |
 | `tests/` | Regression tests for development/release tooling | Git for history tests |
 
@@ -41,6 +42,8 @@ Use `--skip-compatibility` for the six-step isolated build, UI preview and live 
 Every failed command stops the run and returns a nonzero exit status. The temporary workspace is still removed; command logs and a failure summary are copied to `build/one-shot-test/failure-<UTC timestamp>/`. On success all runner-created caches and downloaded tools are removed. The script requires network access, Docker and at least 10 GiB free workspace space. Port 3306 is needed for either functional or MySQL matrix checks; port 9001 for base HSQLDB functional checks; and ports 19020–19029 for Plugin Verifier. The temporary workspace is created under ignored `build/`, which avoids small `/tmp` mounts.
 
 ## UI previews and README screenshots
+
+The current table/console screens use IntelliJ's native action toolbar, which requires a running IDE application. Use the real-IDE commands below for those screens. Linux CI now runs that workflow; the legacy standalone `ui-preview.py` helper cannot render the native toolbar outside the IDE.
 
 With JDK 21 and the cached IntelliJ 2025.1 SDK, run:
 
@@ -73,6 +76,8 @@ LATTICE_UI_REVIEW_OUTPUT="$PWD/build/ui-review-p1" ./scripts/review-intellij-ui.
 ```
 
 The live resize checks cover visible fields/status, native toolbar overflow on mouse hover, icon-only popup actions with their tooltips, and Revert from the expanded toolbar. [P1 fixes](UI_P1_FIXES.md) records the changes and validation.
+
+The [P2 report](UI_P2_FIXES.md) covers schema-form alignment, native header sizes/preview scrolling, selected-cell validation, live NULL/Revert palette checks and immediate cancellation feedback. Use `LATTICE_UI_REVIEW_OUTPUT="$PWD/build/ui-review-p2"` to preserve earlier captures. To isolate the remaining HSQLDB interruption behavior from IDE scheduling, run `./scripts/probe-hsqldb-cancellation.sh`, optionally followed by another real HSQLDB jar path. The probe uses only a disposable in-memory database and bounds its diagnostic JVM to 45 seconds.
 
 Open `build/ui-preview/index.html` to review the five featured screens. Pass `--all-previews` to include light/dark variants for the **Welcome**, **Input controls**, **Schema dialogs**, connection states, table editor/viewer and SQL console. Every successful run updates only the five fixed README image files in `screenshots/`; extra generated images stay under `build/`. Commit changed featured PNGs with UI changes. `--output` changes the gallery/build directory while still updating `screenshots/`; use `--all-previews` for `--compare-with` before/after baselines.
 

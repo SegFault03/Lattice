@@ -421,7 +421,7 @@ class IntellijUiScreenshotTest {
                 }.waitFound()
             }
             databaseTree.fixture.expandRow(1)
-            val connectionPath = arrayOf("Data Sources", "Lattice UI demo [HSQLDB] (connected)")
+            val connectionPath = arrayOf("Data Sources", "Lattice UI demo")
             val publicSchemaPath = connectionPath + "PUBLIC"
             waitUntil("connected HSQLDB schema in the explorer") {
                 databaseTree.pathExists(*publicSchemaPath)
@@ -460,6 +460,7 @@ class IntellijUiScreenshotTest {
                 byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField")
             }.waitFound().text = "LATTICE_PEOPLE"
             Thread.sleep(500)
+            assertCreateTableLayout(createTableDialog)
             captureScreen(screenshotsDirectory.resolve("create-table-dialog.png"))
             createTableDialog.pressButton("Create table")
             frame.x(DialogUiComponent::class.java) {
@@ -473,7 +474,8 @@ class IntellijUiScreenshotTest {
             waitUntil("created LATTICE_PEOPLE table in the explorer") {
                 databaseTree.pathExists(*peoplePath)
             }
-            databaseTree.fixture.doubleClickPath(peoplePath.joinToString(databaseTree.fixture.separator()))
+            databaseTree.fixture.rightClickPath(peoplePath.joinToString(databaseTree.fixture.separator()))
+            frame.x { byVisibleText("Open data editor") }.waitFound().click()
 
             lateinit var tableEditor: UiComponent
             tableEditor = frame.x { byJavaClass("com.segfault03.ideadb.ui.TableDataEditorPanel") }.waitFound()
@@ -491,6 +493,7 @@ class IntellijUiScreenshotTest {
                 dataGrid.rowCount() == 1 && tableEditor.hasSubtext("1 invalid cell") && !commitButton.component.isEnabled()
             }
             assertTrue(revertButton.component.isEnabled(), "An invalid empty row should remain revertible")
+            check(tableEditor.hasSubtext("cannot be NULL")) { "The required-column reason must be visible inline" }
             val emptyRowValues = dataGrid.content().values.single().values
             println("Empty new-row cell values: ${emptyRowValues.joinToString()}")
             captureScreen(screenshotsDirectory.resolve("table-add-empty-row.png"))
@@ -526,6 +529,17 @@ class IntellijUiScreenshotTest {
                 tableEditor.hasSubtext("1 invalid cell") && !commitButton.component.isEnabled()
             }
             captureScreen(screenshotsDirectory.resolve("table-edit-invalid-integer.png"))
+            check(tableEditor.hasSubtext("Invalid INTEGER value")) { "The selected cell's precise type error must be visible" }
+            if (review) {
+                replaceCellValue(dataGrid, 0, 1, "x".repeat(256))
+                waitUntil("both invalid cells reported") { tableEditor.hasSubtext("2 invalid cells") }
+                dataGrid.clickCell(0, 0)
+                waitUntil("integer detail follows selection") { tableEditor.hasSubtext("Invalid INTEGER value") }
+                dataGrid.clickCell(0, 1)
+                waitUntil("text detail follows selection") { tableEditor.hasSubtext("Text exceeds 255 characters") }
+                captureScreen(screenshotsDirectory.resolve("table-selected-cell-error.png"))
+                replaceCellValue(dataGrid, 0, 1, "Ada Lovelace")
+            }
 
             replaceCellValue(dataGrid, row = 0, column = 0, value = initialId.toString())
             waitUntil("restoring the original integer clears invalid and pending state") {
@@ -540,6 +554,7 @@ class IntellijUiScreenshotTest {
                 tableEditor.hasSubtext("1 pending change") && commitButton.component.isEnabled()
             }
             captureScreen(screenshotsDirectory.resolve("table-edit-pending.png"))
+            assertActionContrast(revertButton)
 
             commitButton.click()
             frame.x(DialogUiComponent::class.java) {
@@ -556,6 +571,8 @@ class IntellijUiScreenshotTest {
             val revertSize = "${revertButton.component.width}x${revertButton.component.height}"
 
             if (review) {
+                assertNullContrast(dataGrid, 0, 2)
+                captureScreen(screenshotsDirectory.resolve("table-null-unselected.png"))
                 val pathText = peoplePath.joinToString(databaseTree.fixture.separator())
                 dataGrid.rightClickCell(0, 1)
                 captureScreen(screenshotsDirectory.resolve("table-cell-context-menu.png"))
@@ -605,9 +622,11 @@ class IntellijUiScreenshotTest {
                 captureScreen(screenshotsDirectory.resolve("table-context-menu.png"))
                 frame.x { byVisibleText("Alter table…") }.waitFound().click()
                 val alter = frame.x(DialogUiComponent::class.java) { byTitle("Alter table: LATTICE_PEOPLE") }.waitFound()
+                var formOrigin: Point? = null
                 for ((label, file) in listOf("Add column" to "add", "Rename column" to "rename-column", "Modify column" to "modify", "Drop column" to "drop", "Rename table" to "rename-table")) {
                     // Each card has an operation button with the same label as its tab.
                     alter.xx { byVisibleText(label) }.list().first().click()
+                    formOrigin = assertAlterTableLayout(alter, label, formOrigin)
                     captureScreen(screenshotsDirectory.resolve("alter-$file.png"))
                 }
                 alter.xx { byVisibleText("Drop column") }.list().first().click()
@@ -652,6 +671,11 @@ class IntellijUiScreenshotTest {
                 frame.resize(1000, 800)
                 captureScreen(screenshotsDirectory.resolve("table-narrow.png"))
                 assertEditorControlsVisible(tableEditor, "narrow table")
+                replaceCellValue(dataGrid, 0, 0, "not-an-integer")
+                waitUntil("narrow cell error is visible inline") { tableEditor.hasSubtext("Invalid INTEGER value") }
+                captureScreen(screenshotsDirectory.resolve("table-narrow-invalid-cell.png"))
+                assertEditorControlsVisible(tableEditor, "narrow table with invalid cell detail")
+                replaceCellValue(dataGrid, 0, 0, changedId.toString())
                 assertToolbarSingleRow(tableEditor.x { byAccessibleName("Table actions") }.waitFound(), "collapsed table")
                 openToolbarOverflow(tableEditor, "Table actions").also {
                     captureScreen(screenshotsDirectory.resolve("table-narrow-toolbar-expanded.png"))
@@ -694,6 +718,9 @@ class IntellijUiScreenshotTest {
                 console.x { byVisibleText("Run") }.waitFound().click()
                 waitUntil("SQL SELECT completed") { console.hasSubtext("1 rows") }
                 captureScreen(screenshotsDirectory.resolve("sql-console-results.png"))
+                val sqlGrid = console.x(JTableUiComponent::class.java) { byJavaClass("com.segfault03.ideadb.ui.DatabaseTable") }.waitFound()
+                assertNullContrast(sqlGrid, 0, 2)
+                captureScreen(screenshotsDirectory.resolve("sql-console-null-unselected.png"))
                 withContext(OnDispatcher.EDT) { queryText.setText("SELECT * FROM PUBLIC.LATTICE_PEOPLE WHERE \"id\" = -999") }
                 console.x { byVisibleText("Run") }.waitFound().click()
                 waitUntil("empty SQL result") { console.hasSubtext("0 rows") }
@@ -717,9 +744,20 @@ class IntellijUiScreenshotTest {
                 runQuery.click()
                 waitUntil("long SQL running") { stopQuery.component.isEnabled() }
                 captureScreen(screenshotsDirectory.resolve("sql-console-running.png"), settleMillis = 0)
+                val cancellationStart = System.nanoTime()
                 stopQuery.click()
+                waitUntil("immediate cancellation feedback", timeoutMillis = 2000) { console.hasSubtext("Cancelling query…") }
+                println("P2 cancellation feedback after ${(System.nanoTime() - cancellationStart) / 1_000_000} ms")
+                check(!runQuery.component.isEnabled() && !stopQuery.component.isEnabled()) { "A cancelling query must block Run and repeated Stop" }
+                captureScreen(screenshotsDirectory.resolve("sql-console-cancelling.png"), settleMillis = 0)
                 waitUntil("SQL cancellation completes") { runQuery.component.isEnabled() }
                 captureScreen(screenshotsDirectory.resolve("sql-console-cancelled.png"))
+                val previousTabs = cast(console.x { byJavaClass("javax.swing.JTabbedPane") }.waitFound().component, LiveTabs::class)
+                withContext(OnDispatcher.EDT) { previousTabs.setSelectedIndex(0) }
+                check(sqlGrid.rowCount() == 1) { "Cancellation must retain previous results" }
+                withContext(OnDispatcher.EDT) { queryText.setText("SELECT * FROM PUBLIC.LATTICE_PEOPLE") }
+                runQuery.click()
+                waitUntil("session usable after cancellation") { runQuery.component.isEnabled() && console.hasSubtext("1 rows") }
                 withContext(OnDispatcher.EDT) { queryText.setText("SELECT * FROM TABLE_THAT_DOES_NOT_EXIST") }
                 console.x { byVisibleText("Run") }.waitFound().click()
                 waitUntil("SQL error displayed") { console.hasSubtext("Query failed") }
@@ -817,6 +855,85 @@ class IntellijUiScreenshotTest {
         check(ImageIO.write(image, "png", path.toFile())) { "No PNG ImageIO writer available" }
     }
 
+    private fun assertCreateTableLayout(dialog: UiComponent) {
+        val grid = dialog.x(JTableUiComponent::class.java) { byJavaClass("com.intellij.ui.table.JBTable") }.waitFound()
+        val preview = dialog.x { byAccessibleName("Create table SQL preview") }.waitFound()
+        dialog.driver.withContext(OnDispatcher.EDT) {
+            val table = cast(grid.component, LiveTableEditor::class)
+            val columns = table.getColumnModel()
+            val header = table.getTableHeader().getDefaultRenderer()
+            for (index in 0 until columns.getColumnCount()) {
+                val column = columns.getColumn(index)
+                val painted = header.getTableCellRendererComponent(table, column.getHeaderValue(), false, false, -1, index)
+                check(column.getWidth() >= painted.getPreferredSize().getWidth()) { "Create Table truncates ${column.getHeaderValue()}" }
+            }
+            val text = cast(preview.component, LiveTextArea::class)
+            check(text.getText().startsWith("CREATE TABLE") && text.getCaretPosition() == 0)
+            check(cast(preview.component, LiveSwingComponent::class).getVisibleRect().y == 0) { "SQL preview must show the first line" }
+            check(text.getLineCount() <= text.getRows()) { "Initial SQL preview must fit the small default statement" }
+        }
+        println("P2 Create Table: all headers fit; updated SQL preview starts at CREATE TABLE")
+    }
+
+    private fun assertAlterTableLayout(dialog: UiComponent, tab: String, origin: Point?): Point {
+        val label = when (tab) {
+            "Add column" -> "Column name:"
+            "Drop column" -> "Column to drop:"
+            "Rename table" -> "New Table name:"
+            else -> "Column:"
+        }
+        val field = dialog.x {
+            and(byAccessibleName(label), or(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"),
+                byType("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox")))
+        }.waitFound()
+        val location = field.component.getLocationOnScreen()
+        check(origin == null || origin == location) { "Alter Table card moves its first field: $origin -> $location" }
+        val operation = if (tab == "Modify column") "Apply column changes" else tab
+        val button = dialog.xx { byVisibleText(operation) }.list().last()
+        check(button.component.getLocationOnScreen().x == location.x) { "Alter action must align with the field" }
+        dialog.driver.withContext(OnDispatcher.EDT) {
+            val live = cast(button.component, LiveSwingComponent::class)
+            check(button.component.getBounds().width == live.getPreferredSize().getWidth().toInt()) { "Alter action must stay content-sized" }
+        }
+        println("P2 Alter Table: $tab first field at $location; content-sized action aligned")
+        return location
+    }
+
+    private fun assertNullContrast(grid: UiComponent, row: Int, column: Int) {
+        var ratio = 0.0
+        grid.driver.withContext(OnDispatcher.EDT) {
+            val table = cast(grid.component, LiveTableEditor::class)
+            table.clearSelection()
+            val rendered = table.prepareRenderer(table.getCellRenderer(row, column), row, column)
+            check(rendered.getFont().isItalic()) { "SQL NULL must retain an italic cue" }
+            ratio = contrastRatio(rendered.getForeground().getRGB(), rendered.getBackground().getRGB())
+            check(ratio >= 4.5) { "Unselected SQL NULL contrast is too low: $ratio" }
+        }
+        println("P2 unselected SQL NULL live palette contrast: $ratio:1")
+    }
+
+    private fun assertActionContrast(button: UiComponent) {
+        button.driver.withContext(OnDispatcher.EDT) {
+            val live = cast(button.component, LiveSwingComponent::class)
+            val ratio = contrastRatio(live.getForeground().getRGB(), live.getBackground().getRGB())
+            check(ratio >= 4.5) { "Revert label contrast is too low: $ratio" }
+            println("P2 enabled Revert live palette contrast: $ratio:1")
+        }
+    }
+
+    private fun contrastRatio(first: Int, second: Int): Double {
+        fun luminance(rgb: Int): Double {
+            val channels = listOf((rgb shr 16) and 255, (rgb shr 8) and 255, rgb and 255).map {
+                val value = it / 255.0
+                if (value <= 0.04045) value / 12.92 else Math.pow((value + 0.055) / 1.055, 2.4)
+            }
+            return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+        }
+        val a = luminance(first)
+        val b = luminance(second)
+        return (maxOf(a, b) + 0.05) / (minOf(a, b) + 0.05)
+    }
+
     private fun assertEditorControlsVisible(editor: UiComponent, description: String) {
         val controls = editor.xx {
             or(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"),
@@ -829,6 +946,7 @@ class IntellijUiScreenshotTest {
         editor.driver.withContext(OnDispatcher.EDT) {
             for (control in controls) {
                 val live = cast(control.component, LiveSwingComponent::class)
+                if (!live.isVisible()) continue // Optional validation details are absent when the grid is valid.
                 val bounds = control.component.getBounds()
                 if (live.getClientProperty("lattice.toolbar.control") == true && live.getVisibleRect().isEmpty) continue
                 check(live.getVisibleRect() == Rectangle(0, 0, bounds.width, bounds.height)) {
@@ -969,14 +1087,53 @@ interface LiveFrame {
 
 @Remote("javax.swing.JComponent")
 interface LiveSwingComponent {
+    fun isVisible(): Boolean
     fun getVisibleRect(): Rectangle
     fun getPreferredSize(): LiveDimension
     fun getClientProperty(key: String): Boolean?
+    fun getForeground(): LiveColor
+    fun getBackground(): LiveColor
+    fun getFont(): LiveFont
 }
 
 @Remote("java.awt.Dimension")
 interface LiveDimension {
+    fun getWidth(): Double
     fun getHeight(): Double
+}
+
+@Remote("java.awt.Color")
+interface LiveColor { fun getRGB(): Int }
+
+@Remote("java.awt.Font")
+interface LiveFont { fun isItalic(): Boolean }
+
+@Remote("javax.swing.JTextArea")
+interface LiveTextArea {
+    fun getText(): String
+    fun getCaretPosition(): Int
+    fun getLineCount(): Int
+    fun getRows(): Int
+}
+
+@Remote("javax.swing.table.TableColumnModel")
+interface LiveColumnModel {
+    fun getColumnCount(): Int
+    fun getColumn(index: Int): LiveColumn
+}
+
+@Remote("javax.swing.table.TableColumn")
+interface LiveColumn {
+    fun getHeaderValue(): String
+    fun getWidth(): Int
+}
+
+@Remote("javax.swing.table.JTableHeader")
+interface LiveTableHeader { fun getDefaultRenderer(): LiveCellRenderer }
+
+@Remote("javax.swing.table.TableCellRenderer")
+interface LiveCellRenderer {
+    fun getTableCellRendererComponent(table: LiveTableEditor, value: String, selected: Boolean, focus: Boolean, row: Int, column: Int): LiveSwingComponent
 }
 
 @Remote("javax.swing.JButton")
@@ -1016,6 +1173,11 @@ interface LiveTabs {
 
 @Remote("javax.swing.JTable")
 interface LiveTableEditor {
+    fun getColumnModel(): LiveColumnModel
+    fun getTableHeader(): LiveTableHeader
+    fun getCellRenderer(row: Int, column: Int): LiveCellRenderer
+    fun prepareRenderer(renderer: LiveCellRenderer, row: Int, column: Int): LiveSwingComponent
+    fun clearSelection()
     fun editCellAt(row: Int, column: Int): Boolean
     fun getEditorComponent(): com.intellij.driver.sdk.ui.remote.Component
     fun getCellEditor(): LiveCellEditor

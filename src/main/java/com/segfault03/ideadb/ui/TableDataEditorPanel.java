@@ -68,6 +68,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
 
     private DatabaseTable dataTable;
     private EditableTableModel tableModel;
+    private WrappingLabel validationDetails;
 
     private int currentPage = 1;
     private int pageSize = 100;
@@ -283,13 +284,26 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         footer.setBorder(BorderFactory.createCompoundBorder(
                 JBUI.Borders.customLineTop(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR), JBUI.Borders.empty(4, 12)));
         statusLabel = new WrappingLabel("Ready");
+        validationDetails = new WrappingLabel("");
+        validationDetails.getAccessibleContext().setAccessibleName("Cell validation details");
+        validationDetails.setVisible(false);
         JPanel navigation = new JPanel(new WrapLayout(FlowLayout.LEFT, JBUI.scale(4), 0));
         navigation.setOpaque(false);
         navigation.add(DatabaseUi.group(new JBLabel("Rows"), pageSizeCombo));
         navigation.add(DatabaseUi.group(prevPageBtn, pageLabel, nextPageBtn));
         footer.add(statusLabel, BorderLayout.NORTH);
-        footer.add(navigation, BorderLayout.CENTER);
+        JPanel detailsAndNavigation = new JPanel(new WidthAwareBorderLayout(0, JBUI.scale(4)));
+        detailsAndNavigation.setOpaque(false);
+        detailsAndNavigation.add(validationDetails, BorderLayout.NORTH);
+        detailsAndNavigation.add(navigation, BorderLayout.CENTER);
+        footer.add(detailsAndNavigation, BorderLayout.CENTER);
         add(footer, BorderLayout.SOUTH);
+        dataTable.getSelectionModel().addListSelectionListener(event -> {
+            if (!event.getValueIsAdjusting()) updateValidationDetails(tableModel.getValidationErrors());
+        });
+        dataTable.getColumnModel().getSelectionModel().addListSelectionListener(event -> {
+            if (!event.getValueIsAdjusting()) updateValidationDetails(tableModel.getValidationErrors());
+        });
     }
 
     private void onAutoRefreshChanged() {
@@ -464,6 +478,29 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 saveBtn,
                 saveBtn.isEnabled() ? DatabaseUi.POSITIVE_ACTION_COLOR : null
         );
+        updateValidationDetails(errors);
+    }
+
+    private void updateValidationDetails(Map<CellCoord, String> errors) {
+        if (validationDetails == null) return;
+        if (errors.isEmpty()) {
+            validationDetails.setText("");
+            validationDetails.setVisible(false);
+            return;
+        }
+        CellCoord selected = dataTable.getSelectedRow() < 0 || dataTable.getSelectedColumn() < 0 ? null
+                : new CellCoord(dataTable.convertRowIndexToModel(dataTable.getSelectedRow()),
+                        dataTable.convertColumnIndexToModel(dataTable.getSelectedColumn()));
+        CellCoord coord = selected != null && errors.containsKey(selected) ? selected : errors.keySet().stream()
+                .min(Comparator.comparingInt((CellCoord cell) -> cell.row).thenComparingInt(cell -> cell.col)).orElseThrow();
+        ColumnMetadata metadata = tableModel.getColumnMeta(coord.col);
+        String type = metadata == null ? "unknown type" : metadata.getFormattedType();
+        String detail = "Row " + (dataTable.convertRowIndexToView(coord.row) + 1) + " · "
+                + tableModel.getRawColumnName(coord.col) + " (" + type + ") · " + errors.get(coord);
+        // Keep exceptionally long invalid values from filling the editor with text.
+        validationDetails.setText(detail.length() > 240 ? detail.substring(0, 237) + "…" : detail);
+        validationDetails.setToolTipText(detail);
+        validationDetails.setVisible(true);
     }
 
     private void truncateCurrentTable() {
@@ -1136,7 +1173,6 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         private final JBColor errorBorder = new JBColor(new Color(220, 40, 40), new Color(240, 70, 70));
         private final JBColor errorSelBg = new JBColor(new Color(255, 200, 200), new Color(115, 35, 40));
 
-        private final JBColor nullFg = new JBColor(new Color(150, 150, 150), new Color(125, 125, 125));
         private final JBColor autoFg = new JBColor(new Color(120, 120, 120), new Color(155, 155, 155));
 
         @Override
@@ -1198,7 +1234,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 } else {
                     c.setBackground(table.getBackground());
                     if (value == null) {
-                        c.setForeground(nullFg);
+                        c.setForeground(table.getForeground());
                         setFont(getFont().deriveFont(Font.ITALIC));
                     } else if (isAuto) {
                         c.setForeground(table.getForeground());

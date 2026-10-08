@@ -15,7 +15,7 @@ import java.awt.event.ActionEvent;
 /** Shared spacing and quiet native action styling for database editor controls. */
 public final class DatabaseUi {
     public static final Color POSITIVE_ACTION_COLOR = new JBColor(new Color(0x2E7D32), new Color(0x238636));
-    public static final Color DESTRUCTIVE_ACTION_COLOR = new JBColor(new Color(0xC62828), new Color(0xD94F4F));
+    public static final Color DESTRUCTIVE_ACTION_COLOR = new JBColor(new Color(0xC62828), new Color(0xC43D3D));
 
     private DatabaseUi() {}
 

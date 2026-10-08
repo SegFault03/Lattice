@@ -7,15 +7,19 @@ import com.segfault03.ideadb.ui.DatabaseInputs;
 import javax.swing.*;
 import java.awt.*;
 
-/** Shared label column and top-aligned rows for every connection form and card. */
+/** Shared label column and top-aligned rows for connection and schema forms. */
 final class ConnectionFormPanel extends JPanel {
     ConnectionFormPanel() {
+        this("Database name:", "Database type:", "Database path:");
+    }
+
+    ConnectionFormPanel(String... labels) {
         super(new GridBagLayout());
         GridBagLayout layout = (GridBagLayout) getLayout();
         // Include the widest labels used by any nested card, using the rendered copy.
         // Otherwise GridBagLayout can expand one card's label column independently.
         int labelWidth = 0;
-        for (String label : new String[]{"Database name:", "Database type:", "Database path:"}) {
+        for (String label : labels) {
             labelWidth = Math.max(labelWidth, new JLabel(label).getPreferredSize().width);
         }
         labelWidth += JBUI.scale(10);
