@@ -1,5 +1,7 @@
 # UI copy and feedback review
 
+For the current review using a running IntelliJ IDEA in every bundled theme, see [IDE UI review](IDE_UI_REVIEW.md). The audit below describes earlier copy and component-preview work.
+
 This review covers the welcome editor, explorer toolbar/tree/context menus, connection and schema dialogs, table editor, SQL console and operation confirmations. The [preview helper](UI_PREVIEW.md) renders the production components in both themes without an IDE or database.
 
 | Area | Issue found | Refresh |

@@ -45,7 +45,12 @@ if command -v Xvfb >/dev/null 2>&1; then
 
     Xvfb "$xvfb_display" -screen 0 1920x1080x24 -dpi 96 -nolisten tcp -ac &
     xvfb_pid=$!
+    window_manager_pid=""
     cleanup() {
+        if [[ -n "$window_manager_pid" ]]; then
+            kill "$window_manager_pid" 2>/dev/null || true
+            wait "$window_manager_pid" 2>/dev/null || true
+        fi
         kill "$xvfb_pid" 2>/dev/null || true
         wait "$xvfb_pid" 2>/dev/null || true
     }
@@ -65,6 +70,17 @@ if command -v Xvfb >/dev/null 2>&1; then
     if ! xdpyinfo -display "$DISPLAY" >/dev/null 2>&1; then
         echo "Timed out waiting for Xvfb display $DISPLAY." >&2
         exit 1
+    fi
+    # A real window manager supplies modal borders/title bars and honors IDE resizing.
+    mkdir -p build
+    if command -v xfwm4 >/dev/null 2>&1; then
+        xfwm4 --compositor=off > build/ui-window-manager.log 2>&1 &
+        window_manager_pid=$!
+    elif command -v openbox >/dev/null 2>&1; then
+        openbox > build/ui-window-manager.log 2>&1 &
+        window_manager_pid=$!
+    else
+        echo "No window manager found; modal title bars and desktop shadows may be absent." >&2
     fi
 elif [[ -z "${DISPLAY:-}" ]]; then
     echo "Xvfb is required for a headless run. Install Xvfb or provide a graphical DISPLAY." >&2

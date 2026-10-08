@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Capture production UI flows in every bundled IDEA 2025.1 theme.
+set -euo pipefail
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+export LATTICE_UI_MAVEN_REPOSITORY="$repo_root/build/ui-test-maven/repository"
+
+fetch_jar() {
+    local artifact_path="$1" destination="$LATTICE_UI_MAVEN_REPOSITORY/$1"
+    if [[ ! -s "$destination" ]]; then
+        mkdir -p "$(dirname "$destination")"
+        if ! curl --fail --location --retry 3 "https://repo.maven.apache.org/maven2/$artifact_path" -o "$destination.part"; then
+            rm -f "$destination.part"
+            return 1
+        fi
+        mv "$destination.part" "$destination"
+    fi
+}
+for version in 9.0.0 8.4.0 8.0.33; do
+    fetch_jar "com/mysql/mysql-connector-j/$version/mysql-connector-j-$version.jar"
+done
+fetch_jar org/hsqldb/hsqldb/2.7.2/hsqldb-2.7.2.jar
+fetch_jar org/hsqldb/hsqldb/2.7.3/hsqldb-2.7.3-jdk8.jar
+fetch_jar org/hsqldb/hsqldb/2.6.1/hsqldb-2.6.1-jdk8.jar
+fetch_jar org/hsqldb/hsqldb/2.4.1/hsqldb-2.4.1.jar
+
+themes=("$@")
+if [[ ${#themes[@]} -eq 0 ]]; then
+    themes=(ExperimentalDark ExperimentalLight ExperimentalLightWithLightHeader JetBrainsHighContrastTheme Darcula IntelliJ JetBrainsLightTheme)
+fi
+for theme in "${themes[@]}"; do
+    case "$theme" in
+        ExperimentalDark|ExperimentalLight|ExperimentalLightWithLightHeader|JetBrainsHighContrastTheme|Darcula|IntelliJ|JetBrainsLightTheme) ;;
+        *) echo "Unsupported theme: $theme" >&2; exit 2 ;;
+    esac
+    result_dir="$repo_root/build/ui-review/$theme"
+    mkdir -p "$result_dir"
+    # Each theme uses the same isolated test project and a fresh IDE system sandbox.
+    # Preserve the log outside the directory cleared by the screenshot test.
+    ./scripts/capture-intellij-ui.sh -Plattice.ui.review=true -Plattice.ui.theme="$theme" \
+        -Plattice.ui.output="$result_dir" 2>&1 | tee "$repo_root/build/ui-review/$theme.log"
+    cp build/test-results/uiScreenshotTest/TEST-com.segfault03.ideadb.ui.IntellijUiScreenshotTest.xml "$result_dir/test-result.xml"
+done
+python3 - <<'PY'
+from pathlib import Path
+root = Path('build/ui-review')
+lines = ['# Real IntelliJ UI captures', '', 'Every image is a full virtual-desktop capture of the running IDE.', '']
+for directory in sorted(p for p in root.iterdir() if p.is_dir()):
+    lines += [f'## {directory.name}', '']
+    for png in sorted(directory.glob('*.png')):
+        lines.append(f'- [{png.stem}]({directory.name}/{png.name})')
+    lines += [f'- [Runtime evidence]({directory.name}/runtime-evidence.txt)', f'- [JUnit result]({directory.name}/test-result.xml)', '']
+(root / 'index.md').write_text('\n'.join(lines) + '\n')
+PY
+echo "Screenshots and live-runtime evidence: $repo_root/build/ui-review"

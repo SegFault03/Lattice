@@ -1,6 +1,8 @@
 package com.segfault03.ideadb.ui
 
 import com.intellij.driver.sdk.invokeAction
+import com.intellij.driver.client.Remote
+import com.intellij.driver.model.OnDispatcher
 import com.intellij.driver.sdk.ui.components.UiComponent.Companion.waitFound
 import com.intellij.driver.sdk.ui.components.UiComponent
 import com.intellij.driver.sdk.ui.components.common.IdeaFrameUI
@@ -9,8 +11,10 @@ import com.intellij.driver.sdk.ui.components.elements.DialogUiComponent
 import com.intellij.driver.sdk.ui.components.elements.JComboBoxUiComponent
 import com.intellij.driver.sdk.ui.components.elements.JTableUiComponent
 import com.intellij.driver.sdk.ui.components.elements.JTextFieldUI
+import com.intellij.driver.sdk.ui.components.elements.JTextComponent
 import com.intellij.driver.sdk.ui.components.elements.JTreeUiComponent
 import com.intellij.driver.sdk.ui.components.elements.waitForNoOpenedDialogs
+import com.intellij.driver.sdk.ui.remote.Window
 import com.intellij.driver.sdk.waitForIndicators
 import com.intellij.ide.starter.driver.engine.runIdeWithDriver
 import com.intellij.ide.starter.ide.IdeProductProvider
@@ -36,6 +40,8 @@ import kotlin.io.path.writeText
 import kotlin.time.Duration.Companion.minutes
 
 class IntellijUiScreenshotTest {
+    private var repaintIdeBeforeCapture: (() -> Unit)? = null
+
     @Test
     fun captureLatticeToolWindowFromRealIde() {
         val projectDirectory = Path.of(System.getProperty("user.dir"), "build", "ui-test-project")
@@ -55,6 +61,9 @@ class IntellijUiScreenshotTest {
         """.trimIndent())
 
         val screenshotsDirectory = Path.of(requireNotNull(System.getProperty("ui.screenshot.dir")))
+        val review = System.getProperty("ui.review.enabled").toBoolean()
+        val themeId = System.getProperty("ui.theme.id", "ExperimentalDark")
+        var downloadedButtonEnabledAfterModeSwitch: Boolean? = null
         screenshotsDirectory.toFile().deleteRecursively()
         Files.createDirectories(screenshotsDirectory)
         val mavenRepository = Path.of(requireNotNull(System.getProperty("ui.maven.repository"))).toAbsolutePath()
@@ -79,17 +88,35 @@ class IntellijUiScreenshotTest {
         // Starter keeps the test IDE's config between runs. Reset only this test plugin's
         // saved connections so every run begins at the same real empty-state screen.
         Files.deleteIfExists(testContext.paths.configDir.resolve("options/LatticeSettings.xml"))
+        Files.createDirectories(testContext.paths.configDir.resolve("options"))
+        testContext.paths.configDir.resolve("options/laf.xml").writeText(
+            """<application><component name="LafManager" autodetect="false"><laf themeId="$themeId"/></component></application>""",
+        )
         testContext.apply {
             PluginConfigurator(this).installPluginFromPath(
                 Path.of(requireNotNull(System.getProperty("path.to.build.plugin"))),
             )
         }.runIdeWithDriver().useDriverAndCloseIde {
             waitForIndicators(5.minutes)
+            val laf = service(LiveLafManager::class)
+            // IDEA migrates this classic theme ID on startup in the new UI. Select
+            // the still-installed theme through the live platform API for this audit.
+            if (themeId == "JetBrainsLightTheme") {
+                withContext(OnDispatcher.EDT) {
+                    laf.setCurrentLookAndFeel(laf.findLaf(themeId), true)
+                    laf.updateUI()
+                }
+            }
+            val actualTheme = laf.getCurrentUIThemeLookAndFeel()
+            check(actualTheme.getId() == themeId) { "Requested $themeId, running ${actualTheme.getId()}" }
+            val availableThemes = laf.getInstalledLookAndFeels().map { it.getName() }
+            println("Actual IDE theme: ${actualTheme.getName()} ($themeId); available: $availableThemes")
             val retainedHsqlFixture = testContext.paths.systemDir
                 .resolve("lattice/jdbc/hsqldb/hsqldb-2.7.3-jdk8.jar")
             Files.createDirectories(retainedHsqlFixture.parent)
             Files.copy(
-                Path.of(System.getProperty("user.dir"), "lib", "hsqldb-2.7.4.jar"),
+                if (review) mavenRepository.resolve("org/hsqldb/hsqldb/2.7.3/hsqldb-2.7.3-jdk8.jar")
+                else Path.of(System.getProperty("user.dir"), "lib", "hsqldb-2.7.4.jar"),
                 retainedHsqlFixture,
                 java.nio.file.StandardCopyOption.REPLACE_EXISTING,
             )
@@ -99,7 +126,7 @@ class IntellijUiScreenshotTest {
 
             ideFrame {
                 invokeAction("com.segfault03.lattice.open")
-                maximize()
+                resize(1400, 1000)
                 toFront()
             }
 
@@ -141,8 +168,14 @@ class IntellijUiScreenshotTest {
 
             lateinit var frame: IdeaFrameUI
             ideFrame { frame = this }
-            pluginRoot.x { byVisibleText("Add a connection…") }.waitFound().click()
-            frame.x { byVisibleText("MySQL…") }.waitFound().click()
+            if (themeId == "JetBrainsHighContrastTheme") {
+                // In Xvfb, closing dialogs can leave parts of the high-contrast IDE
+                // chrome unpainted. Request a real JFrame repaint before settled captures.
+                repaintIdeBeforeCapture = {
+                    withContext(OnDispatcher.EDT) { cast(frame.component, LiveFrame::class).repaint() }
+                }
+            }
+            openConnectionMenu(pluginRoot, frame, "MySQL…")
 
             val mysqlDialog = frame.x(DialogUiComponent::class.java) {
                 byTitle("New connection")
@@ -150,6 +183,12 @@ class IntellijUiScreenshotTest {
             mysqlDialog.x {
                 byVisibleText("MySQL · Available drivers · MySQL Connector/J 8.4.0")
             }.waitFound()
+            if (review) {
+                captureScreen(screenshotsDirectory.resolve("mysql-standard.png"))
+                mysqlDialog.x { byVisibleText("JDBC URL") }.waitFound().click()
+                captureScreen(screenshotsDirectory.resolve("mysql-jdbc-url.png"))
+                mysqlDialog.x { byVisibleText("Standard") }.waitFound().click()
+            }
             mysqlDialog.x { byVisibleText("Driver options ▸") }.waitFound().click()
             val mysqlAvailableDriverCombo = mysqlDialog.x(JComboBoxUiComponent::class.java) {
                 and(
@@ -212,18 +251,34 @@ class IntellijUiScreenshotTest {
                 mysqlProgressBar.component.width == mysqlDriverVersionCombo.component.width,
                 "The progress bar should match the driver version selector width",
             )
-            captureScreen(screenshotsDirectory.resolve("mysql-driver-download-progress.png"))
+            captureScreen(screenshotsDirectory.resolve("mysql-driver-download-progress.png"), settleMillis = 0)
             waitUntil("MySQL driver download and verification") {
                 mysqlDialog.hasSubtext("Downloaded and ready")
             }
             check(!mysqlDownloadButton.component.isEnabled()) {
                 "A successfully downloaded driver should not be offered for download again"
             }
+            if (review) {
+                captureScreen(screenshotsDirectory.resolve("mysql-driver-downloaded.png"))
+                mysqlDialog.x { byVisibleText("JDBC URL") }.waitFound().click()
+                mysqlDialog.x(JTextFieldUI::class.java) {
+                    and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("JDBC URL:"))
+                }.waitFound().text =
+                    "jdbc:mysql://127.0.0.1:1/ui_review?connectTimeout=1000"
+                mysqlDialog.x { byVisibleText("Test connection") }.waitFound().click()
+                frame.x(DialogUiComponent::class.java) { byTitle("Connection Failed") }.waitFound().also {
+                    captureScreen(screenshotsDirectory.resolve("mysql-connection-failure.png"))
+                    it.pressButton("OK")
+                }
+                captureScreen(screenshotsDirectory.resolve("mysql-connection-failure-inline.png"))
+                downloadedButtonEnabledAfterModeSwitch = mysqlDownloadButton.component.isEnabled()
+                println("Review observation: downloaded MySQL Download button enabled after JDBC URL / failed test = $downloadedButtonEnabledAfterModeSwitch")
+            }
             mysqlDialog.pressButton("Cancel")
             ideFrame { waitForNoOpenedDialogs() }
+            waitForIndicators(2.minutes)
 
-            pluginRoot.x { byVisibleText("Add a connection…") }.waitFound().click()
-            frame.x { byVisibleText("HSQLDB…") }.waitFound().click()
+            openConnectionMenu(pluginRoot, frame, "HSQLDB…")
 
             val connectionDialog = frame.x(DialogUiComponent::class.java) {
                 byTitle("New connection")
@@ -239,6 +294,12 @@ class IntellijUiScreenshotTest {
                     byAccessibleName("Mode:"),
                 )
             }.waitFound()
+            if (review) {
+                modeCombo.selectItem("Embedded File (file)")
+                captureScreen(screenshotsDirectory.resolve("hsql-file.png"))
+                modeCombo.selectItem("Remote Server (hsql://)")
+                captureScreen(screenshotsDirectory.resolve("hsql-server.png"))
+            }
             modeCombo.selectItem("In-Memory (mem)")
             connectionDialog.x(JTextFieldUI::class.java) {
                 and(
@@ -283,6 +344,10 @@ class IntellijUiScreenshotTest {
                     byAccessibleName("Source:"),
                 )
             }.waitFound()
+            if (review) {
+                driverSourceCombo.selectItem("Local JAR")
+                captureScreen(screenshotsDirectory.resolve("driver-local-jar.png"))
+            }
             driverSourceCombo.selectItem("Download a version")
             val driverVersionCombo = connectionDialog.x(JComboBoxUiComponent::class.java) {
                 and(
@@ -304,6 +369,8 @@ class IntellijUiScreenshotTest {
             pressEscape()
             val sourceWidth = driverSourceCombo.component.width
             val versionWidth = driverVersionCombo.component.width
+            val sourceHeight = driverSourceCombo.component.height
+            val versionHeight = driverVersionCombo.component.height
             println("Download driver control widths: source=$sourceWidth, version=$versionWidth")
             assertTrue(sourceWidth == versionWidth, "Driver source and editable version controls should have equal widths")
             val moreVersionsButton = connectionDialog.x { byVisibleText("More versions") }.waitFound()
@@ -354,6 +421,24 @@ class IntellijUiScreenshotTest {
                 databaseTree.pathExists(*publicSchemaPath)
             }
             captureScreen(screenshotsDirectory.resolve("connected-explorer.png"))
+            if (review) {
+                databaseTree.fixture.rightClickPath(connectionPath.joinToString(databaseTree.fixture.separator()))
+                captureScreen(screenshotsDirectory.resolve("connection-context-menu.png"))
+                frame.x { byVisibleText("Edit connection…") }.waitFound().click()
+                frame.x(DialogUiComponent::class.java) { byTitle("Edit connection") }.waitFound().also {
+                    captureScreen(screenshotsDirectory.resolve("edit-connection.png"))
+                    it.pressButton("Cancel")
+                }
+                databaseTree.fixture.rightClickPath(connectionPath.joinToString(databaseTree.fixture.separator()))
+                frame.x { byVisibleText("Create schema…") }.waitFound().click()
+                frame.x(DialogUiComponent::class.java) { byTitle("Create schema") }.waitFound().also {
+                    captureScreen(screenshotsDirectory.resolve("create-schema.png"))
+                    it.x(JTextFieldUI::class.java) { byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField") }.waitFound().text = "invalid-name"
+                    Thread.sleep(600)
+                    captureScreen(screenshotsDirectory.resolve("create-schema-invalid.png"))
+                    it.pressButton("Cancel")
+                }
+            }
 
             val publicSchemaPathText = publicSchemaPath.joinToString(databaseTree.fixture.separator())
             databaseTree.fixture.expandPath(publicSchemaPathText)
@@ -461,10 +546,191 @@ class IntellijUiScreenshotTest {
                 "Committing the integer edit should preserve the other row values"
             }
             captureScreen(screenshotsDirectory.resolve("table-edit-committed.png"))
+            val commitSize = "${commitButton.component.width}x${commitButton.component.height}"
+            val revertSize = "${revertButton.component.width}x${revertButton.component.height}"
+
+            if (review) {
+                val pathText = peoplePath.joinToString(databaseTree.fixture.separator())
+                dataGrid.rightClickCell(0, 1)
+                captureScreen(screenshotsDirectory.resolve("table-cell-context-menu.png"))
+                check(!frame.x { byVisibleText("Set to NULL") }.waitFound().component.isEnabled())
+                pressEscape()
+                replaceCellValue(dataGrid, 0, 1, "NULL")
+                waitUntil("literal NULL string is a valid text edit") { commitButton.component.isEnabled() }
+                captureScreen(screenshotsDirectory.resolve("table-literal-null.png"))
+                revertButton.click()
+                waitUntil("NULL reverted") { tableCellText(dataGrid, 0, 1) == "Ada Lovelace" }
+                dataGrid.rightClickCell(0, 2)
+                check(!frame.x { byVisibleText("Use database default") }.waitFound().component.isEnabled())
+                captureScreen(screenshotsDirectory.resolve("table-existing-default-disabled.png"))
+                pressEscape()
+                tableEditor.x { byAccessibleName("Add a new row") }.waitFound().click()
+                waitUntil("review default row added") { dataGrid.rowCount() == 2 }
+                replaceCellValue(dataGrid, 1, 1, "Review defaults")
+                replaceCellValue(dataGrid, 1, 0, "99")
+                dataGrid.rightClickCell(1, 0)
+                frame.x { byVisibleText("Use database default") }.waitFound().click()
+                waitUntil("auto default restored") { tableCellText(dataGrid, 1, 0) == "(Auto)" }
+                captureScreen(screenshotsDirectory.resolve("table-use-default.png"))
+                revertButton.click()
+                waitUntil("default row reverted") { dataGrid.rowCount() == 1 }
+                replaceCellValue(dataGrid, 0, 1, "Grace Hopper")
+                waitUntil("review edit pending") { commitButton.component.isEnabled() }
+                revertButton.click()
+                waitUntil("Revert restores persisted row") { tableCellText(dataGrid, 0, 1) == "Ada Lovelace" }
+                captureScreen(screenshotsDirectory.resolve("table-reverted.png"))
+                val whereInput = tableEditor.xx(JTextFieldUI::class.java) {
+                    byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField")
+                }.list().first()
+                whereInput.text = "\"id\" = -999"
+                tableEditor.x { byVisibleText("Apply") }.waitFound().click()
+                waitUntil("empty filter result") { dataGrid.rowCount() == 0 }
+                captureScreen(screenshotsDirectory.resolve("table-filter-empty.png"))
+                whereInput.text = "invalid_column = 1"
+                tableEditor.x { byVisibleText("Apply") }.waitFound().click()
+                frame.x(DialogUiComponent::class.java) { byTitle("Data Fetch Error") }.waitFound().also {
+                    captureScreen(screenshotsDirectory.resolve("table-filter-error.png"))
+                    it.pressButton("OK")
+                }
+                whereInput.text = ""
+                tableEditor.x { byVisibleText("Apply") }.waitFound().click()
+                waitUntil("filter reset") { dataGrid.rowCount() == 1 }
+                databaseTree.fixture.rightClickPath(pathText)
+                captureScreen(screenshotsDirectory.resolve("table-context-menu.png"))
+                frame.x { byVisibleText("Alter table…") }.waitFound().click()
+                val alter = frame.x(DialogUiComponent::class.java) { byTitle("Alter table: LATTICE_PEOPLE") }.waitFound()
+                for ((label, file) in listOf("Add column" to "add", "Rename column" to "rename-column", "Modify column" to "modify", "Drop column" to "drop", "Rename table" to "rename-table")) {
+                    // Each card has an operation button with the same label as its tab.
+                    alter.xx { byVisibleText(label) }.list().first().click()
+                    captureScreen(screenshotsDirectory.resolve("alter-$file.png"))
+                }
+                alter.xx { byVisibleText("Drop column") }.list().first().click()
+                alter.xx { byVisibleText("Drop column") }.list().last().click()
+                frame.x(DialogUiComponent::class.java) { byTitle("Drop column") }.waitFound().also {
+                    captureScreen(screenshotsDirectory.resolve("drop-column-confirmation.png"))
+                    it.pressButton("Cancel")
+                }
+                alter.pressButton("Close")
+                databaseTree.fixture.rightClickPath(pathText)
+                frame.x { byVisibleText("Drop table…") }.waitFound().click()
+                frame.x(DialogUiComponent::class.java) { byTitle("Drop table") }.waitFound().also {
+                    captureScreen(screenshotsDirectory.resolve("drop-table-confirmation.png"))
+                    it.pressButton("Cancel")
+                }
+                databaseTree.fixture.rightClickPath(publicSchemaPathText)
+                frame.x { byVisibleText("Drop schema…") }.waitFound().click()
+                frame.x(DialogUiComponent::class.java) { byTitle("Drop schema") }.waitFound().also {
+                    captureScreen(screenshotsDirectory.resolve("drop-schema-confirmation.png"))
+                    it.pressButton("Cancel")
+                }
+                tableEditor.x { byAccessibleName("Export data") }.waitFound().click()
+                captureScreen(screenshotsDirectory.resolve("table-export-menu.png"))
+                frame.x { byVisibleText("View CREATE TABLE…") }.waitFound().click()
+                frame.x(DialogUiComponent::class.java) { byTitle("CREATE TABLE DDL - LATTICE_PEOPLE") }.waitFound().also {
+                    captureScreen(screenshotsDirectory.resolve("table-ddl-dialog.png"))
+                    it.pressButton("Close")
+                }
+                tableEditor.x { byAccessibleName("Table options") }.waitFound().click()
+                captureScreen(screenshotsDirectory.resolve("table-options-menu.png"))
+                frame.x { byVisibleText("Truncate table…") }.waitFound().click()
+                frame.x(DialogUiComponent::class.java) { byTitle("Truncate table") }.waitFound().also {
+                    captureScreen(screenshotsDirectory.resolve("truncate-confirmation.png"))
+                    it.pressButton("Cancel")
+                }
+                dataGrid.clickCell(0, 1)
+                tableEditor.x { byAccessibleName("Delete selected rows") }.waitFound().click()
+                frame.x(DialogUiComponent::class.java) { byTitle("Delete rows") }.waitFound().also {
+                    captureScreen(screenshotsDirectory.resolve("delete-rows-confirmation.png"))
+                    it.pressButton("Cancel")
+                }
+                frame.resize(1000, 800)
+                captureScreen(screenshotsDirectory.resolve("table-narrow.png"))
+                val ideWindow = cast(frame.component, Window::class)
+                withContext(OnDispatcher.EDT) { ideWindow.setBounds(10, 40, 1900, 1000) }
+                captureScreen(screenshotsDirectory.resolve("table-wide.png"))
+                withContext(OnDispatcher.EDT) { ideWindow.setBounds(260, 40, 1400, 1000) }
+                databaseTree.fixture.rightClickPath(pathText)
+                frame.x { byVisibleText("Open in SQL console") }.waitFound().click()
+                val console = frame.x { byJavaClass("com.segfault03.ideadb.ui.SqlQueryConsolePanel") }.waitFound()
+                val query = console.xx { byJavaClass("com.intellij.ui.components.JBTextArea") }.list().first()
+                val queryText = cast(query.component, JTextComponent::class)
+                captureScreen(screenshotsDirectory.resolve("sql-console-ready.png"))
+                console.x { byVisibleText("Run") }.waitFound().click()
+                waitUntil("SQL SELECT completed") { console.hasSubtext("1 rows") }
+                captureScreen(screenshotsDirectory.resolve("sql-console-results.png"))
+                withContext(OnDispatcher.EDT) { queryText.setText("SELECT * FROM PUBLIC.LATTICE_PEOPLE WHERE \"id\" = -999") }
+                console.x { byVisibleText("Run") }.waitFound().click()
+                waitUntil("empty SQL result") { console.hasSubtext("0 rows") }
+                captureScreen(screenshotsDirectory.resolve("sql-console-empty-results.png"))
+                withContext(OnDispatcher.EDT) { queryText.setText("UPDATE PUBLIC.LATTICE_PEOPLE SET \"name\" = 'Ada Lovelace' WHERE \"id\" = $changedId") }
+                console.x { byVisibleText("Run") }.waitFound().click()
+                waitUntil("SQL update completed") { console.hasSubtext("1 rows affected") }
+                captureScreen(screenshotsDirectory.resolve("sql-console-update.png"))
+                withContext(OnDispatcher.EDT) { queryText.setText("SELECT * FROM PUBLIC.LATTICE_PEOPLE") }
+                console.x { byVisibleText("Run") }.waitFound().click()
+                waitUntil("results restored before cancellation/error review") { console.hasSubtext("1 rows") }
+                // Bounded real database work lasts a few seconds. An unbounded four-way
+                // system-catalog aggregate exposed slow HSQLDB cancellation; its evidence
+                // is retained separately rather than making every theme run hang.
+                val tenValues = "(VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9))"
+                withContext(OnDispatcher.EDT) {
+                    queryText.setText("SELECT COUNT(*) FROM INFORMATION_SCHEMA.SYSTEM_COLUMNS A CROSS JOIN INFORMATION_SCHEMA.SYSTEM_COLUMNS B CROSS JOIN $tenValues C(n) CROSS JOIN $tenValues D(n)")
+                }
+                val runQuery = console.x { byVisibleText("Run") }.waitFound()
+                val stopQuery = console.x { byVisibleText("Stop") }.waitFound()
+                runQuery.click()
+                waitUntil("long SQL running") { stopQuery.component.isEnabled() }
+                captureScreen(screenshotsDirectory.resolve("sql-console-running.png"), settleMillis = 0)
+                stopQuery.click()
+                waitUntil("SQL cancellation completes") { runQuery.component.isEnabled() }
+                captureScreen(screenshotsDirectory.resolve("sql-console-cancelled.png"))
+                withContext(OnDispatcher.EDT) { queryText.setText("SELECT * FROM TABLE_THAT_DOES_NOT_EXIST") }
+                console.x { byVisibleText("Run") }.waitFound().click()
+                waitUntil("SQL error displayed") { console.hasSubtext("Query failed") }
+                captureScreen(screenshotsDirectory.resolve("sql-console-error.png"))
+                val tabs = cast(console.x { byJavaClass("javax.swing.JTabbedPane") }.waitFound().component, LiveTabs::class)
+                withContext(OnDispatcher.EDT) { tabs.setSelectedIndex(1) }
+                captureScreen(screenshotsDirectory.resolve("sql-console-messages.png"))
+                withContext(OnDispatcher.EDT) { tabs.setSelectedIndex(0) }
+                captureScreen(screenshotsDirectory.resolve("sql-console-results-after-error.png"))
+                console.x(JComboBoxUiComponent::class.java) {
+                    and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"), byAccessibleName("History"))
+                }.waitFound().also {
+                    clickComboArrow(it)
+                    captureScreen(screenshotsDirectory.resolve("sql-history-popup.png"))
+                    pressEscape()
+                }
+                console.x(JComboBoxUiComponent::class.java) {
+                    and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"), byAccessibleName("Template"))
+                }.waitFound().also {
+                    clickComboArrow(it)
+                    captureScreen(screenshotsDirectory.resolve("sql-template-popup.png"))
+                    pressEscape()
+                }
+                frame.resize(1000, 800)
+                captureScreen(screenshotsDirectory.resolve("sql-console-narrow.png"))
+                withContext(OnDispatcher.EDT) { ideWindow.setBounds(10, 40, 1900, 1000) }
+                captureScreen(screenshotsDirectory.resolve("sql-console-wide.png"))
+                withContext(OnDispatcher.EDT) { ideWindow.setBounds(260, 40, 1400, 1000) }
+                databaseTree.fixture.rightClickPath(connectionPath.joinToString(databaseTree.fixture.separator()))
+                frame.x { byVisibleText("Remove connection") }.waitFound().click()
+                frame.x(DialogUiComponent::class.java) { byTitle("Remove connection") }.waitFound().also {
+                    captureScreen(screenshotsDirectory.resolve("remove-connection-confirmation.png"))
+                    it.pressButton("Cancel")
+                }
+                databaseTree.fixture.rightClickPath(connectionPath.joinToString(databaseTree.fixture.separator()))
+                frame.x { byVisibleText("Disconnect") }.waitFound().click()
+                captureScreen(screenshotsDirectory.resolve("disconnected-explorer.png"))
+            }
 
             val evidence = buildString {
                 appendLine("IDE target: IntelliJ IDEA Community ${System.getProperty("ui.ide.version")} (${System.getProperty("ui.ide.build")})")
                 appendLine("UI driver: JetBrains Starter and Driver")
+                appendLine("Actual IDE theme: ${actualTheme.getName()} (${actualTheme.getId()})")
+                appendLine("Available IDE themes: $availableThemes")
+                appendLine("Driver input sizes: source=${sourceWidth}x$sourceHeight, version=${versionWidth}x$versionHeight; left edges: $sourceLeft, $selectorLeft; actions: $actionsLeft")
+                appendLine("Commit button size: $commitSize; Revert button size: $revertSize")
+                appendLine("Review observation: downloaded MySQL Download button enabled after JDBC URL / failed test = $downloadedButtonEnabledAfterModeSwitch")
                 appendLine("Configured Maven local repository fixture: $mavenRepository")
                 appendLine("Project POM default drivers: MySQL 8.4.0, HSQLDB 2.7.2")
                 appendLine("Discovered MySQL Connector/J releases: 9.0.0, 8.4.0, 8.0.33")
@@ -495,21 +761,41 @@ class IntellijUiScreenshotTest {
         check(ImageIO.write(image, "png", path.toFile())) { "No PNG ImageIO writer available" }
     }
 
-    private fun captureScreen(path: Path) {
+    private fun openConnectionMenu(root: UiComponent, frame: IdeaFrameUI, itemText: String) {
+        // A late IDE focus change (for example Maven import finishing) can close a
+        // transient popup. Retry opening the production menu, not the whole test.
+        repeat(3) {
+            root.x { byVisibleText("Add a connection…") }.waitFound().click()
+            repeat(20) {
+                val item = frame.xx { byVisibleText(itemText) }.list().firstOrNull()
+                if (item != null) {
+                    item.click()
+                    return
+                }
+                Thread.sleep(100)
+            }
+        }
+        error("Could not open production connection menu item $itemText")
+    }
+
+    private fun captureScreen(path: Path, settleMillis: Long = 350) {
+        if (settleMillis > 0) repaintIdeBeforeCapture?.invoke()
+        Thread.sleep(settleMillis) // Allow live Swing layout and popup painting to settle.
         val bounds = Rectangle(Toolkit.getDefaultToolkit().screenSize)
         savePng(path, Robot().createScreenCapture(bounds))
     }
 
     private fun replaceCellValue(table: JTableUiComponent, row: Int, column: Int, value: String) {
-        table.doubleClickCell(row, column)
-        val robot = Robot()
-        robot.keyPress(KeyEvent.VK_CONTROL)
-        robot.keyPress(KeyEvent.VK_A)
-        robot.keyRelease(KeyEvent.VK_A)
-        robot.keyRelease(KeyEvent.VK_CONTROL)
-        robot.waitForIdle()
-        table.keyboard { typeText(value) }
-        table.keyboard { enter() }
+        table.clickCell(row, column)
+        // Drive the real JTable editor on the IDE EDT. Repeated native double clicks
+        // and global Ctrl+A are focus-sensitive under virtual desktop window managers.
+        // This uses the production editor and its normal conversion/listener lifecycle.
+        table.driver.withContext(OnDispatcher.EDT) {
+            val liveTable = cast(table.component, LiveTableEditor::class)
+            check(liveTable.editCellAt(row, column)) { "Production cell editor did not open at $row,$column" }
+            cast(liveTable.getEditorComponent(), JTextComponent::class).setText(value)
+            check(liveTable.getCellEditor().stopCellEditing()) { "Production cell editor did not finish at $row,$column" }
+        }
     }
 
     private fun tableCellText(table: JTableUiComponent, row: Int, column: Int): String =
@@ -548,4 +834,46 @@ class IntellijUiScreenshotTest {
         }
         assertTrue(condition(), "Timed out waiting for $description")
     }
+}
+
+@Remote("javax.swing.JFrame")
+interface LiveFrame {
+    fun repaint()
+}
+
+@Remote("com.intellij.ide.ui.LafManager")
+interface LiveLafManager {
+    fun getCurrentUIThemeLookAndFeel(): LiveTheme
+    fun getInstalledLookAndFeels(): Array<LiveLafInfo>
+    fun findLaf(themeId: String): LiveTheme
+    fun setCurrentLookAndFeel(theme: LiveTheme, installEditorScheme: Boolean)
+    fun updateUI()
+}
+
+@Remote("com.intellij.ide.ui.laf.UIThemeLookAndFeelInfo")
+interface LiveTheme {
+    fun getId(): String
+    fun getName(): String
+}
+
+@Remote("javax.swing.UIManager\$LookAndFeelInfo")
+interface LiveLafInfo {
+    fun getName(): String
+}
+
+@Remote("javax.swing.JTabbedPane")
+interface LiveTabs {
+    fun setSelectedIndex(index: Int)
+}
+
+@Remote("javax.swing.JTable")
+interface LiveTableEditor {
+    fun editCellAt(row: Int, column: Int): Boolean
+    fun getEditorComponent(): com.intellij.driver.sdk.ui.remote.Component
+    fun getCellEditor(): LiveCellEditor
+}
+
+@Remote("javax.swing.table.TableCellEditor")
+interface LiveCellEditor {
+    fun stopCellEditing(): Boolean
 }

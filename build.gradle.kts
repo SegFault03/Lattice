@@ -163,8 +163,11 @@ val uiScreenshotTest by intellijPlatformTesting.testIdeUi.registering {
         testClassesDirs = uiTestSourceSet.output.classesDirs
         classpath = uiTestSourceSet.runtimeClasspath
         useJUnitPlatform()
+        outputs.upToDateWhen { false } // Rendering must launch the IDE even when code is unchanged.
         systemProperty("java.awt.headless", "false")
-        systemProperty("ui.screenshot.dir", layout.buildDirectory.dir("ui-test-results").get().asFile.absolutePath)
+        systemProperty("ui.screenshot.dir", providers.gradleProperty("lattice.ui.output").orElse(layout.buildDirectory.dir("ui-test-results").get().asFile.absolutePath).get())
+        systemProperty("ui.theme.id", providers.gradleProperty("lattice.ui.theme").orElse("ExperimentalDark").get())
+        systemProperty("ui.review.enabled", providers.gradleProperty("lattice.ui.review").orElse("false").get())
         systemProperty("ui.maven.repository", layout.buildDirectory.dir("ui-test-maven/repository").get().asFile.absolutePath)
         val ide = tasks.named<RunIdeTask>("runIde").get()
         systemProperty("ui.ide.home", ide.platformPath.toString())

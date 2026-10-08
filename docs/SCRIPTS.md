@@ -13,6 +13,7 @@ Python helper scripts use Python's standard library and run on Windows, Linux an
 | `prepare-source-asset.py` | Download/check the pinned corresponding MySQL source archive | Network on first use |
 | `verify-plugin.py` | Check exact ZIP against an IntelliJ SDK | JDK 21; network on first use or `--ide-home` |
 | `capture-intellij-ui.sh` | Launch IDEA with the built plugin under Xvfb and capture the actual tool window | Linux; JDK 21; Xvfb or a graphical display; network on first IDE build |
+| `review-intellij-ui.sh` | Capture connection, schema, table and SQL flows in all seven bundled IDE themes | Linux; JDK 21; Xvfb; xfwm4 or Openbox; Python 3; curl; network for real JDBC fixtures/downloads |
 | `common.py` | Shared cache paths, Java and Gradle discovery | Imported helper |
 | `tests/` | Regression tests for development/release tooling | Git for history tests |
 
@@ -53,7 +54,17 @@ To capture the real plugin Swing UI from a running IntelliJ instance under Xvfb,
 ./scripts/capture-intellij-ui.sh
 ```
 
-This runs the Gradle `uiScreenshotTest` task and writes the complete IDE window, the live Lattice tool-window component, and runtime evidence under `build/ui-test-results/`. It uses JetBrains Starter and Driver UI automation; the plugin is built and installed into the test IDE before the test opens it.
+This runs the Gradle `uiScreenshotTest` task and writes full IDE screenshots of the live production screens and runtime evidence under `build/ui-test-results/`. It uses JetBrains Starter and Driver UI automation; the plugin is built and installed into the test IDE before the test opens it. This task expects the JDBC fixtures under `build/ui-test-maven/repository`; the review script below prepares them automatically.
+
+For the complete real-IDE visual review, including theme variants and more dialog, menu, validation and console states:
+
+```sh
+./scripts/review-intellij-ui.sh
+# Faster focused pass:
+./scripts/review-intellij-ui.sh ExperimentalDark ExperimentalLight
+```
+
+Results stay separate under `build/ui-review/<theme-id>/`, with an `index.md`, per-theme logs, JUnit results and live-runtime evidence. A fresh IDE run is forced without rebuilding unchanged production classes. Xvfb uses 1920×1080 at 24 bits and scale 1; the script starts an available window manager for real modal title bars and borders. See [the IDE review](IDE_UI_REVIEW.md) for coverage, findings and remaining limits.
 
 Open `build/ui-preview/index.html` to review the five featured screens. Pass `--all-previews` to include light/dark variants for the **Welcome**, **Input controls**, **Schema dialogs**, connection states, table editor/viewer and SQL console. Every successful run updates only the five fixed README image files in `screenshots/`; extra generated images stay under `build/`. Commit changed featured PNGs with UI changes. `--output` changes the gallery/build directory while still updating `screenshots/`; use `--all-previews` for `--compare-with` before/after baselines.
 
