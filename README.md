@@ -72,7 +72,7 @@ Choose a JDBC driver compatible with your server. HSQLDB requires a matching ser
 
 Select MySQL or HSQLDB, enter connection details, and choose a driver:
 
-- **Bundled**: Connector/J 9.0.0 or HSQLDB 2.7.3.
+- **Bundled**: Connector/J 26.7.0 or HSQLDB 2.7.4.
 - **Download**: choose or enter a version and click **Download**. Downloads are explicit and checksum-verified.
 - **Local JAR**: select an existing JDBC driver.
 
@@ -121,17 +121,17 @@ The cross-platform helper shows each step in the terminal. It prefers a running 
 
 Use `--dry-run` to inspect the target without making changes, `--list-ides` to list installations, or `--ide-home`, `--plugins-dir` and `--java-home` for explicit paths. Java 21 and an installed IDEA 2025.1+ are required; Gradle still compiles against the pinned 2025.1 SDK. See the [deployment helper reference](docs/SCRIPTS.md#quick-local-ide-deployment) for discovery, recovery, custom profiles and restart options.
 
-## Functional tests
+## Validation
 
-The live suites use disposable test schemas and require isolated fixtures. With JDK 21, Python 3.11+ and a running Docker engine:
+On Linux, run the full disposable validation flow with [the one-shot validation runner](scripts/one-shot-test.py), Python 3.11+ and Docker:
 
 ```text
-python scripts/test.py --live --mysql --hsqldb --build
+python scripts/one-shot-test.py
 ```
 
-The runner starts a temporary MySQL 8.4 container and an in-memory HSQLDB server, runs pure/integration/fallback-driver checks, and stops its owned fixtures even on test failure. Ports 3306 and 9001 must be free. No existing user database is used by this command.
+The default run builds and tests the plugin, creates the five UI previews without launching IntelliJ, checks the ZIP, runs live MySQL/HSQLDB functional tests, verifies IntelliJ 2025.1–2025.3, and exercises the complete JDBC/Java 8 matrix. `--skip-compatibility` runs only the build, UI and live functional checks; `--compatibility-only` runs the IDE and JDBC matrices; `--database-compatibility-only` runs just the JDBC matrix when Plugin Verifier runs separately. Actions uses the isolated compatibility modes for PR and release matrices; routine checks use the Gradle cache. The runner uses temporary Gradle, verifier and JDBC caches; it uses an installed JDK 21 or downloads one, and downloads a temporary Java 8 runtime when needed. Docker, network access and at least 10 GiB free workspace space are required. Ports 3306 and 9001 are used by the base functional checks; 3306 by the database matrix; and 19020–19029 by Plugin Verifier. A failure exits nonzero, preserves command logs and a failure summary in `build/one-shot-test/`, and removes the temporary tools and caches.
 
-See [CONTRIBUTING](docs/CONTRIBUTING.md) to use existing isolated fixtures. Generated classes, logs and reports stay in ignored `build/`. Downloads use your operating system's user cache, overridable with `LATTICE_DEV_CACHE`.
+Use `--java-home` to select a full JDK 21 explicitly. For a shorter check against disposable MySQL 8.4/HSQLDB fixtures, see [the functional test guide](docs/CONTRIBUTING.md). The lower-level `scripts/test.py` runner remains available for focused build and fixture tests.
 
 ## Project layout
 

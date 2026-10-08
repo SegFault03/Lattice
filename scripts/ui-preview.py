@@ -74,12 +74,12 @@ def run():
         parser.error('--compare-with must be an existing output directory different from --output')
     deps = output / 'deps'
     deps.mkdir(parents=True, exist_ok=True)
-    flatlaf = deps / 'flatlaf-3.5.4.jar'
+    flatlaf = deps / 'flatlaf-3.7.2.jar'
     if not flatlaf.is_file():
-        with urllib.request.urlopen('https://repo.maven.apache.org/maven2/com/formdev/flatlaf/3.5.4/flatlaf-3.5.4.jar', timeout=60) as response:
+        with urllib.request.urlopen('https://repo.maven.apache.org/maven2/com/formdev/flatlaf/3.7.2/flatlaf-3.7.2.jar', timeout=60) as response:
             flatlaf.write_bytes(response.read())
     # This is a development-only look and feel. It is never added to the plugin ZIP.
-    if hashlib.sha256(flatlaf.read_bytes()).hexdigest() != '3c34b6aeb2f170a954c4358647eb43b68b447a2c351ff311072f7157a5d4e2fe':
+    if hashlib.sha256(flatlaf.read_bytes()).hexdigest() != '917aff3963c88d797d0fd9b9ccbd70f7681c101df9d11c59e2bc7a3a6c0fabf4':
         raise ValueError('FlatLaf archive checksum mismatch')
     production = output / 'production-classes'
     preview = output / 'preview-classes'

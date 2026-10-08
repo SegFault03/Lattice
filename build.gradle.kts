@@ -1,6 +1,6 @@
 plugins {
     id("java")
-    id("org.jetbrains.intellij.platform") version "2.6.0"
+    id("org.jetbrains.intellij.platform") version "2.19.0"
 }
 
 group = "com.segfault03.lattice"
@@ -26,16 +26,17 @@ dependencies {
         pluginVerifier("1.410")
     }
 
-    implementation("org.hsqldb:hsqldb:2.7.3")
-    implementation("com.mysql:mysql-connector-j:9.0.0")
+    implementation("org.hsqldb:hsqldb:2.7.4")
+    implementation("com.mysql:mysql-connector-j:26.7.0")
     constraints {
-        implementation("com.google.protobuf:protobuf-java:4.28.2") {
-            because("Fix CVE-2024-7254 in Connector/J 9.0.0's protobuf runtime")
+        implementation("com.google.protobuf:protobuf-java:4.36.2") {
+            because("Use the current patched protobuf runtime required by Connector/J")
         }
     }
 
-    testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
+    testImplementation("org.junit.jupiter:junit-jupiter-api:5.14.4")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.14.4")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.14.4")
     // IntelliJ 2025 test logging still references JUnit 4 runtime types.
     testRuntimeOnly("junit:junit:4.13.2")
 }
@@ -82,6 +83,41 @@ tasks.register<JavaExec>("fallbackDriverTest") {
         }
     args(file("lib").absolutePath)
 }
+
+tasks.register<JavaExec>("databaseCompatibilityTest") {
+    description = "Run the downloadable MySQL/HSQLDB driver and Java 8 compatibility matrix"
+    group = "verification"
+    dependsOn(tasks.testClasses)
+    mainClass.set("com.segfault03.ideadb.DatabaseCompatibilityTest")
+    classpath = sourceSets["test"].runtimeClasspath + sourceSets["main"].compileClasspath
+    doFirst {
+        val mode = providers.gradleProperty("lattice.compatibility.mode").orNull
+            ?: throw GradleException("Set -Plattice.compatibility.mode=mysql|hsqldb")
+        val java8 = providers.gradleProperty("lattice.compatibility.java8").orNull
+            ?: throw GradleException("Set -Plattice.compatibility.java8 to a Java 8 runtime")
+        val probeClasses = providers.gradleProperty("lattice.compatibility.probe").orNull
+            ?: throw GradleException("Set -Plattice.compatibility.probe to the compiled Java 8 probe directory")
+        setArgs(when (mode) {
+            "mysql" -> listOf(
+                mode,
+                providers.gradleProperty("lattice.compatibility.port").orNull
+                    ?: throw GradleException("Set -Plattice.compatibility.port"),
+                providers.gradleProperty("lattice.compatibility.server").orNull
+                    ?: throw GradleException("Set -Plattice.compatibility.server"),
+                java8,
+                probeClasses,
+            )
+            "hsqldb" -> listOf(mode, java8, probeClasses)
+            else -> throw GradleException("Unknown compatibility mode: $mode")
+        })
+        providers.gradleProperty("lattice.compatibility.cache").orNull?.let {
+            systemProperty("lattice.jdbc.cache", it)
+        }
+        providers.gradleProperty("lattice.compatibility.output").orNull?.let {
+            systemProperty("lattice.test.output", it)
+        }
+    }
+}
 intellijPlatform {
     pluginConfiguration {
         version.set(project.version.toString())
@@ -90,9 +126,9 @@ intellijPlatform {
     }
     pluginVerification {
         ides {
-            ide(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.IntellijIdeaCommunity, "2025.1")
-            ide(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.IntellijIdeaCommunity, "2025.2")
-            ide(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.IntellijIdeaUltimate, "2025.3")
+            create("IC", "2025.1")
+            create("IC", "2025.2")
+            create("IU", "2025.3")
         }
     }
 }

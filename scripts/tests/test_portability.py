@@ -30,6 +30,12 @@ class PortabilityTests(unittest.TestCase):
         self.assertIn("fallbackDriverTest", command)
         self.assertIn("buildPlugin", command)
         self.assertIn("-Plattice.ide.home=" + str(args.ide_home.resolve()), command)
+        args.integration_only = True
+        integration_command = runner.command(args)
+        self.assertIn("integrationTest", integration_command)
+        self.assertIn("fallbackDriverTest", integration_command)
+        self.assertNotIn("test", integration_command)
+        args.integration_only = False
         args.version = "1.0.0&echo injected"
         with self.assertRaises(ValueError):
             runner.command(args)
@@ -54,6 +60,47 @@ class PortabilityTests(unittest.TestCase):
                 with runner.hsqldb_fixture():
                     self.fail("Existing fixture was taken over")
         launch.assert_not_called()
+
+    def test_mysql_fixture_removes_only_an_image_it_pulled(self):
+        for preexisting in (False, True):
+            with self.subTest(preexisting=preexisting), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+
+                def docker(command, **kwargs):
+                    if command[:3] == ["docker", "image", "inspect"]:
+                        return subprocess.CompletedProcess(command, 0 if preexisting else 1)
+                    if command[:2] == ["docker", "exec"]:
+                        return subprocess.CompletedProcess(command, 0)
+                    return subprocess.CompletedProcess(command, 0)
+
+                with patch.object(runner, "ROOT", root), patch.object(runner, "require_free_port"), \
+                     patch.object(runner.subprocess, "run", side_effect=docker) as launch:
+                    with runner.mysql_fixture():
+                        pass
+
+                commands = [call.args[0] for call in launch.call_args_list]
+                cleanup = [command for command in commands if command[:3] == ["docker", "image", "rm"]]
+                self.assertEqual(not preexisting, bool(cleanup))
+                container_removal = [command for command in commands if command[:3] == ["docker", "rm", "--force"]]
+                self.assertEqual(1, len(container_removal))
+                if cleanup:
+                    self.assertLess(commands.index(container_removal[0]), commands.index(cleanup[0]))
+
+    def test_new_mysql_image_removal_retries_a_transient_container_reference(self):
+        image_removals = 0
+
+        def docker(command, **kwargs):
+            nonlocal image_removals
+            if command[:3] == ["docker", "image", "rm"]:
+                image_removals += 1
+                return subprocess.CompletedProcess(command, 1 if image_removals == 1 else 0,
+                                                   stderr="image is being used")
+            return subprocess.CompletedProcess(command, 0)
+
+        with patch.object(runner.subprocess, "run", side_effect=docker), patch.object(runner.time, "sleep") as wait:
+            runner.remove_downloaded_docker_image("mysql:8.4")
+        self.assertEqual(2, image_removals)
+        wait.assert_called_once_with(1)
 
     def test_wrapper_launch_with_spaces(self):
         with tempfile.TemporaryDirectory(prefix="lattice wrapper ") as directory:
