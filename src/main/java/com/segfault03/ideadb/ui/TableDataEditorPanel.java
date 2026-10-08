@@ -116,7 +116,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
 
     private void initUI() {
         JPanel heading = new JPanel(new BorderLayout());
-        JPanel toolbar = new JPanel(new WrapLayout(FlowLayout.LEFT, JBUI.scale(4), JBUI.scale(4)));
+        JPanel toolbar = new JPanel(new WrapLayout(FlowLayout.LEFT, JBUI.scale(2), JBUI.scale(4)));
         toolbar.setBorder(JBUI.Borders.empty(2, 8));
 
         JButton refreshBtn = DatabaseUi.action("", AllIcons.Actions.Refresh, "Refresh table data");
@@ -188,9 +188,13 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             }
         });
         saveBtn = DatabaseUi.action("Commit", AllIcons.Actions.Checked, "Commit pending changes to the database");
+        saveBtn.setBorder(JBUI.Borders.empty(4, 7));
+        saveBtn.setIconTextGap(JBUI.scale(3));
         saveBtn.setEnabled(false);
         saveBtn.addActionListener(e -> commitChanges());
-        revertBtn = DatabaseUi.action("", AllIcons.Actions.Rollback, "Revert pending changes");
+        revertBtn = DatabaseUi.action("Revert", AllIcons.Actions.Rollback, "Revert pending changes");
+        revertBtn.setBorder(JBUI.Borders.empty(4, 7));
+        revertBtn.setIconTextGap(JBUI.scale(3));
         revertBtn.setEnabled(false);
         revertBtn.addActionListener(e -> {
             if (mutationRunning) return;
@@ -201,6 +205,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         });
 
         JButton exportBtn = DatabaseUi.action("Export", AllIcons.ToolbarDecorator.Export, "Export data");
+        exportBtn.setBorder(JBUI.Borders.empty(4, 3));
+        exportBtn.setIconTextGap(JBUI.scale(3));
         exportBtn.setToolTipText("Choose current page, selected rows, or all persisted rows for export");
         exportBtn.addActionListener(e -> showExportMenu(exportBtn));
 
@@ -220,10 +226,10 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         options.addSeparator();
         options.add(truncateBtn);
         optionsBtn.addActionListener(e -> options.show(optionsBtn, 0, optionsBtn.getHeight()));
-        toolbar.add(DatabaseUi.group(refreshBtn, autoRefreshCombo));
-        toolbar.add(DatabaseUi.group(DatabaseUi.separator(), addRowBtn, delRowBtn));
-        toolbar.add(DatabaseUi.group(DatabaseUi.separator(), saveBtn, revertBtn));
-        toolbar.add(DatabaseUi.group(DatabaseUi.separator(), exportBtn, consoleBtn, optionsBtn));
+        toolbar.add(DatabaseUi.group(2, refreshBtn, autoRefreshCombo));
+        toolbar.add(DatabaseUi.group(2, DatabaseUi.separator(), addRowBtn, delRowBtn));
+        toolbar.add(DatabaseUi.group(4, DatabaseUi.separator(), saveBtn, revertBtn));
+        toolbar.add(DatabaseUi.group(2, DatabaseUi.separator(), exportBtn, consoleBtn, optionsBtn));
         heading.add(toolbar, BorderLayout.NORTH);
         heading.add(filters, BorderLayout.CENTER);
         add(heading, BorderLayout.NORTH);
@@ -418,6 +424,10 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         Map<CellCoord, String> errors = tableModel.getValidationErrors();
         boolean hasErrors = !errors.isEmpty();
         revertBtn.setEnabled(hasPending && !mutationRunning);
+        DatabaseUi.setActionEmphasis(
+                revertBtn,
+                revertBtn.isEnabled() ? DatabaseUi.DESTRUCTIVE_ACTION_COLOR : null
+        );
 
         if (hasErrors) {
             saveBtn.setEnabled(false);
@@ -437,13 +447,17 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 DatabaseUi.status(statusLabel, previousStatus, DatabaseUi.Tone.NORMAL);
             }
             if (hasPending) {
-                saveBtn.setText("Commit (" + tableModel.getPendingChangesCount() + ")");
+                saveBtn.setText("Commit");
                 int count = tableModel.getPendingChangesCount();
                 DatabaseUi.status(statusLabel, count + (count == 1 ? " pending change" : " pending changes") + " · Commit to save", DatabaseUi.Tone.WARNING);
             } else {
                 saveBtn.setText("Commit");
             }
         }
+        DatabaseUi.setActionEmphasis(
+                saveBtn,
+                saveBtn.isEnabled() ? DatabaseUi.POSITIVE_ACTION_COLOR : null
+        );
     }
 
     private void truncateCurrentTable() {

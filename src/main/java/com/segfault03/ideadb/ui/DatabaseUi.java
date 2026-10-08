@@ -1,15 +1,20 @@
 package com.segfault03.ideadb.ui;
 
 import com.intellij.ui.JBColor;
+import com.intellij.util.IconUtil;
 import com.intellij.util.ui.JBUI;
 import com.segfault03.ideadb.model.DatabaseType;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 /** Shared spacing and quiet native action styling for database editor controls. */
 public final class DatabaseUi {
+    public static final Color POSITIVE_ACTION_COLOR = new JBColor(new Color(0x2E7D32), new Color(0x238636));
+    public static final Color DESTRUCTIVE_ACTION_COLOR = new JBColor(new Color(0xC62828), new Color(0xD94F4F));
+
     private DatabaseUi() {}
 
     /** Every connection entry point offers the same database choice. */
@@ -51,40 +56,7 @@ public final class DatabaseUi {
     }
 
     public static JButton action(String text, Icon icon, String tooltip) {
-        JButton button = new JButton(text, icon) {
-            @Override public Dimension getPreferredSize() {
-                // Size toolbar actions to content, bypassing native dialog-button minimum widths.
-                Insets padding = getInsets();
-                FontMetrics font = getFontMetrics(getFont());
-                String label = getText();
-                Icon glyph = getIcon();
-                int textWidth = label == null || label.isEmpty() ? 0 : font.stringWidth(label);
-                int iconWidth = glyph == null ? 0 : glyph.getIconWidth();
-                int gap = textWidth > 0 && iconWidth > 0 ? getIconTextGap() : 0;
-                return new Dimension(Math.max(JBUI.scale(28), padding.left + padding.right + textWidth + iconWidth + gap),
-                        Math.max(JBUI.scale(28), padding.top + padding.bottom
-                                + Math.max(textWidth > 0 ? font.getHeight() : 0, glyph == null ? 0 : glyph.getIconHeight())));
-            }
-            @Override public Dimension getMinimumSize() { return getPreferredSize(); }
-            @Override protected void paintComponent(Graphics graphics) {
-                ButtonModel model = getModel();
-                if (isEnabled() && (model.isRollover() || model.isPressed() && model.isArmed() || hasFocus())) {
-                    Graphics2D g = (Graphics2D) graphics.create();
-                    try {
-                        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                        g.setColor(model.isPressed() && model.isArmed()
-                                ? JBUI.CurrentTheme.ActionButton.pressedBackground()
-                                : JBUI.CurrentTheme.ActionButton.hoverBackground());
-                        g.fillRoundRect(0, 0, getWidth(), getHeight(), JBUI.scale(6), JBUI.scale(6));
-                        if (hasFocus()) {
-                            g.setColor(JBColor.namedColor("Component.focusColor", new JBColor(0x3574F0, 0x548AF7)));
-                            g.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, JBUI.scale(6), JBUI.scale(6));
-                        }
-                    } finally { g.dispose(); }
-                }
-                super.paintComponent(graphics);
-            }
-        };
+        JButton button = new ActionButton(text, icon);
         button.setToolTipText(tooltip);
         button.getAccessibleContext().setAccessibleName(tooltip);
         button.setBorder(JBUI.Borders.empty(4, 6));
@@ -92,15 +64,89 @@ public final class DatabaseUi {
         button.setContentAreaFilled(false);
         button.setOpaque(false);
         button.setDefaultCapable(false);
-        button.setFocusPainted(false); // The focus cue is painted above with the native theme color.
+        button.setFocusPainted(false); // The focus cue is painted with the native theme color.
         button.setRolloverEnabled(true);
         button.setIconTextGap(JBUI.scale(5));
         return button;
     }
 
+    /** Highlights an enabled toolbar action while leaving disabled actions in the native quiet style. */
+    public static void setActionEmphasis(JButton button, Color color) {
+        if (button instanceof ActionButton actionButton) actionButton.setEmphasisColor(color);
+    }
+
+    private static final class ActionButton extends JButton {
+        private final Icon defaultIcon;
+        private Color emphasisColor;
+
+        private ActionButton(String text, Icon icon) {
+            super(text, icon);
+            defaultIcon = icon;
+        }
+
+        private void setEmphasisColor(Color color) {
+            if (Objects.equals(emphasisColor, color)) return;
+            emphasisColor = color;
+            setBackground(color);
+            setForeground(color == null ? null : Color.WHITE);
+            setIcon(color == null || defaultIcon == null ? defaultIcon : IconUtil.colorize(defaultIcon, Color.WHITE));
+            putClientProperty("lattice.action.emphasis", color);
+            repaint();
+        }
+
+        @Override public Dimension getPreferredSize() {
+            // Size toolbar actions to content, bypassing native dialog-button minimum widths.
+            Insets padding = getInsets();
+            FontMetrics font = getFontMetrics(getFont());
+            String label = getText();
+            Icon glyph = getIcon();
+            int textWidth = label == null || label.isEmpty() ? 0 : font.stringWidth(label);
+            int iconWidth = glyph == null ? 0 : glyph.getIconWidth();
+            int gap = textWidth > 0 && iconWidth > 0 ? getIconTextGap() : 0;
+            return new Dimension(Math.max(JBUI.scale(28), padding.left + padding.right + textWidth + iconWidth + gap),
+                    Math.max(JBUI.scale(28), padding.top + padding.bottom
+                            + Math.max(textWidth > 0 ? font.getHeight() : 0, glyph == null ? 0 : glyph.getIconHeight())));
+        }
+
+        @Override public Dimension getMinimumSize() { return getPreferredSize(); }
+
+        @Override protected void paintComponent(Graphics graphics) {
+            ButtonModel model = getModel();
+            boolean emphasized = isEnabled() && emphasisColor != null;
+            boolean interactive = isEnabled() && (model.isRollover() || model.isPressed() && model.isArmed() || hasFocus());
+            if (emphasized || interactive) {
+                Graphics2D g = (Graphics2D) graphics.create();
+                try {
+                    g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    g.setColor(emphasized
+                            ? emphasisColor
+                            : model.isPressed() && model.isArmed()
+                                    ? JBUI.CurrentTheme.ActionButton.pressedBackground()
+                                    : JBUI.CurrentTheme.ActionButton.hoverBackground());
+                    g.fillRoundRect(0, 0, getWidth(), getHeight(), JBUI.scale(10), JBUI.scale(10));
+                    if (emphasized) {
+                        g.setColor(emphasisColor.darker());
+                        g.setStroke(new BasicStroke(JBUI.scale(1f)));
+                        g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, JBUI.scale(10), JBUI.scale(10));
+                    }
+                    if (hasFocus()) {
+                        g.setColor(JBColor.namedColor("Component.focusColor", new JBColor(0x3574F0, 0x548AF7)));
+                        g.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, JBUI.scale(6), JBUI.scale(6));
+                    }
+                } finally { g.dispose(); }
+            }
+            super.paintComponent(graphics);
+        }
+    }
+
     /** An indivisible group so wrapping never separates a field from its label. */
     public static JPanel group(Component... controls) {
-        FlowLayout layout = new FlowLayout(FlowLayout.LEFT, JBUI.scale(4), 0);
+        return group(4, controls);
+    }
+
+    /** An indivisible group with a caller-selected horizontal gap for compact toolbars. */
+    public static JPanel group(int horizontalGap, Component... controls) {
+        FlowLayout layout = new FlowLayout(FlowLayout.LEFT, JBUI.scale(horizontalGap), 0);
         layout.setAlignOnBaseline(true);
         JPanel group = new JPanel(layout);
         group.setOpaque(false);
