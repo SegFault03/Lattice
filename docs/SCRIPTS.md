@@ -1,6 +1,6 @@
 # Script reference
 
-All public helper scripts use Python's standard library and run on Windows, Linux and macOS. Install Python 3.11+; use `python3` where appropriate. Java tasks require JDK 21. Commands below are run from the repository root; helper output paths are resolved from their own repository location, so they also work when invoked by absolute path from another directory.
+Python helper scripts use Python's standard library and run on Windows, Linux and macOS. Install Python 3.11+; use `python3` where appropriate. The real IDE UI capture helper is Bash-only and requires a Linux display. Java tasks require JDK 21. Commands below are run from the repository root; helper output paths are resolved from their own repository location, so they also work when invoked by absolute path from another directory.
 
 | Script | Purpose | Additional requirements |
 |---|---|---|
@@ -12,6 +12,7 @@ All public helper scripts use Python's standard library and run on Windows, Linu
 | `check-release-archive.py` | Check ZIP layout, descriptor, bytecode, licenses; generate checksums | Built plugin ZIP |
 | `prepare-source-asset.py` | Download/check the pinned corresponding MySQL source archive | Network on first use |
 | `verify-plugin.py` | Check exact ZIP against an IntelliJ SDK | JDK 21; network on first use or `--ide-home` |
+| `capture-intellij-ui.sh` | Launch IDEA with the built plugin under Xvfb and capture the actual tool window | Linux; JDK 21; Xvfb or a graphical display; network on first IDE build |
 | `common.py` | Shared cache paths, Java and Gradle discovery | Imported helper |
 | `tests/` | Regression tests for development/release tooling | Git for history tests |
 
@@ -45,6 +46,14 @@ With JDK 21 and the cached IntelliJ 2025.1 SDK, run:
 ```text
 python scripts/ui-preview.py
 ```
+
+To capture the real plugin Swing UI from a running IntelliJ instance under Xvfb, run:
+
+```text
+./scripts/capture-intellij-ui.sh
+```
+
+This runs the Gradle `uiScreenshotTest` task and writes the complete IDE window, the live Lattice tool-window component, and runtime evidence under `build/ui-test-results/`. It uses JetBrains Starter and Driver UI automation; the plugin is built and installed into the test IDE before the test opens it.
 
 Open `build/ui-preview/index.html` to review the five featured screens. Pass `--all-previews` to include light/dark variants for the **Welcome**, **Input controls**, **Schema dialogs**, connection states, table editor/viewer and SQL console. Every successful run updates only the five fixed README image files in `screenshots/`; extra generated images stay under `build/`. Commit changed featured PNGs with UI changes. `--output` changes the gallery/build directory while still updating `screenshots/`; use `--all-previews` for `--compare-with` before/after baselines.
 

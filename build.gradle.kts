@@ -1,6 +1,10 @@
+import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+import org.jetbrains.intellij.platform.gradle.tasks.RunIdeTask
+
 plugins {
     id("java")
     id("org.jetbrains.intellij.platform") version "2.19.0"
+    id("org.jetbrains.kotlin.jvm") version "2.0.21"
 }
 
 group = "com.segfault03.lattice"
@@ -18,12 +22,27 @@ repositories {
     }
 }
 
+sourceSets {
+    create("uiTest") {
+        compileClasspath += sourceSets.main.get().output
+        runtimeClasspath += sourceSets.main.get().output
+    }
+}
+
+val uiTestImplementation by configurations.getting {
+    extendsFrom(configurations.testImplementation.get())
+}
+val uiTestRuntimeOnly by configurations.getting {
+    extendsFrom(configurations.testRuntimeOnly.get())
+}
+
 dependencies {
     intellijPlatform {
         val localIde = providers.gradleProperty("lattice.ide.home").orNull
         if (localIde == null) intellijIdeaCommunity("2025.1") else local(localIde)
         bundledPlugins()
         pluginVerifier("1.410")
+        testFramework(TestFrameworkType.Starter, configurationName = "uiTestImplementation")
     }
 
     implementation("org.hsqldb:hsqldb:2.7.4")
@@ -39,6 +58,11 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.14.4")
     // IntelliJ 2025 test logging still references JUnit 4 runtime types.
     testRuntimeOnly("junit:junit:4.13.2")
+
+    uiTestImplementation(kotlin("stdlib"))
+    uiTestRuntimeOnly(kotlin("reflect"))
+    uiTestImplementation("org.kodein.di:kodein-di-jvm:7.20.2")
+    uiTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.10.1")
 }
 
 java {
@@ -129,6 +153,25 @@ intellijPlatform {
             create("IC", "2025.1")
             create("IC", "2025.2")
             create("IU", "2025.3")
+        }
+    }
+}
+
+val uiScreenshotTest by intellijPlatformTesting.testIdeUi.registering {
+    task {
+        val uiTestSourceSet = sourceSets["uiTest"]
+        testClassesDirs = uiTestSourceSet.output.classesDirs
+        classpath = uiTestSourceSet.runtimeClasspath
+        useJUnitPlatform()
+        systemProperty("java.awt.headless", "false")
+        systemProperty("ui.screenshot.dir", layout.buildDirectory.dir("ui-test-results").get().asFile.absolutePath)
+        val ide = tasks.named<RunIdeTask>("runIde").get()
+        systemProperty("ui.ide.home", ide.platformPath.toString())
+        systemProperty("ui.ide.build", ide.productInfo.buildNumber)
+        systemProperty("ui.ide.version", ide.productInfo.version)
+        testLogging {
+            events("passed", "skipped", "failed")
+            showStandardStreams = true
         }
     }
 }
