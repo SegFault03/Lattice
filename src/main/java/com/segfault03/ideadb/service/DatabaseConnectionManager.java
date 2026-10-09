@@ -119,6 +119,25 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
         synchronized (group) { closeQuietly(group.connections.remove(sessionId)); }
     }
 
+    boolean discardInvalidSession(String connectionId, String sessionId) {
+        ConnectionGroup group = activeConnections.get(connectionId);
+        if (group == null) return false;
+        synchronized (group) {
+            Connection connection = group.connections.get(sessionId);
+            if (connection == null) return false;
+            try {
+                if (!connection.isClosed() && connection.isValid(2)) return false;
+            } catch (java.sql.SQLFeatureNotSupportedException unsupported) {
+                return false;
+            } catch (SQLException invalid) {
+                // Some drivers report isClosed() == false after the server has ended the session.
+            }
+            group.connections.remove(sessionId);
+            closeQuietly(connection);
+            return true;
+        }
+    }
+
     private static void closeQuietly(Connection conn) {
         var application=com.intellij.openapi.application.ApplicationManager.getApplication();
         if(conn!=null && application!=null && application.isDispatchThread()) {

@@ -118,6 +118,8 @@ The subsequent [P1 implementation and real-IDE validation](UI_P1_FIXES.md) addre
 
 ### Suggested follow-up order
 
+This historical order has been addressed by P1, P2 and P3. The subsequent [loading/action-state audit](UI_LOADING_FEEDBACK.md) covers additional busy feedback, hover/focus behavior and real database recovery flows.
+
 1. Repair the table and console resize behavior together. Both use `WrapLayout`, which calculates preferred height from its existing width; a later narrower parent allocation can leave wrapped rows without enough height. This is a likely cause from source inspection, not a fix verified in this review. Include the footer's separate width constraint in the fix.
 2. Recompute driver download availability after connection testing unlocks the form.
 3. Give Alter Table cards a shared top-aligned grid; then adjust Create Table column widths and preview scrolling.

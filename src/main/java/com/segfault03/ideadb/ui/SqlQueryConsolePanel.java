@@ -35,6 +35,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     private String activeDatabase;
     private final DatabaseSession session;
     private boolean running;
+    private boolean loadingDatabases;
     private volatile com.segfault03.ideadb.service.QueryExecution execution;
     private JButton cancelBtn;
     private JComboBox<Integer> resultLimit;
@@ -60,6 +61,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         this.activeDatabase = initialDatabase != null ? initialDatabase : "";
 
         initUI(allDatabases);
+        if (allDatabases == null) loadDatabases();
     }
 
     private void initUI(List<String> allDatabases) {
@@ -74,6 +76,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
             }
         }
         if (activeDatabase != null && !activeDatabase.isEmpty()) {
+            if (allDatabases == null) databaseCombo.addItem(activeDatabase);
             databaseCombo.setSelectedItem(activeDatabase);
         }
         if (databaseCombo.getSelectedItem() != null) activeDatabase = databaseCombo.getSelectedItem().toString();
@@ -211,6 +214,39 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         add(statusBar, BorderLayout.SOUTH);
     }
 
+    private void loadDatabases() {
+        loadingDatabases = true;
+        setRunning(false);
+        DatabaseUi.status(statusLabel, "Connecting · Loading databases…", DatabaseUi.Tone.BUSY);
+        tasks.submit(() -> {
+            try (var read = tasks.openRead(config)) {
+                List<String> databases = com.segfault03.ideadb.service.MetadataService.getInstance()
+                        .getDatabases(read.connection(), config);
+                SwingUtilities.invokeLater(() -> {
+                    if (disposed) return;
+                    String selected = activeDatabase;
+                    databaseCombo.removeAllItems();
+                    for (String database : databases) databaseCombo.addItem(database);
+                    if (!selected.isEmpty()) {
+                        if (!databases.contains(selected)) databaseCombo.addItem(selected);
+                        databaseCombo.setSelectedItem(selected);
+                    }
+                    loadingDatabases = false;
+                    setRunning(false);
+                    DatabaseUi.status(statusLabel, "Ready", DatabaseUi.Tone.NORMAL);
+                });
+            } catch (Exception error) {
+                SwingUtilities.invokeLater(() -> {
+                    if (disposed) return;
+                    loadingDatabases = false;
+                    setRunning(false);
+                    DatabaseUi.status(statusLabel, "Could not load databases · You can still run a query", DatabaseUi.Tone.WARNING);
+                    statusLabel.setToolTipText(error.getMessage());
+                });
+            }
+        });
+    }
+
     private JPanel labeledPicker(String text, JComponent picker) {
         JBLabel label = new JBLabel(text);
         int width = 0;
@@ -227,7 +263,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     }
 
     private void executeCurrentSql() {
-        if (running || disposed) return;
+        if (running || loadingDatabases || disposed) return;
         String sql = editorArea.getSelectedText();
         if (sql == null || sql.trim().isEmpty()) {
             sql = editorArea.getText().trim();
@@ -255,13 +291,14 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         tasks.submit(() -> {
             try {
                 QueryResult result = session.execute(conn -> DataService.getInstance().executeQuery(conn, database, finalSql, options, current));
+                final boolean connectionLost = result.isCancelled() && session.discardInvalidConnection();
 
                 SwingUtilities.invokeLater(() -> {
                     if (disposed) return;
                     execution = null;
                     setRunning(false);
                     if (result.isCancelled()) {
-                        showQueryCancellation(result.getExecutionTimeMs());
+                        showQueryCancellation(result.getExecutionTimeMs(), connectionLost);
                     } else if (result.hasError()) {
                         showQueryError(result.getError(), result.getExecutionTimeMs());
                     } else if (result.isResultSet()) {
@@ -314,7 +351,13 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     }
 
     private void showQueryCancellation(long elapsedMs) {
+        showQueryCancellation(elapsedMs, false);
+    }
+
+    private void showQueryCancellation(long elapsedMs, boolean connectionLost) {
         messagesArea.setText("Query cancelled" + (resultsModel.getRowCount() > 0 ? "\n\nPrevious results have been kept." : "")
+                + (connectionLost ? "\n\nThe driver closed this session. The next query will reconnect."
+                    + (config.isAutoCommit() ? "" : " Any uncommitted work in that session was lost.") : "")
                 + (elapsedMs >= 0 ? "\n\nElapsed: " + elapsedMs + " ms" : ""));
         messagesArea.setForeground(NORMAL_MSG_COLOR);
         resultsTabs.setSelectedIndex(1);
@@ -327,9 +370,9 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
             resultsTabs.setTitleAt(0, "Previous results");
             resultsTabs.setToolTipTextAt(0, "These results are from the last successful query");
         }
-        runBtn.setEnabled(!running);
+        runBtn.setEnabled(!running && !loadingDatabases);
         cancelBtn.setEnabled(running);
-        databaseCombo.setEnabled(!running);
+        databaseCombo.setEnabled(!running && !loadingDatabases);
         resultLimit.setEnabled(!running);
     }
 

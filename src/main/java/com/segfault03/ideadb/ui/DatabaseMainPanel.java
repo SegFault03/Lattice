@@ -40,6 +40,9 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     private DefaultMutableTreeNode rootNode;
     private Tree databaseTree;
     private DatabaseExplorerToolbar toolbar;
+    private final JLabel operationStatus = new WrappingLabel("Ready");
+    private final java.util.Map<TreeNodeData, String> loadingNodes = new java.util.LinkedHashMap<>();
+    private boolean mutationRunning;
     private final DatabaseExplorerHint selectionHint = new DatabaseExplorerHint();
     private final CardLayout explorerLayout = new CardLayout();
     private final JPanel explorerCards = new JPanel(explorerLayout);
@@ -83,6 +86,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         treeModel = new DefaultTreeModel(rootNode);
         databaseTree = new Tree(treeModel);
         databaseTree.setCellRenderer(new DatabaseTreeCellRenderer());
+        databaseTree.putClientProperty(com.intellij.ui.AnimatedIcon.ANIMATION_IN_RENDERER_ALLOWED, Boolean.TRUE);
         databaseTree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
         databaseTree.setRootVisible(true);
         ToolTipManager.sharedInstance().registerComponent(databaseTree);
@@ -97,7 +101,12 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         explorerCards.add(new EmptyConnectionPanel(this::showAddConnectionMenu), "empty");
         add(explorerCards, BorderLayout.CENTER);
 
-        add(selectionHint, BorderLayout.SOUTH);
+        JPanel footer = new JPanel(new BorderLayout(0, JBUI.scale(4)));
+        operationStatus.getAccessibleContext().setAccessibleName("Database explorer status");
+        operationStatus.setBorder(JBUI.Borders.empty(4, 8));
+        footer.add(operationStatus, BorderLayout.NORTH);
+        footer.add(selectionHint, BorderLayout.CENTER);
+        add(footer, BorderLayout.SOUTH);
     }
 
     public void loadConnectionsFromState() {
@@ -109,7 +118,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
             for (ConnectionConfig cfg : configs) {
                 boolean connected = DatabaseConnectionManager.getInstance().isConnected(cfg.getId());
                 DefaultMutableTreeNode connNode = new DefaultMutableTreeNode(TreeNodeData.connection(cfg, connected));
-                connNode.add(new DefaultMutableTreeNode(TreeNodeData.loading("Expand to load databases...")));
+                connNode.add(new DefaultMutableTreeNode(TreeNodeData.placeholder("Expand to load databases...")));
                 rootNode.add(connNode);
             }
         }
@@ -173,7 +182,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         if (!(uo instanceof TreeNodeData)) return;
         TreeNodeData data = (TreeNodeData) uo;
 
-        if (data.isLoaded()) return;
+        if (data.isLoaded() || data.isLoading() || mutationRunning) return;
 
         if (data.getType() == TreeNodeData.NodeType.CONNECTION) {
             loadDatabasesForConnectionNode(node, data);
@@ -185,6 +194,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     }
 
     private void handleNodeDoubleClick(DefaultMutableTreeNode node) {
+        if (mutationRunning) return;
         Object uo = node.getUserObject();
         if (!(uo instanceof TreeNodeData)) return;
         TreeNodeData data = (TreeNodeData) uo;
@@ -195,6 +205,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     }
 
     private void showContextMenu(TreePath path, int x, int y) {
+        if (mutationRunning || !loadingNodes.isEmpty()) return;
         DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
         Object uo = node.getUserObject();
         if (!(uo instanceof TreeNodeData)) return;
@@ -218,7 +229,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                     data.setConnected(false);
                     data.setLoaded(false);
                     node.removeAllChildren();
-                    node.add(new DefaultMutableTreeNode(TreeNodeData.loading("Expand to load databases...")));
+                    node.add(new DefaultMutableTreeNode(TreeNodeData.placeholder("Expand to load databases...")));
                     treeModel.nodeStructureChanged(node);
                 });
                 menu.add(disconnectItem);
@@ -342,22 +353,53 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         }
     }
 
+    private boolean beginNodeLoad(DefaultMutableTreeNode node, TreeNodeData data, String message) {
+        if (disposed || project.isDisposed() || mutationRunning || data.isLoading() || node.getRoot() != rootNode) return false;
+        data.setLoading(true);
+        loadingNodes.put(data, message);
+        node.removeAllChildren();
+        node.add(new DefaultMutableTreeNode(TreeNodeData.loading(message)));
+        treeModel.nodeStructureChanged(node);
+        databaseTree.expandPath(new TreePath(node.getPath()));
+        updateExplorerStatus(message, DatabaseUi.Tone.BUSY);
+        return true;
+    }
+
+    private boolean finishNodeLoad(DefaultMutableTreeNode node, TreeNodeData data, String message, DatabaseUi.Tone tone) {
+        data.setLoading(false);
+        loadingNodes.remove(data);
+        if (disposed || project.isDisposed()) return false;
+        updateExplorerStatus(message, tone);
+        return node.getRoot() == rootNode;
+    }
+
+    private void updateExplorerStatus(String message, DatabaseUi.Tone tone) {
+        toolbar.setBusy(mutationRunning || !loadingNodes.isEmpty());
+        if (!loadingNodes.isEmpty()) {
+            message = loadingNodes.values().iterator().next()
+                    + (loadingNodes.size() > 1 ? " · " + loadingNodes.size() + " operations" : "");
+            tone = DatabaseUi.Tone.BUSY;
+        }
+        DatabaseUi.status(operationStatus, message, tone);
+    }
+
     private void loadDatabasesForConnectionNode(DefaultMutableTreeNode connNode, TreeNodeData data) {
         ConnectionConfig cfg = data.getConnectionConfig();
+        if (!beginNodeLoad(connNode, data, data.isConnected() ? "Loading databases…" : "Connecting to database…")) return;
         tasks.submit(() -> {
             try {
                 Connection conn = DatabaseConnectionManager.getInstance().getConnection(cfg);
                 List<String> dbs = MetadataService.getInstance().getDatabases(conn, cfg);
 
                 SwingUtilities.invokeLater(() -> {
-                    if(disposed || project.isDisposed()) return;
+                    if (!finishNodeLoad(connNode, data, "Loaded databases", DatabaseUi.Tone.NORMAL)) return;
                     connNode.removeAllChildren();
                     data.setConnected(true);
                     data.setLoaded(true);
 
                     for (String db : dbs) {
                         DefaultMutableTreeNode dbNode = new DefaultMutableTreeNode(TreeNodeData.database(cfg, db));
-                        dbNode.add(new DefaultMutableTreeNode(TreeNodeData.loading("Expand to load tables...")));
+                        dbNode.add(new DefaultMutableTreeNode(TreeNodeData.placeholder("Expand to load tables...")));
                         connNode.add(dbNode);
                     }
 
@@ -365,7 +407,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
-                    if(disposed || project.isDisposed()) return;
+                    if (!finishNodeLoad(connNode, data, "Could not load databases · Refresh to retry", DatabaseUi.Tone.ERROR)) return;
                     connNode.removeAllChildren();
                     data.setConnected(false);
                     connNode.add(new DefaultMutableTreeNode(TreeNodeData.error("Connection failed · Refresh to retry", ex.getMessage())));
@@ -379,6 +421,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     private void loadTablesForDatabaseNode(DefaultMutableTreeNode dbNode, TreeNodeData data) {
         ConnectionConfig cfg = data.getConnectionConfig();
         String dbName = data.getDatabaseName();
+        if (!beginNodeLoad(dbNode, data, "Loading tables…")) return;
 
         tasks.submit(() -> {
             try {
@@ -386,7 +429,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 List<TableMetadata> tables = MetadataService.getInstance().getTables(conn, cfg, dbName);
 
                 SwingUtilities.invokeLater(() -> {
-                    if(disposed || project.isDisposed()) return;
+                    if (!finishNodeLoad(dbNode, data, "Loaded tables", DatabaseUi.Tone.NORMAL)) return;
                     dbNode.removeAllChildren();
                     data.setLoaded(true);
 
@@ -400,7 +443,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                     DefaultMutableTreeNode tablesFolder = new DefaultMutableTreeNode(TreeNodeData.tablesFolder(cfg, dbName, regularTables.size()));
                     for (TableMetadata tm : regularTables) {
                         DefaultMutableTreeNode tableNode = new DefaultMutableTreeNode(TreeNodeData.table(cfg, dbName, tm));
-                        tableNode.add(new DefaultMutableTreeNode(TreeNodeData.loading("Expand to load columns...")));
+                        tableNode.add(new DefaultMutableTreeNode(TreeNodeData.placeholder("Expand to load columns...")));
                         tablesFolder.add(tableNode);
                     }
                     dbNode.add(tablesFolder);
@@ -409,7 +452,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                         DefaultMutableTreeNode viewsFolder = new DefaultMutableTreeNode(TreeNodeData.viewsFolder(cfg, dbName, views.size()));
                         for (TableMetadata tm : views) {
                             DefaultMutableTreeNode viewNode = new DefaultMutableTreeNode(TreeNodeData.table(cfg, dbName, tm));
-                            viewNode.add(new DefaultMutableTreeNode(TreeNodeData.loading("Expand to load columns...")));
+                            viewNode.add(new DefaultMutableTreeNode(TreeNodeData.placeholder("Expand to load columns...")));
                             viewsFolder.add(viewNode);
                         }
                         dbNode.add(viewsFolder);
@@ -420,7 +463,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
-                    if(disposed || project.isDisposed()) return;
+                    if (!finishNodeLoad(dbNode, data, "Could not load tables · Refresh to retry", DatabaseUi.Tone.ERROR)) return;
                     dbNode.removeAllChildren();
                     dbNode.add(new DefaultMutableTreeNode(TreeNodeData.error("Could not load tables", ex.getMessage())));
                     treeModel.nodeStructureChanged(dbNode);
@@ -433,18 +476,15 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         ConnectionConfig cfg = data.getConnectionConfig();
         String dbName = data.getDatabaseName();
         TableMetadata tm = data.getTableMetadata();
+        if (!beginNodeLoad(tableNode, data, "Loading columns…")) return;
 
         tasks.submit(() -> {
             try {
                 Connection conn = DatabaseConnectionManager.getInstance().getConnection(cfg);
                 List<ColumnMetadata> cols = MetadataService.getInstance().getColumns(conn, cfg, dbName, tm.getName());
-                tm.getColumns().clear();
-                for (ColumnMetadata col : cols) {
-                    tm.addColumn(col);
-                }
-
                 SwingUtilities.invokeLater(() -> {
-                    if(disposed || project.isDisposed()) return;
+                    if (!finishNodeLoad(tableNode, data, "Loaded columns", DatabaseUi.Tone.NORMAL)) return;
+                    tm.setColumns(cols);
                     tableNode.removeAllChildren();
                     data.setLoaded(true);
 
@@ -459,7 +499,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
-                    if(disposed || project.isDisposed()) return;
+                    if (!finishNodeLoad(tableNode, data, "Could not load columns · Refresh to retry", DatabaseUi.Tone.ERROR)) return;
                     tableNode.removeAllChildren();
                     tableNode.add(new DefaultMutableTreeNode(TreeNodeData.error("Could not load columns", ex.getMessage())));
                     treeModel.nodeStructureChanged(tableNode);
@@ -561,110 +601,92 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         }
     }
 
+    @FunctionalInterface private interface DdlOperation { void execute(Connection connection) throws Exception; }
+
+    private void runMutation(ConnectionConfig config, String message, String failure, DdlOperation operation, Runnable onSuccess) {
+        if (disposed || project.isDisposed() || mutationRunning || !loadingNodes.isEmpty()) return;
+        mutationRunning = true;
+        databaseTree.setEnabled(false);
+        updateExplorerStatus(message, DatabaseUi.Tone.BUSY);
+        tasks.submitMutation(() -> {
+            try {
+                operation.execute(DatabaseConnectionManager.getInstance().getConnection(config));
+                SwingUtilities.invokeLater(() -> {
+                    if (disposed || project.isDisposed()) return;
+                    mutationRunning = false;
+                    databaseTree.setEnabled(true);
+                    updateExplorerStatus("Database operation completed", DatabaseUi.Tone.SUCCESS);
+                    onSuccess.run();
+                });
+            } catch (Exception error) {
+                SwingUtilities.invokeLater(() -> {
+                    if (disposed || project.isDisposed()) return;
+                    mutationRunning = false;
+                    databaseTree.setEnabled(true);
+                    updateExplorerStatus(failure + " · See error details", DatabaseUi.Tone.ERROR);
+                    Messages.showErrorDialog(project, error.getMessage(), failure);
+                });
+            }
+        });
+    }
+
     private void doCreateDatabase(ConnectionConfig cfg, DefaultMutableTreeNode connNode, TreeNodeData connData) {
         CreateDatabaseDialog dlg = new CreateDatabaseDialog(project, cfg);
-        if (dlg.showAndGet()) {
-            String dbName = dlg.getDatabaseName();
-            tasks.submitMutation(() -> {
-                try {
-                    Connection conn = DatabaseConnectionManager.getInstance().getConnection(cfg);
-                    DdlService.getInstance().createDatabase(conn, cfg, dbName);
-                    SwingUtilities.invokeLater(() -> {
-                    if(disposed || project.isDisposed()) return;
-                        Messages.showInfoMessage(project, (cfg.getType() == DatabaseType.MYSQL ? "Database" : "Schema") + " '" + dbName + "' created.", "Created");
-                        connData.setLoaded(false);
-                        loadDatabasesForConnectionNode(connNode, connData);
-                    });
-                } catch (Exception ex) {
-                    SwingUtilities.invokeLater(() -> Messages.showErrorDialog(project, "Failed to create database: " + ex.getMessage(), "Create database failed"));
-                }
-            });
-        }
+        if (!dlg.showAndGet()) return;
+        String dbName = dlg.getDatabaseName();
+        String object = cfg.getType() == DatabaseType.MYSQL ? "database" : "schema";
+        runMutation(cfg, "Creating " + object + "…", "Create " + object + " failed",
+                conn -> DdlService.getInstance().createDatabase(conn, cfg, dbName), () -> {
+                    Messages.showInfoMessage(project, "Created " + object + " '" + dbName + "'.", "Created");
+                    connData.setLoaded(false);
+                    loadDatabasesForConnectionNode(connNode, connData);
+                });
     }
 
     private void doDropDatabase(ConnectionConfig cfg, String dbName, DefaultMutableTreeNode dbNode) {
         String object = cfg.getType() == DatabaseType.MYSQL ? "database" : "schema";
         if (!DatabaseUi.confirmDestructive(project, "Drop " + object,
                 "Drop " + object + " '" + dbName + "'?\nAll tables and their data will be permanently deleted.", "Drop " + object)) return;
-
-        tasks.submitMutation(() -> {
-            try {
-                Connection conn = DatabaseConnectionManager.getInstance().getConnection(cfg);
-                DdlService.getInstance().dropDatabase(conn, cfg, dbName);
-                SwingUtilities.invokeLater(() -> {
-                    if(disposed || project.isDisposed()) return;
+        runMutation(cfg, "Dropping " + object + "…", "Drop " + object + " failed",
+                conn -> DdlService.getInstance().dropDatabase(conn, cfg, dbName), () -> {
                     Messages.showInfoMessage(project, "Dropped " + object + " '" + dbName + "'.", "Dropped");
-                    DefaultMutableTreeNode parent = (DefaultMutableTreeNode) dbNode.getParent();
-                    if (parent != null) {
-                        TreeNodeData parentData = (TreeNodeData) parent.getUserObject();
-                        parentData.setLoaded(false);
-                        loadDatabasesForConnectionNode(parent, parentData);
+                    if (dbNode.getParent() instanceof DefaultMutableTreeNode parent) {
+                        TreeNodeData data = (TreeNodeData) parent.getUserObject();
+                        data.setLoaded(false);
+                        loadDatabasesForConnectionNode(parent, data);
                     }
                 });
-            } catch (Exception ex) {
-                SwingUtilities.invokeLater(() -> Messages.showErrorDialog(project, "Failed to drop database: " + ex.getMessage(), "Drop database failed"));
-            }
-        });
     }
 
     private void doCreateTable(ConnectionConfig cfg, String dbName, DefaultMutableTreeNode dbNode) {
         CreateTableDialog dlg = new CreateTableDialog(project, cfg, dbName);
-        if (dlg.showAndGet()) {
-            String tableName = dlg.getTableName();
-            List<ColumnDefinition> cols = dlg.getColumns();
-
-            tasks.submitMutation(() -> {
-                try {
-                    Connection conn = DatabaseConnectionManager.getInstance().getConnection(cfg);
-                    DdlService.getInstance().createTable(conn, cfg, dbName, tableName, cols);
-                    SwingUtilities.invokeLater(() -> {
-                    if(disposed || project.isDisposed()) return;
-                        Messages.showInfoMessage(project, "Table '" + tableName + "' created.", "Table created");
-                        TreeNodeData data = (TreeNodeData) dbNode.getUserObject();
-                        data.setLoaded(false);
-                        loadTablesForDatabaseNode(dbNode, data);
-                    });
-                } catch (Exception ex) {
-                    SwingUtilities.invokeLater(() -> Messages.showErrorDialog(project, "Failed to create table: " + ex.getMessage(), "Create table failed"));
-                }
-            });
-        }
+        if (!dlg.showAndGet()) return;
+        String tableName = dlg.getTableName();
+        List<ColumnDefinition> columns = dlg.getColumns();
+        runMutation(cfg, "Creating table…", "Create table failed",
+                conn -> DdlService.getInstance().createTable(conn, cfg, dbName, tableName, columns), () -> {
+                    Messages.showInfoMessage(project, "Table '" + tableName + "' created.", "Table created");
+                    TreeNodeData data = (TreeNodeData) dbNode.getUserObject();
+                    data.setLoaded(false);
+                    loadTablesForDatabaseNode(dbNode, data);
+                });
     }
 
     private void doDropTable(ConnectionConfig cfg, String dbName, String tableName, DefaultMutableTreeNode tableNode) {
         if (!DatabaseUi.confirmDestructive(project, "Drop table",
                 "Drop table '" + tableName + "'?\nThe table structure and all its data will be permanently deleted.", "Drop table")) return;
-
-        tasks.submitMutation(() -> {
-            try {
-                Connection conn = DatabaseConnectionManager.getInstance().getConnection(cfg);
-                DdlService.getInstance().dropTable(conn, cfg, dbName, tableName);
-                SwingUtilities.invokeLater(() -> {
-                    if(disposed || project.isDisposed()) return;
+        runMutation(cfg, "Dropping table…", "Drop table failed",
+                conn -> DdlService.getInstance().dropTable(conn, cfg, dbName, tableName), () -> {
                     Messages.showInfoMessage(project, "Table '" + tableName + "' dropped.", "Table dropped");
-                    DefaultMutableTreeNode parent = (DefaultMutableTreeNode) tableNode.getParent();
-                    if (parent != null) {
-                        treeModel.removeNodeFromParent(tableNode);
-                    }
+                    if (tableNode.getParent() != null) treeModel.removeNodeFromParent(tableNode);
                 });
-            } catch (Exception ex) {
-                SwingUtilities.invokeLater(() -> Messages.showErrorDialog(project, "Failed to drop table: " + ex.getMessage(), "Drop table failed"));
-            }
-        });
     }
 
     private void doTruncateTable(ConnectionConfig cfg, String dbName, String tableName) {
         if (!DatabaseUi.confirmDestructive(project, "Truncate table",
                 "Truncate table '" + tableName + "'?\nAll rows will be permanently deleted. The table structure will be kept.", "Truncate table")) return;
-
-        tasks.submitMutation(() -> {
-            try {
-                Connection conn = DatabaseConnectionManager.getInstance().getConnection(cfg);
-                DdlService.getInstance().truncateTable(conn, cfg, dbName, tableName);
-                SwingUtilities.invokeLater(() -> Messages.showInfoMessage(project, "All rows removed from '" + tableName + "'.", "Table truncated"));
-            } catch (Exception ex) {
-                SwingUtilities.invokeLater(() -> Messages.showErrorDialog(project, "Failed to truncate table: " + ex.getMessage(), "Truncate table failed"));
-            }
-        });
+        runMutation(cfg, "Truncating table…", "Truncate table failed",
+                conn -> DdlService.getInstance().truncateTable(conn, cfg, dbName, tableName),
+                () -> Messages.showInfoMessage(project, "All rows removed from '" + tableName + "'.", "Table truncated"));
     }
 }

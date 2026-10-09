@@ -28,6 +28,7 @@ public class TreeNodeData {
     private String errorDetail;
     private boolean connected;
     private boolean loaded;
+    private boolean loading;
 
     public TreeNodeData(NodeType type, String name) {
         this.type = type;
@@ -92,8 +93,12 @@ public class TreeNodeData {
     }
 
     public static TreeNodeData loading(String text) {
-        return new TreeNodeData(NodeType.LOADING, text);
+        TreeNodeData data = new TreeNodeData(NodeType.LOADING, text);
+        data.loading = true;
+        return data;
     }
+
+    public static TreeNodeData placeholder(String text) { return new TreeNodeData(NodeType.LOADING, text); }
 
     public static TreeNodeData error(String summary, String detail) {
         TreeNodeData data = new TreeNodeData(NodeType.ERROR, summary);
@@ -113,6 +118,8 @@ public class TreeNodeData {
     public ColumnMetadata getColumnMetadata() { return columnMetadata; }
     public boolean isConnected() { return connected; }
     public void setConnected(boolean connected) { this.connected = connected; }
+    public boolean isLoading() { return loading; }
+    public void setLoading(boolean loading) { this.loading = loading; }
     public boolean isLoaded() { return loaded; }
     public void setLoaded(boolean loaded) { this.loaded = loaded; }
 

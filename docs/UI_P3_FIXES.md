@@ -2,6 +2,8 @@
 
 P3 addresses the five polish findings from the [real IntelliJ UI review](IDE_UI_REVIEW.md). It uses the existing production screens and the same JetBrains Starter/Driver workflow as [P1](UI_P1_FIXES.md) and [P2](UI_P2_FIXES.md).
 
+Approved P3 was pushed as `5cfe548` on `feat/retain-drivers`; all three cross-platform commit checks passed in [workflow 37876424328](https://github.com/SegFault03/Lattice/actions/runs/37876424328). Subsequent work is recorded in [the loading feedback report](UI_LOADING_FEEDBACK.md).
+
 ## Changes
 
 | Finding | Result |

@@ -94,6 +94,8 @@ class IntellijUiScreenshotTest {
         testContext.paths.configDir.resolve("options/laf.xml").writeText(
             """<application><component name="LafManager" autodetect="false"><laf themeId="$themeId"/></component></application>""",
         )
+        val jdbcFixture = if (review) HsqlUiFixture() else null
+        try {
         testContext.apply {
             PluginConfigurator(this).installPluginFromPath(
                 Path.of(requireNotNull(System.getProperty("path.to.build.plugin"))),
@@ -422,7 +424,18 @@ class IntellijUiScreenshotTest {
             captureScreen(screenshotsDirectory.resolve("connection-dialog-download-driver-full.png"))
             driverSourceCombo.selectItem("Available drivers")
 
-            connectionDialog.x { byVisibleText("Test connection") }.waitFound().click()
+            if (jdbcFixture != null) {
+                connectionDialog.x { byVisibleText("JDBC URL") }.waitFound().click()
+                connectionDialog.x(JTextFieldUI::class.java) {
+                    and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("JDBC URL:"))
+                }.waitFound().text = jdbcFixture.jdbcUrl
+                connectionDialog.x(JTextFieldUI::class.java) {
+                    and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("User:"))
+                }.waitFound().text = "SA"
+                captureBusyState(jdbcFixture, connectionDialog, "Testing connection…", "connection-testing.png", screenshotsDirectory) {
+                    connectionDialog.x { byVisibleText("Test connection") }.waitFound().click()
+                }
+            } else connectionDialog.x { byVisibleText("Test connection") }.waitFound().click()
             waitUntil("successful HSQLDB connection test") {
                 connectionDialog.hasSubtext("Connected · HSQL Database Engine")
             }
@@ -439,7 +452,9 @@ class IntellijUiScreenshotTest {
                     byJavaClass("com.intellij.ui.treeStructure.Tree")
                 }.waitFound()
             }
-            databaseTree.fixture.expandRow(1)
+            if (jdbcFixture != null) captureBusyState(jdbcFixture, pluginRoot, "Connecting to database…", "explorer-connecting.png", screenshotsDirectory) {
+                databaseTree.fixture.expandRow(1)
+            } else databaseTree.fixture.expandRow(1)
             val connectionPath = arrayOf("Data Sources", "Lattice UI demo")
             val publicSchemaPath = connectionPath + "PUBLIC"
             waitUntil("connected HSQLDB schema in the explorer") {
@@ -463,12 +478,38 @@ class IntellijUiScreenshotTest {
                     captureScreen(screenshotsDirectory.resolve("create-schema-invalid.png"))
                     it.pressButton("Cancel")
                 }
+                databaseTree.fixture.rightClickPath(connectionPath.joinToString(databaseTree.fixture.separator()))
+                frame.x { byVisibleText("Create schema…") }.waitFound().click()
+                val schemaDialog = frame.x(DialogUiComponent::class.java) { byTitle("Create schema") }.waitFound()
+                schemaDialog.x(JTextFieldUI::class.java) { byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField") }.waitFound().text = "UI_REVIEW_SCHEMA"
+                captureBusyState(requireNotNull(jdbcFixture), pluginRoot, "Creating schema…", "explorer-creating-schema.png", screenshotsDirectory) {
+                    schemaDialog.pressButton("Create schema")
+                }
+                frame.x(DialogUiComponent::class.java) { byTitle("Created") }.waitFound().pressButton("OK")
+                val createdSchemaPath = connectionPath + "UI_REVIEW_SCHEMA"
+                waitUntil("created schema is visible") { databaseTree.pathExists(*createdSchemaPath) }
+                databaseTree.fixture.rightClickPath(createdSchemaPath.joinToString(databaseTree.fixture.separator()))
+                frame.x { byVisibleText("Drop schema…") }.waitFound().click()
+                val dropSchema = frame.x(DialogUiComponent::class.java) { byTitle("Drop schema") }.waitFound()
+                captureBusyState(jdbcFixture, pluginRoot, "Dropping schema…", "explorer-dropping-schema.png", screenshotsDirectory) {
+                    dropSchema.pressButton("Drop schema")
+                }
+                frame.x(DialogUiComponent::class.java) { byTitle("Dropped") }.waitFound().pressButton("OK")
+                waitUntil("dropped schema removed from explorer") { !databaseTree.pathExists(*createdSchemaPath) && databaseTree.pathExists(*publicSchemaPath) }
             }
 
             val publicSchemaPathText = publicSchemaPath.joinToString(databaseTree.fixture.separator())
             databaseTree.fixture.expandPath(publicSchemaPathText)
             val tablesPath = publicSchemaPath + "Tables (0)"
             waitUntil("empty Tables folder") { databaseTree.pathExists(*tablesPath) }
+            if (jdbcFixture != null) {
+                // Path lookup can already expand the schema; Refresh always starts a real metadata read.
+                databaseTree.fixture.rightClickPath(publicSchemaPathText)
+                captureBusyState(jdbcFixture, pluginRoot, "Loading tables…", "explorer-loading-tables.png", screenshotsDirectory) {
+                    frame.x { byVisibleText("Refresh tables") }.waitFound().click()
+                }
+                waitUntil("refreshed Tables folder") { databaseTree.pathExists(*tablesPath) }
+            }
             databaseTree.fixture.rightClickPath(publicSchemaPathText)
             frame.x { byVisibleText("Create table…") }.waitFound().click()
 
@@ -481,7 +522,9 @@ class IntellijUiScreenshotTest {
             Thread.sleep(500)
             assertCreateTableLayout(createTableDialog)
             captureScreen(screenshotsDirectory.resolve("create-table-dialog.png"))
-            createTableDialog.pressButton("Create table")
+            if (jdbcFixture != null) captureBusyState(jdbcFixture, pluginRoot, "Creating table…", "explorer-creating-table.png", screenshotsDirectory) {
+                createTableDialog.pressButton("Create table")
+            } else createTableDialog.pressButton("Create table")
             frame.x(DialogUiComponent::class.java) {
                 byTitle("Table created")
             }.waitFound().pressButton("OK")
@@ -524,7 +567,9 @@ class IntellijUiScreenshotTest {
             }
             captureScreen(screenshotsDirectory.resolve("table-add-row-valid.png"))
 
-            commitButton.click()
+            if (jdbcFixture != null) captureBusyState(jdbcFixture, tableEditor, "Committing changes…", "table-committing.png", screenshotsDirectory) {
+                commitButton.click()
+            } else commitButton.click()
             frame.x(DialogUiComponent::class.java) {
                 byTitle("Changes Saved")
             }.waitFound().pressButton("OK")
@@ -534,8 +579,40 @@ class IntellijUiScreenshotTest {
             check(dataGrid.content().values.any { row -> row.values.any { "Ada" in it } }) {
                 "Committed row should be visible in the live data grid"
             }
+            if (jdbcFixture != null) {
+                dataGrid.clickCell(0, 1)
+                tableEditor.x { byAccessibleName("Delete selected rows") }.waitFound().click()
+                val confirm = frame.x(DialogUiComponent::class.java) { byTitle("Delete rows") }.waitFound()
+                captureBusyState(jdbcFixture, tableEditor, "Deleting saved rows…", "table-deleting-rows.png", screenshotsDirectory) {
+                    confirm.pressButton("Delete rows")
+                }
+                waitUntil("saved row deleted and editor unlocked") { dataGrid.rowCount() == 0 && tableEditor.hasSubtext("Deleted 1 saved row") }
+                captureScreen(screenshotsDirectory.resolve("table-deleted-empty.png"))
+                tableEditor.x { byAccessibleName("Add a new row") }.waitFound().click()
+                replaceCellValue(dataGrid, 0, 1, "Ada Lovelace")
+                commitButton.click()
+                frame.x(DialogUiComponent::class.java) { byTitle("Changes Saved") }.waitFound().pressButton("OK")
+                waitUntil("replacement saved row loaded") { dataGrid.rowCount() == 1 && tableEditor.hasSubtext("1 row ·") }
+            }
 
             val initialId = tableCellText(dataGrid, row = 0, column = 0).toLong()
+            if (jdbcFixture != null) {
+                tableEditor.x { byAccessibleName("Add a new row") }.waitFound().click()
+                replaceCellValue(dataGrid, 1, 1, "Duplicate key fixture")
+                replaceCellValue(dataGrid, 1, 0, initialId.toString())
+                waitUntil("duplicate key is type-valid before the database check") { commitButton.component.isEnabled() }
+                captureBusyState(jdbcFixture, tableEditor, "Committing changes…", "table-commit-failure-busy.png", screenshotsDirectory) {
+                    commitButton.click()
+                }
+                frame.x(DialogUiComponent::class.java) { byTitle("Commit Error") }.waitFound().also {
+                    captureScreen(screenshotsDirectory.resolve("table-commit-failure.png"))
+                    it.pressButton("OK")
+                }
+                check(tableEditor.hasSubtext("Commit failed · Pending edits kept") && commitButton.component.isEnabled() && revertButton.component.isEnabled())
+                captureScreen(screenshotsDirectory.resolve("table-commit-failure-recovered.png"))
+                revertButton.click()
+                waitUntil("failed insert reverted without losing saved row") { dataGrid.rowCount() == 1 && !revertButton.component.isEnabled() }
+            }
             dataGrid.doubleClickCell(0, 0)
             dataGrid.keyboard { enter() }
             waitUntil("opening and closing an unchanged integer cell stays clean") {
@@ -622,6 +699,21 @@ class IntellijUiScreenshotTest {
                 revertButton.click()
                 waitUntil("Revert restores persisted row") { tableCellText(dataGrid, 0, 1) == "Ada Lovelace" }
                 captureScreen(screenshotsDirectory.resolve("table-reverted.png"))
+                captureBusyState(requireNotNull(jdbcFixture), tableEditor, "Loading table data…", "table-loading-data.png", screenshotsDirectory) {
+                    tableEditor.x { byAccessibleName("Refresh table data") }.waitFound().click()
+                }
+                waitUntil("refresh completed and actions restored") { tableEditor.x { byAccessibleName("Refresh table data") }.waitFound().component.isEnabled() }
+                assertButtonReset(tableEditor.x { byAccessibleName("Refresh table data") }.waitFound(), dataGrid)
+                val applyButton = tableEditor.x { byAccessibleName("Apply filter and sort") }.waitFound()
+                applyButton.click()
+                waitUntil("Apply completed") { applyButton.component.isEnabled() }
+                assertButtonReset(applyButton, dataGrid)
+                captureScreen(screenshotsDirectory.resolve("table-action-focus-after-click.png"))
+                tableEditor.x { byAccessibleName("Table options") }.waitFound().click()
+                captureBusyState(jdbcFixture, tableEditor, "Counting saved rows…", "table-counting-rows.png", screenshotsDirectory) {
+                    frame.x { byVisibleText("Count rows") }.waitFound().click()
+                }
+                waitUntil("row count completed") { tableEditor.hasSubtext("1 saved row matches the filter") }
                 val whereInput = tableEditor.xx(JTextFieldUI::class.java) {
                     byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField")
                 }.list().first()
@@ -639,6 +731,12 @@ class IntellijUiScreenshotTest {
                 tableEditor.x { byVisibleText("Apply") }.waitFound().click()
                 waitUntil("filter reset") { dataGrid.rowCount() == 1 }
                 databaseTree.fixture.rightClickPath(pathText)
+                pressEscape()
+                captureBusyState(jdbcFixture, pluginRoot, "Loading columns…", "explorer-loading-columns.png", screenshotsDirectory) {
+                    pluginRoot.x { byAccessibleName("Refresh") }.waitFound().click()
+                }
+                waitUntil("column metadata loaded") { pluginRoot.hasSubtext("Loaded columns") }
+                databaseTree.fixture.rightClickPath(pathText)
                 captureScreen(screenshotsDirectory.resolve("table-context-menu.png"))
                 frame.x { byVisibleText("Alter table…") }.waitFound().click()
                 val alter = frame.x(DialogUiComponent::class.java) { byTitle("Alter table: LATTICE_PEOPLE") }.waitFound()
@@ -655,6 +753,20 @@ class IntellijUiScreenshotTest {
                     captureScreen(screenshotsDirectory.resolve("drop-column-confirmation.png"))
                     it.pressButton("Cancel")
                 }
+                alter.xx { byVisibleText("Add column") }.list().first().click()
+                alter.x(JTextFieldUI::class.java) {
+                    and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("Column name:"))
+                }.waitFound().text = "name"
+                captureBusyState(jdbcFixture, alter, "Updating table…", "alter-table-updating.png", screenshotsDirectory) {
+                    alter.xx { byVisibleText("Add column") }.list().last().click()
+                }
+                frame.x(DialogUiComponent::class.java) { byTitle("Database Operation Failed") }.waitFound().also {
+                    captureScreen(screenshotsDirectory.resolve("alter-table-operation-error.png"))
+                    it.pressButton("OK")
+                }
+                check(alter.hasSubtext("Table operation failed · See error details"))
+                check(alter.xx { byVisibleText("Add column") }.list().last().component.isEnabled())
+                captureScreen(screenshotsDirectory.resolve("alter-table-recovered.png"))
                 alter.pressButton("Close")
                 databaseTree.fixture.rightClickPath(pathText)
                 frame.x { byVisibleText("Drop table…") }.waitFound().click()
@@ -670,7 +782,30 @@ class IntellijUiScreenshotTest {
                 }
                 tableEditor.x { byAccessibleName("Export data") }.waitFound().click()
                 captureScreen(screenshotsDirectory.resolve("table-export-menu.png"))
-                frame.x { byVisibleText("View CREATE TABLE…") }.waitFound().click()
+                frame.x { byVisibleText("All persisted rows (current filter)") }.waitFound().click()
+                // Scope duplicate CSV entries through their actual Swing submenu owner.
+                val csvAction = frame.xx { byVisibleText("CSV…") }.list().first {
+                    withContext(OnDispatcher.EDT) {
+                        cast(it.component, LiveMenuItem::class).getParent().getInvoker().getText() == "All persisted rows (current filter)"
+                    }
+                }
+                csvAction.click()
+                val saveExport = frame.x(DialogUiComponent::class.java) { byTitle("Export All Persisted Rows") }.waitFound()
+                val exportFile = screenshotsDirectory.resolve("persisted-rows.csv").toAbsolutePath()
+                val filename = saveExport.xx(JTextFieldUI::class.java) { byType(javax.swing.JTextField::class.java) }
+                    .list().single { it.text.endsWith(".csv") }
+                filename.text = exportFile.toString()
+                captureScreen(screenshotsDirectory.resolve("table-export-file-chooser.png"))
+                captureBusyState(jdbcFixture, tableEditor, "Exporting persisted rows…", "table-exporting-rows.png", screenshotsDirectory) {
+                    saveExport.pressButton("OK")
+                }
+                frame.x(DialogUiComponent::class.java) { byTitle("Export Complete") }.waitFound().pressButton("OK")
+                check(Files.readString(exportFile).contains("Ada Lovelace")) { "Real persisted-row export must contain the saved database value" }
+                captureScreen(screenshotsDirectory.resolve("table-export-complete.png"))
+                tableEditor.x { byAccessibleName("Export data") }.waitFound().click()
+                captureBusyState(jdbcFixture, tableEditor, "Loading CREATE TABLE statement…", "table-loading-ddl.png", screenshotsDirectory) {
+                    frame.x { byVisibleText("View CREATE TABLE…") }.waitFound().click()
+                }
                 frame.x(DialogUiComponent::class.java) { byTitle("CREATE TABLE DDL - LATTICE_PEOPLE") }.waitFound().also {
                     captureScreen(screenshotsDirectory.resolve("table-ddl-dialog.png"))
                     it.pressButton("Close")
@@ -702,19 +837,20 @@ class IntellijUiScreenshotTest {
                     captureScreen(screenshotsDirectory.resolve("table-narrow-toolbar-expanded.png"))
                     assertToolbarSingleRow(it, "expanded table")
                     assertIconOnlyOverflow(tableEditor.x { byAccessibleName("Table actions") }.waitFound(), it)
-                    pressEscape()
+                    closeToolbarOverflow(it)
                 }
                 replaceCellValue(dataGrid, 0, 1, "Narrow layout edit")
                 waitUntil("narrow edit can be committed") { commitButton.component.isEnabled() }
                 captureScreen(screenshotsDirectory.resolve("table-narrow-pending.png"))
                 assertEditorControlsVisible(tableEditor, "narrow table with pending edit")
-                openToolbarOverflow(tableEditor, "Table actions").also {
+                val pendingOverflow = openToolbarOverflow(tableEditor, "Table actions").also {
                     captureScreen(screenshotsDirectory.resolve("table-narrow-toolbar-expanded-pending.png"))
                     assertIconOnlyOverflow(tableEditor.x { byAccessibleName("Table actions") }.waitFound(), it)
                     assertTrue(it.x { byAccessibleName("Commit pending changes to the database") }.waitFound().component.isEnabled())
                     it.x { byAccessibleName("Revert pending changes") }.waitFound().click()
                 }
                 waitUntil("narrow Revert restores row") { tableCellText(dataGrid, 0, 1) == "Ada Lovelace" }
+                closeToolbarOverflow(pendingOverflow)
                 whereInput.text = "\"id\" = -999"
                 tableEditor.x { byVisibleText("Apply") }.waitFound().click()
                 waitUntil("narrow Apply filters rows") { dataGrid.rowCount() == 0 }
@@ -737,8 +873,17 @@ class IntellijUiScreenshotTest {
                 assertFilterLayout(tableEditor, 1)
                 assertEditorControlsVisible(tableEditor, "restored table")
                 databaseTree.fixture.rightClickPath(pathText)
+                jdbcFixture.pauseResponses()
                 frame.x { byVisibleText("Open in SQL console") }.waitFound().click()
                 val console = frame.x { byJavaClass("com.segfault03.ideadb.ui.SqlQueryConsolePanel") }.waitFound()
+                try {
+                    waitUntil("console opens immediately with loading feedback") { console.hasSubtext("Connecting · Loading databases…") }
+                    jdbcFixture.awaitBlockedResponse()
+                    assertAnimatedBusy(console.x { byAccessibleName("SQL query status") }.waitFound())
+                    check(!console.x { byVisibleText("Run") }.waitFound().component.isEnabled())
+                    captureScreen(screenshotsDirectory.resolve("sql-console-loading-databases.png"))
+                } finally { jdbcFixture.resumeResponses() }
+                waitUntil("console database picker ready") { console.x { byVisibleText("Run") }.waitFound().component.isEnabled() }
                 val query = console.xx { byJavaClass("com.intellij.ui.components.JBTextArea") }.list().first()
                 val queryText = cast(query.component, JTextComponent::class)
                 captureScreen(screenshotsDirectory.resolve("sql-console-ready.png"))
@@ -795,12 +940,14 @@ class IntellijUiScreenshotTest {
                 }
                 runQuery.click()
                 waitUntil("long SQL running") { stopQuery.component.isEnabled() }
+                assertAnimatedBusy(console.x { byAccessibleName("SQL query status") }.waitFound())
                 captureScreen(screenshotsDirectory.resolve("sql-console-running.png"), settleMillis = 0)
                 val cancellationStart = System.nanoTime()
                 stopQuery.click()
                 waitUntil("immediate cancellation feedback", timeoutMillis = 2000) { console.hasSubtext("Cancelling query…") }
                 println("P2 cancellation feedback after ${(System.nanoTime() - cancellationStart) / 1_000_000} ms")
                 check(!runQuery.component.isEnabled() && !stopQuery.component.isEnabled()) { "A cancelling query must block Run and repeated Stop" }
+                assertAnimatedBusy(console.x { byAccessibleName("SQL query status") }.waitFound())
                 captureScreen(screenshotsDirectory.resolve("sql-console-cancelling.png"), settleMillis = 0)
                 waitUntil("SQL cancellation completes") { runQuery.component.isEnabled() }
                 assertQueryOutcome(console, cancelled = true)
@@ -843,7 +990,7 @@ class IntellijUiScreenshotTest {
                     captureScreen(screenshotsDirectory.resolve("sql-console-narrow-toolbar-expanded.png"))
                     assertToolbarSingleRow(it, "expanded SQL")
                     assertIconOnlyOverflow(console.x { byAccessibleName("SQL actions") }.waitFound(), it)
-                    pressEscape()
+                    closeToolbarOverflow(it)
                 }
                 for ((label, file) in listOf("History" to "sql-history-narrow-popup", "Template" to "sql-template-narrow-popup")) {
                     console.x(JComboBoxUiComponent::class.java) {
@@ -902,6 +1049,75 @@ class IntellijUiScreenshotTest {
             Files.writeString(screenshotsDirectory.resolve("runtime-evidence.txt"), evidence)
             println(evidence)
             println("Saved real IDE screenshots to $screenshotsDirectory")
+        }
+        } finally { jdbcFixture?.close() }
+    }
+
+    private fun captureBusyState(fixture: HsqlUiFixture, root: UiComponent, message: String, filename: String,
+                                 directory: Path, action: () -> Unit) {
+        fixture.pauseResponses()
+        try {
+            action()
+            waitUntil("visible busy feedback: $message") { root.hasSubtext(message) }
+            fixture.awaitBlockedResponse()
+            val label = root.x { byVisibleText(message) }.waitFound()
+            assertAnimatedBusy(label)
+            // Confirm that the actual icon animates on screen, rather than merely having a spinner class.
+            val point = label.component.getLocationOnScreen()
+            val region = Rectangle(point.x, point.y, 16, label.component.height)
+            val robot = Robot()
+            val first = robot.createScreenCapture(region)
+            var changed = false
+            repeat(5) {
+                Thread.sleep(100)
+                val next = robot.createScreenCapture(region)
+                if ((0 until first.width).any { x -> (0 until first.height).any { y -> first.getRGB(x, y) != next.getRGB(x, y) } }) changed = true
+            }
+            check(changed) { "Busy spinner did not animate on the live display: $message" }
+            println("Animated spinner pixels changed on the live IDE display: $message")
+            if (message in listOf("Committing changes…", "Loading table data…", "Counting saved rows…", "Deleting saved rows…", "Exporting persisted rows…", "Loading CREATE TABLE statement…")) {
+                for (name in listOf("Refresh table data", "Add a new row", "Delete selected rows", "Commit pending changes to the database", "Revert pending changes", "Apply filter and sort")) {
+                    check(!root.x { byAccessibleName(name) }.waitFound().component.isEnabled()) { "$name must be disabled during $message" }
+                }
+                val grid = root.x { byJavaClass("com.segfault03.ideadb.ui.DatabaseTable") }.waitFound()
+                check(!grid.component.isEnabled())
+            }
+            captureScreen(directory.resolve(filename))
+        } finally { fixture.resumeResponses() }
+    }
+
+    private fun assertButtonReset(button: UiComponent, grid: UiComponent) {
+        val location = grid.component.getLocationOnScreen()
+        val robot = Robot()
+        robot.mouseMove(location.x + grid.component.width / 2, location.y + grid.component.height / 2)
+        Thread.sleep(200)
+        button.driver.withContext(OnDispatcher.EDT) {
+            val live = cast(button.component, LiveToolbarButton::class)
+            val model = live.getModel()
+            check(!model.isPressed() && !model.isArmed() && !model.isRollover()) { "Button retains pressed/armed/hover state after the pointer leaves: ${live.getToolTipText()}" }
+            check(cast(grid.component, LiveSwingComponent::class).requestFocusInWindow())
+        }
+        Thread.sleep(150)
+        val point = button.component.getLocationOnScreen()
+        val bounds = Rectangle(point.x, point.y, button.component.width, button.component.height)
+        val unfocused = robot.createScreenCapture(bounds)
+        button.driver.withContext(OnDispatcher.EDT) {
+            check(cast(button.component, LiveToolbarButton::class).requestFocusInWindow())
+        }
+        Thread.sleep(150)
+        val focused = robot.createScreenCapture(bounds)
+        check(button.driver.cast(button.component, LiveToolbarButton::class).isFocusOwner()) { "Keyboard focus must still work" }
+        check(unfocused.getRGB(4, unfocused.height / 2) == focused.getRGB(4, focused.height / 2)) { "Keyboard focus must not paint a sticky hover fill" }
+        println("Action reset: ${button.driver.cast(button.component, LiveToolbarButton::class).getToolTipText()} · model reset; keyboard focus has no hover fill")
+    }
+
+    private fun assertAnimatedBusy(label: UiComponent) {
+        label.driver.withContext(OnDispatcher.EDT) {
+            val icon = cast(label.component, LiveLabel::class).getIcon()
+            check(icon != null) { "Busy feedback must have an icon" }
+            val className = cast(icon, LiveObject::class).getClass().getName()
+            check(className.contains("AnimatedIcon")) { "Busy feedback must use the platform animated icon: $className" }
+            println("Loading feedback: ${cast(label.component, LiveLabel::class).getText()} · $className")
         }
     }
 
@@ -1076,6 +1292,19 @@ class IntellijUiScreenshotTest {
         return editor.driver.ui.x { byType("com.intellij.openapi.actionSystem.impl.ActionToolbarImpl\$PopupToolbar") }.waitFound()
     }
 
+    private fun closeToolbarOverflow(toolbar: UiComponent) {
+        // The native popup consumes an outside click to dismiss itself. Dismiss explicitly
+        // before testing another action rather than relying on its mouse-exit timer.
+        val popups = toolbar.driver.ui.xx {
+            byType("com.intellij.openapi.actionSystem.impl.ActionToolbarImpl\$PopupToolbar")
+        }.list().map { toolbar.driver.cast(it.component, LiveSwingComponent::class) }
+        Robot().mouseMove(10, 10)
+        pressEscape()
+        waitUntil("native hover toolbar dismissed") {
+            popups.all { !it.isShowing() }
+        }
+    }
+
     private fun assertIconOnlyOverflow(originalToolbar: UiComponent, toolbar: UiComponent) {
         var checked = 0
         for (original in originalToolbar.xx { byJavaClass("com.segfault03.ideadb.ui.DatabaseUi\$ActionButton") }.list()) {
@@ -1139,6 +1368,7 @@ class IntellijUiScreenshotTest {
     }
 
     private fun replaceCellValue(table: JTableUiComponent, row: Int, column: Int, value: String) {
+        waitUntil("data grid ready for editing") { table.component.isEnabled() }
         table.clickCell(row, column)
         // Drive the real JTable editor on the IDE EDT. Repeated native double clicks
         // and global Ctrl+A are focus-sensitive under virtual desktop window managers.
@@ -1196,6 +1426,8 @@ interface LiveFrame {
 
 @Remote("javax.swing.JComponent")
 interface LiveSwingComponent {
+    fun requestFocusInWindow(): Boolean
+    fun isShowing(): Boolean
     fun paintImmediately(x: Int, y: Int, width: Int, height: Int)
     fun isVisible(): Boolean
     fun getVisibleRect(): Rectangle
@@ -1254,13 +1486,38 @@ interface LiveCellRenderer {
 
 @Remote("javax.swing.JButton")
 interface LiveToolbarButton {
+    fun isFocusOwner(): Boolean
+    fun getModel(): LiveButtonModel
+    fun requestFocusInWindow(): Boolean
     fun getText(): String
     fun getToolTipText(): String
     fun getIcon(): LiveIcon?
 }
 
+@Remote("javax.swing.JMenuItem")
+interface LiveMenuItem {
+    fun getText(): String
+    fun getParent(): LivePopupMenu
+}
+
+@Remote("javax.swing.JPopupMenu")
+interface LivePopupMenu { fun getInvoker(): LiveMenuItem }
+
+@Remote("javax.swing.ButtonModel")
+interface LiveButtonModel {
+    fun isPressed(): Boolean
+    fun isArmed(): Boolean
+    fun isRollover(): Boolean
+}
+
 @Remote("javax.swing.Icon")
 interface LiveIcon
+
+@Remote("java.lang.Object")
+interface LiveObject { fun getClass(): LiveClass }
+
+@Remote("java.lang.Class")
+interface LiveClass { fun getName(): String }
 
 @Remote("com.intellij.ide.ui.LafManager")
 interface LiveLafManager {

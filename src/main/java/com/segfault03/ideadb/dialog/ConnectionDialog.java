@@ -547,9 +547,10 @@ public class ConnectionDialog extends DialogWrapper {
 
     private void setDriverStatus(String message) {
         message = java.util.Objects.requireNonNullElse(message, " ");
-        driverStatusLabel.setIcon(null);
-        driverStatusLabel.setText("<html><body width='300'>" + escapeHtml(message) + "</body></html>");
+        DatabaseUi.status(driverStatusLabel, "<html><body width='300'>" + escapeHtml(message) + "</body></html>",
+                driverBusy ? DatabaseUi.Tone.BUSY : DatabaseUi.Tone.NORMAL);
         driverStatusLabel.setToolTipText(message);
+        driverStatusLabel.getAccessibleContext().setAccessibleDescription(message);
         refreshFormSize();
     }
 
@@ -888,6 +889,8 @@ public class ConnectionDialog extends DialogWrapper {
         testStatusLabel.setVisible(true);
 
         connectionBusy = true;
+        setOKActionEnabled(false);
+        setDriverControlsEnabled(false);
         updateDriverStatus();
 
         connectionTask = com.segfault03.ideadb.service.DatabaseTaskService.getInstance().submit(() -> {
@@ -897,6 +900,8 @@ public class ConnectionDialog extends DialogWrapper {
                 SwingUtilities.invokeLater(() -> {
                     if (isDisposed()) return;
                     connectionBusy = false;
+                    setOKActionEnabled(true);
+                    setDriverControlsEnabled(true);
                     updateDriverStatus();
                     if (!sameRequest(requested, createTempConfig())) {
                         DatabaseUi.status(testStatusLabel, "Settings changed · Test again", DatabaseUi.Tone.WARNING); return;

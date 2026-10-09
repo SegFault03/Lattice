@@ -26,7 +26,7 @@ class QueryExecutionTest {
             try { assertTrue(release.await(3, TimeUnit.SECONDS)); }
             catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new AssertionError(error); }
         }));
-        ExecutorService worker = Executors.newSingleThreadExecutor();
+        ExecutorService worker = Executors.newFixedThreadPool(2);
         try {
             assertTrue(execution.requestCancellation());
             Future<?> cancel = worker.submit(execution::cancel);
@@ -35,9 +35,14 @@ class QueryExecutionTest {
             assertTrue(execution.isRunning(), "Run must stay blocked until the query worker detaches");
             assertThrows(SQLException.class, execution::checkCancelled);
             assertFalse(cancel.isDone());
+            CountDownLatch detaching = new CountDownLatch(1);
+            Future<?> detached = worker.submit(() -> { detaching.countDown(); execution.detach(); });
+            assertTrue(detaching.await(2, TimeUnit.SECONDS));
+            assertThrows(TimeoutException.class, () -> detached.get(100, TimeUnit.MILLISECONDS),
+                    "The next query must wait for the driver's in-flight cancellation to finish");
             release.countDown();
             cancel.get(2, TimeUnit.SECONDS);
-            execution.detach();
+            detached.get(2, TimeUnit.SECONDS);
             assertFalse(execution.isRunning());
         } finally { release.countDown(); worker.shutdownNow(); }
     }

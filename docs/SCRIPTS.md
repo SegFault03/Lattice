@@ -81,6 +81,8 @@ The [P2 report](UI_P2_FIXES.md) covers schema-form alignment, native header size
 
 The [P3 report](UI_P3_FIXES.md) covers neutral cancellation, responsive filter rows, sentence-case schema labels, singular/plural row counts and readable version/source summaries. Use `LATTICE_UI_REVIEW_OUTPUT="$PWD/build/ui-review-p3"` to preserve earlier results. The same review command exercises cancellation both with and without previous results, genuine SQL errors, four IDE widths and all driver-summary source labels.
 
+The [loading feedback report](UI_LOADING_FEEDBACK.md) describes the test-only real HSQLDB server/response gate used by review mode to hold brief operations for inspection. The same command checks animated spinner pixels, locked controls, button models after clicks, mutation failures, and actual database/schema/export flows.
+
 Open `build/ui-preview/index.html` to review the five featured screens. Pass `--all-previews` to include light/dark variants for the **Welcome**, **Input controls**, **Schema dialogs**, connection states, table editor/viewer and SQL console. Every successful run updates only the five fixed README image files in `screenshots/`; extra generated images stay under `build/`. Commit changed featured PNGs with UI changes. `--output` changes the gallery/build directory while still updating `screenshots/`; use `--all-previews` for `--compare-with` before/after baselines.
 
 See [UI preview instructions](UI_PREVIEW.md) for SDK setup, explicit paths, the featured-image mapping and preview limitations.

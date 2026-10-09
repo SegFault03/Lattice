@@ -10,11 +10,13 @@ import java.util.function.Consumer;
 
 /** Fixed-size explorer actions grouped like an IntelliJ tool window toolbar. */
 final class DatabaseExplorerToolbar extends JPanel {
+    private final JButton add;
     private final JButton edit;
     private final JButton remove;
     private final JButton refresh;
     private final JButton console;
     private boolean hasConnections;
+    private boolean busy;
     private TreeNodeData selection;
 
     DatabaseExplorerToolbar(Consumer<Component> addConnection, Runnable editConnection,
@@ -24,7 +26,7 @@ final class DatabaseExplorerToolbar extends JPanel {
         setBorder(BorderFactory.createCompoundBorder(
                 JBUI.Borders.customLineBottom(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR),
                 JBUI.Borders.empty(6, 12)));
-        JButton add = button(AllIcons.General.Add, "Add connection…", null, true);
+        add = button(AllIcons.General.Add, "Add connection…", null, true);
         add.addActionListener(e -> addConnection.accept(add));
         edit = button(AllIcons.General.Settings, "Edit connection…", editConnection);
         remove = button(AllIcons.General.Remove, "Remove connection settings", removeConnection);
@@ -46,15 +48,18 @@ final class DatabaseExplorerToolbar extends JPanel {
         updateActions();
     }
 
+    void setBusy(boolean busy) { this.busy = busy; updateActions(); }
+
     private void updateActions() {
-        boolean connectionSelected = hasConnections && selection != null && selection.getConnectionConfig() != null;
+        add.setEnabled(!busy);
+        boolean connectionSelected = !busy && hasConnections && selection != null && selection.getConnectionConfig() != null;
         edit.setEnabled(connectionSelected);
         remove.setEnabled(connectionSelected && selection.getType() == TreeNodeData.NodeType.CONNECTION);
-        refresh.setEnabled(hasConnections && (selection == null || switch (selection.getType()) {
+        refresh.setEnabled(!busy && hasConnections && (selection == null || switch (selection.getType()) {
             case ROOT, CONNECTION, DATABASE, TABLE, VIEW -> true;
             default -> false;
         }));
-        console.setEnabled(hasConnections);
+        console.setEnabled(!busy && hasConnections);
     }
 
     private JButton button(Icon icon, String tooltip, Runnable action) {

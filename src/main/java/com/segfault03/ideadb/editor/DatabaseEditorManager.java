@@ -7,13 +7,8 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.model.TableMetadata;
-import com.segfault03.ideadb.service.DatabaseConnectionManager;
-import com.segfault03.ideadb.service.MetadataService;
 import org.jetbrains.annotations.NotNull;
 
-import java.sql.Connection;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -65,39 +60,20 @@ public class DatabaseEditorManager implements com.intellij.openapi.Disposable {
 
     public void openConsole(ConnectionConfig config, String initialDb, String initialSql) {
         String key = "console:" + config.getId() + ":" + (initialDb != null ? initialDb : "");
-        tasks.submit(() -> {
-            if(disposed || project.isDisposed()) return;
-            List<String> dbs = new ArrayList<>();
-            try(var read=tasks.openRead(config)) {
-                Connection conn=read.connection();
-                dbs = MetadataService.getInstance().getDatabases(conn, config);
-            } catch (Exception ignored) {
+        ApplicationManager.getApplication().invokeLater(() -> {
+            if (disposed || project.isDisposed()) return;
+            DatabaseVirtualFile vf = openFiles.get(key);
+            if (vf instanceof SqlConsoleVirtualFile console && FileEditorManager.getInstance(project).isFileOpen(vf)) {
+                FileEditorManager.getInstance(project).openFile(vf, true);
+                if (initialSql != null && console.getPanel() != null) console.getPanel().setSqlText(initialSql);
+                return;
             }
-
-            final List<String> allDbs = dbs;
-            ApplicationManager.getApplication().invokeLater(() -> {
-                if(disposed || project.isDisposed()) return;
-                DatabaseVirtualFile vf = openFiles.get(key);
-                if (vf instanceof SqlConsoleVirtualFile consoleVf && FileEditorManager.getInstance(project).isFileOpen(consoleVf)) {
-                    FileEditorManager.getInstance(project).openFile(consoleVf, true);
-                    if (initialSql != null && consoleVf.getPanel() != null) {
-                        consoleVf.getPanel().setSqlText(initialSql);
-                    }
-                    return;
-                }
-
-                SqlConsoleVirtualFile newVf = new SqlConsoleVirtualFile(config, initialDb, allDbs);
-                openFiles.put(key, newVf);
-                FileEditorManager.getInstance(project).openFile(newVf, true);
-
-                if (initialSql != null) {
-                    ApplicationManager.getApplication().invokeLater(() -> {
-                if(disposed || project.isDisposed()) return;
-                        if (newVf.getPanel() != null) {
-                            newVf.getPanel().setSqlText(initialSql);
-                        }
-                    });
-                }
+            // Open immediately. The production panel loads its database picker with visible feedback.
+            SqlConsoleVirtualFile console = new SqlConsoleVirtualFile(config, initialDb, null);
+            openFiles.put(key, console);
+            FileEditorManager.getInstance(project).openFile(console, true);
+            if (initialSql != null) ApplicationManager.getApplication().invokeLater(() -> {
+                if (!disposed && !project.isDisposed() && console.getPanel() != null) console.getPanel().setSqlText(initialSql);
             });
         });
     }

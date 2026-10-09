@@ -39,7 +39,7 @@ public final class DatabaseUi {
         label.getAccessibleContext().setAccessibleDescription(text);
         label.setIcon(switch (tone) {
             case NORMAL -> null;
-            case BUSY -> com.intellij.icons.AllIcons.Process.Step_passive;
+            case BUSY -> com.intellij.ui.AnimatedIcon.Default.INSTANCE;
             case SUCCESS -> com.intellij.icons.AllIcons.General.GreenCheckmark;
             case WARNING -> com.intellij.icons.AllIcons.General.Warning;
             case ERROR -> com.intellij.icons.AllIcons.General.Error;
@@ -104,6 +104,17 @@ public final class DatabaseUi {
             defaultIcon = icon;
         }
 
+        @Override public void setEnabled(boolean enabled) {
+            super.setEnabled(enabled);
+            if (!enabled && getModel() != null) clearInteractionState();
+        }
+
+        private void clearInteractionState() {
+            getModel().setArmed(false);
+            getModel().setPressed(false);
+            getModel().setRollover(false);
+        }
+
         private void copySourceState() {
             if (source == null) return;
             setText(iconOnly ? "" : source.getText());
@@ -125,6 +136,7 @@ public final class DatabaseUi {
 
         @Override public void removeNotify() {
             if (source != null) source.removePropertyChangeListener(sourceChanges);
+            clearInteractionState();
             super.removeNotify();
         }
 
@@ -157,17 +169,19 @@ public final class DatabaseUi {
         @Override protected void paintComponent(Graphics graphics) {
             ButtonModel model = getModel();
             boolean emphasized = isEnabled() && emphasisColor != null;
-            boolean interactive = isEnabled() && (model.isRollover() || model.isPressed() && model.isArmed() || hasFocus());
-            if (emphasized || interactive) {
+            boolean interactive = isEnabled() && (model.isRollover() || model.isPressed() && model.isArmed());
+            if (emphasized || interactive || isEnabled() && hasFocus()) {
                 Graphics2D g = (Graphics2D) graphics.create();
                 try {
                     g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                    g.setColor(emphasized
-                            ? emphasisColor
-                            : model.isPressed() && model.isArmed()
-                                    ? JBUI.CurrentTheme.ActionButton.pressedBackground()
-                                    : JBUI.CurrentTheme.ActionButton.hoverBackground());
-                    g.fillRoundRect(0, 0, getWidth(), getHeight(), JBUI.scale(10), JBUI.scale(10));
+                    if (emphasized || interactive) {
+                        g.setColor(emphasized
+                                ? emphasisColor
+                                : model.isPressed() && model.isArmed()
+                                        ? JBUI.CurrentTheme.ActionButton.pressedBackground()
+                                        : JBUI.CurrentTheme.ActionButton.hoverBackground());
+                        g.fillRoundRect(0, 0, getWidth(), getHeight(), JBUI.scale(10), JBUI.scale(10));
+                    }
                     if (emphasized) {
                         g.setColor(emphasisColor.darker());
                         g.setStroke(new BasicStroke(JBUI.scale(1f)));

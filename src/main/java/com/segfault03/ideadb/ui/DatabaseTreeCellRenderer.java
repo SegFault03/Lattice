@@ -106,7 +106,7 @@ public class DatabaseTreeCellRenderer extends ColoredTreeCellRenderer {
                 break;
 
             case LOADING:
-                setIcon(AllIcons.Process.Step_passive);
+                setIcon(data.isLoading() ? com.intellij.ui.AnimatedIcon.Default.INSTANCE : null);
                 append(data.getName(), SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES);
                 break;
         }

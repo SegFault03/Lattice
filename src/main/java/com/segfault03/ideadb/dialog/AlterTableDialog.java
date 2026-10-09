@@ -31,6 +31,7 @@ public class AlterTableDialog extends DialogWrapper {
     private final String databaseName;
     private final TableMetadata tableMetadata;
 
+    private final JLabel operationStatus = new com.segfault03.ideadb.ui.WrappingLabel("Ready");
     private boolean busy;
     private volatile Connection activeConnection;
     private java.util.concurrent.Future<?> operationTask;
@@ -230,6 +231,8 @@ public class AlterTableDialog extends DialogWrapper {
 
         root.add(tabScrollPane, BorderLayout.NORTH);
         root.add(contentCards, BorderLayout.CENTER);
+        operationStatus.getAccessibleContext().setAccessibleName("Alter table status");
+        root.add(operationStatus, BorderLayout.SOUTH);
         return root;
     }
 
@@ -280,12 +283,15 @@ public class AlterTableDialog extends DialogWrapper {
         else { enabledStates.forEach(Component::setEnabled); enabledStates.clear(); }
     }
     private void disableControls(Component component) {
+        if (component == operationStatus) return;
         enabledStates.put(component,component.isEnabled()); component.setEnabled(false);
         if (component instanceof Container container) for(Component child:container.getComponents()) disableControls(child);
     }
     private void runAlter(AlterOperation operation, String metadataName, String success) {
         if (busy || isDisposed()) return;
         setBusy(true);
+        com.segfault03.ideadb.ui.DatabaseUi.status(operationStatus,
+                success == null ? "Loading columns…" : "Updating table…", com.segfault03.ideadb.ui.DatabaseUi.Tone.BUSY);
         operationTask = com.segfault03.ideadb.service.DatabaseTaskService.getInstance().submit(() -> {
             if (isDisposed()) return;
             try (Connection conn = DatabaseConnectionManager.getInstance().openConnection(config)) {
@@ -296,12 +302,15 @@ public class AlterTableDialog extends DialogWrapper {
                 SwingUtilities.invokeLater(() -> {
                     if (isDisposed()) return;
                     tableMetadata.setColumns(columns); setBusy(false); refreshDropdowns();
+                    com.segfault03.ideadb.ui.DatabaseUi.status(operationStatus, "Table metadata loaded", com.segfault03.ideadb.ui.DatabaseUi.Tone.NORMAL);
                     if (success != null) { Messages.showInfoMessage(project,success,"Table updated"); close(OK_EXIT_CODE); }
                 });
             } catch(Exception error) {
                 SwingUtilities.invokeLater(() -> {
                     if (isDisposed()) return;
-                    setBusy(false); Messages.showErrorDialog(project,error.getMessage(),"Database Operation Failed");
+                    setBusy(false);
+                    com.segfault03.ideadb.ui.DatabaseUi.status(operationStatus, "Table operation failed · See error details", com.segfault03.ideadb.ui.DatabaseUi.Tone.ERROR);
+                    Messages.showErrorDialog(project,error.getMessage(),"Database Operation Failed");
                 });
             } finally { activeConnection=null; }
         });
