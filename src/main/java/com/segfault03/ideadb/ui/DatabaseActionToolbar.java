@@ -36,11 +36,11 @@ public final class DatabaseActionToolbar {
         return new ControlAction(combo, label);
     }
 
-    private static final class ControlAction extends DumbAwareAction implements CustomComponentAction {
+    static final class ControlAction extends DumbAwareAction implements CustomComponentAction {
         private final JComponent source;
         private final String label;
 
-        private ControlAction(JComponent source, String label) {
+        ControlAction(JComponent source, String label) {
             super(source instanceof JButton button ? button.getText() : label, source.getToolTipText(),
                     source instanceof JButton button ? button.getIcon() : null);
             this.source = source;
@@ -48,7 +48,12 @@ public final class DatabaseActionToolbar {
         }
 
         @Override public ActionUpdateThread getActionUpdateThread() { return ActionUpdateThread.EDT; }
-        @Override public void update(AnActionEvent event) { event.getPresentation().setEnabled(source.isEnabled()); }
+        @Override public void update(AnActionEvent event) { updatePresentation(event.getPresentation()); }
+
+        void updatePresentation(Presentation presentation) {
+            presentation.setEnabled(source.isEnabled());
+            if (source instanceof JButton button) presentation.setIcon(button.getIcon());
+        }
         @Override public void actionPerformed(AnActionEvent event) {
             if (source instanceof JButton button) button.doClick();
             else source.requestFocusInWindow();
