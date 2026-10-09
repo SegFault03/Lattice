@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Render database UI components without launching IntelliJ.
+"""Render database UI components without launching an IntelliJ IDE window.
 
 Requires JDK 21 and an IntelliJ 2025.1 SDK (Gradle's cached SDK is discovered).
-Preview-only service shadows block background work; FlatLaf approximates IDE themes.
+The IntelliJ test application supplies native action-system services; preview-only
+service shadows block database work and FlatLaf approximates IDE themes.
 Refreshes the five featured screenshots/ PNGs and a local gallery under ignored build/ui-preview/.
 """
 import argparse
@@ -42,6 +43,20 @@ def cached_sdk(gradle_cache):
     return None
 
 
+def cached_test_runtime_jars(gradle_cache):
+    dependencies = (
+        ('junit/junit/4.13.2', 'junit-4.13.2.jar'),
+        ('org.hamcrest/hamcrest-core/1.3', 'hamcrest-core-1.3.jar'),
+    )
+    result = []
+    for module, filename in dependencies:
+        matches = sorted((gradle_cache / 'caches/modules-2/files-2.1' / module).glob(f'*/{filename}'))
+        if not matches:
+            return None
+        result.append(matches[0])
+    return result
+
+
 def run():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--ide-home', type=Path, help='IntelliJ SDK installation directory')
@@ -57,11 +72,14 @@ def run():
     if not javac.is_file():
         parser.error('Select a full JDK 21 with --java-home or JAVA_HOME; javac was not found.')
     sdk = args.ide_home.expanduser().resolve() if args.ide_home else None
+    gradle_cache = Path(os.environ.get('GRADLE_USER_HOME', Path.home() / '.gradle')).expanduser().resolve()
     if sdk is None:
-        gradle_cache = Path(os.environ.get('GRADLE_USER_HOME', Path.home() / '.gradle')).expanduser().resolve()
         sdk = cached_sdk(gradle_cache)
         if sdk is None:
             parser.error('No cached IntelliJ 2025.1 SDK. Run ./gradlew compileJava or pass --ide-home.')
+    test_jars = cached_test_runtime_jars(gradle_cache)
+    if test_jars is None:
+        parser.error('No cached JUnit 4 preview runtime. Run ./gradlew test or set GRADLE_USER_HOME.')
     jars = sorted((sdk / 'lib').glob('*.jar')) + sorted((sdk / 'lib/modules').glob('*.jar'))
     if not (sdk / 'lib/app-client.jar').is_file():
         parser.error('--ide-home must point to an IntelliJ SDK with lib/app-client.jar')
@@ -85,7 +103,7 @@ def run():
     preview = output / 'preview-classes'
     production.mkdir(exist_ok=True)
     preview.mkdir(exist_ok=True)
-    cp = os.pathsep.join(map(str, jars + sorted((ROOT / 'lib').glob('*.jar'))))
+    cp = os.pathsep.join(map(str, jars + sorted((ROOT / 'lib').glob('*.jar')) + test_jars))
     sources = sorted((ROOT / 'src/main/java').rglob('*.java'))
     java_args(javac, ['--release', '21', '-encoding', 'UTF-8', '-cp', cp, '-d', str(production)] + list(map(str, sources)), output / 'compile-production.args')
     preview_sources = sorted((ROOT / 'scripts/ui-preview').glob('*.java'))
@@ -101,7 +119,30 @@ def run():
     mode = 'all' if args.all_previews else 'featured'
     themes = ('light', 'dark') if args.all_previews else ('light',)
     for theme in themes:
-        java_args(java, ['--add-opens=java.desktop/javax.swing=ALL-UNNAMED', '--add-opens=java.desktop/java.awt=ALL-UNNAMED', '--add-opens=java.desktop/sun.awt=ALL-UNNAMED', '--add-opens=java.desktop/sun.swing=ALL-UNNAMED', '--add-opens=java.desktop/javax.swing.plaf.basic=ALL-UNNAMED', '-Djava.awt.headless=true', f'-Didea.system.path={output / "idea-system"}', '-cp', runtime, 'UiPreview', str(output), theme, mode], output / f'{theme}.args')
+        system_path = output / f'idea-system-{os.getpid()}-{theme}'
+        config_path = output / f'idea-config-{os.getpid()}-{theme}'
+        try:
+            java_args(java, ['--add-exports=java.desktop/sun.awt=ALL-UNNAMED',
+                         '--add-opens=java.base/java.lang=ALL-UNNAMED',
+                         '--add-opens=java.base/java.io=ALL-UNNAMED',
+                         '--add-opens=java.base/java.nio=ALL-UNNAMED',
+                         '--add-opens=java.base/java.util=ALL-UNNAMED',
+                         '--add-opens=java.base/java.util.concurrent=ALL-UNNAMED',
+                         '--add-opens=java.desktop/java.awt=ALL-UNNAMED',
+                         '--add-opens=java.desktop/java.awt.event=ALL-UNNAMED',
+                         '--add-opens=java.desktop/javax.swing=ALL-UNNAMED',
+                         '--add-opens=java.desktop/javax.swing.plaf.basic=ALL-UNNAMED',
+                         '--add-opens=java.desktop/sun.awt=ALL-UNNAMED',
+                         '--add-opens=java.desktop/sun.font=ALL-UNNAMED',
+                         '--add-opens=java.desktop/sun.java2d=ALL-UNNAMED',
+                         '--add-opens=java.desktop/sun.swing=ALL-UNNAMED',
+                         '-Djava.awt.headless=true', '-Didea.is.unit.test=true', '-Didea.platform.prefix=Idea',
+                         f'-Didea.home.path={sdk}', f'-Didea.config.path={config_path}',
+                         f'-Didea.system.path={system_path}', '-cp', runtime, 'UiPreview',
+                         str(output), theme, mode], output / f'{theme}.args')
+        finally:
+            shutil.rmtree(system_path, ignore_errors=True)
+            shutil.rmtree(config_path, ignore_errors=True)
     if not args.all_previews:
         (output / 'dark-manifest.txt').write_text('', encoding='utf-8')
     publish_screenshots(output, screenshots)

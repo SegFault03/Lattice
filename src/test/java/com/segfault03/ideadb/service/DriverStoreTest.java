@@ -108,35 +108,73 @@ class DriverStoreTest {
         } finally { registry.dispose(); }
     }
 
-    @Test void onlyAStoredVersionChangesTheConnectionIdentity() throws Exception {
+    @Test void disappearingArtifactDoesNotEraseTheRegisteredDriverIdentity() throws Exception {
         System.setProperty("lattice.jdbc.cache", cache.toString());
-        stored(DatabaseType.MYSQL, "8.4.0");
-        var method = Class.forName("com.segfault03.ideadb.service.DatabaseConnectionManager$Identity")
-                .getDeclaredMethod("of", ConnectionConfig.class);
-        method.setAccessible(true);
+        Path jar = stored(DatabaseType.HSQLDB, "2.7.2");
+        var retained = new ConnectionConfig(DatabaseType.HSQLDB, "retained");
+        retained.setDriverVersion("2.7.2");
+        var manager = new DatabaseConnectionManager();
+        try {
+            manager.registerConfiguration(retained);
+            // Remove it before loading: this also works on Windows, which locks loaded JARs.
+            Files.delete(jar);
+            var packaged = retained.copy();
+            packaged.setDriverVersion("");
+            manager.registerConfiguration(packaged);
+            assertThrows(java.sql.SQLException.class, () -> manager.openConnection(retained),
+                    "An editor using the removed selection must be rejected after switching to bundled");
+            packaged.setHsqlMode(com.segfault03.ideadb.model.HsqlMode.MEM);
+            packaged.setDatabaseName("identity_" + java.util.UUID.randomUUID().toString().replace("-", ""));
+            manager.registerConfiguration(packaged);
+            var connection = manager.getConnection(packaged);
+            var missing = packaged.copy();
+            missing.setDriverVersion("2.7.2");
+            manager.registerConfiguration(missing);
+            assertTrue(connection.isClosed(), "Selecting a now-missing explicit version still retires the old session");
+            assertThrows(java.sql.SQLException.class, () -> manager.getConnection(packaged));
+            assertThrows(IllegalStateException.class, () -> manager.openConnection(missing),
+                    "Missing selected drivers must not reuse or fall back to the packaged driver");
+        } finally { manager.dispose(); }
+    }
 
-        var packaged = new ConnectionConfig(DatabaseType.MYSQL, "packaged");
-        var named = packaged.copy();
-        named.setDriverVersion("8.4.0");
-        var unused = packaged.copy();
-        unused.setDriverVersion("5.7.44");
-        unused.setDriverJarPath("drivers/mysql.jar");
-        assertEquals(method.invoke(null, packaged), method.invoke(null, unused),
-                "Fields unused by the packaged driver must not retire sessions");
-        assertNotEquals(method.invoke(null, packaged), method.invoke(null, named),
-                "Switching to a stored driver must retire sessions");
-
-        Path discoveredJar;
-        try (var jars = Files.list(Path.of("lib"))) {
-            discoveredJar = jars.filter(path -> path.getFileName().toString().startsWith("mysql-connector")
-                            && path.getFileName().toString().endsWith(".jar"))
-                    .findFirst().orElseThrow();
+    @Test void corruptionInsideAReadableZipIsRejectedAndOnlyOwnedArtifactsAreDeleted() throws Exception {
+        System.setProperty("lattice.jdbc.cache", cache.toString());
+        Path retained = stored(DatabaseType.HSQLDB, "2.7.2");
+        // Build a valid STORED entry, then damage the bytes without changing the ZIP directory / CRC.
+        byte[] bytecode;
+        try (var jar = new java.util.jar.JarFile(retained.toFile())) {
+            bytecode = jar.getInputStream(jar.getJarEntry("org/hsqldb/jdbc/JDBCDriver.class")).readAllBytes();
         }
-        var discovered = packaged.copy();
-        discovered.setDriverVersion(DriverCatalog.versionOf(DatabaseType.MYSQL, discoveredJar.getFileName().toString()));
-        discovered.setDriverJarPath(discoveredJar.toString());
-        assertNotEquals(method.invoke(null, packaged), method.invoke(null, discovered),
-                "Switching to a valid discovered driver must retire sessions");
+        var entry = new java.util.zip.ZipEntry("org/hsqldb/jdbc/JDBCDriver.class");
+        entry.setMethod(java.util.zip.ZipEntry.STORED);
+        entry.setSize(bytecode.length);
+        var crc = new java.util.zip.CRC32(); crc.update(bytecode); entry.setCrc(crc.getValue());
+        try (var zip = new java.util.zip.ZipOutputStream(Files.newOutputStream(retained))) {
+            zip.putNextEntry(entry); zip.write(bytecode); zip.closeEntry();
+        }
+        assertNotNull(DriverCatalog.validateJar(DatabaseType.HSQLDB, retained));
+        byte[] archive = Files.readAllBytes(retained);
+        int dataStart = 30 + entry.getName().getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+        archive[dataStart + 8] ^= 1;
+        Files.write(retained, archive);
+        Files.setLastModifiedTime(retained, java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() + 2000));
+        Path external = cache.resolve("hsqldb-2.7.2.jar"); Files.copy(retained, external);
+        assertThrows(java.io.IOException.class, () -> DriverCatalog.validateJar(DatabaseType.HSQLDB, external));
+        assertTrue(Files.exists(external), "Validation must not delete Maven or user-supplied JARs");
+        assertFalse(DriverCatalog.isInstalled(DatabaseType.HSQLDB, "2.7.2"));
+        assertFalse(Files.exists(retained), "A corrupt retained JAR must be removed so the version can be downloaded again");
+    }
+
+    @Test void cancelledValidationCannotDeleteAValidRetainedArtifact() throws Exception {
+        System.setProperty("lattice.jdbc.cache", cache.toString());
+        Path jar = stored(DatabaseType.HSQLDB, "2.7.2");
+        Thread.currentThread().interrupt();
+        try {
+            assertFalse(DriverCatalog.isInstalled(DatabaseType.HSQLDB, "2.7.2"));
+            assertTrue(Thread.currentThread().isInterrupted());
+            assertTrue(Files.exists(jar), "Cancellation is not evidence of corruption");
+        } finally { Thread.interrupted(); }
+        assertTrue(DriverCatalog.isInstalled(DatabaseType.HSQLDB, "2.7.2"));
     }
 
     @Test void versionOrderingMatchesMavenReleaseOrder() {

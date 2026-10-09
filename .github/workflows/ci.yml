@@ -9,11 +9,14 @@ on:
 permissions:
   contents: read
 
+# Keep push and PR groups separate: a head push must not cancel validation of its merge commit.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   commit-checks:
-    # Internal PR commits are already checked by their push event. For fork PRs,
-    # run the baseline here because their push event belongs to the fork repository.
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository }}
+    # PR checkout tests the merge commit, including integration with the current base branch.
     strategy:
       fail-fast: false
       matrix:
@@ -33,10 +36,10 @@ jobs:
           cache-provider: enhanced
       - name: Test development tools
         run: python -m unittest discover -s scripts/tests -v
-      - name: Build, run UI and functional tests
+      - name: Build and run unit and live functional tests
         if: matrix.os == 'ubuntu-24.04'
         run: python3 scripts/test.py --live --mysql --hsqldb --build
-      - name: Build and run UI tests
+      - name: Build and run unit tests
         if: matrix.os != 'ubuntu-24.04'
         run: python scripts/test.py --build
       - name: Render UI inside IntelliJ IDEA
@@ -45,6 +48,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y xvfb xfwm4 x11-utils
           ./scripts/review-intellij-ui.sh ExperimentalDark
+      - name: Retain plugin for PR compatibility checks
+        if: github.event_name == 'pull_request' && matrix.os == 'ubuntu-24.04'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: plugin-under-test
+          path: build/distributions/*.zip
+          if-no-files-found: error
+          retention-days: 1
       - name: Retain test reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -54,17 +65,18 @@ jobs:
             build/reports/tests/
             build/test-results/
             build/fixtures/
-            build/ui-preview/
             build/ui-review/
           retention-days: 7
 
-  compatibility:
+  ide-compatibility:
     needs: commit-checks
-    # For internal PRs, commit-checks ran on the push event for this same SHA.
-    # Fork PRs run the baseline job above before reaching this compatibility gate.
-    if: ${{ always() && github.event_name == 'pull_request' && (needs.commit-checks.result == 'success' || needs.commit-checks.result == 'skipped') }}
+    if: github.event_name == 'pull_request' && needs.commit-checks.result == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        ide: ['2025.1', '2025.2', '2025.3']
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -73,15 +85,63 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Run IntelliJ and JDBC compatibility matrices
-        run: python3 scripts/one-shot-test.py --compatibility-only
-      - name: Retain compatibility reports
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: plugin-under-test
+          path: build/distributions
+      - name: Verify the exact tested plugin
+        env:
+          IDE_VERSION: ${{ matrix.ide }}
+        run: |
+          archives=(build/distributions/*.zip)
+          [[ ${#archives[@]} -eq 1 && -f "${archives[0]}" ]]
+          python3 scripts/verify-plugin.py "${archives[0]}" --ide-version "$IDE_VERSION" \
+            --java-home "$JAVA_HOME" --cache "$RUNNER_TEMP/lattice-test-binaries"
+      - name: Retain verifier reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: compatibility-pr
+          name: compatibility-pr-${{ matrix.ide }}
+          if-no-files-found: ignore
+          path: build/compatibility/verifier-ci/
+          retention-days: 7
+
+  database-compatibility:
+    needs: commit-checks
+    if: github.event_name == 'pull_request' && needs.commit-checks.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Run JDBC and Java 8 compatibility matrices
+        run: python3 scripts/one-shot-test.py --database-compatibility-only
+      - name: Retain JDBC compatibility reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: compatibility-pr-jdbc
           if-no-files-found: ignore
           path: |
             build/compatibility/
             build/one-shot-test/
           retention-days: 7
+
+  compatibility:
+    needs: [commit-checks, ide-compatibility, database-compatibility]
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require all compatibility gates to pass
+        env:
+          BASELINE_RESULT: ${{ needs.commit-checks.result }}
+          IDE_RESULT: ${{ needs.ide-compatibility.result }}
+          JDBC_RESULT: ${{ needs.database-compatibility.result }}
+        run: |
+          [[ "$BASELINE_RESULT" == success && "$IDE_RESULT" == success && "$JDBC_RESULT" == success ]]

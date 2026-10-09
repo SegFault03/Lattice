@@ -211,6 +211,21 @@ class IntellijUiScreenshotTest {
             ))) { "Expected bundled and Maven-discovered MySQL releases: $mysqlAvailableDriverLabels" }
             captureScreen(screenshotsDirectory.resolve("mysql-connection-dialog-available-driver-list.png"))
             pressEscape()
+            val mysqlTypeCombo = mysqlDialog.x(JComboBoxUiComponent::class.java) {
+                and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"), byAccessibleName("Database type:"))
+            }.waitFound()
+            mysqlTypeCombo.selectItem("HSQLDB")
+            assertDriverSummary(mysqlDialog, "2.7.2 · DISCOVERED")
+            captureScreen(screenshotsDirectory.resolve("driver-type-switch-hsql-project-default.png"))
+            mysqlTypeCombo.selectItem("MySQL")
+            assertDriverSummary(mysqlDialog, "8.4.0 · DISCOVERED")
+            mysqlAvailableDriverCombo.selectItem("26.7.0 · BUNDLED")
+            mysqlTypeCombo.selectItem("HSQLDB")
+            assertDriverSummary(mysqlDialog, "2.7.2 · DISCOVERED")
+            mysqlTypeCombo.selectItem("MySQL")
+            assertDriverSummary(mysqlDialog, "26.7.0 · BUNDLED")
+            captureScreen(screenshotsDirectory.resolve("driver-type-switch-mysql-manual-choice.png"))
+            mysqlAvailableDriverCombo.selectItem("8.4.0 · DISCOVERED")
             if (review) {
                 mysqlAvailableDriverCombo.selectItem("26.7.0 · BUNDLED")
                 assertDriverSummary(mysqlDialog, "26.7.0 · BUNDLED")
@@ -397,6 +412,7 @@ class IntellijUiScreenshotTest {
             }
             captureScreen(screenshotsDirectory.resolve("connection-dialog-download-version-list.png"))
             pressEscape()
+            val inputOffsets = assertInputTextPadding(connectionDialog, driverSourceCombo, driverVersionCombo)
             val sourceWidth = driverSourceCombo.component.width
             val versionWidth = driverVersionCombo.component.width
             val sourceHeight = driverSourceCombo.component.height
@@ -422,7 +438,23 @@ class IntellijUiScreenshotTest {
             }
             connectionDialog.x { byVisibleText("Downloaded and ready") }.waitFound()
             captureScreen(screenshotsDirectory.resolve("connection-dialog-download-driver-full.png"))
+            if (System.getProperty("ui.inputs.only").toBoolean()) {
+                pressEscape() // Close any popup before the focused input capture.
+                captureScreen(screenshotsDirectory.resolve("inputs-aligned.png"))
+                Files.writeString(screenshotsDirectory.resolve("runtime-evidence.txt"), buildString {
+                    appendLine("IDE target: IntelliJ IDEA Community ${System.getProperty("ui.ide.version")} (${System.getProperty("ui.ide.build")})")
+                    appendLine("UI driver: JetBrains Starter and Driver; production ConnectionDialog / DatabaseInputs")
+                    appendLine("Actual IDE theme: ${actualTheme.getName()} (${actualTheme.getId()})")
+                    appendLine("Live painted input text offsets: $inputOffsets")
+                    appendLine("Production root Swing class: com.segfault03.ideadb.ui.DatabaseMainPanel")
+                    appendLine("IDE JBR release: ${Files.readString(ideHome.resolve("jbr/release")).lineSequence().filter { it.startsWith("JAVA_VERSION=") || it.startsWith("IMPLEMENTOR=") }.joinToString(", ")}")
+                    appendLine("Scope: input/driver dialogs only; table and query flows run in the full scenario")
+                })
+                return@useDriverAndCloseIde
+            }
             driverSourceCombo.selectItem("Available drivers")
+            availableDriverCombo.selectItem("2.7.3-jdk8 · DOWNLOADED")
+            assertDriverSummary(connectionDialog, "2.7.3-jdk8 · DOWNLOADED")
 
             if (jdbcFixture != null) {
                 connectionDialog.x { byVisibleText("JDBC URL") }.waitFound().click()
@@ -466,8 +498,35 @@ class IntellijUiScreenshotTest {
                 captureScreen(screenshotsDirectory.resolve("connection-context-menu.png"))
                 frame.x { byVisibleText("Edit connection…") }.waitFound().click()
                 frame.x(DialogUiComponent::class.java) { byTitle("Edit connection") }.waitFound().also {
+                    assertDriverSummary(it, "2.7.3-jdk8 · DOWNLOADED")
                     captureScreen(screenshotsDirectory.resolve("edit-connection.png"))
                     it.pressButton("Cancel")
+                }
+                // A saved manual choice must not silently change when its retained JAR disappears.
+                val missingDriverFiles = listOf(retainedHsqlFixture,
+                    mavenRepository.resolve("org/hsqldb/hsqldb/2.7.3/hsqldb-2.7.3-jdk8.jar"))
+                val backups = mutableListOf<Pair<Path, Path>>()
+                try {
+                    for (jar in missingDriverFiles) {
+                        val backup = jar.resolveSibling(jar.fileName.toString() + ".ui-test-backup")
+                        Files.move(jar, backup, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                        backups.add(jar to backup)
+                    }
+                    databaseTree.fixture.rightClickPath(connectionPath.joinToString(databaseTree.fixture.separator()))
+                    frame.x { byVisibleText("Edit connection…") }.waitFound().click()
+                    frame.x(DialogUiComponent::class.java) { byTitle("Edit connection") }.waitFound().also {
+                        assertDriverSummary(it, "2.7.3-jdk8 · UNAVAILABLE")
+                        check(!it.x { byVisibleText("Test connection") }.waitFound().component.isEnabled())
+                        val save = it.x { byVisibleText("Save") }.waitFound()
+                        if (save.component.isEnabled()) save.click()
+                        check(it.component.isShowing()) { "Saving an unavailable explicit driver must keep the dialog open" }
+                        captureScreen(screenshotsDirectory.resolve("edit-connection-unavailable-driver.png"))
+                        it.pressButton("Cancel")
+                    }
+                } finally {
+                    backups.asReversed().forEach { (jar, backup) ->
+                        Files.move(backup, jar, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                    }
                 }
                 databaseTree.fixture.rightClickPath(connectionPath.joinToString(databaseTree.fixture.separator()))
                 frame.x { byVisibleText("Create schema…") }.waitFound().click()
@@ -1358,6 +1417,36 @@ class IntellijUiScreenshotTest {
             }
         }
         error("Could not open production connection menu item $itemText")
+    }
+
+    private fun assertInputTextPadding(dialog: UiComponent, source: UiComponent, version: UiComponent): List<Pair<String, Int>> {
+        val text = dialog.x {
+            and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("User:"))
+        }.waitFound()
+        repaintIdeBeforeCapture?.invoke()
+        Thread.sleep(350)
+        val image = Robot().createScreenCapture(Rectangle(Toolkit.getDefaultToolkit().screenSize))
+        val offsets = listOf("text field" to text, "selector" to source, "editable selector" to version).map { (name, input) ->
+            val origin = input.component.getLocationOnScreen()
+            val bounds = input.component.getBounds()
+            val foreground = input.driver.cast(input.component, LiveSwingComponent::class).getForeground().getRGB()
+            // Inspect actual painted glyphs, not just border insets: native combo delegates add their own padding.
+            val firstInk = (4 until bounds.width / 2).firstOrNull { x ->
+                (5 until bounds.height - 5).any { y ->
+                    val pixel = image.getRGB(origin.x + x, origin.y + y)
+                    listOf(16, 8, 0).sumOf { shift ->
+                        val delta = ((pixel shr shift) and 255) - ((foreground shr shift) and 255)
+                        delta * delta
+                    } < 2500
+                }
+            } ?: error("No painted input text found for $name")
+            name to firstInk
+        }
+        check(offsets.maxOf { it.second } - offsets.minOf { it.second } <= 2) {
+            "Input text starts at inconsistent left offsets: $offsets"
+        }
+        println("Live input text left offsets (glyph side bearings may differ): $offsets")
+        return offsets
     }
 
     private fun captureScreen(path: Path, settleMillis: Long = 350) {

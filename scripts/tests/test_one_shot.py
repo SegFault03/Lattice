@@ -17,10 +17,10 @@ class OneShotTests(unittest.TestCase):
     def test_modes_split_routine_checks_from_compatibility_work(self):
         self.assertEqual(one_shot.validation_plan(Namespace(
             skip_compatibility=False, compatibility_only=False, database_compatibility_only=False)),
-            (True, True, True, 9))
+            (True, True, True, 8))
         self.assertEqual(one_shot.validation_plan(Namespace(
             skip_compatibility=True, compatibility_only=False, database_compatibility_only=False)),
-            (True, False, False, 6))
+            (True, False, False, 5))
         self.assertEqual(one_shot.validation_plan(Namespace(
             skip_compatibility=False, compatibility_only=True, database_compatibility_only=False)),
             (False, True, True, 6))
@@ -34,6 +34,22 @@ class OneShotTests(unittest.TestCase):
         self.assertEqual(sum(len(drivers) for _, drivers in one_shot.MYSQL_MATRIX), 13)
         self.assertEqual(len(one_shot.HSQL_VERSIONS), 10)
         self.assertEqual(one_shot.IDE_VERSIONS, ("2025.1", "2025.2", "2025.3"))
+
+    def test_isolated_source_copy_excludes_generated_ide_installations(self):
+        with tempfile.TemporaryDirectory(prefix="lattice-copy-test-") as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "gradle.properties").write_text("pluginVersion=1.0.0", encoding="utf-8")
+            for name in ("out", "build", ".gradle"):
+                generated = source / name / "ide-cache"
+                generated.mkdir(parents=True)
+                (generated / "large-sdk.bin").write_bytes(b"generated SDK")
+            with patch.object(one_shot, "ROOT", source):
+                copied = one_shot.copy_source(root / "copy")
+            self.assertTrue((copied / "gradle.properties").is_file())
+            for name in ("out", "build", ".gradle"):
+                self.assertFalse((copied / name).exists(), "Isolated validation must not clone generated IDEs/caches")
 
     def test_linux_only_guard_rejects_other_platforms(self):
         with patch.object(one_shot.sys, "platform", "darwin"):
@@ -66,6 +82,29 @@ class OneShotTests(unittest.TestCase):
             one_shot.remove_downloaded_image("mysql:5.5.62")
         self.assertEqual(2, image_removals)
         wait.assert_called_once_with(1)
+
+    def test_failed_mysql_startup_keeps_logs_and_removes_its_container_without_waiting(self):
+        with tempfile.TemporaryDirectory(prefix="lattice-startup-test-") as directory:
+            runner = one_shot.CommandRunner(Path(directory), {}, one_shot.Progress())
+            commands = []
+
+            def docker(command, **kwargs):
+                commands.append(command)
+                if command[:2] == ["docker", "exec"]:
+                    return one_shot.subprocess.CompletedProcess(command, 1)
+                if command[:3] == ["docker", "inspect", "--format"]:
+                    return one_shot.subprocess.CompletedProcess(command, 0, stdout="false 1")
+                if command[:2] == ["docker", "logs"]:
+                    kwargs["stdout"].write("mysqld: fixture startup failed\n")
+                return one_shot.subprocess.CompletedProcess(command, 0)
+
+            with patch.object(runner, "run"), patch.object(one_shot.subprocess, "run", side_effect=docker), \
+                 patch.object(one_shot.time, "sleep", side_effect=AssertionError("An exited fixture cannot become ready")):
+                with self.assertRaisesRegex(one_shot.RunnerError, "stopped before becoming ready"):
+                    with one_shot.mysql_server(runner, "5.7.44"):
+                        self.fail("An exited fixture was used")
+            self.assertIn("fixture startup failed", (Path(directory) / "mysql-5.7.44.container.log").read_text())
+            self.assertEqual(1, sum(command[:3] == ["docker", "rm", "--force"] for command in commands))
 
     def test_failure_report_keeps_the_command_log_after_workspace_cleanup(self):
         with tempfile.TemporaryDirectory(prefix="lattice-one-shot-test-") as directory:

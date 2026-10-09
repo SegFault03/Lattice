@@ -22,9 +22,9 @@ public final class DatabaseTable extends JBTable {
         DatabaseInputs.styleTableEditors(this);
         setGridColor(JBColor.namedColor("Table.gridColor", new JBColor(0xE8E9ED, 0x393B40)));
         setExpandableItemsEnabled(false);
-        com.intellij.ui.render.RenderingUtil.setHoverPaintingDisabled(this, true);
+        putClientProperty(com.intellij.ui.render.RenderingUtil.PAINT_HOVERED_BACKGROUND, Boolean.FALSE);
         ((JBTableHeader)getTableHeader()).setExpandableItemsEnabled(false);
-        com.intellij.ui.render.RenderingUtil.setHoverPaintingDisabled(getTableHeader(), true);
+        getTableHeader().putClientProperty(com.intellij.ui.render.RenderingUtil.PAINT_HOVERED_BACKGROUND, Boolean.FALSE);
         getTableHeader().setReorderingAllowed(false);
         getTableHeader().setDefaultRenderer(new HeaderRenderer());
         ToolTipManager.sharedInstance().unregisterComponent(this);

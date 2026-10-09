@@ -5,8 +5,8 @@ Python helper scripts use Python's standard library and run on Windows, Linux an
 | Script | Purpose | Additional requirements |
 |---|---|---|
 | `test.py` | Gradle tests and optional packaging; owns optional database fixtures | JDK 21; Docker only for `--mysql` |
-| `one-shot-test.py` | Linux validation runner with full, routine-check and compatibility-only modes | Linux, Python 3.11+, Docker, network access, at least 10 GiB free; JDK 21 is found or downloaded |
-| `ui-preview.py` | Refresh the five featured README screenshots; optionally build the full light/dark preview gallery with `--all-previews` | JDK 21; cached IntelliJ 2025.1 SDK or `--ide-home`; network on first use for preview-only FlatLaf |
+| `one-shot-test.py` | Headless Linux validation runner with full, routine-check and compatibility-only modes; real IDE UI checks run separately | Linux, Python 3.11+, Docker, network access, at least 10 GiB free; JDK 21 is found or downloaded |
+| `ui-preview.py` | Render production Swing screens and refresh the five README screenshots; optionally build a light/dark gallery | JDK 21; cached IntelliJ 2025.1 SDK and Gradle JUnit/Hamcrest jars; network on first use for FlatLaf |
 | `dev-deploy.py` | Test, build, discover a local IDEA, deploy Lattice and restart a running IDE | Installed IntelliJ IDEA 2025.1+; JDK 21; Git for tooling tests |
 | `release.py` | Validate a stable version/tag and generate patch notes/commit history | Git |
 | `check-release-archive.py` | Check ZIP layout, descriptor, bytecode, licenses; generate checksums | Built plugin ZIP |
@@ -33,59 +33,40 @@ python scripts/verify-plugin.py build/distributions/Lattice-1.0.1.zip --ide-vers
 
 ## Linux one-shot validation
 
-Run `python scripts/one-shot-test.py` to execute the complete documented validation matrix. The script first checks Linux, Docker and required ports, then creates a temporary workspace containing isolated Gradle, development and JDBC caches. It uses a JDK 21 from `--java-home`, `JAVA_HOME` or `PATH`, and downloads a temporary JDK 21 only when none is available. Java 8 is downloaded only for compatibility modes. Python/Gradle/preview/verifier downloads are directed into the temporary workspace.
+Run `python scripts/one-shot-test.py` to execute the documented headless validation matrix. The script first checks Linux, Docker and required ports, then creates a temporary workspace containing isolated Gradle, development and JDBC caches. It uses a JDK 21 from `--java-home`, `JAVA_HOME` or `PATH`, and downloads a temporary JDK 21 only when none is available. Java 8 is downloaded only for compatibility modes. Python/Gradle/verifier downloads are directed into the temporary workspace.
 
-The default nine visible steps run Python tooling tests; Gradle unit/UI tests and plugin packaging; the five headless UI previews; MySQL 8.4/HSQLDB functional fixtures plus fallback-driver checks; the IntelliJ 2025.1–2025.3 verifier matrix; four MySQL server versions with three Connector/J versions each; and ten HSQLDB driver/server versions. Database servers and each IDE SDK are processed serially. A fetched Docker image is removed after its server case, and each compatibility driver JAR is removed after its checks. An image already present before the run is left untouched. IntelliJ is never launched.
+The default eight visible steps run Python tooling tests; Gradle unit tests and plugin packaging; MySQL 8.4/HSQLDB functional fixtures plus fallback-driver checks; the IntelliJ 2025.1–2025.3 verifier matrix; 13 Connector/J/server combinations across four MySQL server versions; and ten HSQLDB driver/server versions. Database servers and each IDE SDK are processed serially. A fetched Docker image is removed after its server case, and each compatibility driver JAR is removed after its checks. An image already present before the run is left untouched. This helper does not open an IDE window or render screenshots. Run `python scripts/ui-preview.py` for standalone component images or `./scripts/review-intellij-ui.sh ExperimentalDark` for real-IDE UI flows.
 
-Use `--skip-compatibility` for the six-step isolated build, UI preview and live functional checks without downloading compatibility SDKs and JDBC drivers. Actions runs routine checks through `scripts/test.py` so the enhanced Gradle cache remains effective. Its pull-request compatibility job uses `--compatibility-only` to run IDE and JDBC matrices without repeating unit, UI or live functional tests; it builds the archive needed by Plugin Verifier. The release workflow already verifies its exact archive, so it uses `--database-compatibility-only` to run only the MySQL and HSQLDB/Java 8 matrix.
+Use `--skip-compatibility` for the five-step isolated build and live functional checks without downloading compatibility SDKs and JDBC drivers. Actions runs routine checks through `scripts/test.py` so the enhanced Gradle cache remains effective. Its pull-request IDE matrix downloads the Linux merge-commit ZIP already built by the baseline and verifies that exact artifact against the three supported IDE versions on separate runners. A parallel JDBC job uses `--database-compatibility-only` for the isolated JDBC/Java 8 matrix. Neither job repeats unit or UI tests or rebuilds the plugin ZIP. Generated `out/` IDE installations are excluded from the isolated source copy, and exited MySQL fixtures retain startup logs before explicit cleanup. The release workflow already verifies its exact archive, so it uses `--database-compatibility-only` to run only the MySQL and HSQLDB/Java 8 matrix.
 
 Every failed command stops the run and returns a nonzero exit status. The temporary workspace is still removed; command logs and a failure summary are copied to `build/one-shot-test/failure-<UTC timestamp>/`. On success all runner-created caches and downloaded tools are removed. The script requires network access, Docker and at least 10 GiB free workspace space. Port 3306 is needed for either functional or MySQL matrix checks; port 9001 for base HSQLDB functional checks; and ports 19020–19029 for Plugin Verifier. The temporary workspace is created under ignored `build/`, which avoids small `/tmp` mounts.
 
-## UI previews and README screenshots
+## UI previews and screenshots
 
-The current table/console screens use IntelliJ's native action toolbar, which requires a running IDE application. Use the real-IDE commands below for those screens. Linux CI now runs that workflow; the legacy standalone `ui-preview.py` helper cannot render the native toolbar outside the IDE.
+For quick component layout feedback and the five README images, run:
 
-With JDK 21 and the cached IntelliJ 2025.1 SDK, run:
-
-```text
+```sh
 python scripts/ui-preview.py
 ```
 
-To capture the real plugin Swing UI from a running IntelliJ instance under Xvfb, run:
+This renders production Swing components with fixture data and a headless IntelliJ test application that supplies platform services such as the native Action System. It opens no IDE window. It requires JDK 21, the cached IntelliJ 2025.1 SDK and Gradle's cached JUnit/Hamcrest jars; the first run downloads checksum-verified FlatLaf into ignored build output. `--all-previews` adds light/dark gallery variants; `--output` selects another gallery directory; `--compare-with` adds a before/after view. The default run refreshes only the five tracked PNGs under `screenshots/`. See [UI preview instructions](UI_PREVIEW.md).
 
-```text
-./scripts/capture-intellij-ui.sh
+For screenshots and interactions inside a real test IDE under Xvfb, run:
+
+```sh
+LATTICE_UI_MAVEN_REPOSITORY="$PWD/build/ui-test-maven/repository" ./scripts/capture-intellij-ui.sh
 ```
 
-This runs the Gradle `uiScreenshotTest` task and writes full IDE screenshots of the live production screens and runtime evidence under `build/ui-test-results/`. It uses JetBrains Starter and Driver UI automation; the plugin is built and installed into the test IDE before the test opens it. This task expects the JDBC fixtures under `build/ui-test-maven/repository`; the review script below prepares them automatically.
+This runs Gradle's `uiScreenshotTest` task and writes full IDE screenshots and live-runtime evidence under `build/ui-test-results/`. It builds and loads the plugin into the test IDE and uses JetBrains UI automation; the fixture directory must be populated and passed to the IDE for Maven driver discovery. The multi-flow review command below fetches fixtures and sets this property automatically.
 
-For the complete real-IDE visual review, including theme variants and more dialog, menu, validation and console states:
+For the multi-flow, multi-theme UI suite and automatic fixture setup, run:
 
 ```sh
 ./scripts/review-intellij-ui.sh
-# Faster focused pass:
 ./scripts/review-intellij-ui.sh ExperimentalDark ExperimentalLight
 ```
 
-Results stay separate under `build/ui-review/<theme-id>/`, with an `index.md`, per-theme logs, JUnit results and live-runtime evidence. A fresh IDE run is forced without rebuilding unchanged production classes. Xvfb uses 1920×1080 at 24 bits and scale 1; the script starts an available window manager for real modal title bars and borders. See [the IDE review](IDE_UI_REVIEW.md) for coverage, findings and remaining limits.
-
-To preserve an earlier capture set, select another result directory:
-
-```sh
-LATTICE_UI_REVIEW_OUTPUT="$PWD/build/ui-review-p1" ./scripts/review-intellij-ui.sh
-```
-
-The live resize checks cover visible fields/status, native toolbar overflow on mouse hover, icon-only popup actions with their tooltips, and Revert from the expanded toolbar. [P1 fixes](UI_P1_FIXES.md) records the changes and validation.
-
-The [P2 report](UI_P2_FIXES.md) covers schema-form alignment, native header sizes/preview scrolling, selected-cell validation, live NULL/Revert palette checks and immediate cancellation feedback. Use `LATTICE_UI_REVIEW_OUTPUT="$PWD/build/ui-review-p2"` to preserve earlier captures. To isolate the remaining HSQLDB interruption behavior from IDE scheduling, run `./scripts/probe-hsqldb-cancellation.sh`, optionally followed by another real HSQLDB jar path. The probe uses only a disposable in-memory database and bounds its diagnostic JVM to 45 seconds.
-
-The [P3 report](UI_P3_FIXES.md) covers neutral cancellation, responsive filter rows, sentence-case schema labels, singular/plural row counts and readable version/source summaries. Use `LATTICE_UI_REVIEW_OUTPUT="$PWD/build/ui-review-p3"` to preserve earlier results. The same review command exercises cancellation both with and without previous results, genuine SQL errors, four IDE widths and all driver-summary source labels.
-
-The [loading feedback report](UI_LOADING_FEEDBACK.md) describes the test-only real HSQLDB server/response gate used by review mode to hold brief operations for inspection. The same command checks animated spinner pixels, locked controls, button models after clicks, mutation failures, and actual database/schema/export flows.
-
-Open `build/ui-preview/index.html` to review the five featured screens. Pass `--all-previews` to include light/dark variants for the **Welcome**, **Input controls**, **Schema dialogs**, connection states, table editor/viewer and SQL console. Every successful run updates only the five fixed README image files in `screenshots/`; extra generated images stay under `build/`. Commit changed featured PNGs with UI changes. `--output` changes the gallery/build directory while still updating `screenshots/`; use `--all-previews` for `--compare-with` before/after baselines.
-
-See [UI preview instructions](UI_PREVIEW.md) for SDK setup, explicit paths, the featured-image mapping and preview limitations.
+Results are written under `build/ui-review/<theme-id>/` with screenshots, logs, JUnit results and runtime evidence. Linux runs use Xvfb at 1920×1080, 24-bit color and scale 1, with an available window manager for native dialog borders. Set `XVFB_DISPLAY` if `:99` is occupied. For the focused connection-field alignment pass, set `LATTICE_UI_INPUTS_ONLY=true`; set `LATTICE_UI_REVIEW_OUTPUT` to choose another results directory. The disposable HSQLDB cancellation probe is available as `./scripts/probe-hsqldb-cancellation.sh`.
 
 ## Quick local IDE deployment
 

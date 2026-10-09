@@ -48,7 +48,7 @@ Previews use sample data. These five screens are the featured UI previews.
 
 ## Requirements and compatibility
 
-IntelliJ IDEA **2025.1 or later**, Community or Ultimate/unified editions, using the IDE's Java 21+ runtime. Windows, Linux and macOS are intended targets; hosted checks cover all three platforms. Interactive IDE testing remains pending.
+IntelliJ IDEA **2025.1 or later**, Community or Ultimate/unified editions, using the IDE's Java 21+ runtime. Windows, Linux and macOS are intended targets; hosted checks cover all three platforms. Real-IDE UI testing is available through the scripts below.
 
 | Database | Server releases exercised |
 |---|---|
@@ -109,7 +109,7 @@ Use `python3` if that is your system's Python command. All optional development/
 
 ### Quick local UI testing
 
-To preview the five featured screens without launching IDEA, run `python scripts/ui-preview.py` with JDK 21 and the cached IntelliJ SDK, then open `build/ui-preview/index.html`. Pass `--all-previews` to generate the complete light/dark gallery. Only the five featured images above are tracked in `screenshots/`; commit them when updating the UI. See [UI previews](docs/UI_PREVIEW.md) for setup, theme limitations and layout review notes. The [UI copy review](docs/UI_REVIEW.md) records label, icon and warning conventions.
+To render the five featured production Swing screens in light mode, run `python scripts/ui-preview.py` with JDK 21 and the cached IntelliJ SDK, then open `build/ui-preview/index.html`. It uses a headless IntelliJ test application for platform services without opening an IDE window. Pass `--all-previews` for the light/dark gallery. The five README images in `screenshots/` are refreshed by default; review them and commit them with UI changes. See [UI previews](docs/UI_PREVIEW.md) for setup and the full-IDE capture commands.
 
 To run the tooling and pure Java tests, build the ZIP, find an installed IntelliJ IDEA, and deploy the freshly built plugin:
 
@@ -129,7 +129,7 @@ On Linux, run the full disposable validation flow with [the one-shot validation 
 python scripts/one-shot-test.py
 ```
 
-The default run builds and tests the plugin, creates the five UI previews without launching IntelliJ, checks the ZIP, runs live MySQL/HSQLDB functional tests, verifies IntelliJ 2025.1–2025.3, and exercises the complete JDBC/Java 8 matrix. `--skip-compatibility` runs only the build, UI and live functional checks; `--compatibility-only` runs the IDE and JDBC matrices; `--database-compatibility-only` runs just the JDBC matrix when Plugin Verifier runs separately. Actions uses the isolated compatibility modes for PR and release matrices; routine checks use the Gradle cache. The runner uses temporary Gradle, verifier and JDBC caches; it uses an installed JDK 21 or downloads one, and downloads a temporary Java 8 runtime when needed. Docker, network access and at least 10 GiB free workspace space are required. Ports 3306 and 9001 are used by the base functional checks; 3306 by the database matrix; and 19020–19029 by Plugin Verifier. A failure exits nonzero, preserves command logs and a failure summary in `build/one-shot-test/`, and removes the temporary tools and caches.
+The default run builds and tests the plugin, checks the ZIP, runs live MySQL/HSQLDB functional tests, verifies IntelliJ 2025.1–2025.3, and exercises the complete JDBC/Java 8 matrix. It does not render screenshots; use `python scripts/ui-preview.py` for standalone Swing previews or `./scripts/review-intellij-ui.sh` for real-IDE UI flows. `--skip-compatibility` runs the build and live functional checks; `--compatibility-only` runs the IDE and JDBC matrices; `--database-compatibility-only` runs just the JDBC matrix when Plugin Verifier runs separately. Actions uses the isolated compatibility modes for PR and release matrices; routine checks use the Gradle cache. The runner uses temporary Gradle, verifier and JDBC caches; it uses an installed JDK 21 or downloads one, and downloads a temporary Java 8 runtime when needed. Docker, network access and at least 10 GiB free workspace space are required. Ports 3306 and 9001 are used by the base functional checks; 3306 by the database matrix; and 19020–19029 by Plugin Verifier. A failure exits nonzero, preserves command logs and a failure summary in `build/one-shot-test/`, and removes the temporary tools and caches.
 
 Use `--java-home` to select a full JDK 21 explicitly. For a shorter check against disposable MySQL 8.4/HSQLDB fixtures, see [the functional test guide](docs/CONTRIBUTING.md). The lower-level `scripts/test.py` runner remains available for focused build and fixture tests.
 
@@ -151,11 +151,11 @@ Workstation-only helpers and notes live in locally excluded `scripts/local/` and
 
 A tag such as `v1.0.1` or `v0.0.1-alpha` triggers the [release workflow](.github/workflows/release.yml): live tests, ZIP validation, IntelliJ 2025.1–2025.3 compatibility checks, then a GitHub Release with patch notes, commit history, checksums and corresponding MySQL sources. Versions with prerelease suffixes are marked as GitHub prereleases and are not designated latest. Manual workflow runs never publish.
 
-See [CHANGELOG](docs/CHANGELOG.md), [RELEASING](docs/RELEASING.md), [issue reporting](docs/ISSUE.md), [security reporting](docs/SECURITY.md) and the [final review](docs/final-review.md). Marketplace publishing is a separate step.
+See [CHANGELOG](docs/CHANGELOG.md), [RELEASING](docs/RELEASING.md), [issue reporting](docs/ISSUE.md) and [security reporting](docs/SECURITY.md). Marketplace publishing is a separate step.
 
 ## Known limits
 
-HSQLDB multi-statement DDL is not atomic. Stable pagination without a primary key requires an explicit unique order. Partial CREATE reconstruction is labeled when native SCRIPT is unavailable. Connection failure during commit can leave an uncertain server outcome; verify persisted state before retrying. Interactive UI and dynamic unload checks remain pending.
+HSQLDB multi-statement DDL is not atomic. Stable pagination without a primary key requires an explicit unique order. Partial CREATE reconstruction is labeled when native SCRIPT is unavailable. Connection failure during commit can leave an uncertain server outcome; verify persisted state before retrying. Dynamic plugin unload and project-close behavior are not covered by the UI suite.
 
 ## License
 

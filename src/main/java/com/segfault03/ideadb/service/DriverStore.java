@@ -27,6 +27,10 @@ public final class DriverStore {
 
     /** Every driver usable without another download, with the IDE project's Maven cache included. */
     public static List<InstalledDriver> installed(DatabaseType type, Project project) {
+        return installedInRepository(type, MavenRepositoryLocator.localRepository(project));
+    }
+
+    public static List<InstalledDriver> installedInRepository(DatabaseType type, Path localRepository) {
         List<InstalledDriver> drivers = new ArrayList<>();
         drivers.add(packaged(type));
         java.util.Set<String> knownVersions = new java.util.LinkedHashSet<>();
@@ -35,7 +39,6 @@ public final class DriverStore {
             drivers.add(new InstalledDriver(type, version, false, DriverCatalog.downloadedJar(type, version)));
             knownVersions.add(version);
         }
-        Path localRepository = MavenRepositoryLocator.localRepository(project);
         for (String version : DriverCatalog.discoveredVersions(type, localRepository)) {
             if (knownVersions.add(version))
                 drivers.add(new InstalledDriver(type, version, InstalledDriver.Kind.DISCOVERED,
@@ -46,9 +49,13 @@ public final class DriverStore {
 
     /** A validated driver declared by the current project's POM and present in its configured Maven repository. */
     public static Optional<InstalledDriver> projectDefault(DatabaseType type, Project project) {
+        return projectDefaultInRepository(type, project, MavenRepositoryLocator.localRepository(project));
+    }
+
+    public static Optional<InstalledDriver> projectDefaultInRepository(DatabaseType type, Project project, Path localRepository) {
         if (project == null || project.getBasePath() == null || project.getBasePath().isBlank()) return Optional.empty();
         Path pom = Path.of(project.getBasePath()).resolve("pom.xml");
-        return MavenPomDriverResolver.find(type, project, pom, MavenRepositoryLocator.localRepository(project))
+        return MavenPomDriverResolver.find(type, project, pom, localRepository)
                 // There is no benefit in creating a duplicate available-driver entry for the exact bundled release.
                 .filter(driver -> !driver.version().equals(packagedVersion(type)));
     }

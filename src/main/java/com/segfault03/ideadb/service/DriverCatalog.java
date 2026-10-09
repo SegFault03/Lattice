@@ -25,6 +25,15 @@ public final class DriverCatalog {
     private static final Map<DatabaseType, List<String>> MAVEN_ARTIFACT_DIRECTORIES = Map.of(
             DatabaseType.MYSQL, List.of("com/mysql/mysql-connector-j", "mysql/mysql-connector-java"),
             DatabaseType.HSQLDB, List.of("org/hsqldb/hsqldb"));
+    private record ValidationKey(DatabaseType type, Path path) {}
+    private record ValidatedJar(java.nio.file.attribute.BasicFileAttributes attributes, String driverClass) {}
+    // Discovery repeatedly inspects the same artifacts. Cache successful reads, never failures.
+    private static final Map<ValidationKey, ValidatedJar> VALIDATED_JARS = Collections.synchronizedMap(
+            new LinkedHashMap<>(64, 0.75f, true) {
+                @Override protected boolean removeEldestEntry(Map.Entry<ValidationKey, ValidatedJar> entry) {
+                    return size() > 256;
+                }
+            });
     private static final ConcurrentMap<Path, Object> DOWNLOAD_LOCKS = new ConcurrentHashMap<>();
 
     @FunctionalInterface
@@ -165,6 +174,9 @@ public final class DriverCatalog {
             try {
                 validateJar(type, jar);
                 return true;
+            } catch (InterruptedIOException cancelled) {
+                Thread.currentThread().interrupt();
+                return false;
             } catch (IOException invalidJar) {
                 Files.deleteIfExists(jar);
                 return false;
@@ -334,11 +346,59 @@ public final class DriverCatalog {
         } finally { connection.disconnect(); }
     }
     public static String validateJar(DatabaseType type, Path path) throws IOException {
-        if (!Files.isRegularFile(path)) throw new IOException("Driver JAR not found: " + path);
-        try (JarFile jar = new JarFile(path.toFile())) {
-            List<String> classes = type == DatabaseType.MYSQL ? List.of("com.mysql.cj.jdbc.Driver", "com.mysql.jdbc.Driver") : List.of("org.hsqldb.jdbc.JDBCDriver", "org.hsqldb.jdbcDriver");
-            for (String name : classes) if (jar.getJarEntry(name.replace('.', '/') + ".class") != null) return name;
-            throw new IOException("Selected JAR does not contain a " + type.getDisplayName() + " JDBC driver");
+        Path realPath = path.toRealPath();
+        var attributes = Files.readAttributes(realPath, java.nio.file.attribute.BasicFileAttributes.class);
+        if (!attributes.isRegularFile()) throw new IOException("Driver JAR not found: " + path);
+        var key = new ValidationKey(type, realPath);
+        var cached = VALIDATED_JARS.get(key);
+        if (cached != null && sameFile(cached.attributes(), attributes)) return cached.driverClass();
+        List<String> classes = type == DatabaseType.MYSQL
+                ? List.of("com.mysql.cj.jdbc.Driver", "com.mysql.jdbc.Driver")
+                : List.of("org.hsqldb.jdbc.JDBCDriver", "org.hsqldb.jdbcDriver");
+        String driverClass = null;
+        try (JarFile jar = new JarFile(realPath.toFile())) {
+            // A readable central directory does not prove the entry data is intact.
+            long total = 0;
+            byte[] buffer = new byte[8192];
+            var entries = jar.entries();
+            while (entries.hasMoreElements()) {
+                if (Thread.currentThread().isInterrupted()) throw new InterruptedIOException("Driver validation cancelled");
+                var entry = entries.nextElement();
+                if (entry.isDirectory()) continue;
+                var crc = new java.util.zip.CRC32();
+                long bytes = 0;
+                int magic = 0;
+                try (InputStream input = jar.getInputStream(entry)) {
+                    int count;
+                    while ((count = input.read(buffer)) != -1) {
+                        for (int i = 0; i < count && bytes + i < 4; i++) magic = magic << 8 | buffer[i] & 0xff;
+                        bytes += count;
+                        total += count;
+                        if (total > 128L * 1024 * 1024) throw new IOException("Driver JAR contents exceed size limit");
+                        crc.update(buffer, 0, count);
+                    }
+                }
+                if (bytes != entry.getSize() || crc.getValue() != entry.getCrc())
+                    throw new IOException("Corrupt driver JAR entry: " + entry.getName());
+                for (String name : classes) {
+                    if (!entry.getName().equals(name.replace('.', '/') + ".class")) continue;
+                    if (bytes < 8 || magic != 0xcafebabe) throw new IOException("Invalid JDBC driver class: " + name);
+                    if (driverClass == null) driverClass = name;
+                }
+            }
+        } catch (SecurityException invalidSignature) {
+            throw new IOException("Driver JAR signature verification failed", invalidSignature);
         }
+        if (driverClass == null) throw new IOException("Selected JAR does not contain a " + type.getDisplayName() + " JDBC driver");
+        var after = Files.readAttributes(realPath, java.nio.file.attribute.BasicFileAttributes.class);
+        if (!sameFile(attributes, after)) throw new IOException("Driver JAR changed during validation");
+        VALIDATED_JARS.put(key, new ValidatedJar(after, driverClass));
+        return driverClass;
+    }
+
+    private static boolean sameFile(java.nio.file.attribute.BasicFileAttributes a,
+                                    java.nio.file.attribute.BasicFileAttributes b) {
+        return a.size() == b.size() && a.lastModifiedTime().equals(b.lastModifiedTime())
+                && a.creationTime().equals(b.creationTime()) && Objects.equals(a.fileKey(), b.fileKey());
     }
 }

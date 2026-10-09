@@ -15,6 +15,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, default=ROOT / "build/release")
     parser.add_argument("--cache", type=Path)
+    parser.add_argument("--github-output", type=Path, help="Append the prepared filename to this Actions output file")
     args = parser.parse_args()
     cache_root = args.cache or cache_directory() / "sources"
     source = cache_root / NAME
@@ -30,6 +31,9 @@ def main():
         source.write_bytes(content)
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / NAME).write_bytes(content)
+    if args.github_output:
+        with args.github_output.open("a", encoding="utf-8") as output:
+            output.write(f"filename={NAME}\n")
     print(f"Prepared checksum-verified {NAME}")
 
 

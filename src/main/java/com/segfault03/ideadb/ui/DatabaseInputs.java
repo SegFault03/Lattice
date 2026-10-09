@@ -130,7 +130,17 @@ public final class DatabaseInputs {
     }
 
     private static final class InputBorder extends AbstractBorder {
-        @Override public Insets getBorderInsets(Component input) { return JBUI.insets(3, 8); }
+        @Override public Insets getBorderInsets(Component input) {
+            Insets insets = JBUI.insets(3, 8);
+            // BasicComboBoxUI (including IntelliJ's delegates) adds ComboBox.padding
+            // to both the selected-value renderer and editable field's bounds.
+            // Supply only the remainder here so text starts at the same inset as a text field.
+            if (input instanceof JComboBox<?> combo && combo.getUI() instanceof javax.swing.plaf.basic.BasicComboBoxUI) {
+                Insets nativePadding = UIManager.getInsets("ComboBox.padding");
+                if (nativePadding != null) insets.left = Math.max(0, insets.left - nativePadding.left);
+            }
+            return insets;
+        }
         @Override public Insets getBorderInsets(Component input, Insets insets) {
             Insets padding = getBorderInsets(input);
             insets.set(padding.top, padding.left, padding.bottom, padding.right);
@@ -140,7 +150,7 @@ public final class DatabaseInputs {
             Graphics2D g = (Graphics2D)graphics.create();
             try {
                 g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                float inset = JBUI.scale(1f);
+                float inset = com.intellij.ui.scale.JBUIScale.scale(1f);
                 RoundRectangle2D shape = new RoundRectangle2D.Float(x + inset, y + inset,
                         width - 2 * inset, height - 2 * inset, JBUI.scale(8), JBUI.scale(8));
                 Area corners = new Area(new Rectangle(x, y, width, height));
@@ -154,7 +164,7 @@ public final class DatabaseInputs {
                         : focus ? JBColor.namedColor("Component.focusColor", new JBColor(0x3574F0, 0x548AF7))
                         : JBColor.namedColor("Component.borderColor", new JBColor(0xB8BDC6, 0x646872));
                 g.setColor(input.isEnabled() ? color : JBColor.namedColor("Component.disabledBorderColor", JBColor.GRAY));
-                g.setStroke(new BasicStroke(JBUI.scale(focus ? 2f : 1f)));
+                g.setStroke(new BasicStroke(com.intellij.ui.scale.JBUIScale.scale(focus ? 2f : 1f)));
                 g.draw(shape);
             } finally { g.dispose(); }
         }

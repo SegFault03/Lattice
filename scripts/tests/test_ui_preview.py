@@ -23,6 +23,18 @@ class UiPreviewTests(unittest.TestCase):
                 (home / 'lib/app-client.jar').touch()
                 self.assertEqual(preview.cached_sdk(cache), home.resolve())
 
+    def test_cached_test_runtime_jars_requires_junit_and_hamcrest(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            cache = Path(temporary)
+            junit = cache / 'caches/modules-2/files-2.1/junit/junit/4.13.2/hash/junit-4.13.2.jar'
+            hamcrest = cache / 'caches/modules-2/files-2.1/org.hamcrest/hamcrest-core/1.3/hash/hamcrest-core-1.3.jar'
+            junit.parent.mkdir(parents=True)
+            hamcrest.parent.mkdir(parents=True)
+            junit.touch()
+            self.assertIsNone(preview.cached_test_runtime_jars(cache))
+            hamcrest.touch()
+            self.assertEqual(preview.cached_test_runtime_jars(cache), [junit, hamcrest])
+
     def test_gallery_zip_uses_current_manifest_and_matching_baseline_only(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

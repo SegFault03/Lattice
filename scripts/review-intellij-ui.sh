@@ -40,7 +40,17 @@ for theme in "${themes[@]}"; do
     mkdir -p "$result_dir"
     # Each theme uses the same isolated test project and a fresh IDE system sandbox.
     # Preserve the log outside the directory cleared by the screenshot test.
-    ./scripts/capture-intellij-ui.sh -Plattice.ui.review=true -Plattice.ui.theme="$theme" \
+    version_args=()
+    if [[ -n "${LATTICE_UI_PLUGIN_VERSION:-}" ]]; then
+        version_args+=("-PreleaseVersion=$LATTICE_UI_PLUGIN_VERSION")
+    fi
+    if [[ -n "${LATTICE_UI_RELEASE_NOTES_FILE:-}" ]]; then
+        version_args+=("-PreleaseNotesFile=$LATTICE_UI_RELEASE_NOTES_FILE")
+    fi
+    if [[ "${LATTICE_UI_INPUTS_ONLY:-false}" == true ]]; then
+        version_args+=("-Plattice.ui.inputsOnly=true")
+    fi
+    ./scripts/capture-intellij-ui.sh "${version_args[@]}" -Plattice.ui.review=true -Plattice.ui.theme="$theme" \
         -Plattice.ui.output="$result_dir" 2>&1 | tee "$result_root/$theme.log"
     cp build/test-results/uiScreenshotTest/TEST-com.segfault03.ideadb.ui.IntellijUiScreenshotTest.xml "$result_dir/test-result.xml"
 done

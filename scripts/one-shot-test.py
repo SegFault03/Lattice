@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Run Lattice's complete Linux validation flow in disposable tool/cache directories.
+"""Run Lattice's headless Linux validation in disposable tool/cache directories.
 
-The runner checks tooling, Java/UI tests, package integrity, live database behavior,
+The runner checks tooling, Java unit tests, package integrity, live database behavior,
 all supported IntelliJ targets, and the documented Java 8/JDBC compatibility matrix.
-It never starts an IDE. Docker images pulled by this run are removed after their case.
+It never starts an IDE; use review-intellij-ui.sh for real UI validation.
+Docker images pulled by this run are removed after their case.
 """
 from __future__ import annotations
 
@@ -41,11 +42,7 @@ HSQL_VERSIONS = (
     "2.2.9", "2.3.0", "2.3.6", "2.4.1", "2.5.0", "2.5.2",
     "2.6.1-jdk8", "2.7.0-jdk8", "2.7.3-jdk8", "2.7.4-jdk8",
 )
-FEATURED_SCREENSHOTS = {
-    "side-panel.png", "connection-dialog.png", "table-view.png",
-    "table-editing.png", "sql-console.png",
-}
-TOTAL_STEPS = 9
+TOTAL_STEPS = 8
 
 
 class RunnerError(RuntimeError):
@@ -308,7 +305,7 @@ def prepare_proxy_environment(env: dict[str, str], java_home: Path, tools: Path)
 def copy_source(destination: Path) -> Path:
     def ignore(_directory: str, names: list[str]) -> set[str]:
         return {name for name in names if name in {
-            ".git", ".gradle", "build", ".idea", ".venv", "venv", "__pycache__", ".pytest_cache",
+            ".git", ".gradle", "build", "out", ".idea", ".venv", "venv", "__pycache__", ".pytest_cache",
         }}
     shutil.copytree(ROOT, destination, ignore=ignore, symlinks=True)
     return destination
@@ -372,7 +369,7 @@ def mysql_server(runner: CommandRunner, image_tag: str, port: int = 3306):
     created = False
     log_path = runner.logs / f"mysql-{image_tag}.container.log"
     try:
-        runner.run(["docker", "run", "--detach", "--rm", "--name", name,
+        runner.run(["docker", "run", "--detach", "--name", name,
                     "--publish", f"127.0.0.1:{port}:3306", "--env", "MYSQL_ALLOW_EMPTY_PASSWORD=yes",
                     "--env", "MYSQL_ROOT_HOST=%", "--env", "MYSQL_DATABASE=shop_db", image],
                    cwd=ROOT, name=f"docker-run-mysql-{image_tag}", timeout=600)
@@ -384,6 +381,10 @@ def mysql_server(runner: CommandRunner, image_tag: str, port: int = 3306):
             if ping.returncode == 0:
                 print(f"  MySQL {image_tag} is accepting connections on 127.0.0.1:{port}", flush=True)
                 break
+            state = subprocess.run(["docker", "inspect", "--format", "{{.State.Running}} {{.State.ExitCode}}", name],
+                                   capture_output=True, text=True, check=False)
+            if state.returncode != 0 or state.stdout.strip().startswith("false"):
+                raise RunnerError(f"MySQL {image_tag} fixture stopped before becoming ready ({state.stdout.strip() or 'container unavailable'}); see {log_path}")
             time.sleep(1)
         else:
             raise RunnerError(f"MySQL {image_tag} did not become ready within 180 seconds")
@@ -436,7 +437,7 @@ def validation_plan(args: argparse.Namespace) -> tuple[bool, bool, bool, int]:
     run_database_compatibility = not args.skip_compatibility
     step_count = 2
     if run_base:
-        step_count += 4
+        step_count += 3
     elif run_ide_compatibility:
         step_count += 1  # Build the archive needed by Plugin Verifier.
     if run_ide_compatibility:
@@ -452,7 +453,7 @@ def main() -> int:
                         help="Use this full JDK 21; otherwise use JAVA_HOME/PATH, then download a temporary JDK 21")
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--skip-compatibility", action="store_true",
-                       help="Run tooling, build, UI previews and live functional tests only")
+                       help="Run tooling, build and live functional tests only; real IDE UI checks run separately")
     modes.add_argument("--compatibility-only", action="store_true",
                        help="Run the IDE verifier and JDBC compatibility matrices; build the plugin but skip ordinary tests")
     modes.add_argument("--database-compatibility-only", action="store_true",
@@ -527,7 +528,7 @@ def main() -> int:
                     runner.run([sys.executable, "-m", "unittest", "discover", "-s", "scripts/tests", "-v"],
                                cwd=source, name="python-tool-tests", timeout=300)
 
-                with progress.step("Gradle unit/UI tests and plugin build"):
+                with progress.step("Gradle unit tests and plugin build"):
                     active = progress.active
                     run_gradle(runner, source, "clean", "test", "buildPlugin",
                                name="gradle-build-and-unit-tests", timeout=1200)
@@ -537,19 +538,6 @@ def main() -> int:
                         raise RunnerError(f"Gradle completed without producing {archive}")
                     runner.run([sys.executable, "scripts/check-release-archive.py", str(archive),
                                 "--version", version], cwd=source, name="plugin-archive-check", timeout=300)
-
-                with progress.step("Render and validate the five UI preview screens"):
-                    active = progress.active
-                    runner.run([sys.executable, "scripts/ui-preview.py", "--java-home", str(java_home),
-                                "--output", str(source / "build/ui-preview")],
-                               cwd=source, name="featured-ui-previews", timeout=600)
-                    screenshots = source / "screenshots"
-                    names = {path.name for path in screenshots.glob("*.png")}
-                    if names != FEATURED_SCREENSHOTS:
-                        raise RunnerError(f"UI preview output must contain exactly the five README screenshots; found {sorted(names)}")
-                    gallery = source / "build/ui-preview/index.html"
-                    if not gallery.is_file():
-                        raise RunnerError("UI preview generator did not produce build/ui-preview/index.html")
 
                 with progress.step("Run MySQL 8.4 and HSQLDB live functional suites"):
                     active = progress.active
@@ -607,7 +595,7 @@ def main() -> int:
                                name=f"hsqldb-matrix-{len(HSQL_VERSIONS)}-versions", timeout=1800)
 
         if args.skip_compatibility:
-            scope = "Linux build, UI preview and live functional checks"
+            scope = "Linux build and live functional checks (real IDE UI checks run separately)"
         elif args.compatibility_only:
             scope = "Linux IntelliJ and JDBC compatibility checks"
         elif args.database_compatibility_only:

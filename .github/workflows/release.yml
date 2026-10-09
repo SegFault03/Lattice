@@ -38,7 +38,7 @@ jobs:
           cache-provider: enhanced
       - name: Test development tools
         run: python -m unittest discover -s scripts/tests -v
-      - name: Build and run UI tests
+      - name: Build and run unit tests
         run: python scripts/test.py --build
       - name: Retain test reports
         if: always()
@@ -49,7 +49,6 @@ jobs:
             build/reports/tests/
             build/test-results/
             build/fixtures/
-            build/ui-preview/
           retention-days: 7
 
   build:
@@ -58,6 +57,7 @@ jobs:
     outputs:
       version: ${{ steps.metadata.outputs.version }}
       prerelease: ${{ steps.metadata.outputs.prerelease }}
+      source_asset: ${{ steps.source.outputs.filename }}
     services:
       mysql:
         image: mysql:8.4
@@ -77,8 +77,7 @@ jobs:
       - name: Require release tag to point to main
         if: github.event_name == 'push'
         run: |
-          git fetch origin main --no-tags
-          git merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD || {
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
             echo "Release tags must point to a commit reachable from main." >&2
             exit 1
           }
@@ -104,17 +103,25 @@ jobs:
           python3 scripts/test.py --live --hsqldb --build
           --version "$RELEASE_VERSION"
           --notes-file build/release/patch-notes.html
-      - name: Render the five UI previews
-        run: python3 scripts/ui-preview.py --output build/ui-preview
+      - name: Render production UI inside IntelliJ IDEA
+        env:
+          LATTICE_UI_PLUGIN_VERSION: ${{ steps.metadata.outputs.version }}
+          LATTICE_UI_RELEASE_NOTES_FILE: build/release/patch-notes.html
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xfwm4 x11-utils
+          ./scripts/review-intellij-ui.sh ExperimentalDark
       - name: Prepare corresponding source asset
-        run: python3 scripts/prepare-source-asset.py
+        id: source
+        run: python3 scripts/prepare-source-asset.py --github-output "$GITHUB_OUTPUT"
       - name: Validate ZIP and generate asset checksums
         env:
           RELEASE_VERSION: ${{ steps.metadata.outputs.version }}
+          SOURCE_ASSET: ${{ steps.source.outputs.filename }}
         run: >-
           python3 scripts/check-release-archive.py "build/distributions/Lattice-$RELEASE_VERSION.zip"
           --version "$RELEASE_VERSION"
-          --source build/release/mysql-connector-j-9.0.0-source.tar.gz
+          --source "build/release/$SOURCE_ASSET"
           --checksums build/release/SHA256SUMS
       - name: Upload release candidate
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -123,10 +130,10 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           path: |
-            build/distributions/*.zip
+            build/distributions/Lattice-${{ steps.metadata.outputs.version }}.zip
             build/release/release-notes.md
             build/release/version.txt
-            build/release/mysql-connector-j-9.0.0-source.tar.gz
+            build/release/${{ steps.source.outputs.filename }}
             build/release/SHA256SUMS
       - name: Upload test diagnostics
         if: always()
@@ -138,6 +145,7 @@ jobs:
             build/reports/tests/
             build/test-results/
             build/fixtures/
+            build/ui-review/
 
   database-compatibility:
     needs: build
@@ -218,6 +226,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_VERSION: ${{ needs.build.outputs.version }}
           RELEASE_PRERELEASE: ${{ needs.build.outputs.prerelease }}
+          SOURCE_ASSET: ${{ needs.build.outputs.source_asset }}
         run: |
           release_flags=()
           if [[ "$RELEASE_PRERELEASE" == "true" ]]; then
@@ -225,7 +234,7 @@ jobs:
           fi
           gh release create "$GITHUB_REF_NAME" \
             "build/distributions/Lattice-$RELEASE_VERSION.zip" \
-            build/release/mysql-connector-j-9.0.0-source.tar.gz build/release/SHA256SUMS \
+            "build/release/$SOURCE_ASSET" build/release/SHA256SUMS \
             --verify-tag --draft --title "Lattice $RELEASE_VERSION" \
             --notes-file build/release/release-notes.md "${release_flags[@]}"
           gh release edit "$GITHUB_REF_NAME" --draft=false

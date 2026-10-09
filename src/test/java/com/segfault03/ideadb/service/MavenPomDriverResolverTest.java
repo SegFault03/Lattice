@@ -102,6 +102,45 @@ class MavenPomDriverResolverTest {
         assertEquals(jar.toAbsolutePath(), DriverCatalog.discoveredJar(DatabaseType.MYSQL, "8.0.33", repository));
     }
 
+    @Test void childOverridesInheritedDependencyAndManagedVersionExpressions() throws Exception {
+        Path child = Files.createDirectories(project.resolve("child"));
+        Path repository = project.resolve("repository");
+        for (String version : java.util.List.of("2.7.2", "2.7.3")) {
+            Path jar = DriverCatalog.discoveredJar(DatabaseType.HSQLDB, version, repository);
+            Files.createDirectories(jar.getParent()); Files.copy(packagedJar("hsqldb-"), jar);
+        }
+        for (boolean managed : new boolean[]{false, true}) {
+            String dependency = "<dependency><groupId>org.hsqldb</groupId><artifactId>hsqldb</artifactId>";
+            String versioned = dependency + "<version>${jdbc.version}</version></dependency>";
+            Files.writeString(project.resolve("pom.xml"), "<project><groupId>example</groupId><artifactId>parent</artifactId><version>1</version>"
+                    + "<properties><jdbc.version>${driver.version}</jdbc.version><driver.version>2.7.2</driver.version></properties>"
+                    + (managed ? "<dependencyManagement><dependencies>" + versioned + "</dependencies></dependencyManagement>"
+                    + "<dependencies>" + dependency + "</dependency></dependencies>"
+                    : "<dependencies>" + versioned + "</dependencies>") + "</project>");
+            Files.writeString(child.resolve("pom.xml"), """
+                    <project><parent><groupId>example</groupId><artifactId>parent</artifactId><version>1</version></parent>
+                    <artifactId>child</artifactId><properties><driver.version>2.7.3</driver.version></properties></project>
+                    """);
+            assertEquals("2.7.3", MavenPomDriverResolver.find(DatabaseType.HSQLDB, child.resolve("pom.xml"), repository)
+                    .orElseThrow().version(), "Child properties must interpolate inherited " + (managed ? "managed" : "direct") + " dependencies");
+        }
+    }
+
+    @Test void unrelatedRelativeParentCannotSupplyADriver() throws Exception {
+        Path child = Files.createDirectories(project.resolve("child"));
+        Path repository = project.resolve("repository");
+        Path jar = DriverCatalog.discoveredJar(DatabaseType.HSQLDB, "2.7.2", repository);
+        Files.createDirectories(jar.getParent()); Files.copy(packagedJar("hsqldb-"), jar);
+        Files.writeString(project.resolve("pom.xml"), """
+                <project><groupId>unrelated</groupId><artifactId>parent</artifactId><version>1</version>
+                <dependencies><dependency><groupId>org.hsqldb</groupId><artifactId>hsqldb</artifactId><version>2.7.2</version></dependency></dependencies></project>
+                """);
+        Files.writeString(child.resolve("pom.xml"), """
+                <project><parent><groupId>expected</groupId><artifactId>parent</artifactId><version>1</version></parent><artifactId>child</artifactId></project>
+                """);
+        assertTrue(MavenPomDriverResolver.find(DatabaseType.HSQLDB, child.resolve("pom.xml"), repository).isEmpty());
+    }
+
     private static Path packagedJar(String prefix) throws Exception {
         try (var files = Files.list(Path.of("lib"))) {
             return files.filter(path -> path.getFileName().toString().startsWith(prefix)

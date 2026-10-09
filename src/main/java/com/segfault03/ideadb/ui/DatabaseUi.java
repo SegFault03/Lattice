@@ -184,7 +184,7 @@ public final class DatabaseUi {
                     }
                     if (emphasized) {
                         g.setColor(emphasisColor.darker());
-                        g.setStroke(new BasicStroke(JBUI.scale(1f)));
+                        g.setStroke(new BasicStroke(com.intellij.ui.scale.JBUIScale.scale(1f)));
                         g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, JBUI.scale(10), JBUI.scale(10));
                     }
                     if (hasFocus()) {

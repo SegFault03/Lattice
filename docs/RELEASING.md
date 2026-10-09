@@ -4,7 +4,7 @@
 
 Connect this checkout to the intended GitHub repository and push the release-preparation commit. Ensure the workflow is present on the repository's default branch so its manual Run workflow option is available. Enable Actions and private vulnerability reporting in the repository settings. The workflow uses the repository's `GITHUB_TOKEN`; the publish job requests `contents: write`. No personal access token or Marketplace secret is required for GitHub Releases.
 
-Run **Build, test and release → Run workflow** on the intended branch to validate the hosted pipeline. Manual runs never publish. Review its test and compatibility reports. Complete the separately planned IntelliJ UI checks before calling the release ready for users.
+Run **Build, test and release → Run workflow** on the intended branch to validate the hosted pipeline. Manual runs never publish. Review its test and compatibility reports. The Linux build job also exercises the production UI inside IntelliJ IDEA in Dark theme. Inspect its retained screenshots before releasing.
 
 ## Prepare a version
 
@@ -28,13 +28,13 @@ The tag workflow:
 1. Checks out full Git history and validates the version/tag and patch notes.
 2. Runs the Python release-tool tests and Gradle pure/live regression suites with fresh MySQL 8.4 and in-memory HSQLDB fixtures.
 3. Builds `Lattice-X.Y.Z.zip` against IntelliJ 2025.1 / Java 21; embeds the tag version, patch notes and license notices.
-4. Validates archive paths, descriptor, bundled drivers/notices and bytecode, then generates SHA-256 asset checksums.
+4. Runs the real IntelliJ UI scenario in Dark theme at the release version, validates archive paths, descriptor, bundled drivers/notices and bytecode, then generates SHA-256 asset checksums. The source-preparation step supplies the actual archive filename to validation, artifact upload and publication.
 5. Verifies that exact ZIP against IDEA 2025.1, 2025.2 and 2025.3 in separate jobs with checksum-verified official SDK downloads. Every verdict must be Compatible.
-6. Publishes a GitHub Release only when all build/test/verification jobs succeed.
+6. Runs the JDBC/Java 8 matrix and Windows/macOS baseline checks; publishes a GitHub Release only when every build/test/verification job succeeds.
 
 Release assets are the plugin ZIP, the unmodified MySQL Connector/J 26.7.0 corresponding-source archive and `SHA256SUMS`. The description combines the matching changelog section (or populated Unreleased notes) with all commits since the preceding reachable lower-version release tag. The first release includes the reachable commit history.
 
-Build/test/verification failures publish no release. The publish job uploads assets to a draft, then makes it public after successful upload. A failed publish can leave a draft; remove that failed draft before retrying. Diagnostics and candidate artifacts are retained for seven days. A retry fails if a release already exists; it does not overwrite published assets. Use a new version for changed published artifacts. The workflow does not publish to JetBrains Marketplace, sign the plugin, or run interactive UI tests.
+Build/test/verification failures publish no release. The publish job uploads assets to a draft, then makes it public after successful upload. A failed publish can leave a draft; remove that failed draft before retrying. Diagnostics and candidate artifacts are retained for seven days. A retry fails if a release already exists; it does not overwrite published assets. Use a new version for changed published artifacts. The workflow does not publish to JetBrains Marketplace, sign the plugin, or perform project-close/dynamic-unload UI tests.
 
 ## Local dry run
 

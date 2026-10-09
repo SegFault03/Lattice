@@ -45,7 +45,6 @@ public final class DatabaseActionToolbar {
                     source instanceof JButton button ? button.getIcon() : null);
             this.source = source;
             this.label = label;
-            getTemplatePresentation().setEnabled(source.isEnabled());
         }
 
         @Override public ActionUpdateThread getActionUpdateThread() { return ActionUpdateThread.EDT; }

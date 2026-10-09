@@ -68,6 +68,8 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         loadConnectionsFromState();
     }
 
+    public boolean isDisposed() { return disposed; }
+
     @Override public void dispose() {
         disposed=true; tasks.cancelPending();
         ToolTipManager.sharedInstance().unregisterComponent(databaseTree);

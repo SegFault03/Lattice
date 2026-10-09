@@ -22,13 +22,23 @@ import java.util.*;
 import java.util.List;
 import javax.imageio.ImageIO;
 
-/** Paint production Swing components with fixture data, without starting IntelliJ. */
+/** Paint production Swing components with fixture data in a headless IntelliJ test application. */
 public final class UiPreview {
     static Path output;
     static final List<String> snapshots = new ArrayList<>();
     static final Set<String> FEATURED_PREVIEWS = Set.of(
             "side-panel-340", "connection-mysql-600", "table-1100", "table-new-row-1100", "sql-console-1100");
     static boolean featuredOnly;
+    private static Font previewFont() {
+        Set<String> available = Set.of(GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames());
+        List<String> preferred = System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("mac")
+                ? List.of("Helvetica Neue", "Arial", "Liberation Sans", "SansSerif")
+                : System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win")
+                ? List.of("Segoe UI", "Arial", "DejaVu Sans", "SansSerif")
+                : List.of("DejaVu Sans", "Liberation Sans", "Noto Sans", "SansSerif");
+        String family = preferred.stream().filter(available::contains).findFirst().orElse("SansSerif");
+        return new Font(family, Font.PLAIN, 13);
+    }
     static Object field(Object target, String name) throws Exception {
         Field field = target.getClass().getDeclaredField(name);
         field.setAccessible(true);
@@ -44,8 +54,15 @@ public final class UiPreview {
         for (Component component : container.getComponents())
             if (component instanceof Container nested) layout(nested);
     }
+    static void updateToolbars(Container container) {
+        if (container instanceof com.intellij.openapi.actionSystem.ActionToolbar toolbar)
+            toolbar.updateActionsImmediately();
+        for (Component component : container.getComponents())
+            if (component instanceof Container nested) updateToolbars(nested);
+    }
     static void render(JComponent component, String name, int width, int height) throws Exception {
         component.setSize(width, height);
+        updateToolbars(component);
         for (int pass = 0; pass < 4; pass++) layout(component);
         verifyInputs(component);
         if (featuredOnly && !FEATURED_PREVIEWS.contains(name.replaceFirst("^(light|dark)-", ""))) return;
@@ -303,6 +320,9 @@ public final class UiPreview {
         String[] names = {"Amelia Brooks", "Liam Chen", "Sofia Patel", "Noah Williams", "Olivia Reyes", "Ethan Kim", "Isabella Rossi", "Lucas Martin", "Mia Thompson", "Aiden Davis", "Charlotte Wilson", "Leo Garcia"};
         for (int i = 0; i < names.length; i++) rows.add(new ArrayList<>(Arrays.asList(1001L + i, names[i], i == 3 ? null : names[i].split(" ")[0].toLowerCase(Locale.ROOT) + "@example.com", i == 4 ? "inactive" : "active", new java.math.BigDecimal(i % 3 == 0 ? "240.50" : "0.00"))));
         invoke(model, "setData", new Class<?>[]{List.class, List.class, List.class}, List.of("id", "name", "email", "status", "balance"), List.of("BIGINT", "VARCHAR", "VARCHAR", "VARCHAR", "DECIMAL"), rows);
+        // The preview task service intentionally does no I/O; release the production panel's
+        // initial loading lock after supplying its fixture rows so edits render as usable.
+        invoke(panel, "setReadRunning", new Class<?>[]{boolean.class}, false);
         JTable table = (JTable) field(panel, "dataTable");
         ((JScrollPane)table.getParent().getParent()).setColumnHeaderView(table.getTableHeader());
         int[] widths = {110, 190, 280, 150, 150};
@@ -376,8 +396,33 @@ public final class UiPreview {
         }
         return null;
     }
+    static com.intellij.openapi.actionSystem.AnAction findToolbarAction(Container container, String tooltip) {
+        for (Component child : container.getComponents()) {
+            if (child instanceof com.intellij.openapi.actionSystem.ActionToolbar toolbar) {
+                for (Object action : toolbar.getActions()) {
+                    if (action instanceof com.intellij.openapi.actionSystem.AnAction candidate
+                            && tooltip.equals(candidate.getTemplatePresentation().getDescription())) return candidate;
+                }
+            }
+            if (child instanceof Container nested) {
+                com.intellij.openapi.actionSystem.AnAction match = findToolbarAction(nested, tooltip);
+                if (match != null) return match;
+            }
+        }
+        return null;
+    }
+    static void performToolbarAction(Container container, String tooltip) {
+        var action = findToolbarAction(container, tooltip);
+        if (action == null) throw new AssertionError("Toolbar action not found: " + tooltip);
+        action.actionPerformed(com.intellij.openapi.actionSystem.AnActionEvent.createFromAnAction(
+                action, null, com.intellij.openapi.actionSystem.ActionPlaces.TOOLBAR,
+                com.intellij.openapi.actionSystem.DataContext.EMPTY_CONTEXT));
+    }
     static void verifyConsoleActions() throws Exception {
         SqlQueryConsolePanel panel = console();
+        panel.setSize(1100, 620);
+        updateToolbars(panel);
+        layout(panel);
         JTextArea editor = (JTextArea)field(panel, "editorArea");
         panel.setSqlText("");
         JComboBox<?> template = (JComboBox<?>)findByTooltip(panel, "Insert a SQL template at the caret");
@@ -388,7 +433,7 @@ public final class UiPreview {
         history.addItem(new QueryHistoryEntry("SELECT 42;"));
         history.setSelectedIndex(1);
         if (!editor.getText().equals("SELECT 42;")) throw new AssertionError("History must restore the full query");
-        ((JButton)findByTooltip(panel, "Clear query text")).doClick(0);
+        performToolbarAction(panel, "Clear query text");
         if (!editor.getText().isEmpty()) throw new AssertionError("Clear action must clear the query");
         panel.setSqlText("SELECT 1; SELECT 2;");
         editor.select(10, 19);
@@ -516,19 +561,89 @@ public final class UiPreview {
         }
     }
 
+    static void renderFeatured(String theme) throws Exception {
+        render(ExplorerPreview.create(config(DatabaseType.MYSQL), false), theme + "-side-panel-340", 340, 620);
+        ConnectionDialog dialog = new ConnectionDialog(null, config(DatabaseType.MYSQL), true);
+        JComponent connection = dialog.previewPanel();
+        render(connection, theme + "-connection-mysql-600", 600, connection.getPreferredSize().height);
+        render(console(), theme + "-sql-console-1100", 1100, 620);
+        TableDataEditorPanel editor = table(false);
+        render(editor, theme + "-table-1100", 1100, 620);
+        Object model = field(editor, "tableModel");
+        ((TableModel)model).setValueAt("Amelia Stone", 0, 1);
+        invoke(model, "addNewRow", new Class<?>[]{});
+        int newRow = ((TableModel)model).getRowCount() - 1;
+        ((TableModel)model).setValueAt("Grace Lee", newRow, 1);
+        ((TableModel)model).setValueAt("grace@example.com", newRow, 2);
+        invoke(editor, "updatePendingChangesState", new Class<?>[]{});
+        if (!((JButton)field(editor, "saveBtn")).isEnabled())
+            throw new AssertionError("Featured new-row preview must be valid: " + field(model, "validationErrors"));
+        render(editor, theme + "-table-new-row-1100", 1100, 620);
+    }
+
+    private static void initializePreviewApplication() throws Exception {
+        com.intellij.testFramework.common.TestApplicationKt.loadApp();
+        com.intellij.openapi.extensions.PluginDescriptor descriptor = (com.intellij.openapi.extensions.PluginDescriptor)
+                Proxy.newProxyInstance(com.intellij.openapi.extensions.PluginDescriptor.class.getClassLoader(),
+                        new Class<?>[]{com.intellij.openapi.extensions.PluginDescriptor.class}, (proxy, method, values) -> {
+                            return switch (method.getName()) {
+                                case "getPluginId" -> com.intellij.openapi.extensions.PluginId.getId("com.segfault03.lattice.preview");
+                                case "getName" -> "Lattice preview";
+                                case "getVersion" -> "preview";
+                                case "getClassLoader" -> UiPreview.class.getClassLoader();
+                                case "getPluginPath" -> Path.of(".");
+                                case "isEnabled", "isBundled", "isImplementationDetail", "allowBundledUpdate" -> false;
+                                case "getDescription", "getVendor", "getSinceBuild", "getUntilBuild" -> "";
+                                case "toString" -> "Lattice preview descriptor";
+                                case "hashCode" -> System.identityHashCode(proxy);
+                                case "equals" -> proxy == values[0];
+                                default -> null;
+                            };
+                        });
+        Object application = com.intellij.openapi.application.ApplicationManager.getApplication();
+        registerPreviewService(application, descriptor, com.segfault03.ideadb.service.DatabaseConnectionManager.class,
+                new com.segfault03.ideadb.service.DatabaseConnectionManager());
+        registerPreviewService(application, descriptor, com.segfault03.ideadb.service.DriverRegistry.class,
+                new com.segfault03.ideadb.service.DriverRegistry());
+    }
+
+    private static void registerPreviewService(Object application,
+                                               com.intellij.openapi.extensions.PluginDescriptor descriptor,
+                                               Class<?> serviceClass, Object service) throws Exception {
+        application.getClass().getMethod("registerServiceInstance", Class.class, Object.class,
+                        com.intellij.openapi.extensions.PluginDescriptor.class)
+                .invoke(application, serviceClass, service, descriptor);
+    }
+
     public static void main(String[] args) throws Exception {
-        output = Path.of(args[0]);
-        Files.createDirectories(output);
-        String theme = args[1];
-        featuredOnly = args.length < 3 || !args[2].equals("all");
-        UIManager.setLookAndFeel(theme.equals("dark") ? new FlatDarculaLaf() : new FlatIntelliJLaf());
-        UIManager.put("defaultFont", new Font("SansSerif", Font.PLAIN, 13));
-        JBColor.setDark(theme.equals("dark"));
-        com.intellij.ui.IconManager.Companion.activate(new com.intellij.ui.icons.CoreIconManager());
-        IconLoader.activate();
-        IconLoader.setUseDarkIcons(theme.equals("dark"));
-        SwingUtilities.invokeAndWait(() -> {
-            try {
+        int exitCode = 0;
+        try {
+            initializePreviewApplication();
+            output = Path.of(args[0]);
+            Files.createDirectories(output);
+            String theme = args[1];
+            featuredOnly = args.length < 3 || !args[2].equals("all");
+            UIManager.setLookAndFeel(theme.equals("dark") ? new FlatDarculaLaf() : new FlatIntelliJLaf());
+            Font font = new javax.swing.plaf.FontUIResource(previewFont());
+            UIManager.put("defaultFont", font);
+            for (String key : List.of("Label.font", "Button.font", "ToggleButton.font", "CheckBox.font",
+                    "RadioButton.font", "ComboBox.font", "TextField.font", "PasswordField.font", "TextArea.font",
+                    "Table.font", "TableHeader.font", "Menu.font", "MenuItem.font", "TabbedPane.font",
+                    "TitledBorder.font")) UIManager.put(key, font);
+            JBColor.setDark(theme.equals("dark"));
+            com.intellij.ui.IconManager.Companion.activate(new com.intellij.ui.icons.CoreIconManager());
+            IconLoader.activate();
+            IconLoader.setUseDarkIcons(theme.equals("dark"));
+            if (featuredOnly) {
+                SwingUtilities.invokeAndWait(() -> {
+                    try { renderFeatured(theme); }
+                    catch (Exception exception) { throw new RuntimeException(exception); }
+                });
+                Files.write(output.resolve(theme + "-manifest.txt"), snapshots);
+                return;
+            }
+            SwingUtilities.invokeAndWait(() -> {
+                try {
                 inputPreviews(theme);
                 render(welcome(false), theme + "-welcome-900", 900, 680);
                 render(welcome(false), theme + "-welcome-520", 520, 680);
@@ -619,9 +734,14 @@ public final class UiPreview {
                 render(editor, theme + "-table-error-1100", 1100, 620);
                 render(table(true), theme + "-view-1100", 1100, 620);
                 verifyCellActions();
-            } catch (Exception exception) { throw new RuntimeException(exception); }
-        });
-        Files.write(output.resolve(theme + "-manifest.txt"), snapshots);
-        System.exit(0); // SDK timer threads otherwise keep this screenshot process alive.
+                } catch (Exception exception) { throw new RuntimeException(exception); }
+            });
+            Files.write(output.resolve(theme + "-manifest.txt"), snapshots);
+        } catch (Throwable failure) {
+            failure.printStackTrace();
+            exitCode = 1;
+        } finally {
+            System.exit(exitCode); // Platform timers otherwise keep this screenshot process alive.
+        }
     }
 }

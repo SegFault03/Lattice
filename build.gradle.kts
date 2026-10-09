@@ -29,10 +29,10 @@ sourceSets {
     }
 }
 
-val uiTestImplementation by configurations.getting {
+val uiTestImplementation = configurations.getByName("uiTestImplementation") {
     extendsFrom(configurations.testImplementation.get())
 }
-val uiTestRuntimeOnly by configurations.getting {
+val uiTestRuntimeOnly = configurations.getByName("uiTestRuntimeOnly") {
     extendsFrom(configurations.testRuntimeOnly.get())
 }
 
@@ -157,7 +157,7 @@ intellijPlatform {
     }
 }
 
-val uiScreenshotTest by intellijPlatformTesting.testIdeUi.registering {
+intellijPlatformTesting.testIdeUi.register("uiScreenshotTest") {
     task {
         val uiTestSourceSet = sourceSets["uiTest"]
         testClassesDirs = uiTestSourceSet.output.classesDirs
@@ -168,6 +168,7 @@ val uiScreenshotTest by intellijPlatformTesting.testIdeUi.registering {
         systemProperty("ui.screenshot.dir", providers.gradleProperty("lattice.ui.output").orElse(layout.buildDirectory.dir("ui-test-results").get().asFile.absolutePath).get())
         systemProperty("ui.theme.id", providers.gradleProperty("lattice.ui.theme").orElse("ExperimentalDark").get())
         systemProperty("ui.review.enabled", providers.gradleProperty("lattice.ui.review").orElse("false").get())
+        systemProperty("ui.inputs.only", providers.gradleProperty("lattice.ui.inputsOnly").orElse("false").get())
         systemProperty("ui.maven.repository", layout.buildDirectory.dir("ui-test-maven/repository").get().asFile.absolutePath)
         val ide = tasks.named<RunIdeTask>("runIde").get()
         systemProperty("ui.ide.home", ide.platformPath.toString())

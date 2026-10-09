@@ -115,7 +115,7 @@ public class RegressionSuitesTest {
         manager.registerConfiguration(config);
         try {
             var previous = manager.getConnection(config);
-            var unchanged = config.copy(); unchanged.setDriverVersion("unused selection");
+            var unchanged = config.copy(); unchanged.setDriverJarPath("unused local JAR field");
             manager.registerConfiguration(unchanged);
             assertSame(previous, manager.getConnection(config), "Unused driver fields must not retire sessions");
             var updated = config.copy(); updated.setDriverSource(DriverSource.LOCAL_JAR);
