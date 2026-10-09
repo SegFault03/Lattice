@@ -1,6 +1,8 @@
 # P2 UI fixes
 
-P2 addresses the nine readability and consistency findings from the [real IntelliJ UI review](IDE_UI_REVIEW.md). P3 remains a separate approval phase. The UI changes are ready for review; prompt interruption of large HSQLDB read aggregates remains a driver limitation, described below.
+P2 addresses the nine readability and consistency findings from the [real IntelliJ UI review](IDE_UI_REVIEW.md). Prompt interruption of large HSQLDB read aggregates remains a driver limitation, described below.
+
+After approval, P2 was committed and pushed to `feat/retain-drivers` as `da7f6ab`. All three cross-platform commit checks passed in [workflow run 37829130195](https://github.com/SegFault03/Lattice/actions/runs/37829130195). The validation below records the original P2 review; [P3](UI_P3_FIXES.md) is documented separately.
 
 ## Changes
 
@@ -95,7 +97,7 @@ I directly opened representative full-IDE PNGs in every theme, rather than claim
 - Unselected NULL is clearly readable in the inspected Dark, light-header, Darcula and IntelliJ Light data captures, retaining an italic cue. The remaining themes also pass the live renderer palette checks.
 - Enabled Revert retains its rounded red fill and white label/icon. Cancelling captures show disabled Run/Stop, preserved previous results and visible feedback at the bottom of the SQL editor.
 
-The prior P1 push also needed CI corrections: generated-report links are valid without local build output; Ubuntu's rendering gate now uses the real IDE instead of the legacy standalone preview; and x11-utils supplies its display-readiness probe. **All three cross-platform commit checks passed for pushed commit `545d1ae`** in [workflow run 37826635795](https://github.com/SegFault03/Lattice/actions/runs/37826635795). Ubuntu's real-IDE Dark step completed with `BUILD SUCCESSFUL in 4m 26s` and logged the live `DatabaseMainPanel`. Those CI results cover the pushed P1/CI changes; P2 changes remain local for review.
+The prior P1 push also needed CI corrections: generated-report links are valid without local build output; Ubuntu's rendering gate now uses the real IDE instead of the legacy standalone preview; and x11-utils supplies its display-readiness probe. **All three cross-platform commit checks passed for pushed commit `545d1ae`** in [workflow run 37826635795](https://github.com/SegFault03/Lattice/actions/runs/37826635795). Ubuntu's real-IDE Dark step completed with `BUILD SUCCESSFUL in 4m 26s` and logged the live `DatabaseMainPanel`. Those CI results cover the pushed P1/CI changes; the approved P2 push and its separate CI results are recorded above.
 
 Two test-only issues were investigated and corrected during validation. An initial Dark run queried a result grid while its Messages tab was selected; selecting the native Previous results tab before inspecting retained rows fixed the visibility lookup. In High Contrast, the Driver tree double-click expanded the table's children but did not open an editor; the flow now clicks the existing production “Open data editor” context-menu item. Logs, failure PNGs and partial captures are preserved under `build/ui-review-p2-investigations/`. An execution-service interruption also stopped the first Light attempt; its partial evidence was preserved and Light passed on restart using `XVFB_DISPLAY=:100`.
 

@@ -132,18 +132,16 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         orderField.addActionListener(e -> loadData(1, pageSize));
         JButton filterBtn = DatabaseUi.action("Apply", AllIcons.Actions.Execute, "Apply filter and sort");
         filterBtn.addActionListener(e -> loadData(1, pageSize));
-        JPanel filters = new JPanel(new WrapLayout(FlowLayout.LEFT, JBUI.scale(4), JBUI.scale(4)));
-        filters.setBorder(BorderFactory.createCompoundBorder(
-                JBUI.Borders.customLineBottom(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR),
-                JBUI.Borders.empty(2, 8, 6, 8)));
         JBLabel whereLabel = new JBLabel("WHERE");
         JBLabel orderLabel = new JBLabel("ORDER BY");
         int filterLabelWidth = Math.max(whereLabel.getPreferredSize().width, orderLabel.getPreferredSize().width);
         whereLabel.setPreferredSize(new Dimension(filterLabelWidth, whereLabel.getPreferredSize().height));
         orderLabel.setPreferredSize(new Dimension(filterLabelWidth, orderLabel.getPreferredSize().height));
-        filters.add(DatabaseUi.labeledInput(whereLabel, whereField));
-        filters.add(DatabaseUi.labeledInput(orderLabel, orderField));
-        filters.add(filterBtn);
+        JPanel filters = new TableFilterPanel(DatabaseUi.labeledInput(whereLabel, whereField),
+                DatabaseUi.labeledInput(orderLabel, orderField), filterBtn);
+        filters.setBorder(BorderFactory.createCompoundBorder(
+                JBUI.Borders.customLineBottom(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR),
+                JBUI.Borders.empty(2, 12, 6, 12)));
 
         pageSizeCombo = DatabaseInputs.comboBox(new String[]{"50", "100", "250", "500", "1000"});
         pageSizeCombo.setSelectedItem("100");
@@ -396,8 +394,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     nextPageBtn.setEnabled(hasNext);
                     pageLabel.setText("Page " + currentPage + (maxPage > 0 ? " of " + maxPage : ""));
 
-                    DatabaseUi.status(statusLabel, String.format("%d rows · %d ms · Total: %s",
-                            result.getRows().size(), result.getExecutionTimeMs(),
+                    DatabaseUi.status(statusLabel, String.format("%s · %d ms · Total: %s",
+                            QueryResult.formatRowCount(result.getRows().size()), result.getExecutionTimeMs(),
                             totalRowCount >= 0 ? String.valueOf(totalRowCount) : "not counted") + (keys.isEmpty() && order.isEmpty() ? " · No primary key: set ORDER BY for stable pages" : ""), keys.isEmpty() && order.isEmpty() ? DatabaseUi.Tone.WARNING : DatabaseUi.Tone.NORMAL);
                 });
             } catch (Exception ex) {
@@ -423,7 +421,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     totalRowCount=count;
                     long pages=Math.max(1,(count+pageSize-1)/pageSize);
                     pageLabel.setText("Page " + currentPage + " of " + pages);
-                    DatabaseUi.status(statusLabel, count + " saved rows match the filter", DatabaseUi.Tone.NORMAL);
+                    DatabaseUi.status(statusLabel, count == 1 ? "1 saved row matches the filter" : count + " saved rows match the filter", DatabaseUi.Tone.NORMAL);
                 });
             } catch(Exception error) {
                 SwingUtilities.invokeLater(() -> { if(!disposed && generation==loadGeneration) DatabaseUi.status(statusLabel, "Row count failed: " + error.getMessage(), DatabaseUi.Tone.ERROR); });

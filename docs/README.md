@@ -8,6 +8,7 @@ All commands in these guides run from the repository root unless stated otherwis
 | [Scripts](SCRIPTS.md) | Portable test, deployment and release helpers |
 | [UI previews](UI_PREVIEW.md) | Render the side panel, connection dialog, table editor/viewer and SQL console outside the IDE; refresh README screenshots |
 | [IDE UI review](IDE_UI_REVIEW.md) | Repeat real IntelliJ captures across all bundled themes; visual findings and coverage limits |
+| [P3 UI fixes](UI_P3_FIXES.md) | Neutral cancellation, responsive filters, consistent labels and driver summaries; real-IDE validation |
 | [Releasing](RELEASING.md) | Versioning, tags, validation and publication |
 | [Changelog](CHANGELOG.md) | Versioned release notes |
 | [Issue reporting](ISSUE.md) | Bug reports and feature requests |

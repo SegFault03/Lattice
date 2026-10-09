@@ -119,7 +119,7 @@ public class AlterTableDialog extends DialogWrapper {
         renameColCombo = DatabaseInputs.comboBox(colNames);
         renameColNewNameField = DatabaseInputs.textField(colNames.length > 0 ? colNames[0] : "");
         renameColPanel.addRow(0, "Column:", renameColCombo, true);
-        renameColPanel.addRow(1, "New Column name:", renameColNewNameField, true);
+        renameColPanel.addRow(1, "New column name:", renameColNewNameField, true);
         renameColCombo.addActionListener(e -> {
             String selected = (String) renameColCombo.getSelectedItem();
             if (selected != null) renameColNewNameField.setText(selected);
@@ -162,7 +162,7 @@ public class AlterTableDialog extends DialogWrapper {
 
         ConnectionFormPanel renamePanel = alterForm();
         renameTableField = DatabaseInputs.textField(tableMetadata.getName());
-        renamePanel.addRow(0, "New Table name:", renameTableField, true);
+        renamePanel.addRow(0, "New table name:", renameTableField, true);
         JButton executeRenameBtn = new JButton("Rename table");
         executeRenameBtn.addActionListener(e -> doRenameTable());
         renamePanel.addRow(1, "", executeRenameBtn, false);
@@ -235,7 +235,7 @@ public class AlterTableDialog extends DialogWrapper {
 
     private static ConnectionFormPanel alterForm() {
         return new ConnectionFormPanel("Column name:", "Type:", "Size / length:", "Nullable:",
-                "Default value:", "Column:", "New Column name:", "Column to drop:", "New Table name:");
+                "Default value:", "Column:", "New column name:", "Column to drop:", "New table name:");
     }
 
     private void populateModifyFields(String colName) {

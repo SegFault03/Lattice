@@ -185,6 +185,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         resultsTabs.addTab("Results", resultsScroll);
 
         messagesArea = new JBTextArea();
+        messagesArea.getAccessibleContext().setAccessibleName("SQL query messages");
         messagesArea.setEditable(false);
         messagesArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         messagesArea.setForeground(NORMAL_MSG_COLOR);
@@ -201,6 +202,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         statusBar.setBorder(BorderFactory.createCompoundBorder(
                 JBUI.Borders.customLineTop(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR), JBUI.Borders.empty(4, 12)));
         statusLabel = new WrappingLabel("Ready");
+        statusLabel.getAccessibleContext().setAccessibleName("SQL query status");
         statusBar.add(statusLabel, BorderLayout.NORTH);
         JPanel limitRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 0, 0));
         limitRow.setOpaque(false);
@@ -258,7 +260,9 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
                     if (disposed) return;
                     execution = null;
                     setRunning(false);
-                    if (result.hasError()) {
+                    if (result.isCancelled()) {
+                        showQueryCancellation(result.getExecutionTimeMs());
+                    } else if (result.hasError()) {
                         showQueryError(result.getError(), result.getExecutionTimeMs());
                     } else if (result.isResultSet()) {
                         messagesArea.setText(result.getMessage());
@@ -274,14 +278,14 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
                         resultsTabs.setTitleAt(0, "Results (" + result.getRows().size() + ")");
                         resultsTabs.setSelectedIndex(0); // Switch to Results tab
                         DatabaseUi.status(statusLabel,
-                                result.isTruncated() ? result.getRows().size() + " rows · Limit reached" : result.getRows().size() + " rows · " + result.getExecutionTimeMs() + " ms",
+                                QueryResult.formatRowCount(result.getRows().size()) + (result.isTruncated() ? " · Limit reached" : " · " + result.getExecutionTimeMs() + " ms"),
                                 result.isTruncated() ? DatabaseUi.Tone.WARNING : DatabaseUi.Tone.SUCCESS);
                         statusLabel.setToolTipText(result.getMessage());
                     } else {
                         messagesArea.setText(result.getMessage());
                         messagesArea.setForeground(NORMAL_MSG_COLOR);
                         resultsTabs.setSelectedIndex(1);
-                        DatabaseUi.status(statusLabel, result.getAffectedRows() + " rows affected · " + result.getExecutionTimeMs() + " ms", DatabaseUi.Tone.SUCCESS);
+                        DatabaseUi.status(statusLabel, QueryResult.formatRowCount(result.getAffectedRows()) + " affected · " + result.getExecutionTimeMs() + " ms", DatabaseUi.Tone.SUCCESS);
                     }
                 });
             } catch (Exception ex) {
@@ -289,7 +293,8 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
                     if (disposed) return;
                     execution = null;
                     setRunning(false);
-                    showQueryError(ex.getMessage(), -1);
+                    if (current.isCancellationRequested()) showQueryCancellation(-1);
+                    else showQueryError(ex.getMessage(), -1);
                 });
             }
         });
@@ -306,6 +311,14 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         }
         DatabaseUi.status(statusLabel, "Query failed · See Messages for details", DatabaseUi.Tone.ERROR);
         statusLabel.setToolTipText(detail);
+    }
+
+    private void showQueryCancellation(long elapsedMs) {
+        messagesArea.setText("Query cancelled" + (resultsModel.getRowCount() > 0 ? "\n\nPrevious results have been kept." : "")
+                + (elapsedMs >= 0 ? "\n\nElapsed: " + elapsedMs + " ms" : ""));
+        messagesArea.setForeground(NORMAL_MSG_COLOR);
+        resultsTabs.setSelectedIndex(1);
+        DatabaseUi.status(statusLabel, "Query cancelled" + (elapsedMs >= 0 ? " · " + elapsedMs + " ms" : ""), DatabaseUi.Tone.NORMAL);
     }
 
     private void setRunning(boolean running) {

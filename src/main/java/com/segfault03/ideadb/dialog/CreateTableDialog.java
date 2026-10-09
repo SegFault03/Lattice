@@ -80,7 +80,7 @@ public class CreateTableDialog extends DialogWrapper {
 
         // Center: Columns Table + Toolbar
         JPanel centerPanel = new JPanel(new BorderLayout(4, 4));
-        centerPanel.setBorder(BorderFactory.createTitledBorder("Columns Definition"));
+        centerPanel.setBorder(BorderFactory.createTitledBorder("Columns"));
 
         List<ColumnDefinition> defaultCols = new ArrayList<>();
         defaultCols.add(new ColumnDefinition("id", "INT", 11, false, true, true, ""));
@@ -103,9 +103,9 @@ public class CreateTableDialog extends DialogWrapper {
         // Action buttons
         JPanel tableButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
         JButton addBtn = new JButton("Add column");
-        JButton remBtn = new JButton("Remove Column");
-        JButton upBtn = new JButton("Move Up");
-        JButton downBtn = new JButton("Move Down");
+        JButton remBtn = new JButton("Remove column");
+        JButton upBtn = new JButton("Move up");
+        JButton downBtn = new JButton("Move down");
 
         addBtn.addActionListener(e -> {
             tableModel.addColumn(new ColumnDefinition("col_" + (tableModel.getRowCount() + 1), "VARCHAR", 255, true, false, false, ""));
@@ -148,7 +148,7 @@ public class CreateTableDialog extends DialogWrapper {
 
         // South: SQL Preview
         JPanel previewPanel = new JPanel(new BorderLayout(4, 4));
-        previewPanel.setBorder(BorderFactory.createTitledBorder("SQL DDL Preview"));
+        previewPanel.setBorder(BorderFactory.createTitledBorder("SQL preview"));
         sqlPreviewArea = new JBTextArea(8, 40);
         sqlPreviewArea.setEditable(false);
         sqlPreviewArea.getAccessibleContext().setAccessibleName("Create table SQL preview");

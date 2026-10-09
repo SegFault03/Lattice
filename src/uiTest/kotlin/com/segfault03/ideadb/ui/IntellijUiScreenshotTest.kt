@@ -170,11 +170,12 @@ class IntellijUiScreenshotTest {
 
             lateinit var frame: IdeaFrameUI
             ideFrame { frame = this }
-            if (themeId == "JetBrainsHighContrastTheme") {
-                // In Xvfb, closing dialogs can leave parts of the high-contrast IDE
-                // chrome unpainted. Request a real JFrame repaint before settled captures.
-                repaintIdeBeforeCapture = {
-                    withContext(OnDispatcher.EDT) { cast(frame.component, LiveFrame::class).repaint() }
+            // Closing dialogs can leave IDE chrome unpainted under Xvfb, particularly
+            // in legacy/high-contrast themes. Paint the live root before desktop capture.
+            repaintIdeBeforeCapture = {
+                withContext(OnDispatcher.EDT) {
+                    val root = cast(frame.component, LiveFrame::class).getRootPane()
+                    root.paintImmediately(0, 0, frame.component.width, frame.component.height)
                 }
             }
             openConnectionMenu(pluginRoot, frame, "MySQL…")
@@ -183,8 +184,9 @@ class IntellijUiScreenshotTest {
                 byTitle("New connection")
             }.waitFound()
             mysqlDialog.x {
-                byVisibleText("MySQL · Available drivers · MySQL Connector/J 8.4.0")
+                byVisibleText("8.4.0 · DISCOVERED")
             }.waitFound()
+            assertDriverSummary(mysqlDialog, "8.4.0 · DISCOVERED")
             if (review) {
                 captureScreen(screenshotsDirectory.resolve("mysql-standard.png"))
                 mysqlDialog.x { byVisibleText("JDBC URL") }.waitFound().click()
@@ -207,6 +209,12 @@ class IntellijUiScreenshotTest {
             ))) { "Expected bundled and Maven-discovered MySQL releases: $mysqlAvailableDriverLabels" }
             captureScreen(screenshotsDirectory.resolve("mysql-connection-dialog-available-driver-list.png"))
             pressEscape()
+            if (review) {
+                mysqlAvailableDriverCombo.selectItem("26.7.0 · BUNDLED")
+                assertDriverSummary(mysqlDialog, "26.7.0 · BUNDLED")
+                captureScreen(screenshotsDirectory.resolve("mysql-driver-summary-bundled.png"))
+                mysqlAvailableDriverCombo.selectItem("8.4.0 · DISCOVERED")
+            }
 
             val mysqlDriverSourceCombo = mysqlDialog.x(JComboBoxUiComponent::class.java) {
                 and(
@@ -238,6 +246,7 @@ class IntellijUiScreenshotTest {
             }
             val mysqlProgressVersion = "5.1.49"
             mysqlDriverVersionCombo.selectItem(mysqlProgressVersion)
+            assertDriverSummary(mysqlDialog, "5.1.49 · DOWNLOAD")
             val mysqlDownloadButton = mysqlDialog.x { byVisibleText("Download") }.waitFound()
             waitUntil("MySQL version $mysqlProgressVersion can be downloaded") {
                 mysqlDownloadButton.component.isEnabled()
@@ -261,7 +270,13 @@ class IntellijUiScreenshotTest {
                 "A successfully downloaded driver should not be offered for download again"
             }
             if (review) {
+                assertDriverSummary(mysqlDialog, "5.1.49 · DOWNLOADED")
                 captureScreen(screenshotsDirectory.resolve("mysql-driver-downloaded.png"))
+                mysqlDriverSourceCombo.selectItem("Available drivers")
+                mysqlAvailableDriverCombo.selectItem("5.1.49 · DOWNLOADED")
+                assertDriverSummary(mysqlDialog, "5.1.49 · DOWNLOADED")
+                captureScreen(screenshotsDirectory.resolve("mysql-driver-summary-retained.png"))
+                mysqlDriverSourceCombo.selectItem("Download a version")
                 mysqlDialog.x { byVisibleText("JDBC URL") }.waitFound().click()
                 mysqlDialog.x(JTextFieldUI::class.java) {
                     and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("JDBC URL:"))
@@ -291,8 +306,9 @@ class IntellijUiScreenshotTest {
                 byTitle("New connection")
             }.waitFound()
             connectionDialog.x {
-                byVisibleText("HSQLDB · Available drivers · HSQLDB 2.7.2")
+                byVisibleText("2.7.2 · DISCOVERED")
             }.waitFound()
+            assertDriverSummary(connectionDialog, "2.7.2 · DISCOVERED")
             Thread.sleep(750)
             captureScreen(screenshotsDirectory.resolve("connection-dialog-default-driver.png"))
             val modeCombo = connectionDialog.x(JComboBoxUiComponent::class.java) {
@@ -354,6 +370,11 @@ class IntellijUiScreenshotTest {
             if (review) {
                 driverSourceCombo.selectItem("Local JAR")
                 captureScreen(screenshotsDirectory.resolve("driver-local-jar.png"))
+                val localJar = connectionDialog.x { byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputBrowseField") }.waitFound()
+                localJar.x(JTextFieldUI::class.java) { byType("javax.swing.JTextField") }.waitFound().text =
+                    mavenRepository.resolve("org/hsqldb/hsqldb/2.7.2/hsqldb-2.7.2.jar").toString()
+                assertDriverSummary(connectionDialog, "2.7.2 · LOCAL JAR")
+                captureScreen(screenshotsDirectory.resolve("driver-local-jar-selected.png"))
             }
             driverSourceCombo.selectItem("Download a version")
             val driverVersionCombo = connectionDialog.x(JComboBoxUiComponent::class.java) {
@@ -392,9 +413,7 @@ class IntellijUiScreenshotTest {
             clickComboArrow(driverVersionCombo)
             Thread.sleep(200)
             selectNextComboPopupRow()
-            connectionDialog.x {
-                byVisibleText("HSQLDB · Download a version · HSQLDB 2.7.3-jdk8")
-            }.waitFound()
+            assertDriverSummary(connectionDialog, "2.7.3-jdk8 · DOWNLOADED")
             val downloadButton = connectionDialog.x { byVisibleText("Download") }.waitFound()
             waitUntil("Download disabled for an already downloaded driver") {
                 !downloadButton.component.isEnabled()
@@ -485,6 +504,7 @@ class IntellijUiScreenshotTest {
             waitUntil("empty table data loaded") { tableEditor.hasSubtext("0 rows") }
             check(dataGrid.rowCount() == 0) { "New LATTICE_PEOPLE table should start empty" }
             captureScreen(screenshotsDirectory.resolve("table-editor-empty.png"))
+            if (review) assertFilterLayout(tableEditor, 1)
 
             val commitButton = tableEditor.x { byAccessibleName("Commit pending changes to the database") }.waitFound()
             val revertButton = tableEditor.x { byAccessibleName("Revert pending changes") }.waitFound()
@@ -509,7 +529,7 @@ class IntellijUiScreenshotTest {
                 byTitle("Changes Saved")
             }.waitFound().pressButton("OK")
             waitUntil("committed row reload") {
-                dataGrid.rowCount() == 1 && tableEditor.hasSubtext("1 rows")
+                dataGrid.rowCount() == 1 && tableEditor.hasSubtext("1 row ·")
             }
             check(dataGrid.content().values.any { row -> row.values.any { "Ada" in it } }) {
                 "Committed row should be visible in the live data grid"
@@ -561,7 +581,7 @@ class IntellijUiScreenshotTest {
                 byTitle("Changes Saved")
             }.waitFound().pressButton("OK")
             waitUntil("valid integer change is committed and reloaded") {
-                dataGrid.rowCount() == 1 && tableEditor.hasSubtext("1 rows") && tableCellText(dataGrid, 0, 0).toLongOrNull() == changedId
+                dataGrid.rowCount() == 1 && tableEditor.hasSubtext("1 row ·") && tableCellText(dataGrid, 0, 0).toLongOrNull() == changedId
             }
             check(dataGrid.content().values.any { row -> row.values.any { "Ada" in it } }) {
                 "Committing the integer edit should preserve the other row values"
@@ -670,6 +690,7 @@ class IntellijUiScreenshotTest {
                 }
                 frame.resize(1000, 800)
                 captureScreen(screenshotsDirectory.resolve("table-narrow.png"))
+                assertFilterLayout(tableEditor, 3)
                 assertEditorControlsVisible(tableEditor, "narrow table")
                 replaceCellValue(dataGrid, 0, 0, "not-an-integer")
                 waitUntil("narrow cell error is visible inline") { tableEditor.hasSubtext("Invalid INTEGER value") }
@@ -703,11 +724,17 @@ class IntellijUiScreenshotTest {
                 tableEditor.x { byVisibleText("Apply") }.waitFound().click()
                 waitUntil("narrow filter reset") { dataGrid.rowCount() == 1 }
                 val ideWindow = cast(frame.component, Window::class)
+                frame.resize(1120, 900)
+                captureScreen(screenshotsDirectory.resolve("table-medium-filters.png"))
+                assertFilterLayout(tableEditor, 2)
+                assertEditorControlsVisible(tableEditor, "medium table")
                 withContext(OnDispatcher.EDT) { ideWindow.setBounds(10, 40, 1900, 1000) }
                 captureScreen(screenshotsDirectory.resolve("table-wide.png"))
+                assertFilterLayout(tableEditor, 1)
                 assertEditorControlsVisible(tableEditor, "wide table")
                 withContext(OnDispatcher.EDT) { ideWindow.setBounds(260, 40, 1400, 1000) }
                 captureScreen(screenshotsDirectory.resolve("table-normal-after-resize.png"))
+                assertFilterLayout(tableEditor, 1)
                 assertEditorControlsVisible(tableEditor, "restored table")
                 databaseTree.fixture.rightClickPath(pathText)
                 frame.x { byVisibleText("Open in SQL console") }.waitFound().click()
@@ -715,32 +742,57 @@ class IntellijUiScreenshotTest {
                 val query = console.xx { byJavaClass("com.intellij.ui.components.JBTextArea") }.list().first()
                 val queryText = cast(query.component, JTextComponent::class)
                 captureScreen(screenshotsDirectory.resolve("sql-console-ready.png"))
+                val runQuery = console.x { byVisibleText("Run") }.waitFound()
+                val stopQuery = console.x { byVisibleText("Stop") }.waitFound()
+                // Bounded real HSQLDB work also exercises cancellation with no prior results.
+                val tenValues = "(VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9))"
+                val cancellationSql = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.SYSTEM_COLUMNS A CROSS JOIN INFORMATION_SCHEMA.SYSTEM_COLUMNS B CROSS JOIN $tenValues C(n) CROSS JOIN $tenValues D(n)"
+                withContext(OnDispatcher.EDT) { queryText.setText(cancellationSql) }
+                runQuery.click()
+                waitUntil("first SQL query running") { stopQuery.component.isEnabled() }
+                stopQuery.click()
+                waitUntil("first query cancellation completes") { runQuery.component.isEnabled() }
+                assertQueryOutcome(console, cancelled = true)
+                captureScreen(screenshotsDirectory.resolve("sql-console-cancelled-empty.png"))
+                val initialTabs = cast(console.x { byJavaClass("javax.swing.JTabbedPane") }.waitFound().component, LiveTabs::class)
+                withContext(OnDispatcher.EDT) {
+                    initialTabs.setSelectedIndex(0)
+                    check(initialTabs.getComponentAt(0).getViewport().getView().getRowCount() == 0) {
+                        "Cancelling the first query must not invent results"
+                    }
+                }
+                withContext(OnDispatcher.EDT) { queryText.setText("SELECT * FROM PUBLIC.LATTICE_PEOPLE") }
                 console.x { byVisibleText("Run") }.waitFound().click()
-                waitUntil("SQL SELECT completed") { console.hasSubtext("1 rows") }
-                captureScreen(screenshotsDirectory.resolve("sql-console-results.png"))
+                waitUntil("SQL SELECT completed") { console.hasSubtext("1 row ·") }
                 val sqlGrid = console.x(JTableUiComponent::class.java) { byJavaClass("com.segfault03.ideadb.ui.DatabaseTable") }.waitFound()
+                captureScreen(screenshotsDirectory.resolve("sql-console-results.png"))
                 assertNullContrast(sqlGrid, 0, 2)
                 captureScreen(screenshotsDirectory.resolve("sql-console-null-unselected.png"))
+                withContext(OnDispatcher.EDT) { queryText.setText("SELECT * FROM PUBLIC.LATTICE_PEOPLE UNION ALL SELECT * FROM PUBLIC.LATTICE_PEOPLE") }
+                console.x { byVisibleText("Run") }.waitFound().click()
+                waitUntil("plural SQL row count") { console.hasSubtext("2 rows ·") }
+                captureScreen(screenshotsDirectory.resolve("sql-console-multiple-rows.png"))
                 withContext(OnDispatcher.EDT) { queryText.setText("SELECT * FROM PUBLIC.LATTICE_PEOPLE WHERE \"id\" = -999") }
                 console.x { byVisibleText("Run") }.waitFound().click()
                 waitUntil("empty SQL result") { console.hasSubtext("0 rows") }
                 captureScreen(screenshotsDirectory.resolve("sql-console-empty-results.png"))
+                withContext(OnDispatcher.EDT) { queryText.setText("UPDATE PUBLIC.LATTICE_PEOPLE SET \"name\" = 'Ada Lovelace' WHERE \"id\" = -999") }
+                console.x { byVisibleText("Run") }.waitFound().click()
+                waitUntil("zero affected rows") { console.hasSubtext("0 rows affected ·") }
+                captureScreen(screenshotsDirectory.resolve("sql-console-update-zero.png"))
                 withContext(OnDispatcher.EDT) { queryText.setText("UPDATE PUBLIC.LATTICE_PEOPLE SET \"name\" = 'Ada Lovelace' WHERE \"id\" = $changedId") }
                 console.x { byVisibleText("Run") }.waitFound().click()
-                waitUntil("SQL update completed") { console.hasSubtext("1 rows affected") }
+                waitUntil("SQL update completed") { console.hasSubtext("1 row affected ·") }
                 captureScreen(screenshotsDirectory.resolve("sql-console-update.png"))
                 withContext(OnDispatcher.EDT) { queryText.setText("SELECT * FROM PUBLIC.LATTICE_PEOPLE") }
                 console.x { byVisibleText("Run") }.waitFound().click()
-                waitUntil("results restored before cancellation/error review") { console.hasSubtext("1 rows") }
+                waitUntil("results restored before cancellation/error review") { console.hasSubtext("1 row ·") }
                 // Bounded real database work lasts a few seconds. An unbounded four-way
                 // system-catalog aggregate exposed slow HSQLDB cancellation; its evidence
                 // is retained separately rather than making every theme run hang.
-                val tenValues = "(VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9))"
                 withContext(OnDispatcher.EDT) {
-                    queryText.setText("SELECT COUNT(*) FROM INFORMATION_SCHEMA.SYSTEM_COLUMNS A CROSS JOIN INFORMATION_SCHEMA.SYSTEM_COLUMNS B CROSS JOIN $tenValues C(n) CROSS JOIN $tenValues D(n)")
+                    queryText.setText(cancellationSql)
                 }
-                val runQuery = console.x { byVisibleText("Run") }.waitFound()
-                val stopQuery = console.x { byVisibleText("Stop") }.waitFound()
                 runQuery.click()
                 waitUntil("long SQL running") { stopQuery.component.isEnabled() }
                 captureScreen(screenshotsDirectory.resolve("sql-console-running.png"), settleMillis = 0)
@@ -751,16 +803,18 @@ class IntellijUiScreenshotTest {
                 check(!runQuery.component.isEnabled() && !stopQuery.component.isEnabled()) { "A cancelling query must block Run and repeated Stop" }
                 captureScreen(screenshotsDirectory.resolve("sql-console-cancelling.png"), settleMillis = 0)
                 waitUntil("SQL cancellation completes") { runQuery.component.isEnabled() }
+                assertQueryOutcome(console, cancelled = true)
                 captureScreen(screenshotsDirectory.resolve("sql-console-cancelled.png"))
                 val previousTabs = cast(console.x { byJavaClass("javax.swing.JTabbedPane") }.waitFound().component, LiveTabs::class)
                 withContext(OnDispatcher.EDT) { previousTabs.setSelectedIndex(0) }
                 check(sqlGrid.rowCount() == 1) { "Cancellation must retain previous results" }
                 withContext(OnDispatcher.EDT) { queryText.setText("SELECT * FROM PUBLIC.LATTICE_PEOPLE") }
                 runQuery.click()
-                waitUntil("session usable after cancellation") { runQuery.component.isEnabled() && console.hasSubtext("1 rows") }
+                waitUntil("session usable after cancellation") { runQuery.component.isEnabled() && console.hasSubtext("1 row ·") }
                 withContext(OnDispatcher.EDT) { queryText.setText("SELECT * FROM TABLE_THAT_DOES_NOT_EXIST") }
                 console.x { byVisibleText("Run") }.waitFound().click()
                 waitUntil("SQL error displayed") { console.hasSubtext("Query failed") }
+                assertQueryOutcome(console, cancelled = false)
                 captureScreen(screenshotsDirectory.resolve("sql-console-error.png"))
                 val tabs = cast(console.x { byJavaClass("javax.swing.JTabbedPane") }.waitFound().component, LiveTabs::class)
                 withContext(OnDispatcher.EDT) { tabs.setSelectedIndex(1) }
@@ -856,6 +910,7 @@ class IntellijUiScreenshotTest {
     }
 
     private fun assertCreateTableLayout(dialog: UiComponent) {
+        for (caption in listOf("Remove column", "Move up", "Move down")) dialog.x { byVisibleText(caption) }.waitFound()
         val grid = dialog.x(JTableUiComponent::class.java) { byJavaClass("com.intellij.ui.table.JBTable") }.waitFound()
         val preview = dialog.x { byAccessibleName("Create table SQL preview") }.waitFound()
         dialog.driver.withContext(OnDispatcher.EDT) {
@@ -875,11 +930,65 @@ class IntellijUiScreenshotTest {
         println("P2 Create Table: all headers fit; updated SQL preview starts at CREATE TABLE")
     }
 
+    private fun assertDriverSummary(dialog: UiComponent, expected: String) {
+        waitUntil("compact selected-driver summary") { dialog.hasSubtext(expected) }
+        val summary = dialog.x { byAccessibleName("Selected JDBC driver") }.waitFound()
+        dialog.driver.withContext(OnDispatcher.EDT) {
+            check(cast(summary.component, LiveLabel::class).getText() == expected)
+            val live = cast(summary.component, LiveSwingComponent::class)
+            check(summary.component.width >= live.getPreferredSize().getWidth()) { "Selected driver summary is clipped" }
+            val ratio = contrastRatio(live.getForeground().getRGB(), live.getBackground().getRGB())
+            check(ratio >= 4.5) { "Selected driver summary contrast is too low: $ratio" }
+            println("P3 driver summary: $expected; live palette contrast $ratio:1")
+        }
+    }
+
+    private fun assertFilterLayout(editor: UiComponent, rows: Int) {
+        val where = editor.x(JTextFieldUI::class.java) {
+            and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("WHERE"))
+        }.waitFound().component
+        val order = editor.x(JTextFieldUI::class.java) {
+            and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("ORDER BY"))
+        }.waitFound().component
+        val apply = editor.x { byAccessibleName("Apply filter and sort") }.waitFound().component
+        fun center(component: com.intellij.driver.sdk.ui.remote.Component) = component.getLocationOnScreen().y + component.height / 2
+        val first = center(where)
+        val second = center(order)
+        val action = center(apply)
+        when (rows) {
+            1 -> check(first == second && second == action) { "Filters and Apply must share one row: $first, $second, $action" }
+            2 -> check(first < second && second == action) { "Apply must share the second filter row: $first, $second, $action" }
+            3 -> check(first < second && second < action) { "Narrow filters must stack without clipping" }
+        }
+        check(where.width >= 80 && order.width >= 80) { "Filter fields must keep a usable width" }
+        println("P3 table filters: $rows rows; input widths ${where.width}, ${order.width}; Apply aligned")
+    }
+
+    private fun assertQueryOutcome(console: UiComponent, cancelled: Boolean) {
+        val status = console.x { byAccessibleName("SQL query status") }.waitFound()
+        val messages = console.x { byAccessibleName("SQL query messages") }.waitFound()
+        val heading = console.x { byVisibleText("SQL query") }.waitFound()
+        console.driver.withContext(OnDispatcher.EDT) {
+            val statusLabel = cast(status.component, LiveLabel::class)
+            val text = cast(messages.component, LiveTextArea::class).getText()
+            val normalColor = cast(heading.component, LiveSwingComponent::class).getForeground().getRGB()
+            val statusColor = cast(status.component, LiveSwingComponent::class).getForeground().getRGB()
+            if (cancelled) {
+                check(text.startsWith("Query cancelled") && !text.contains("Query failed"))
+                check(statusLabel.getIcon() == null && statusColor == normalColor) { "User cancellation must use normal text without the error glyph" }
+            } else {
+                check(text.startsWith("Query failed"))
+                check(statusLabel.getIcon() != null && statusColor != normalColor) { "Real query failures must retain error feedback" }
+            }
+        }
+        println("P3 SQL outcome: ${if (cancelled) "neutral cancellation" else "real failure retains error tone"}")
+    }
+
     private fun assertAlterTableLayout(dialog: UiComponent, tab: String, origin: Point?): Point {
         val label = when (tab) {
             "Add column" -> "Column name:"
             "Drop column" -> "Column to drop:"
-            "Rename table" -> "New Table name:"
+            "Rename table" -> "New table name:"
             else -> "Column:"
         }
         val field = dialog.x {
@@ -1082,11 +1191,12 @@ class IntellijUiScreenshotTest {
 
 @Remote("javax.swing.JFrame")
 interface LiveFrame {
-    fun repaint()
+    fun getRootPane(): LiveSwingComponent
 }
 
 @Remote("javax.swing.JComponent")
 interface LiveSwingComponent {
+    fun paintImmediately(x: Int, y: Int, width: Int, height: Int)
     fun isVisible(): Boolean
     fun getVisibleRect(): Rectangle
     fun getPreferredSize(): LiveDimension
@@ -1104,6 +1214,12 @@ interface LiveDimension {
 
 @Remote("java.awt.Color")
 interface LiveColor { fun getRGB(): Int }
+
+@Remote("javax.swing.JLabel")
+interface LiveLabel {
+    fun getText(): String
+    fun getIcon(): LiveIcon?
+}
 
 @Remote("java.awt.Font")
 interface LiveFont { fun isItalic(): Boolean }
@@ -1169,10 +1285,18 @@ interface LiveLafInfo {
 @Remote("javax.swing.JTabbedPane")
 interface LiveTabs {
     fun setSelectedIndex(index: Int)
+    fun getComponentAt(index: Int): LiveScrollPane
 }
+
+@Remote("javax.swing.JScrollPane")
+interface LiveScrollPane { fun getViewport(): LiveViewport }
+
+@Remote("javax.swing.JViewport")
+interface LiveViewport { fun getView(): LiveTableEditor }
 
 @Remote("javax.swing.JTable")
 interface LiveTableEditor {
+    fun getRowCount(): Int
     fun getColumnModel(): LiveColumnModel
     fun getTableHeader(): LiveTableHeader
     fun getCellRenderer(row: Int, column: Int): LiveCellRenderer

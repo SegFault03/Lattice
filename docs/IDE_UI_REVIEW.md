@@ -85,7 +85,7 @@ This is broad flow/state coverage, not an exhaustive combination of every databa
 
 Priorities: P1 blocks or misleads an operation; P2 materially affects readability or consistency; P3 is polish. Screenshot links below point to generated artifacts and become available after running the script. They are observations and proposed follow-up work, not production fixes made by this review.
 
-The subsequent [P1 implementation and real-IDE validation](UI_P1_FIXES.md) addresses the three P1 findings below. The approved [P2 implementation and validation](UI_P2_FIXES.md) addresses readability and consistency, including the remaining HSQLDB interruption limit. This review preserves the original evidence; P3 remains a separate approval phase.
+The subsequent [P1 implementation and real-IDE validation](UI_P1_FIXES.md) addresses the three P1 findings below. The approved [P2 implementation and validation](UI_P2_FIXES.md) addresses readability and consistency, including the remaining HSQLDB interruption limit. The [P3 implementation and validation](UI_P3_FIXES.md) addresses the five polish findings. This review preserves the original evidence.
 
 | Priority | Finding | Evidence / suggested improvement |
 |---|---|---|

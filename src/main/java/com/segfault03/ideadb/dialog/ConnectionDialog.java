@@ -203,7 +203,8 @@ public class ConnectionDialog extends DialogWrapper {
         driverSection.add(DatabaseUi.section("Driver"), BorderLayout.NORTH);
         JPanel driverBody = new JPanel(new BorderLayout(0, JBUI.scale(6)));
         JPanel summaryRow = new JPanel(new BorderLayout(JBUI.scale(8), 0));
-        driverSummary.setForeground(JBColor.namedColor("Label.infoForeground", new JBColor(0x63666C, 0xB5B8BD)));
+        driverSummary.setForeground(UIManager.getColor("Label.foreground"));
+        driverSummary.getAccessibleContext().setAccessibleName("Selected JDBC driver");
         summaryRow.add(driverSummary, BorderLayout.CENTER);
         summaryRow.add(driverToggle, BorderLayout.EAST);
         driverBody.add(summaryRow, BorderLayout.NORTH);
@@ -699,16 +700,23 @@ public class ConnectionDialog extends DialogWrapper {
         DatabaseType type = (DatabaseType) typeCombo.getSelectedItem();
         DriverSource source = (DriverSource)driverSourceCombo.getSelectedItem();
         if (source == null) return;
+        if (source == DriverSource.DOWNLOAD) refreshDownloadedDriverVersions(type);
         downloadDriverButton.setEnabled(!driverBusy && !connectionBusy);
         listVersionsButton.setEnabled(!driverBusy && !connectionBusy);
         String selectedDriver = switch (source) {
-            case BUNDLED -> formatDriverLabel(type, selectedBundledLabel(type));
-            case DOWNLOAD -> formatDriverLabel(type, selectedDriverVersion());
+            case BUNDLED -> selectedBundledLabel(type);
+            case DOWNLOAD -> selectedDriverVersion();
             case LOCAL_JAR -> selectedLocalDriverLabel(type);
         };
-        driverSummary.setText(type.getDisplayName() + " · " + source
-                + (selectedDriver.isBlank() ? "" : " · " + selectedDriver));
-        driverSummary.setToolTipText(driverSummary.getText());
+        String origin = switch (source) {
+            case BUNDLED -> bundledDriverCombo.getSelectedItem() instanceof InstalledDriver driver ? driver.kind().name() : "BUNDLED";
+            case DOWNLOAD -> downloadedDriverVersions.contains(selectedDriver) ? "DOWNLOADED"
+                    : discoveredDriverVersions.contains(selectedDriver) ? "DISCOVERED" : "DOWNLOAD";
+            case LOCAL_JAR -> "LOCAL JAR";
+        };
+        driverSummary.setText((selectedDriver.isBlank() ? source == DriverSource.LOCAL_JAR ? "Choose a JAR" : "Choose a version" : selectedDriver) + " · " + origin);
+        driverSummary.setToolTipText(formatDriverLabel(type, selectedDriver) + " · " + origin);
+        driverSummary.getAccessibleContext().setAccessibleDescription(driverSummary.getToolTipText());
         if (source == DriverSource.BUNDLED) {
             var selected = (InstalledDriver) bundledDriverCombo.getSelectedItem();
             String packaged = DriverStore.packagedVersion(type);
@@ -720,7 +728,6 @@ public class ConnectionDialog extends DialogWrapper {
                     + " is packaged with the plugin and ready to use.");
         } else if (source == DriverSource.DOWNLOAD) {
             String version = selectedDriverVersion();
-            refreshDownloadedDriverVersions(type);
             boolean alreadyDownloaded = downloadedDriverVersions.contains(version);
             boolean alreadyDiscovered = discoveredDriverVersions.contains(version);
             downloadDriverButton.setEnabled(!driverBusy && !connectionBusy && !alreadyDownloaded && !alreadyDiscovered);
@@ -779,7 +786,7 @@ public class ConnectionDialog extends DialogWrapper {
                     }
                 } catch (java.io.IOException ignored) { }
             }
-            return version.isBlank() ? name : formatDriverLabel(type, version);
+            return version.isBlank() ? name : version;
         } catch (java.nio.file.InvalidPathException | SecurityException ignored) {
             return "";
         }
