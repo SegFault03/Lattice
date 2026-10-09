@@ -33,11 +33,14 @@ class DatabaseSessionCancellationTest {
             Connection original = session.execute(connection -> {
                 try (var statement = connection.createStatement()) {
                     statement.execute("VALUES(1)");
-                    // HSQLDB's cancellation channel can end the server session even as a query finishes.
                     statement.cancel();
                 }
                 return connection;
             });
+            // Cancelling an already-finished statement may leave its session healthy, depending
+            // on server timing. Close this fixture's sockets explicitly to test the invalid
+            // branch deterministically; the server stays online for the reconnect assertion.
+            server.signalCloseAllServerConnections();
             assertFalse(original.isClosed(), "isClosed alone misses this server-side disconnect");
             assertTrue(session.discardInvalidConnection());
             assertTrue(original.isClosed());

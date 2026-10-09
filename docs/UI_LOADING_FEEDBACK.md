@@ -39,6 +39,8 @@ The query worker now waits for an in-flight JDBC cancellation to finish before d
 
 Regression tests exercise the actual HSQLDB server disconnect, a successful query on a fresh connection, preservation and rollback of a healthy manual transaction, and a cancellation that finishes after the query worker tries to detach. This does not improve HSQLDB's ability to interrupt a long aggregate promptly; that earlier driver limitation remains.
 
+The first cross-platform run exposed a test assumption: cancelling an already-finished HSQLDB statement does not always disconnect its session. The recovery test now explicitly closes its own fixture's server sockets before checking the invalid-session branch, while leaving the server online for reconnect. It retains a real JDBC connection and does not depend on driver timing or sleeps. The healthy-transaction test continues to verify that valid sessions are retained.
+
 ## Reusable validation
 
 ```sh
