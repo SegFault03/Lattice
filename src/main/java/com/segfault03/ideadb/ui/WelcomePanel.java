@@ -184,7 +184,7 @@ public class WelcomePanel extends JPanel implements AutoCloseable {
         } else if (configs.size() == 1) {
             DatabaseEditorManager.getInstance(project).openConsole(configs.get(0), null, null);
         } else {
-            JPopupMenu menu = new JPopupMenu();
+            JPopupMenu menu = DatabaseUi.popupMenu();
             for (ConnectionConfig config : configs) {
                 JMenuItem item = new JMenuItem(config.getName(), Icons.DATABASE);
                 item.addActionListener(e -> DatabaseEditorManager.getInstance(project).openConsole(config, null, null));

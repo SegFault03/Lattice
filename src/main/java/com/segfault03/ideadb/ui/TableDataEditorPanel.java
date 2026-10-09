@@ -225,7 +225,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         consoleBtn.addActionListener(e -> openSqlConsole());
 
         JButton optionsBtn = DatabaseUi.action("", AllIcons.Actions.MoreHorizontal, "Table options");
-        JPopupMenu options = new JPopupMenu();
+        JPopupMenu options = DatabaseUi.popupMenu();
         JMenuItem countItem = new JMenuItem("Count rows");
         countItem.addActionListener(e -> countRows());
         options.add(countItem);
@@ -248,7 +248,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         tableModel = new EditableTableModel();
         dataTable = new DatabaseTable(tableModel);
         dataTable.setDefaultRenderer(Object.class, new CellHighlightRenderer());
-        JPopupMenu cellMenu = new JPopupMenu();
+        JPopupMenu cellMenu = DatabaseUi.popupMenu();
         cellMenu.add(nullBtn);
         cellMenu.add(defaultBtn);
         dataTable.setComponentPopupMenu(cellMenu);
@@ -808,7 +808,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     }
 
     private void showExportMenu(Component invoker) {
-        JPopupMenu menu = new JPopupMenu();
+        JPopupMenu menu = DatabaseUi.popupMenu();
 
         addExportFormats(menu,"Current page (includes pending edits)",ExportScope.PAGE);
         addExportFormats(menu,"Selected rows (includes pending edits)",ExportScope.SELECTED);

@@ -13,7 +13,7 @@ Python helper scripts use Python's standard library and run on Windows, Linux an
 | `prepare-source-asset.py` | Download/check the pinned corresponding MySQL source archive | Network on first use |
 | `verify-plugin.py` | Check exact ZIP against an IntelliJ SDK | JDK 21; network on first use or `--ide-home` |
 | `capture-intellij-ui.sh` | Launch IDEA with the built plugin under Xvfb and capture the actual tool window | Linux; JDK 21; Xvfb and `xdpyinfo` (x11-utils), or a graphical display; network on first IDE build |
-| `review-intellij-ui.sh` | Capture connection, schema, table and SQL flows in all seven bundled IDE themes | Linux; JDK 21; Xvfb; x11-utils; xfwm4 or Openbox; Python 3; curl; network for real JDBC fixtures/downloads |
+| `review-intellij-ui.sh` | Capture real-IDE UI flows across bundled themes (seven by default), with optional focused styling checks | Linux; JDK 21; Xvfb; x11-utils; xfwm4 or Openbox; Python 3; curl; network for real JDBC fixtures/downloads |
 | `probe-hsqldb-cancellation.sh` | Measure real HSQLDB JDBC cancellation and subsequent connection usability in an isolated in-memory database | Bash; JDK 21; `timeout`; optional HSQLDB jar path (bundled 2.7.4 by default) |
 | `common.py` | Shared cache paths, Java and Gradle discovery | Imported helper |
 | `tests/` | Regression tests for development/release tooling | Git for history tests |
@@ -67,6 +67,16 @@ For the multi-flow, multi-theme UI suite and automatic fixture setup, run:
 ```
 
 Results are written under `build/ui-review/<theme-id>/` with screenshots, logs, JUnit results and runtime evidence. Linux runs use Xvfb at 1920×1080, 24-bit color and scale 1, with an available window manager for native dialog borders. Set `XVFB_DISPLAY` if `:99` is occupied. For the focused connection-field alignment pass, set `LATTICE_UI_INPUTS_ONLY=true`; set `LATTICE_UI_REVIEW_OUTPUT` to choose another results directory. The disposable HSQLDB cancellation probe is available as `./scripts/probe-hsqldb-cancellation.sh`.
+
+Set `LATTICE_UI_IDE_HOME` to an installed Linux IDEA directory to launch another version with its bundled JBR, while compilation stays on the pinned 2025.1 / Java 21 SDK. This applies to both real IDE scripts; direct Gradle users can pass `-Plattice.ui.ide.home=/path/to/idea`. The test verifies the actual theme after startup, captures open text/numeric cell editors, auto-refresh options and menus, checks painted white action glyphs, and exercises the explorer's native hover toolbar. IDEA 2026.2.3 also provides `Islands Light`, `Islands Dark` and `Islands Darcula`; pass those quoted IDs explicitly alongside the seven classic IDs when reviewing that version.
+
+For a faster review of connection-dialog spacing, explorer overflow, table editor/menu surfaces, auto-refresh sizing and active glyph colors, set `LATTICE_UI_STYLE_ONLY=true` (direct Gradle: `-Plattice.ui.styleOnly=true`). This still opens and edits the production UI inside the full IDE, then stops after those checks; omit it for the complete review.
+
+Linux commit and release CI run the complete Dark-theme review followed by the focused Light-theme review on the pinned IDE. Java and script tests continue to run on Linux, Windows and macOS. The newer-IDE/theme override is available for local compatibility reviews.
+
+```bash
+LATTICE_UI_IDE_HOME=/path/to/idea-2026.2.3 ./scripts/review-intellij-ui.sh ExperimentalLight ExperimentalLightWithLightHeader IntelliJ JetBrainsLightTheme "Islands Light" ExperimentalDark Darcula JetBrainsHighContrastTheme "Islands Dark" "Islands Darcula"
+```
 
 ## Quick local IDE deployment
 

@@ -203,6 +203,7 @@ public final class DatabaseInputs {
 
     private static class InputComboBox<E> extends JComboBox<E> implements SizedInput {
         private boolean initialized;
+        private JList<E> sizingList;
         InputComboBox() { initialize(); }
         InputComboBox(E[] items) { super(items); initialize(); }
         private void initialize() {
@@ -215,8 +216,33 @@ public final class DatabaseInputs {
             super.updateUI();
             if (initialized) style(this);
         }
-        @Override public Dimension getPreferredSize() { return inputSize(this, super.getPreferredSize()); }
-        @Override public Dimension getMinimumSize() { return inputSize(this, super.getMinimumSize()); }
+        @Override public Dimension getPreferredSize() {
+            Dimension size = inputSize(this, super.getPreferredSize());
+            if (!initialized || isEditable() || isPreferredSizeSet()) return size;
+            // Native light-theme delegates reserve additional renderer padding but
+            // can omit it from their preferred width when a custom border is used.
+            if (sizingList == null) sizingList = new JList<>();
+            sizingList.setFont(getFont());
+            int textWidth = 0;
+            E prototype = getPrototypeDisplayValue();
+            for (int index = 0; index < (prototype == null ? getItemCount() : 1); index++) {
+                E value = prototype == null ? getItemAt(index) : prototype;
+                Component rendered = getRenderer().getListCellRendererComponent(sizingList, value, -1, false, false);
+                textWidth = Math.max(textWidth, rendered.getPreferredSize().width);
+            }
+            int arrowWidth = height(this);
+            for (Component child : getComponents()) {
+                if (child instanceof JButton) arrowWidth = child.getPreferredSize().width;
+            }
+            Insets border = getInsets();
+            Insets padding = UIManager.getInsets("ComboBox.padding");
+            size.width = Math.max(size.width, textWidth + arrowWidth + border.left + border.right
+                    + (padding == null ? 0 : padding.left + padding.right));
+            return size;
+        }
+        @Override public Dimension getMinimumSize() {
+            return isMinimumSizeSet() ? inputSize(this, super.getMinimumSize()) : getPreferredSize();
+        }
         @Override public void paint(Graphics graphics) { paintRounded(this, graphics, super::paint); }
     }
 
@@ -268,6 +294,11 @@ public final class DatabaseInputs {
                 input = field;
                 input.putClientProperty("JComponent.outline", null);
                 style(input);
+                // JTable reuses plain Swing editors. Make their surface explicit;
+                // a transparent editor with our border skips native light-theme fill.
+                field.setOpaque(true);
+                field.setBackground(JBColor.namedColor("TextField.background", table.getBackground()));
+                field.setForeground(JBColor.namedColor("TextField.foreground", table.getForeground()));
                 Component rendered = table.getCellRenderer(row, column).getTableCellRendererComponent(
                         table, value, selected, false, row, column);
                 if (rendered instanceof JLabel label) field.setHorizontalAlignment(label.getHorizontalAlignment());

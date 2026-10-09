@@ -16,6 +16,8 @@ It paints the plugin's production Swing screens with fixture data and a headless
 
 It also writes `build/ui-preview/index.html` and a ZIP of the generated preview set. Open the gallery to inspect the captures before committing changed README images.
 
+Explorer previews use the production native action toolbar. The helper waits for action expansion before painting and fails if a toolbar has no visible actions.
+
 Use JDK 21 and run `./gradlew test` once to cache the IntelliJ SDK and UI-test runtime dependencies. On the first preview run, the script downloads checksum-verified FlatLaf into ignored `build/ui-preview/deps/`. In this headless Linux environment the preview selects an installed regular sans-serif font to avoid the host's italic logical-font fallback.
 
 Options:

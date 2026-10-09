@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Capture production UI flows in every bundled IDEA 2025.1 theme.
+# Capture production UI flows in IDEA's bundled themes (optional installed IDE).
 set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
@@ -33,7 +33,7 @@ if [[ ${#themes[@]} -eq 0 ]]; then
 fi
 for theme in "${themes[@]}"; do
     case "$theme" in
-        ExperimentalDark|ExperimentalLight|ExperimentalLightWithLightHeader|JetBrainsHighContrastTheme|Darcula|IntelliJ|JetBrainsLightTheme) ;;
+        ExperimentalDark|ExperimentalLight|ExperimentalLightWithLightHeader|JetBrainsHighContrastTheme|Darcula|IntelliJ|JetBrainsLightTheme|"Islands Dark"|"Islands Light"|"Islands Darcula") ;;
         *) echo "Unsupported theme: $theme" >&2; exit 2 ;;
     esac
     result_dir="$result_root/$theme"
@@ -50,6 +50,9 @@ for theme in "${themes[@]}"; do
     if [[ "${LATTICE_UI_INPUTS_ONLY:-false}" == true ]]; then
         version_args+=("-Plattice.ui.inputsOnly=true")
     fi
+    if [[ "${LATTICE_UI_STYLE_ONLY:-false}" == true ]]; then
+        version_args+=("-Plattice.ui.styleOnly=true")
+    fi
     ./scripts/capture-intellij-ui.sh "${version_args[@]}" -Plattice.ui.review=true -Plattice.ui.theme="$theme" \
         -Plattice.ui.output="$result_dir" 2>&1 | tee "$result_root/$theme.log"
     cp build/test-results/uiScreenshotTest/TEST-com.segfault03.ideadb.ui.IntellijUiScreenshotTest.xml "$result_dir/test-result.xml"
@@ -62,8 +65,8 @@ lines = ['# Real IntelliJ UI captures', '', 'Every image is a full virtual-deskt
 for directory in sorted(p for p in root.iterdir() if p.is_dir()):
     lines += [f'## {directory.name}', '']
     for png in sorted(directory.glob('*.png')):
-        lines.append(f'- [{png.stem}]({directory.name}/{png.name})')
-    lines += [f'- [Runtime evidence]({directory.name}/runtime-evidence.txt)', f'- [JUnit result]({directory.name}/test-result.xml)', '']
+        lines.append(f'- [{png.stem}](<{directory.name}/{png.name}>)')
+    lines += [f'- [Runtime evidence](<{directory.name}/runtime-evidence.txt>)', f'- [JUnit result](<{directory.name}/test-result.xml>)', '']
 (root / 'index.md').write_text('\n'.join(lines) + '\n')
 PY
 echo "Screenshots and live-runtime evidence: $result_root"

@@ -8,13 +8,14 @@ import javax.swing.*;
 import java.awt.*;
 import java.util.function.Consumer;
 
-/** Fixed-size explorer actions grouped like an IntelliJ tool window toolbar. */
+/** Explorer action state shared by the native IDE toolbar and Swing previews. */
 final class DatabaseExplorerToolbar extends JPanel {
     private final JButton add;
     private final JButton edit;
     private final JButton remove;
     private final JButton refresh;
     private final JButton console;
+    private final JButton help;
     private boolean hasConnections;
     private boolean busy;
     private TreeNodeData selection;
@@ -27,15 +28,26 @@ final class DatabaseExplorerToolbar extends JPanel {
                 JBUI.Borders.customLineBottom(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR),
                 JBUI.Borders.empty(6, 12)));
         add = button(AllIcons.General.Add, "Add connection…", null, true);
-        add.addActionListener(e -> addConnection.accept(add));
+        add.addActionListener(e -> addConnection.accept((Component)e.getSource()));
         edit = button(AllIcons.General.Settings, "Edit connection…", editConnection);
         remove = button(AllIcons.General.Remove, "Remove connection settings", removeConnection);
         separator();
         refresh = button(AllIcons.Actions.Refresh, "Refresh", refreshConnection);
         console = button(Icons.CONSOLE, "Open SQL Console", openConsole);
         separator();
-        button(AllIcons.General.ContextHelp, "Welcome to Lattice", showHelp);
+        help = button(AllIcons.General.ContextHelp, "Welcome to Lattice", showHelp);
         setHasConnections(false);
+    }
+
+    /** Use IDEA's single-row overflow arrow and hover popup in the live tool window. */
+    JComponent createComponent(JComponent target) {
+        removeAll(); // Transfer the existing production controls and their listeners.
+        JComponent toolbar = DatabaseActionToolbar.create(target, "Explorer actions",
+                add, edit, remove, null, refresh, console, null, help);
+        toolbar.setBorder(BorderFactory.createCompoundBorder(
+                JBUI.Borders.customLineBottom(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR),
+                toolbar.getBorder()));
+        return toolbar;
     }
 
     void setHasConnections(boolean hasConnections) {

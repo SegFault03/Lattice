@@ -19,9 +19,12 @@ public final class DatabaseUi {
 
     private DatabaseUi() {}
 
+    /** Native IDEA popup painting, palette, borders and window handling in every theme. */
+    public static JPopupMenu popupMenu() { return new com.intellij.openapi.ui.JBPopupMenu(); }
+
     /** Every connection entry point offers the same database choice. */
     public static JPopupMenu connectionMenu(Consumer<DatabaseType> choose) {
-        JPopupMenu menu = new JPopupMenu();
+        JPopupMenu menu = popupMenu();
         for (DatabaseType type : DatabaseType.values()) {
             JMenuItem item = new JMenuItem(type.getDisplayName() + "…");
             item.addActionListener(event -> choose.accept(type));
@@ -82,7 +85,7 @@ public final class DatabaseUi {
         Icon icon = source instanceof ActionButton action ? action.defaultIcon : source.getIcon();
         ActionButton copy = (ActionButton) action(source.getText(), icon, source.getToolTipText());
         copy.source = source;
-        copy.iconOnly = source.getIcon() != null && !source.getText().isEmpty();
+        copy.iconOnly = source.getIcon() != null && source.getText() != null && !source.getText().isEmpty();
         copy.copySourceState();
         copy.addActionListener(event -> {
             if (!source.isEnabled()) return;
@@ -145,7 +148,14 @@ public final class DatabaseUi {
             emphasisColor = color;
             setBackground(color);
             setForeground(color == null ? null : Color.WHITE);
-            setIcon(color == null || defaultIcon == null ? defaultIcon : IconUtil.colorize(defaultIcon, Color.WHITE));
+            // Colorize preserves source brightness: gray glyphs would stay gray on white.
+            // Filter only RGB, keeping the native icon's alpha, scale and antialiasing.
+            setIcon(color == null || defaultIcon == null ? defaultIcon : IconUtil.filterIcon(defaultIcon,
+                    () -> new java.awt.image.RGBImageFilter() {
+                        @Override public int filterRGB(int x, int y, int rgb) {
+                            return (rgb & 0xFF000000) | 0x00FFFFFF;
+                        }
+                    }, null));
             putClientProperty("lattice.action.emphasis", color);
             repaint();
         }

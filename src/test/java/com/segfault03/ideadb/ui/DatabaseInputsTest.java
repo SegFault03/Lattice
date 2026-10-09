@@ -7,6 +7,25 @@ import java.awt.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DatabaseInputsTest {
+    @Test void naturalComboWidthIncludesTheCaptionArrowAndThemePadding() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            Object previous = UIManager.get("ComboBox.padding");
+            try {
+                UIManager.put("ComboBox.padding", new Insets(0, 8, 0, 12));
+                JComboBox<String> combo = DatabaseInputs.comboBox(new String[]{"Auto: Off", "10s"});
+                for (int fontSize : new int[]{13, 22}) {
+                    combo.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, fontSize));
+                    int arrow = java.util.Arrays.stream(combo.getComponents()).filter(JButton.class::isInstance)
+                            .mapToInt(child -> child.getPreferredSize().width).max().orElse(DatabaseInputs.height(combo));
+                    int text = combo.getFontMetrics(combo.getFont()).stringWidth("Auto: Off");
+                    Insets border = combo.getInsets();
+                    assertTrue(combo.getPreferredSize().width >= text + arrow + border.left + border.right + 20);
+                    assertEquals(combo.getPreferredSize(), combo.getMinimumSize(), "Move the control to overflow instead of squeezing its caption");
+                }
+            } finally { UIManager.put("ComboBox.padding", previous); }
+        });
+    }
+
     @Test void overflowPickerUsesTheRealSelectionAndDetachesItsModelWhenClosed() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             JComboBox<String> source = DatabaseInputs.comboBox(new String[]{"Auto: Off", "10s"});
@@ -114,6 +133,9 @@ class DatabaseInputsTest {
             DatabaseInputs.styleTableEditors(table);
             assertTrue(table.editCellAt(0, 0));
             JTextField editor = (JTextField)table.getEditorComponent();
+            assertTrue(editor.isOpaque(), "The live table editor must paint its theme surface");
+            assertEquals(UIManager.getColor("TextField.background"), editor.getBackground());
+            assertEquals(UIManager.getColor("TextField.foreground"), editor.getForeground());
             editor.setText("invalid integer");
             assertFalse(table.getCellEditor().stopCellEditing());
             assertEquals(7, model.getValueAt(0, 0));

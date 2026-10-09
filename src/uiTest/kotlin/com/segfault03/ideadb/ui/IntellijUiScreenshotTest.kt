@@ -64,6 +64,7 @@ class IntellijUiScreenshotTest {
 
         val screenshotsDirectory = Path.of(requireNotNull(System.getProperty("ui.screenshot.dir")))
         val review = System.getProperty("ui.review.enabled").toBoolean()
+        val styleOnly = System.getProperty("ui.style.only").toBoolean()
         val themeId = System.getProperty("ui.theme.id", "ExperimentalDark")
         var downloadedButtonEnabledAfterModeSwitch: Boolean? = null
         screenshotsDirectory.toFile().deleteRecursively()
@@ -75,9 +76,18 @@ class IntellijUiScreenshotTest {
         check(listOf("9.0.0", "8.4.0", "8.0.33").all { version ->
             Files.isRegularFile(mavenRepository.resolve("com/mysql/mysql-connector-j/$version/mysql-connector-j-$version.jar"))
         }) { "Expected the MySQL Connector/J Maven fixtures in $mavenRepository" }
+        Files.createDirectories(projectDirectory.resolve(".idea"))
+        projectDirectory.resolve(".idea/workspace.xml").writeText("""
+            <project version="4"><component name="MavenImportPreferences">
+              <option name="generalSettings"><MavenGeneralSettings>
+                <option name="localRepository" value="${mavenRepository.toString().replace("&", "&amp;").replace("\"", "&quot;")}"/>
+              </MavenGeneralSettings></option>
+            </component></project>
+        """.trimIndent())
 
         val ideHome = Path.of(requireNotNull(System.getProperty("ui.ide.home")))
-        val ideInfo = IdeProductProvider.IC.copy(
+        val productCode = System.getProperty("ui.ide.product", "IC")
+        val ideInfo = (if (productCode == "IU") IdeProductProvider.IU else IdeProductProvider.IC).copy(
             buildNumber = requireNotNull(System.getProperty("ui.ide.build")),
             version = requireNotNull(System.getProperty("ui.ide.version")),
             getInstaller = { ExistingIdeInstaller(ideHome) },
@@ -91,10 +101,32 @@ class IntellijUiScreenshotTest {
         // saved connections so every run begins at the same real empty-state screen.
         Files.deleteIfExists(testContext.paths.configDir.resolve("options/LatticeSettings.xml"))
         Files.createDirectories(testContext.paths.configDir.resolve("options"))
+        // Starter's first-session marker triggers config migration and automatic trial
+        // plugin reloads in unified IDEA. Use a normal initialized test profile.
+        Files.deleteIfExists(testContext.paths.configDir.resolve("migrate.config"))
+        testContext.paths.configDir.resolve("options/ide.general.xml").writeText(
+            """<application><component name="GeneralSettings"><option name="showTipsOnStartup" value="false"/></component></application>""",
+        )
+        // IDEA's own ProxySelector supersedes JVM proxy flags. Configure the real
+        // HTTP Proxy settings in this isolated profile, preserving cloud routing.
+        val proxyAddress = System.getenv("HTTPS_PROXY") ?: System.getenv("HTTP_PROXY")
+        if (!proxyAddress.isNullOrBlank()) {
+            val proxy = java.net.URI.create(proxyAddress)
+            testContext.paths.configDir.resolve("options/proxy.settings.xml").writeText("""
+                <application><component name="HttpConfigurable">
+                  <option name="USE_HTTP_PROXY" value="true"/>
+                  <option name="PROXY_HOST" value="${proxy.host}"/>
+                  <option name="PROXY_PORT" value="${if (proxy.port < 0) 80 else proxy.port}"/>
+                  <option name="PROXY_EXCEPTIONS" value="localhost,127.0.0.1"/>
+                </component></application>
+            """.trimIndent())
+        }
         testContext.paths.configDir.resolve("options/laf.xml").writeText(
             """<application><component name="LafManager" autodetect="false"><laf themeId="$themeId"/></component></application>""",
         )
-        val jdbcFixture = if (review) HsqlUiFixture() else null
+        // The focused theme pass uses a real embedded DB. Delayed network probes
+        // and schema/export flows belong to the complete functional review.
+        val jdbcFixture = if (review && !styleOnly) HsqlUiFixture() else null
         try {
         testContext.apply {
             PluginConfigurator(this).installPluginFromPath(
@@ -103,9 +135,9 @@ class IntellijUiScreenshotTest {
         }.runIdeWithDriver().useDriverAndCloseIde {
             waitForIndicators(5.minutes)
             val laf = service(LiveLafManager::class)
-            // IDEA migrates this classic theme ID on startup in the new UI. Select
-            // the still-installed theme through the live platform API for this audit.
-            if (themeId == "JetBrainsLightTheme") {
+            // Newer IDEs migrate saved classic IDs to Islands on startup. Select the
+            // requested installed theme explicitly and verify what actually rendered.
+            if (laf.getCurrentUIThemeLookAndFeel().getId() != themeId) {
                 withContext(OnDispatcher.EDT) {
                     laf.setCurrentLookAndFeel(laf.findLaf(themeId), true)
                     laf.updateUI()
@@ -493,7 +525,8 @@ class IntellijUiScreenshotTest {
                 databaseTree.pathExists(*publicSchemaPath)
             }
             captureScreen(screenshotsDirectory.resolve("connected-explorer.png"))
-            if (review) {
+            assertExplorerOverflow(pluginRoot, frame, screenshotsDirectory)
+            if (review && !styleOnly) {
                 databaseTree.fixture.rightClickPath(connectionPath.joinToString(databaseTree.fixture.separator()))
                 captureScreen(screenshotsDirectory.resolve("connection-context-menu.png"))
                 frame.x { byVisibleText("Edit connection…") }.waitFound().click()
@@ -672,13 +705,19 @@ class IntellijUiScreenshotTest {
                 revertButton.click()
                 waitUntil("failed insert reverted without losing saved row") { dataGrid.rowCount() == 1 && !revertButton.component.isEnabled() }
             }
-            dataGrid.doubleClickCell(0, 0)
+            openCellEditor(dataGrid, 0, 0)
+            captureScreen(screenshotsDirectory.resolve("table-integer-cell-editing.png"))
+            assertEditorSurface(dataGrid)
             dataGrid.keyboard { enter() }
             waitUntil("opening and closing an unchanged integer cell stays clean") {
                 !commitButton.component.isEnabled() && !tableEditor.hasSubtext("invalid cell")
             }
             assertTrue(!revertButton.component.isEnabled(), "An unchanged cell should not enable Revert")
             captureScreen(screenshotsDirectory.resolve("table-edit-unchanged-value.png"))
+            openCellEditor(dataGrid, 0, 1)
+            captureScreen(screenshotsDirectory.resolve("table-text-cell-editing.png"))
+            assertEditorSurface(dataGrid)
+            dataGrid.keyboard { enter() }
 
             replaceCellValue(dataGrid, row = 0, column = 0, value = "not-an-integer")
             waitUntil("invalid integer is marked and blocks commit") {
@@ -710,7 +749,43 @@ class IntellijUiScreenshotTest {
                 tableEditor.hasSubtext("1 pending change") && commitButton.component.isEnabled()
             }
             captureScreen(screenshotsDirectory.resolve("table-edit-pending.png"))
+            assertActionContrast(commitButton)
             assertActionContrast(revertButton)
+            tableEditor.x { byAccessibleName("Table options") }.waitFound().click()
+            captureScreen(screenshotsDirectory.resolve("table-options-theme.png"))
+            assertPaintedSurface(frame.x { byVisibleText("Count rows") }.waitFound(), dataGrid, "table menu")
+            pressEscape()
+            val autoRefresh = tableEditor.x(JComboBoxUiComponent::class.java) {
+                and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"),
+                    byTooltip("Periodic auto-refresh interval"))
+            }.waitFound()
+            assertAutoRefreshFits(autoRefresh)
+            autoRefresh.click()
+            captureScreen(screenshotsDirectory.resolve("table-auto-refresh-options.png"))
+            pressEscape()
+            if (styleOnly) {
+                frame.resize(1000, 800)
+                openToolbarOverflow(tableEditor, "Table actions").also {
+                    captureScreen(screenshotsDirectory.resolve("table-narrow-toolbar-expanded-pending.png"))
+                    assertToolbarSingleRow(it, "expanded table")
+                    assertIconOnlyOverflow(tableEditor.x { byAccessibleName("Table actions") }.waitFound(), it)
+                    assertActionContrast(it.x { byAccessibleName("Commit pending changes to the database") }.waitFound())
+                    assertActionContrast(it.x { byAccessibleName("Revert pending changes") }.waitFound())
+                    closeToolbarOverflow(it)
+                }
+                Files.writeString(screenshotsDirectory.resolve("runtime-evidence.txt"), buildString {
+                    appendLine("IDE target: IntelliJ IDEA $productCode ${System.getProperty("ui.ide.version")} (${System.getProperty("ui.ide.build")})")
+                    appendLine("Actual IDE theme: ${actualTheme.getName()} (${actualTheme.getId()})")
+                    appendLine("Available IDE themes: $availableThemes")
+                    appendLine("UI driver: JetBrains Starter and Driver; real production DatabaseMainPanel, TableDataEditorPanel, DatabaseTable and JTable editors")
+                    appendLine("IDE JBR release: ${Files.readString(ideHome.resolve("jbr/release")).lineSequence().filter { it.startsWith("JAVA_VERSION=") || it.startsWith("IMPLEMENTOR=") }.joinToString(", ")}")
+                    appendLine("IDE display: ${displayBounds.width}x${displayBounds.height}; scale 1")
+                    appendLine("Verified: six explorer actions in native hover overflow and working Add Connection invoker; failed connection status; valid/invalid/unchanged table edits; text and integer editor theme surfaces; native menu background; full auto-refresh caption; white active action labels and painted glyphs in normal and overflow toolbars")
+                    appendLine("Scope: focused UI regressions; the default review continues through commit, export, alter-table and SQL flows")
+                })
+                println("Focused real IDE UI regression review passed: $themeId")
+                return@useDriverAndCloseIde
+            }
 
             commitButton.click()
             frame.x(DialogUiComponent::class.java) {
@@ -906,6 +981,8 @@ class IntellijUiScreenshotTest {
                     captureScreen(screenshotsDirectory.resolve("table-narrow-toolbar-expanded-pending.png"))
                     assertIconOnlyOverflow(tableEditor.x { byAccessibleName("Table actions") }.waitFound(), it)
                     assertTrue(it.x { byAccessibleName("Commit pending changes to the database") }.waitFound().component.isEnabled())
+                    assertActionContrast(it.x { byAccessibleName("Commit pending changes to the database") }.waitFound())
+                    assertActionContrast(it.x { byAccessibleName("Revert pending changes") }.waitFound())
                     it.x { byAccessibleName("Revert pending changes") }.waitFound().click()
                 }
                 waitUntil("narrow Revert restores row") { tableCellText(dataGrid, 0, 1) == "Ada Lovelace" }
@@ -1078,7 +1155,7 @@ class IntellijUiScreenshotTest {
             }
 
             val evidence = buildString {
-                appendLine("IDE target: IntelliJ IDEA Community ${System.getProperty("ui.ide.version")} (${System.getProperty("ui.ide.build")})")
+                appendLine("IDE target: IntelliJ IDEA $productCode ${System.getProperty("ui.ide.version")} (${System.getProperty("ui.ide.build")})")
                 appendLine("UI driver: JetBrains Starter and Driver")
                 appendLine("Actual IDE theme: ${actualTheme.getName()} (${actualTheme.getId()})")
                 appendLine("Available IDE themes: $availableThemes")
@@ -1119,11 +1196,17 @@ class IntellijUiScreenshotTest {
             action()
             waitUntil("visible busy feedback: $message") { root.hasSubtext(message) }
             fixture.awaitBlockedResponse()
-            val label = root.x { byVisibleText(message) }.waitFound()
+            // IDEA's optional plugin recommendation can cover the status bar.
+            root.driver.ui.xx { byVisibleText("Don't suggest again") }.list()
+                .filter { it.component.isShowing() }.forEach { it.click() }
+            // A tree renderer also exposes the loading text. Inspect the persistent
+            // status component, whose screen location and repaint lifecycle are real.
+            val label = root.xx { byAccessibleName("Database explorer status") }.list().firstOrNull()
+                ?: root.x { byVisibleText(message) }.waitFound()
             assertAnimatedBusy(label)
             // Confirm that the actual icon animates on screen, rather than merely having a spinner class.
             val point = label.component.getLocationOnScreen()
-            val region = Rectangle(point.x, point.y, 16, label.component.height)
+            val region = Rectangle(point.x, point.y, minOf(40, label.component.width), label.component.height)
             val robot = Robot()
             val first = robot.createScreenCapture(region)
             var changed = false
@@ -1300,9 +1383,69 @@ class IntellijUiScreenshotTest {
         button.driver.withContext(OnDispatcher.EDT) {
             val live = cast(button.component, LiveSwingComponent::class)
             val ratio = contrastRatio(live.getForeground().getRGB(), live.getBackground().getRGB())
-            check(ratio >= 4.5) { "Revert label contrast is too low: $ratio" }
-            println("P2 enabled Revert live palette contrast: $ratio:1")
+            check(live.getForeground().getRGB() == java.awt.Color.WHITE.rgb) { "Active action text must be white" }
+            check(ratio >= 4.5) { "Active action label contrast is too low: $ratio" }
+            println("Enabled action live palette contrast: $ratio:1")
         }
+        val point = button.component.getLocationOnScreen()
+        val icon = requireNotNull(button.driver.cast(button.component, LiveToolbarButton::class).getIcon())
+        val iconWidth = icon.getIconWidth()
+        val left = if (button.driver.cast(button.component, LiveToolbarButton::class).getText().isEmpty())
+            (button.component.width - iconWidth) / 2 else 7
+        val image = Robot().createScreenCapture(Rectangle(point.x + left,
+            point.y + (button.component.height - icon.getIconHeight()) / 2, iconWidth, icon.getIconHeight()))
+        val whitePixels = (0 until image.width).sumOf { x -> (0 until image.height).count { y ->
+            val rgb = image.getRGB(x, y)
+            // Thin native SVG strokes have few fully opaque pixels at scale 1.
+            // Their bright cores must exceed native gray glyphs (also in dark themes).
+            listOf((rgb shr 16) and 255, (rgb shr 8) and 255, rgb and 255).all { it >= 220 }
+        } }
+        check(whitePixels >= 5) { "Active icon is gray rather than white: $whitePixels white glyph pixels" }
+        println("Active glyph painted white in the live IDE: $whitePixels pixels")
+    }
+
+    private fun assertEditorSurface(grid: UiComponent) {
+        assertPaintedSurface(grid.x { byType("javax.swing.JTextField") }.waitFound(), grid, "cell editor")
+    }
+
+    private fun openCellEditor(grid: UiComponent, row: Int, column: Int) {
+        waitUntil("data grid ready for editing") { grid.component.isEnabled() }
+        grid.driver.withContext(OnDispatcher.EDT) {
+            val table = cast(grid.component, LiveTableEditor::class)
+            check(table.editCellAt(row, column)) { "The production editor did not open" }
+            cast(table.getEditorComponent(), LiveSwingComponent::class).requestFocusInWindow()
+        }
+    }
+
+    private fun assertPaintedSurface(component: UiComponent, grid: UiComponent, description: String) {
+        val background = component.driver.cast(component.component, LiveSwingComponent::class).getBackground().getRGB()
+        val gridBackground = grid.driver.cast(grid.component, LiveSwingComponent::class).getBackground().getRGB()
+        fun light(rgb: Int) = ((rgb shr 16) and 255) + ((rgb shr 8) and 255) + (rgb and 255) > 384
+        val point = component.component.getLocationOnScreen()
+        val pixels = Robot().createScreenCapture(Rectangle(point.x, point.y,
+            component.component.width, component.component.height))
+        // The dominant interior color is the surface, even for right-aligned
+        // numbers and a blinking caret. A single point can land on a text stroke.
+        val colors = mutableMapOf<Int, Int>()
+        for (x in 4 until pixels.width - 4) for (y in 4 until pixels.height - 4) {
+            val rgb = pixels.getRGB(x, y)
+            colors[rgb] = (colors[rgb] ?: 0) + 1
+        }
+        val painted = colors.maxBy { it.value }.key
+        check(light(background) == light(gridBackground) && light(painted) == light(gridBackground)) {
+            "$description has the wrong theme background: component=${background.toUInt().toString(16)}, painted=${painted.toUInt().toString(16)}, grid=${gridBackground.toUInt().toString(16)}"
+        }
+        println("Live $description surface: component=${background.toUInt().toString(16)}, painted=${painted.toUInt().toString(16)}")
+    }
+
+    private fun assertAutoRefreshFits(combo: UiComponent) {
+        val live = combo.driver.cast(combo.component, LiveSwingComponent::class)
+        val textWidth = live.getFontMetrics(live.getFont()).stringWidth("Auto: Off")
+        val arrow = combo.x { byType("javax.swing.JButton") }.waitFound()
+        check(combo.component.width - arrow.component.width - 16 >= textWidth) {
+            "Auto-refresh caption is squeezed: combo=${combo.component.width}, arrow=${arrow.component.width}, text=$textWidth"
+        }
+        println("Auto-refresh caption fits: combo=${combo.component.width}, arrow=${arrow.component.width}, text=$textWidth")
     }
 
     private fun contrastRatio(first: Int, second: Int): Double {
@@ -1349,6 +1492,41 @@ class IntellijUiScreenshotTest {
         val bounds = toolbar.component.getBounds()
         toolbar.moveMouse(Point(bounds.width - 16, bounds.height / 2))
         return editor.driver.ui.x { byType("com.intellij.openapi.actionSystem.impl.ActionToolbarImpl\$PopupToolbar") }.waitFound()
+    }
+
+    private fun assertExplorerOverflow(root: UiComponent, frame: IdeaFrameUI, directory: Path) {
+        val origin = root.component.getLocationOnScreen()
+        val originalWidth = root.component.width
+        val robot = Robot()
+        val dividerX = origin.x - 2
+        val dividerY = origin.y + root.component.height / 2
+        fun drag(from: Int, to: Int) {
+            robot.mouseMove(from, dividerY)
+            robot.mousePress(InputEvent.BUTTON1_DOWN_MASK)
+            repeat(10) { step -> robot.mouseMove(from + (to - from) * (step + 1) / 10, dividerY); Thread.sleep(20) }
+            robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
+            Thread.sleep(300)
+        }
+        drag(dividerX, dividerX + originalWidth - 170)
+        check(root.component.width < 210) { "The explorer resize did not constrain its toolbar: ${root.component.width}" }
+        captureScreen(directory.resolve("explorer-narrow.png"))
+        val toolbar = openToolbarOverflow(root, "Explorer actions")
+        captureScreen(directory.resolve("explorer-narrow-toolbar-expanded.png"))
+        for (name in listOf("Add connection…", "Edit connection…", "Remove connection settings", "Refresh", "Open SQL Console", "Welcome to Lattice")) {
+            val button = toolbar.x { byAccessibleName(name) }.waitFound()
+            val live = toolbar.driver.cast(button.component, LiveSwingComponent::class)
+            check(live.getVisibleRect() == Rectangle(0, 0, button.component.width, button.component.height)) {
+                "The explorer hover toolbar clips $name"
+            }
+        }
+        // Exercise an actual mirrored action and its popup invoker, then cancel.
+        toolbar.x { byAccessibleName("Add connection…") }.waitFound().click()
+        frame.x { byVisibleText("MySQL…") }.waitFound().click()
+        frame.x(DialogUiComponent::class.java) { byTitle("New connection") }.waitFound().pressButton("Cancel")
+        closeToolbarOverflow(toolbar)
+        drag(root.component.getLocationOnScreen().x - 2, dividerX)
+        waitUntil("explorer width restored") { kotlin.math.abs(root.component.width - originalWidth) <= 3 }
+        println("Native explorer overflow: all six actions visible at 170px; mirrored Add connection opens the production dialog")
     }
 
     private fun closeToolbarOverflow(toolbar: UiComponent) {
@@ -1525,7 +1703,11 @@ interface LiveSwingComponent {
     fun getForeground(): LiveColor
     fun getBackground(): LiveColor
     fun getFont(): LiveFont
+    fun getFontMetrics(font: LiveFont): LiveFontMetrics
 }
+
+@Remote("java.awt.FontMetrics")
+interface LiveFontMetrics { fun stringWidth(text: String): Int }
 
 @Remote("java.awt.Dimension")
 interface LiveDimension {
@@ -1600,7 +1782,10 @@ interface LiveButtonModel {
 }
 
 @Remote("javax.swing.Icon")
-interface LiveIcon
+interface LiveIcon {
+    fun getIconWidth(): Int
+    fun getIconHeight(): Int
+}
 
 @Remote("java.lang.Object")
 interface LiveObject { fun getClass(): LiveClass }

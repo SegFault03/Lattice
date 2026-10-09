@@ -4,7 +4,7 @@
 
 Connect this checkout to the intended GitHub repository and push the release-preparation commit. Ensure the workflow is present on the repository's default branch so its manual Run workflow option is available. Enable Actions and private vulnerability reporting in the repository settings. The workflow uses the repository's `GITHUB_TOKEN`; the publish job requests `contents: write`. No personal access token or Marketplace secret is required for GitHub Releases.
 
-Run **Build, test and release → Run workflow** on the intended branch to validate the hosted pipeline. Manual runs never publish. Review its test and compatibility reports. The Linux build job also exercises the production UI inside IntelliJ IDEA in Dark theme. Inspect its retained screenshots before releasing.
+Run **Build, test and release → Run workflow** on the intended branch to validate the hosted pipeline. Manual runs never publish. Review its test and compatibility reports. The Linux build job also runs the complete real-IDE UI review in Dark theme and the focused styling review in Light theme. Inspect its retained screenshots before releasing.
 
 ## Prepare a version
 
@@ -28,7 +28,7 @@ The tag workflow:
 1. Checks out full Git history and validates the version/tag and patch notes.
 2. Runs the Python release-tool tests and Gradle pure/live regression suites with fresh MySQL 8.4 and in-memory HSQLDB fixtures.
 3. Builds `Lattice-X.Y.Z.zip` against IntelliJ 2025.1 / Java 21; embeds the tag version, patch notes and license notices.
-4. Runs the real IntelliJ UI scenario in Dark theme at the release version, validates archive paths, descriptor, bundled drivers/notices and bytecode, then generates SHA-256 asset checksums. The source-preparation step supplies the actual archive filename to validation, artifact upload and publication.
+4. Runs the complete real IntelliJ UI scenario in Dark theme and the focused Light-theme review at the release version, validates archive paths, descriptor, bundled drivers/notices and bytecode, then generates SHA-256 asset checksums. The source-preparation step supplies the actual archive filename to validation, artifact upload and publication.
 5. Verifies that exact ZIP against IDEA 2025.1, 2025.2 and 2025.3 in separate jobs with checksum-verified official SDK downloads. Every verdict must be Compatible.
 6. Runs the JDBC/Java 8 matrix and Windows/macOS baseline checks; publishes a GitHub Release only when every build/test/verification job succeeds.
 

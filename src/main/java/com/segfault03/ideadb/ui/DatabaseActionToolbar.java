@@ -77,7 +77,8 @@ public final class DatabaseActionToolbar {
             else throw new IllegalArgumentException("Unsupported toolbar control: " + source);
             JComponent result = control;
             if (label != null) result = DatabaseUi.labeledInput(new JBLabel(label), control);
-            else if (control instanceof JButton && source instanceof JButton button && !button.getText().isEmpty()) {
+            else if (control instanceof JButton && source instanceof JButton button
+                    && button.getText() != null && !button.getText().isEmpty()) {
                 JPanel padded = new JPanel(new BorderLayout());
                 padded.setOpaque(false);
                 padded.setBorder(JBUI.Borders.empty(0, 2));

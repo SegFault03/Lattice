@@ -54,8 +54,23 @@ public final class UiPreview {
         for (Component component : container.getComponents())
             if (component instanceof Container nested) layout(nested);
     }
-    static void updateToolbars(Container container) {
-        if (container instanceof com.intellij.openapi.actionSystem.ActionToolbar toolbar)
+    static void updateToolbars(Container container) throws Exception {
+        if (container instanceof com.intellij.openapi.actionSystem.impl.ActionToolbarImpl toolbar) {
+            // Native action expansion can finish asynchronously, especially for the
+            // first toolbar. Pump the test event queue before offscreen layout/paint.
+            var update = toolbar.updateActionsAsync();
+            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(15);
+            while (!update.isDone()) {
+                com.intellij.util.ui.UIUtil.dispatchAllInvocationEvents();
+                try { update.get(10, java.util.concurrent.TimeUnit.MILLISECONDS); }
+                catch (java.util.concurrent.TimeoutException timeout) {
+                    if (System.nanoTime() >= deadline) throw timeout;
+                }
+            }
+            update.get(); // Propagate action expansion errors rather than painting an empty toolbar.
+            if (!toolbar.hasVisibleActions())
+                throw new AssertionError("Preview toolbar did not populate: " + toolbar.getPlace());
+        } else if (container instanceof com.intellij.openapi.actionSystem.ActionToolbar toolbar)
             toolbar.updateActionsImmediately();
         for (Component component : container.getComponents())
             if (component instanceof Container nested) updateToolbars(nested);
@@ -82,6 +97,24 @@ public final class UiPreview {
         config.setDatabaseName("shop");
         config.setUser(type == DatabaseType.MYSQL ? "developer" : "SA");
         return config;
+    }
+    static ConnectionDialog connectionDialog(ConnectionConfig config, boolean newConnection) throws Exception {
+        ConnectionDialog dialog = new ConnectionDialog(null, config, newConnection);
+        refreshPreviewDrivers(dialog);
+        return dialog;
+    }
+    static void refreshPreviewDrivers(ConnectionDialog dialog) throws Exception {
+        // Preview background work is blocked. Supply the actual local fixture
+        // inventory and finish discovery before checking/painting ready controls.
+        @SuppressWarnings("unchecked") Map<DatabaseType, List<InstalledDriver>> inventory =
+                (Map<DatabaseType, List<InstalledDriver>>)field(dialog, "driverInventory");
+        for (DatabaseType type : DatabaseType.values())
+            inventory.put(type, com.segfault03.ideadb.service.DriverStore.installedInRepository(
+                    type, output.resolve("fixture-maven-repository")));
+        Field busy = ConnectionDialog.class.getDeclaredField("discoveryBusy");
+        busy.setAccessible(true);
+        busy.setBoolean(dialog, false);
+        invoke(dialog, "refillDriverVersions", new Class<?>[0]);
     }
     static void verifyInputs(Container parent) {
         for (Component child : parent.getComponents()) {
@@ -183,7 +216,7 @@ public final class UiPreview {
         if (variant.equals("driver-local")) { config.setDriverSource(DriverSource.LOCAL_JAR); config.setDriverJarPath("/home/developer/drivers/mysql-connector-j.jar"); }
         if (variant.equals("mysql-incomplete")) config.setUser("");
         if (variant.equals("hsql-incomplete")) config.setDatabaseName("");
-        ConnectionDialog dialog = new ConnectionDialog(null, config, variant.equals("new"));
+        ConnectionDialog dialog = connectionDialog(config, variant.equals("new"));
         if (variant.endsWith("bundled-expanded") || variant.equals("mysql-collapsed-after-expansion")) {
             JPanel root = (JPanel)field(dialog, "rootPanel");
             int collapsed = root.getPreferredSize().height;
@@ -269,7 +302,7 @@ public final class UiPreview {
         return -1;
     }
     static void verifyConnectionReadiness() throws Exception {
-        ConnectionDialog dialog = new ConnectionDialog(null, config(DatabaseType.MYSQL), true);
+        ConnectionDialog dialog = connectionDialog(config(DatabaseType.MYSQL), true);
         JButton test = (JButton)field(dialog, "testButton");
         JTextField user = (JTextField)field(dialog, "mysqlUserField");
         user.setText("");
@@ -295,11 +328,11 @@ public final class UiPreview {
         java.nio.file.Files.copy(Path.of("lib", "mysql-connector-j-26.7.0.jar"), retained, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         var bundled = (JComboBox<?>)field(dialog, "bundledDriverCombo");
         // The dialog was built before the file existed; a refresh must pick it up like a new download does.
-        invoke(dialog, "refillBundledDrivers", new Class<?>[0]);
+        refreshPreviewDrivers(dialog);
         if (retainedIndex(bundled) < 0) throw new AssertionError("Stored driver must appear in the bundled list");
         bundled.setSelectedIndex(retainedIndex(bundled));
         if (!test.isEnabled()) throw new AssertionError("A stored driver must allow testing without downloading");
-        invoke(dialog, "refillBundledDrivers", new Class<?>[0]);
+        refreshPreviewDrivers(dialog);
         if (bundled.getSelectedIndex() != retainedIndex(bundled))
             throw new AssertionError("Rebuilding the bundled list must keep the stored driver selected");
         ((JRadioButton)field(dialog, "customUrlRadio")).doClick(0);
@@ -563,7 +596,7 @@ public final class UiPreview {
 
     static void renderFeatured(String theme) throws Exception {
         render(ExplorerPreview.create(config(DatabaseType.MYSQL), false), theme + "-side-panel-340", 340, 620);
-        ConnectionDialog dialog = new ConnectionDialog(null, config(DatabaseType.MYSQL), true);
+        ConnectionDialog dialog = connectionDialog(config(DatabaseType.MYSQL), true);
         JComponent connection = dialog.previewPanel();
         render(connection, theme + "-connection-mysql-600", 600, connection.getPreferredSize().height);
         render(console(), theme + "-sql-console-1100", 1100, 620);

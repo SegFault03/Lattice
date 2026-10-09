@@ -80,7 +80,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 this::editSelectedConnection, this::removeSelectedConnection,
                 this::refreshSelectedNode, this::openConsoleForSelected,
                 () -> DatabaseEditorManager.getInstance(project).openWelcome());
-        add(toolbar, BorderLayout.NORTH);
+        add(toolbar.createComponent(this), BorderLayout.NORTH);
         setPreferredSize(JBUI.size(260, 400));
 
         // Database Tree
@@ -213,7 +213,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         if (!(uo instanceof TreeNodeData)) return;
         TreeNodeData data = (TreeNodeData) uo;
 
-        JPopupMenu menu = new JPopupMenu();
+        JPopupMenu menu = DatabaseUi.popupMenu();
 
         switch (data.getType()) {
             case CONNECTION: {

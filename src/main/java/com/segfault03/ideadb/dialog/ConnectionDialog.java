@@ -359,12 +359,13 @@ public class ConnectionDialog extends DialogWrapper {
         JPanel south = new JPanel(new BorderLayout(0, JBUI.scale(6)));
         south.setBorder(JBUI.Borders.empty(0, 8, 0, 8));
         testStatusLabel.setFont(testStatusLabel.getFont().deriveFont(Font.PLAIN));
+        testStatusLabel.setBorder(JBUI.Borders.empty(6, 0, 0, 0));
         testStatusLabel.setVisible(false);
         south.add(testStatusLabel, BorderLayout.NORTH);
         testButton.addActionListener(e -> doTestConnection());
         JPanel actions = new JPanel(new BorderLayout(JBUI.scale(12), JBUI.scale(6)));
         actions.setBorder(BorderFactory.createCompoundBorder(
-                JBUI.Borders.empty(24, 0, 0, 0),
+                JBUI.Borders.empty(10, 0, 0, 0),
                 BorderFactory.createCompoundBorder(
                         JBUI.Borders.customLineTop(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR),
                         JBUI.Borders.empty(12, 0, 0, 0))));

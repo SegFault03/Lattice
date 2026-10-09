@@ -169,11 +169,23 @@ intellijPlatformTesting.testIdeUi.register("uiScreenshotTest") {
         systemProperty("ui.theme.id", providers.gradleProperty("lattice.ui.theme").orElse("ExperimentalDark").get())
         systemProperty("ui.review.enabled", providers.gradleProperty("lattice.ui.review").orElse("false").get())
         systemProperty("ui.inputs.only", providers.gradleProperty("lattice.ui.inputsOnly").orElse("false").get())
+        systemProperty("ui.style.only", providers.gradleProperty("lattice.ui.styleOnly").orElse("false").get())
         systemProperty("ui.maven.repository", layout.buildDirectory.dir("ui-test-maven/repository").get().asFile.absolutePath)
         val ide = tasks.named<RunIdeTask>("runIde").get()
-        systemProperty("ui.ide.home", ide.platformPath.toString())
-        systemProperty("ui.ide.build", ide.productInfo.buildNumber)
-        systemProperty("ui.ide.version", ide.productInfo.version)
+        // Launch a newer installed IDE without changing the plugin's compilation SDK.
+        val uiIdeHome = providers.gradleProperty("lattice.ui.ide.home").orNull
+        if (uiIdeHome == null) {
+            systemProperty("ui.ide.home", ide.platformPath.toString())
+            systemProperty("ui.ide.build", ide.productInfo.buildNumber)
+            systemProperty("ui.ide.version", ide.productInfo.version)
+            systemProperty("ui.ide.product", ide.productInfo.productCode)
+        } else {
+            val info = groovy.json.JsonSlurper().parse(file("$uiIdeHome/product-info.json")) as Map<*, *>
+            systemProperty("ui.ide.home", file(uiIdeHome).absolutePath)
+            systemProperty("ui.ide.build", requireNotNull(info["buildNumber"]).toString())
+            systemProperty("ui.ide.version", requireNotNull(info["version"]).toString())
+            systemProperty("ui.ide.product", requireNotNull(info["productCode"]).toString())
+        }
         testLogging {
             events("passed", "skipped", "failed")
             showStandardStreams = true

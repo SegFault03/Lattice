@@ -93,4 +93,8 @@ else
     echo "Using existing display $DISPLAY; install Xvfb for the deterministic 1920x1080 run." >&2
 fi
 
-./gradlew uiScreenshotTest "$@"
+ide_args=()
+if [[ -n "${LATTICE_UI_IDE_HOME:-}" ]]; then
+    ide_args+=("-Plattice.ui.ide.home=$LATTICE_UI_IDE_HOME")
+fi
+./gradlew uiScreenshotTest "${ide_args[@]}" "$@"

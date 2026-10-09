@@ -7,6 +7,32 @@ import java.awt.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DatabaseUiTest {
+    @Test void emphasizedGlyphIsWhiteRatherThanGrayAndPreservesTransparency() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            Icon gray = new Icon() {
+                public int getIconWidth() { return 2; }
+                public int getIconHeight() { return 1; }
+                public void paintIcon(Component component, Graphics graphics, int x, int y) {
+                    graphics.setColor(new Color(100, 100, 100));
+                    graphics.fillRect(x, y, 1, 1);
+                    graphics.setColor(new Color(50, 50, 50, 128));
+                    graphics.fillRect(x + 1, y, 1, 1);
+                }
+            };
+            JButton button = DatabaseUi.action("Commit", gray, "Commit");
+            DatabaseUi.setActionEmphasis(button, DatabaseUi.POSITIVE_ACTION_COLOR);
+            java.awt.image.BufferedImage image = new java.awt.image.BufferedImage(2, 1,
+                    java.awt.image.BufferedImage.TYPE_INT_ARGB);
+            Graphics2D graphics = image.createGraphics();
+            try { button.getIcon().paintIcon(button, graphics, 0, 0); }
+            finally { graphics.dispose(); }
+            assertEquals(0xFFFFFFFF, image.getRGB(0, 0), "Opaque gray must become opaque white");
+            assertEquals(0x80FFFFFF, image.getRGB(1, 0), "Antialiasing alpha must be preserved");
+            DatabaseUi.setActionEmphasis(button, null);
+            assertSame(gray, button.getIcon(), "Inactive actions must restore the native glyph");
+        });
+    }
+
     @Test void nativeToolbarPresentationTracksTheEmphasizedIconAndWhiteLabel() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             JButton source = DatabaseUi.action("Commit", com.intellij.icons.AllIcons.Actions.Checked, "Commit changes");

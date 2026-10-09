@@ -103,7 +103,7 @@ jobs:
           python3 scripts/test.py --live --hsqldb --build
           --version "$RELEASE_VERSION"
           --notes-file build/release/patch-notes.html
-      - name: Render production UI inside IntelliJ IDEA
+      - name: Render dark and light production UI inside IntelliJ IDEA
         env:
           LATTICE_UI_PLUGIN_VERSION: ${{ steps.metadata.outputs.version }}
           LATTICE_UI_RELEASE_NOTES_FILE: build/release/patch-notes.html
@@ -111,6 +111,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y xvfb xfwm4 x11-utils
           ./scripts/review-intellij-ui.sh ExperimentalDark
+          LATTICE_UI_STYLE_ONLY=true ./scripts/review-intellij-ui.sh ExperimentalLight
       - name: Prepare corresponding source asset
         id: source
         run: python3 scripts/prepare-source-asset.py --github-output "$GITHUB_OUTPUT"
