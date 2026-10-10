@@ -110,8 +110,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb xfwm4 x11-utils
-          ./scripts/review-intellij-ui.sh ExperimentalDark
-          LATTICE_UI_STYLE_ONLY=true ./scripts/review-intellij-ui.sh ExperimentalLight
+          ./scripts/linux/review-intellij-ui.sh ExperimentalDark
+          LATTICE_UI_STYLE_ONLY=true ./scripts/linux/review-intellij-ui.sh ExperimentalLight
       - name: Prepare corresponding source asset
         id: source
         run: python3 scripts/prepare-source-asset.py --github-output "$GITHUB_OUTPUT"

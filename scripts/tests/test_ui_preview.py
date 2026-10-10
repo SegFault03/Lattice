@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 import zipfile
+from unittest.mock import patch
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
@@ -14,6 +15,12 @@ spec.loader.exec_module(preview)
 
 
 class UiPreviewTests(unittest.TestCase):
+    def test_gradle_wrapper_command_matches_host(self):
+        with patch.object(preview.os, 'name', 'nt'):
+            self.assertEqual(r'.\gradlew.bat', preview.gradle_wrapper())
+        with patch.object(preview.os, 'name', 'posix'):
+            self.assertEqual('./gradlew', preview.gradle_wrapper())
+
     def test_cached_sdk_supports_macos_app_and_linux_windows_layouts(self):
         for suffix in ('', 'Contents', 'IntelliJ IDEA CE.app/Contents', 'idea-IC-251'):
             with self.subTest(suffix=suffix), tempfile.TemporaryDirectory() as temporary:

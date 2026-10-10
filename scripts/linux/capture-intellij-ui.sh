@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$repo_root"
-
-if [[ -z "${JAVA_HOME:-}" && -x "$repo_root/../.jdk21/bin/javac" ]]; then
-    export JAVA_HOME="$repo_root/../.jdk21"
-    export PATH="$JAVA_HOME/bin:$PATH"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+if [[ "${LATTICE_CAPTURE_SUPERVISED:-}" != 1 ]]; then
+    exec python3 "$repo_root/scripts/processes.py" --command -- env LATTICE_CAPTURE_SUPERVISED=1 bash "${BASH_SOURCE[0]}" "$@"
 fi
+cd "$repo_root"
 
 gradle_jvm_options="${GRADLE_OPTS:-}"
 proxy_url="${HTTPS_PROXY:-${https_proxy:-${HTTP_PROXY:-${http_proxy:-}}}}"
@@ -97,4 +95,4 @@ ide_args=()
 if [[ -n "${LATTICE_UI_IDE_HOME:-}" ]]; then
     ide_args+=("-Plattice.ui.ide.home=$LATTICE_UI_IDE_HOME")
 fi
-./gradlew uiScreenshotTest "${ide_args[@]}" "$@"
+./gradlew --no-daemon uiScreenshotTest "${ide_args[@]}" "$@"

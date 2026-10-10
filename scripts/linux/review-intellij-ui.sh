@@ -1,8 +1,21 @@
 #!/usr/bin/env bash
 # Capture production UI flows in IDEA's bundled themes (optional installed IDE).
 set -euo pipefail
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+if [[ "${LATTICE_REVIEW_SUPERVISED:-}" != 1 ]]; then
+    exec python3 "$repo_root/scripts/processes.py" --command -- env LATTICE_REVIEW_SUPERVISED=1 bash "${BASH_SOURCE[0]}" "$@"
+fi
 cd "$repo_root"
+themes=("$@")
+if [[ ${#themes[@]} -eq 0 ]]; then
+    themes=(ExperimentalDark ExperimentalLight ExperimentalLightWithLightHeader JetBrainsHighContrastTheme Darcula IntelliJ JetBrainsLightTheme)
+fi
+for theme in "${themes[@]}"; do
+    case "$theme" in
+        ExperimentalDark|ExperimentalLight|ExperimentalLightWithLightHeader|JetBrainsHighContrastTheme|Darcula|IntelliJ|JetBrainsLightTheme|"Islands Dark"|"Islands Light"|"Islands Darcula") ;;
+        *) echo "Unsupported theme: $theme" >&2; exit 2 ;;
+    esac
+done
 export LATTICE_UI_MAVEN_REPOSITORY="$repo_root/build/ui-test-maven/repository"
 
 fetch_jar() {
@@ -24,18 +37,10 @@ fetch_jar org/hsqldb/hsqldb/2.7.3/hsqldb-2.7.3-jdk8.jar
 fetch_jar org/hsqldb/hsqldb/2.6.1/hsqldb-2.6.1-jdk8.jar
 fetch_jar org/hsqldb/hsqldb/2.4.1/hsqldb-2.4.1.jar
 
-themes=("$@")
 result_root="${LATTICE_UI_REVIEW_OUTPUT:-$repo_root/build/ui-review}"
 mkdir -p "$result_root"
 result_root="$(cd "$result_root" && pwd)"
-if [[ ${#themes[@]} -eq 0 ]]; then
-    themes=(ExperimentalDark ExperimentalLight ExperimentalLightWithLightHeader JetBrainsHighContrastTheme Darcula IntelliJ JetBrainsLightTheme)
-fi
 for theme in "${themes[@]}"; do
-    case "$theme" in
-        ExperimentalDark|ExperimentalLight|ExperimentalLightWithLightHeader|JetBrainsHighContrastTheme|Darcula|IntelliJ|JetBrainsLightTheme|"Islands Dark"|"Islands Light"|"Islands Darcula") ;;
-        *) echo "Unsupported theme: $theme" >&2; exit 2 ;;
-    esac
     result_dir="$result_root/$theme"
     mkdir -p "$result_dir"
     # Each theme uses the same isolated test project and a fresh IDE system sandbox.
@@ -53,7 +58,7 @@ for theme in "${themes[@]}"; do
     if [[ "${LATTICE_UI_STYLE_ONLY:-false}" == true ]]; then
         version_args+=("-Plattice.ui.styleOnly=true")
     fi
-    ./scripts/capture-intellij-ui.sh "${version_args[@]}" -Plattice.ui.review=true -Plattice.ui.theme="$theme" \
+    ./scripts/linux/capture-intellij-ui.sh "${version_args[@]}" -Plattice.ui.review=true -Plattice.ui.theme="$theme" \
         -Plattice.ui.output="$result_dir" 2>&1 | tee "$result_root/$theme.log"
     cp build/test-results/uiScreenshotTest/TEST-com.segfault03.ideadb.ui.IntellijUiScreenshotTest.xml "$result_dir/test-result.xml"
 done

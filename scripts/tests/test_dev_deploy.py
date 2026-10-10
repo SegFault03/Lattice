@@ -126,9 +126,9 @@ class DeploymentTests(unittest.TestCase):
 
     @unittest.skipUnless(os.name == "nt", "Windows native argument parser")
     def test_windows_command_line_preserves_paths_with_spaces(self):
-        argv = deploy.windows_arguments('"C:/Program Files/IDEA/bin/idea64.exe" "-Didea.plugins.path=C:/Users/test user/plugins"')
+        argv = deploy.windows_arguments('"C:/Program Files/IDEA/bin/idea64.exe" "-Didea.plugins.path=C:/Profiles/test user/plugins"')
         self.assertEqual("C:/Program Files/IDEA/bin/idea64.exe", argv[0])
-        self.assertEqual("C:/Users/test user/plugins", deploy.vm_properties(argv)["idea.plugins.path"])
+        self.assertEqual("C:/Profiles/test user/plugins", deploy.vm_properties(argv)["idea.plugins.path"])
 
     def test_default_paths_all_platforms_and_linux_xdg(self):
         home, selector = self.root / "profile", "IdeaIC2025.1"

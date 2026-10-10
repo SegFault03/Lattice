@@ -1,4 +1,4 @@
-"""Regression checks for the Linux one-shot validation runner."""
+"""Regression checks for the Linux/Windows one-shot validation runner."""
 import importlib.util
 from pathlib import Path
 import sys
@@ -8,6 +8,7 @@ from argparse import Namespace
 from unittest.mock import patch
 
 SCRIPTS = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(SCRIPTS))
 spec = importlib.util.spec_from_file_location("one_shot", SCRIPTS / "one-shot-test.py")
 one_shot = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(one_shot)
@@ -51,10 +52,31 @@ class OneShotTests(unittest.TestCase):
             for name in ("out", "build", ".gradle"):
                 self.assertFalse((copied / name).exists(), "Isolated validation must not clone generated IDEs/caches")
 
-    def test_linux_only_guard_rejects_other_platforms(self):
+    def test_supported_host_guard_rejects_other_platforms(self):
         with patch.object(one_shot.sys, "platform", "darwin"):
-            with self.assertRaisesRegex(one_shot.RunnerError, "Linux only"):
+            with self.assertRaisesRegex(one_shot.RunnerError, "Linux and Windows only"):
                 one_shot.check_linux()
+
+    def test_download_workspace_inside_checkout_is_not_recursively_copied(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'gradle.properties').write_text('pluginVersion=1.0.0')
+            download = root / 'downloads/lattice-run-example'
+            download.mkdir(parents=True)
+            (download / 'tool.zip').write_bytes(b'large download')
+            with patch.object(one_shot, 'ROOT', root):
+                source = one_shot.copy_source(download / 'source')
+            self.assertTrue((source / 'gradle.properties').is_file())
+            self.assertFalse((source / 'downloads').exists())
+
+    def test_timeout_stops_owned_process_and_preserves_log(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runner = one_shot.CommandRunner(root / 'logs', {}, one_shot.Progress())
+            with self.assertRaisesRegex(one_shot.CommandFailed, 'timed out'):
+                runner.run([sys.executable, '-u', '-c', "import time; print('started'); time.sleep(60)"],
+                           cwd=root, name='timeout', timeout=1)
+            self.assertIn('started', runner.last_log.read_text())
 
     def test_failed_commands_raise_and_keep_their_output_in_a_log(self):
         with tempfile.TemporaryDirectory(prefix="lattice-one-shot-test-") as directory:

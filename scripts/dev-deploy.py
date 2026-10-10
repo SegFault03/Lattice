@@ -14,13 +14,14 @@ import shlex
 import shutil
 import signal
 import stat
-import subprocess
+import processes as subprocess
 import sys
 import tempfile
 import time
 import xml.etree.ElementTree as ET
 import zipfile
 
+from dependencies import Dependencies, add_dependency_options, temporary_environment
 from common import ROOT, gradle_command
 from release import validate_version
 
@@ -439,7 +440,13 @@ def build_plugin(java_home, version):
     if sys.platform == "win32" and any(c in str(ROOT) for c in '\"&|<>^%!\r\n'):
         raise ValueError("Windows checkout paths must not contain batch shell metacharacters")
     environment = {**os.environ, "JAVA_HOME": str(java_home)}
-    subprocess.run(gradle_command() + ["--console=plain", "test", "buildPlugin", f"-PreleaseVersion={version}"],
+    build_args = ["--console=plain", "--no-daemon", "test", "buildPlugin", f"-PreleaseVersion={version}"]
+    if os.environ.get('LATTICE_BUILD_IDE'):
+        sdk = os.environ['LATTICE_BUILD_IDE']
+        if sys.platform == 'win32' and any(c in sdk for c in '\"&|<>^%!\r\n'):
+            raise ValueError('Windows build SDK paths must not contain shell metacharacters')
+        build_args.append('-Plattice.ide.home=' + sdk)
+    subprocess.run(gradle_command() + build_args,
                    cwd=ROOT, env=environment, check=True)
     return ROOT / "build/distributions" / f"Lattice-{version}.zip"
 
@@ -598,7 +605,7 @@ def start_ide(ide, project, timeout, progress, expected_paths=None):
     options = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS} if sys.platform == "win32" else {"start_new_session": True}
     # Do not pass the build's JAVA_HOME to the launcher: IDEA uses its own runtime.
     with log_path.open("wb") as log:
-        child = subprocess.Popen(command, cwd=ide.home, stdout=log, stderr=subprocess.STDOUT, **options)
+        child = subprocess.Popen(command, owned=False, cwd=ide.home, stdout=log, stderr=subprocess.STDOUT, **options)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         active = matching_processes(ide, scan_processes())
@@ -617,7 +624,7 @@ def start_ide(ide, project, timeout, progress, expected_paths=None):
     raise TimeoutError(f"IDEA startup was not detected; inspect {log_path}")
 
 
-def run(args, progress):
+def run(args, progress, deps=None):
     with progress.step(1, "Find IntelliJ IDEA and deployment paths"):
         processes = scan_processes()
         ides = [read_ide(args.ide_home)] if args.ide_home else discover_ides(processes)
@@ -629,7 +636,12 @@ def run(args, progress):
             return
         ide = choose_ide(ides, processes)
         config, plugins = ide_paths(ide, processes, args.plugins_dir)
-        java_home = find_java(ide, args.java_home)
+        try:
+            java_home = find_java(ide, args.java_home)
+        except ValueError:
+            if deps is None or args.java_home:
+                raise
+            java_home = deps.java()
         version = validate_version(read_properties(ROOT / "gradle.properties")["pluginVersion"])
         project = args.project.expanduser().resolve() if args.project else None
         if project and not project.is_dir():
@@ -644,7 +656,14 @@ def run(args, progress):
     with progress.step(2, "Run development tooling tests"):
         subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "scripts/tests", "-v"], cwd=ROOT, check=True)
     with progress.step(3, "Run pure Java tests and build plugin ZIP"):
-        archive = build_plugin(java_home, version)
+        if deps is None:
+            archive = build_plugin(java_home, version)
+        else:
+            environment = deps.environment(java_home)
+            if args.build_ide_home or args.binaries_dir:
+                environment['LATTICE_BUILD_IDE'] = str(deps.ide(args.build_ide_home))
+            with temporary_environment(environment):
+                archive = build_plugin(java_home, version)
     stage, stopped, retain = None, False, False
     try:
         with progress.step(4, "Validate and stage the exact built ZIP"):
@@ -700,6 +719,8 @@ def main(argv=None):
     parser.add_argument("--ide-home", type=Path, help="Installed IDEA directory or macOS .app; otherwise discover it")
     parser.add_argument("--plugins-dir", type=Path, help="Explicit custom user plugins directory")
     parser.add_argument("--java-home", type=Path, help="JDK 21 directory; otherwise discover Java 21")
+    parser.add_argument("--build-ide-home", type=Path, help="Local build SDK; deployment target still comes from --ide-home/discovery")
+    add_dependency_options(parser)
     parser.add_argument("--project", type=Path, help="Project to open after restart (otherwise IDEA's reopen setting applies)")
     parser.add_argument("--dry-run", action="store_true", help="Print targets and planned steps without building, deploying or restarting")
     parser.add_argument("--list-ides", action="store_true", help="List discovered compatible IDEA installations and exit")
@@ -709,7 +730,11 @@ def main(argv=None):
     args = parser.parse_args(argv)
     progress = Progress(not args.no_color)
     try:
-        run(args, progress)
+        if args.dry_run or args.list_ides:
+            run(args, progress)
+        else:
+            with Dependencies(args) as deps:
+                run(args, progress, deps)
         return 0
     except (OSError, ValueError, KeyError, RuntimeError, subprocess.SubprocessError, zipfile.BadZipFile) as error:
         progress.emit(f"ERROR: {error}", 31)

@@ -43,22 +43,24 @@ public class PluginIntegrationTest {
     private static void testSelectedTypeAndLiveConnections() throws Exception {
         System.out.print("[TEST] Wrong protocol does not change database type... ");
         ConnectionConfig wrong = new ConnectionConfig(DatabaseType.MYSQL, "Wrong protocol");
-        wrong.setPort(9001); wrong.setDatabaseName("testdb"); wrong.setUser("SA");
+        wrong.setPort(Integer.getInteger("lattice.test.hsqldb.port", 9001)); wrong.setDatabaseName("testdb"); wrong.setUser("SA");
         ConnectionTestResult rejected = DatabaseConnectionManager.getInstance().testConnection(wrong);
         if (rejected.isSuccess() || wrong.getType() != DatabaseType.MYSQL) {
             throw new AssertionError("A protocol failure must not switch the selected database type");
         }
         ConnectionConfig hsql = new ConnectionConfig(DatabaseType.HSQLDB, "Explicit HSQLDB");
+        hsql.setPort(Integer.getInteger("lattice.test.hsqldb.port", 9001));
         ConnectionTestResult detected = DatabaseConnectionManager.getInstance().testConnection(hsql);
         if (!detected.isSuccess() || !detected.getDatabaseProductName().contains("HSQL")) {
             throw new AssertionError("Explicit HSQLDB connection/version detection failed");
         }
         System.out.println("PASSED!");
 
-        System.out.print("[TEST] Live MySQL server on 3306... ");
+        int mysqlPort = Integer.getInteger("lattice.test.mysql.port", 3306);
+        System.out.print("[TEST] Live MySQL server on " + mysqlPort + "... ");
         ConnectionConfig mysqlLiveCfg = new ConnectionConfig(DatabaseType.MYSQL, "Live MySQL");
         mysqlLiveCfg.setHost("localhost");
-        mysqlLiveCfg.setPort(3306);
+        mysqlLiveCfg.setPort(mysqlPort);
         mysqlLiveCfg.setDatabaseName("shop_db");
         mysqlLiveCfg.setUser("root");
         mysqlLiveCfg.setPassword("");
@@ -71,7 +73,7 @@ public class PluginIntegrationTest {
 
         System.out.print("[TEST] Custom JDBC URL mode with User & Password... ");
         ConnectionConfig customCfg = new ConnectionConfig();
-        customCfg.setCustomUrl("jdbc:mysql://localhost:3306/shop_db");
+        customCfg.setCustomUrl("jdbc:mysql://localhost:" + mysqlPort + "/shop_db");
         customCfg.setUser("root");
         customCfg.setPassword("");
         ConnectionTestResult resCustom = DatabaseConnectionManager.getInstance().testConnection(customCfg);

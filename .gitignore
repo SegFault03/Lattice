@@ -2,7 +2,13 @@
 .gradle/
 .kotlin/
 build/
-screenshots/
+# Only the five README screenshots are versioned.
+/screenshots/*
+!/screenshots/side-panel.png
+!/screenshots/connection-dialog.png
+!/screenshots/table-view.png
+!/screenshots/table-editing.png
+!/screenshots/sql-console.png
 allure-results/
 
 # Distribution
@@ -18,7 +24,6 @@ out/
 # Java / Compilation
 *.class
 *.jar
-!lib/*.jar
 !gradle/wrapper/gradle-wrapper.jar
 
 # OS
@@ -45,3 +50,33 @@ test-binaries/
 # Workstation-specific instructions
 TESTING-INSTRUCTIONS.md
 AGENTS
+
+# Downloaded tools, native binaries and archives
+/lib/
+/binaries/
+/downloads/
+/lattice-run-*/
+/scripts/windows/local/
+/docs/local/
+.haze/
+*.exe
+*.dll
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.msi
+*.cab
+*.png
+*.jpg
+*.jpeg
+# Authored branding and the five documented previews
+!/assets/icon.png
+!/src/main/resources/META-INF/pluginIcon.png
+!/src/main/resources/META-INF/pluginIcon@2x.png
+!/screenshots/side-panel.png
+!/screenshots/connection-dialog.png
+!/screenshots/table-view.png
+!/screenshots/table-editing.png
+!/screenshots/sql-console.png

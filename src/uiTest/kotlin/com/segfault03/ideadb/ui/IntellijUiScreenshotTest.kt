@@ -126,6 +126,17 @@ class IntellijUiScreenshotTest {
         )
         // The focused theme pass uses a real embedded DB. Delayed network probes
         // and schema/export flows belong to the complete functional review.
+        val displayBounds = Rectangle(Toolkit.getDefaultToolkit().screenSize)
+        assertTrue(displayBounds.width >= 1440 && displayBounds.height >= 800,
+            "Real IDE UI capture requires a display of at least 1440x800; found ${displayBounds.width}x${displayBounds.height}")
+        val normalWidth = minOf(1400, displayBounds.width - 40)
+        val normalHeight = minOf(1000, displayBounds.height - 80)
+        val narrowWidth = minOf(1000, displayBounds.width - 40)
+        val narrowHeight = minOf(800, displayBounds.height - 80)
+        val mediumWidth = minOf(1120, displayBounds.width - 40)
+        val mediumHeight = minOf(900, displayBounds.height - 80)
+        val wideWidth = minOf(1900, displayBounds.width - 20)
+        val wideHeight = minOf(1000, displayBounds.height - 80)
         val jdbcFixture = if (review && !styleOnly) HsqlUiFixture() else null
         try {
         testContext.apply {
@@ -152,7 +163,7 @@ class IntellijUiScreenshotTest {
             Files.createDirectories(retainedHsqlFixture.parent)
             Files.copy(
                 if (review) mavenRepository.resolve("org/hsqldb/hsqldb/2.7.3/hsqldb-2.7.3-jdk8.jar")
-                else Path.of(System.getProperty("user.dir"), "lib", "hsqldb-2.7.4.jar"),
+                else Path.of(System.getProperty("lattice.test.drivers"), "hsqldb-2.7.4.jar"),
                 retainedHsqlFixture,
                 java.nio.file.StandardCopyOption.REPLACE_EXISTING,
             )
@@ -162,7 +173,7 @@ class IntellijUiScreenshotTest {
 
             ideFrame {
                 invokeAction("com.segfault03.lattice.open")
-                resize(1400, 1000)
+                resize(normalWidth, normalHeight)
                 toFront()
             }
 
@@ -190,7 +201,6 @@ class IntellijUiScreenshotTest {
 
             Thread.sleep(1000)
 
-            val displayBounds = Rectangle(Toolkit.getDefaultToolkit().screenSize)
             var ideFrameBounds = Rectangle()
             ideFrame { ideFrameBounds = component.getBounds() }
             val rootLocation = pluginRoot.component.getLocationOnScreen()
@@ -764,7 +774,7 @@ class IntellijUiScreenshotTest {
             captureScreen(screenshotsDirectory.resolve("table-auto-refresh-options.png"))
             pressEscape()
             if (styleOnly) {
-                frame.resize(1000, 800)
+                frame.resize(narrowWidth, narrowHeight)
                 openToolbarOverflow(tableEditor, "Table actions").also {
                     captureScreen(screenshotsDirectory.resolve("table-narrow-toolbar-expanded-pending.png"))
                     assertToolbarSingleRow(it, "expanded table")
@@ -957,7 +967,7 @@ class IntellijUiScreenshotTest {
                     captureScreen(screenshotsDirectory.resolve("delete-rows-confirmation.png"))
                     it.pressButton("Cancel")
                 }
-                frame.resize(1000, 800)
+                frame.resize(narrowWidth, narrowHeight)
                 captureScreen(screenshotsDirectory.resolve("table-narrow.png"))
                 assertFilterLayout(tableEditor, 3)
                 assertEditorControlsVisible(tableEditor, "narrow table")
@@ -996,15 +1006,15 @@ class IntellijUiScreenshotTest {
                 tableEditor.x { byVisibleText("Apply") }.waitFound().click()
                 waitUntil("narrow filter reset") { dataGrid.rowCount() == 1 }
                 val ideWindow = cast(frame.component, Window::class)
-                frame.resize(1120, 900)
+                frame.resize(mediumWidth, mediumHeight)
                 captureScreen(screenshotsDirectory.resolve("table-medium-filters.png"))
                 assertFilterLayout(tableEditor, 2)
                 assertEditorControlsVisible(tableEditor, "medium table")
-                withContext(OnDispatcher.EDT) { ideWindow.setBounds(10, 40, 1900, 1000) }
+                withContext(OnDispatcher.EDT) { ideWindow.setBounds(10, 40, wideWidth, wideHeight) }
                 captureScreen(screenshotsDirectory.resolve("table-wide.png"))
                 assertFilterLayout(tableEditor, 1)
                 assertEditorControlsVisible(tableEditor, "wide table")
-                withContext(OnDispatcher.EDT) { ideWindow.setBounds(260, 40, 1400, 1000) }
+                withContext(OnDispatcher.EDT) { ideWindow.setBounds((displayBounds.width - normalWidth) / 2, 40, normalWidth, normalHeight) }
                 captureScreen(screenshotsDirectory.resolve("table-normal-after-resize.png"))
                 assertFilterLayout(tableEditor, 1)
                 assertEditorControlsVisible(tableEditor, "restored table")
@@ -1118,7 +1128,7 @@ class IntellijUiScreenshotTest {
                     captureScreen(screenshotsDirectory.resolve("sql-template-popup.png"))
                     pressEscape()
                 }
-                frame.resize(1000, 800)
+                frame.resize(narrowWidth, narrowHeight)
                 captureScreen(screenshotsDirectory.resolve("sql-console-narrow.png"))
                 assertEditorControlsVisible(console, "narrow SQL console")
                 assertToolbarSingleRow(console.x { byAccessibleName("SQL actions") }.waitFound(), "collapsed SQL")
@@ -1137,10 +1147,10 @@ class IntellijUiScreenshotTest {
                         pressEscape()
                     }
                 }
-                withContext(OnDispatcher.EDT) { ideWindow.setBounds(10, 40, 1900, 1000) }
+                withContext(OnDispatcher.EDT) { ideWindow.setBounds(10, 40, wideWidth, wideHeight) }
                 captureScreen(screenshotsDirectory.resolve("sql-console-wide.png"))
                 assertEditorControlsVisible(console, "wide SQL console")
-                withContext(OnDispatcher.EDT) { ideWindow.setBounds(260, 40, 1400, 1000) }
+                withContext(OnDispatcher.EDT) { ideWindow.setBounds((displayBounds.width - normalWidth) / 2, 40, normalWidth, normalHeight) }
                 captureScreen(screenshotsDirectory.resolve("sql-console-normal-after-resize.png"))
                 assertEditorControlsVisible(console, "restored SQL console")
                 databaseTree.fixture.rightClickPath(connectionPath.joinToString(databaseTree.fixture.separator()))

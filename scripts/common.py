@@ -1,5 +1,6 @@
 """Platform-neutral development paths and Java discovery."""
 import os
+import re
 from pathlib import Path
 import shutil
 import sys
@@ -7,10 +8,17 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def resolved_path(value):
+    expanded = os.path.expandvars(str(value))
+    if re.search(r'%[^%/\\]+%|\$\{[^}]+\}|\$[A-Za-z_]\w*', expanded):
+        raise ValueError(f'Path contains an unresolved environment variable: {value}')
+    return Path(expanded).expanduser().resolve()
+
+
 def cache_directory():
     override = os.environ.get("LATTICE_DEV_CACHE")
     if override:
-        return Path(override).expanduser().resolve()
+        return resolved_path(override)
     if sys.platform == "win32":
         base = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData/Local")))
     elif sys.platform == "darwin":
@@ -33,11 +41,11 @@ def java_command(home=None):
     return command
 
 
-def gradle_command():
+def gradle_command(root=None):
     # Windows batch launch requires cmd.exe. Arguments are controlled by the CLI,
     # with shell metacharacters rejected before this command is constructed.
     if os.name == "nt":
-        # Callers set cwd=ROOT. A relative batch name prevents cmd.exe from
+        # Callers set cwd to the selected checkout. A relative batch name prevents cmd.exe from
         # stripping the first pair of quotes when the checkout has spaces.
         return [os.environ.get("COMSPEC", "cmd.exe"), "/d", "/c", r".\gradlew.bat"]
-    return [str(ROOT / "gradlew")]
+    return [str((root or ROOT) / "gradlew")]

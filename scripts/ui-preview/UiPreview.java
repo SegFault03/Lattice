@@ -205,7 +205,7 @@ public final class UiPreview {
                     variant.endsWith("-hsqldb") ? DatabaseType.HSQLDB : DatabaseType.MYSQL, version);
             try {
                 java.nio.file.Files.createDirectories(jar.getParent());
-                java.nio.file.Files.copy(Path.of("lib", variant.endsWith("-hsqldb") ? "hsqldb-2.7.4.jar" : "mysql-connector-j-26.7.0.jar"), jar,
+                java.nio.file.Files.copy(Path.of(System.getProperty(variant.endsWith("-hsqldb") ? "lattice.preview.hsqldb" : "lattice.preview.mysql")), jar,
                         java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             } catch (Exception absent) {
                 throw new AssertionError("Could not stage a retained driver preview", absent);
@@ -325,7 +325,7 @@ public final class UiPreview {
         // A stored release must be offered without downloading and stay usable after selection.
         Path retained = com.segfault03.ideadb.service.DriverCatalog.downloadedJar(DatabaseType.MYSQL, "8.4.0");
         java.nio.file.Files.createDirectories(retained.getParent());
-        java.nio.file.Files.copy(Path.of("lib", "mysql-connector-j-26.7.0.jar"), retained, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        java.nio.file.Files.copy(Path.of(System.getProperty("lattice.preview.mysql")), retained, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         var bundled = (JComboBox<?>)field(dialog, "bundledDriverCombo");
         // The dialog was built before the file existed; a refresh must pick it up like a new download does.
         refreshPreviewDrivers(dialog);

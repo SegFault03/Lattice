@@ -142,10 +142,9 @@ class MavenPomDriverResolverTest {
     }
 
     private static Path packagedJar(String prefix) throws Exception {
-        try (var files = Files.list(Path.of("lib"))) {
+        try (var files = Files.list(Path.of(System.getProperty("lattice.test.drivers")))) {
             return files.filter(path -> path.getFileName().toString().startsWith(prefix)
-                            && path.getFileName().toString().endsWith(".jar"))
-                    .findFirst().orElseThrow();
+                    && path.getFileName().toString().endsWith(".jar")).findFirst().orElseThrow();
         }
     }
 }

@@ -111,6 +111,7 @@ public class RegressionSuitesTest {
     }
     @Test @Tag("integration") void changingDriverRevokesExistingSessions() throws Exception {
         var config = new ConnectionConfig(DatabaseType.HSQLDB, "driver switch");
+        config.setPort(Integer.getInteger("lattice.test.hsqldb.port", 9001));
         var manager = com.segfault03.ideadb.service.DatabaseConnectionManager.getInstance();
         manager.registerConfiguration(config);
         try {
@@ -119,7 +120,7 @@ public class RegressionSuitesTest {
             manager.registerConfiguration(unchanged);
             assertSame(previous, manager.getConnection(config), "Unused driver fields must not retire sessions");
             var updated = config.copy(); updated.setDriverSource(DriverSource.LOCAL_JAR);
-            updated.setDriverJarPath(new java.io.File("lib/hsqldb-2.7.4.jar").getAbsolutePath());
+            updated.setDriverJarPath(java.nio.file.Path.of(System.getProperty("lattice.test.drivers"), "hsqldb-2.7.4.jar").toString());
             manager.registerConfiguration(updated);
             assertTrue(previous.isClosed());
             assertThrows(java.sql.SQLException.class, () -> manager.getConnection(config));

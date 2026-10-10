@@ -27,12 +27,9 @@ class DriverStoreTest {
         Files.createDirectories(jar.getParent());
         String prefix = type == DatabaseType.MYSQL ? "mysql-connector" : "hsqldb-";
         Path source;
-        try (var jars = Files.list(Path.of("lib"))) {
+        try (var jars = Files.list(Path.of(System.getProperty("lattice.test.drivers")))) {
             source = jars.filter(path -> path.getFileName().toString().startsWith(prefix)
-                            && path.getFileName().toString().endsWith(".jar"))
-                    .sorted()
-                    .findFirst()
-                    .orElseThrow(() -> new IllegalStateException("No packaged " + type + " test driver found under lib"));
+                    && path.getFileName().toString().endsWith(".jar")).findFirst().orElseThrow();
         }
         Files.copy(source, jar, StandardCopyOption.REPLACE_EXISTING);
         return jar;

@@ -5,7 +5,11 @@ import html
 import os
 from pathlib import Path
 import re
-import subprocess
+import processes as subprocess
+
+from dependencies import Dependencies, add_dependency_options
+
+GIT = "git"
 
 VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?\Z")
 
@@ -43,7 +47,7 @@ def patch_notes(changelog, version):
 
 
 def git(root, *args):
-    return subprocess.check_output(["git", "-C", str(root), *args], text=True, encoding="utf-8").strip()
+    return subprocess.check_output([GIT, "-C", str(root), *args], text=True, encoding="utf-8").strip()
 
 
 def previous_tag(root, version):
@@ -91,7 +95,20 @@ def main():
     parser.add_argument("--tag", default=os.environ.get("RELEASE_TAG") or None)
     parser.add_argument("--version", default=os.environ.get("RELEASE_INPUT_VERSION") or None)
     parser.add_argument("--output", type=Path)
+    parser.add_argument('--git', type=Path, help='Git executable; otherwise PATH, then portable MinGit on Windows')
+    add_dependency_options(parser)
     args = parser.parse_args()
+    global GIT
+    with Dependencies(args) as deps:
+        previous = GIT
+        GIT = deps.git(args.git)
+        try:
+            write_release(args)
+        finally:
+            GIT = previous
+
+
+def write_release(args):
     if args.tag:
         if not args.tag.startswith("v"):
             raise ValueError("Release tag must have the form v1.2.3")

@@ -13,10 +13,11 @@ import os
 import shutil
 import zipfile
 from pathlib import Path
-import subprocess
+import processes as subprocess
 import urllib.request
 
 from common import ROOT, java_command
+from dependencies import Dependencies, add_dependency_options, executable
 
 FEATURED_SCREENSHOTS = {
     'side-panel.png': 'light-side-panel-340.png',
@@ -25,6 +26,12 @@ FEATURED_SCREENSHOTS = {
     'table-editing.png': 'light-table-new-row-1100.png',
     'sql-console.png': 'light-sql-console-1100.png',
 }
+
+
+def gradle_wrapper():
+    return r".\gradlew.bat" if os.name == 'nt' else './gradlew'
+
+
 def java_args(command, args, path):
     # Java argument files avoid Windows command-length limits and quote paths with spaces.
     def quote(value):
@@ -66,20 +73,32 @@ def run():
                         help='Gallery/build directory; screenshots/ keeps only the five featured images')
     parser.add_argument('--all-previews', action='store_true',
                         help='Generate the full light/dark preview gallery; by default only the five featured screens are rendered')
+    parser.add_argument('--flatlaf-jar', type=Path, help='Existing FlatLaf 3.7.2 JAR')
+    parser.add_argument('--junit-jar', type=Path, help='Existing JUnit 4.13.2 JAR')
+    parser.add_argument('--hamcrest-jar', type=Path, help='Existing Hamcrest Core 1.3 JAR')
+    add_dependency_options(parser)
     args = parser.parse_args()
-    java = Path(java_command(args.java_home)).resolve()
+    with Dependencies(args) as deps:
+        render(args, deps, parser)
+
+
+def render(args, deps, parser):
+    java = executable(deps.java(args.java_home), 'java').resolve()
     javac = java.with_name('javac.exe' if os.name == 'nt' else 'javac')
     if not javac.is_file():
         parser.error('Select a full JDK 21 with --java-home or JAVA_HOME; javac was not found.')
-    sdk = args.ide_home.expanduser().resolve() if args.ide_home else None
-    gradle_cache = Path(os.environ.get('GRADLE_USER_HOME', Path.home() / '.gradle')).expanduser().resolve()
+    sdk = deps.ide(args.ide_home) if args.ide_home or args.binaries_dir else None
+    gradle_cache = Path(args.gradle_user_home or os.environ.get('GRADLE_USER_HOME', Path.home() / '.gradle')).expanduser().resolve()
     if sdk is None:
         sdk = cached_sdk(gradle_cache)
         if sdk is None:
-            parser.error('No cached IntelliJ 2025.1 SDK. Run ./gradlew compileJava or pass --ide-home.')
+            sdk = deps.ide()
     test_jars = cached_test_runtime_jars(gradle_cache)
     if test_jars is None:
-        parser.error('No cached JUnit 4 preview runtime. Run ./gradlew test or set GRADLE_USER_HOME.')
+        test_jars = []
+    if args.junit_jar or args.hamcrest_jar or not test_jars:
+        test_jars = [deps.file('tools/junit/junit-4.13.2.jar', 'https://repo.maven.apache.org/maven2/junit/junit/4.13.2/junit-4.13.2.jar', '8e495b634469d64fb8acfa3495a065cbacc8a0fff55ce1e31007be4c16dc57d3', args.junit_jar),
+                     deps.file('tools/junit/hamcrest-core-1.3.jar', 'https://repo.maven.apache.org/maven2/org/hamcrest/hamcrest-core/1.3/hamcrest-core-1.3.jar', '66fdef91e9739348df7a096aa384a5685f4e875584cce89386a7a47251c4d8e9', args.hamcrest_jar)]
     jars = sorted((sdk / 'lib').glob('*.jar')) + sorted((sdk / 'lib/modules').glob('*.jar'))
     if not (sdk / 'lib/app-client.jar').is_file():
         parser.error('--ide-home must point to an IntelliJ SDK with lib/app-client.jar')
@@ -90,20 +109,16 @@ def run():
     baseline = args.compare_with.expanduser().resolve() if args.compare_with else None
     if baseline and (not baseline.is_dir() or baseline == output):
         parser.error('--compare-with must be an existing output directory different from --output')
-    deps = output / 'deps'
-    deps.mkdir(parents=True, exist_ok=True)
-    flatlaf = deps / 'flatlaf-3.7.2.jar'
-    if not flatlaf.is_file():
-        with urllib.request.urlopen('https://repo.maven.apache.org/maven2/com/formdev/flatlaf/3.7.2/flatlaf-3.7.2.jar', timeout=60) as response:
-            flatlaf.write_bytes(response.read())
-    # This is a development-only look and feel. It is never added to the plugin ZIP.
-    if hashlib.sha256(flatlaf.read_bytes()).hexdigest() != '917aff3963c88d797d0fd9b9ccbd70f7681c101df9d11c59e2bc7a3a6c0fabf4':
-        raise ValueError('FlatLaf archive checksum mismatch')
+    flatlaf = deps.file('tools/flatlaf/flatlaf-3.7.2.jar',
+                        'https://repo.maven.apache.org/maven2/com/formdev/flatlaf/3.7.2/flatlaf-3.7.2.jar',
+                        '917aff3963c88d797d0fd9b9ccbd70f7681c101df9d11c59e2bc7a3a6c0fabf4', args.flatlaf_jar)
+    output.mkdir(parents=True, exist_ok=True)
     production = output / 'production-classes'
     preview = output / 'preview-classes'
     production.mkdir(exist_ok=True)
     preview.mkdir(exist_ok=True)
-    cp = os.pathsep.join(map(str, jars + sorted((ROOT / 'lib').glob('*.jar')) + test_jars))
+    drivers = {kind: deps.jdbc(kind) for kind in ('mysql', 'hsqldb')}
+    cp = os.pathsep.join(map(str, jars + list(drivers.values()) + test_jars))
     sources = sorted((ROOT / 'src/main/java').rglob('*.java'))
     java_args(javac, ['--release', '21', '-encoding', 'UTF-8', '-cp', cp, '-d', str(production)] + list(map(str, sources)), output / 'compile-production.args')
     preview_sources = sorted((ROOT / 'scripts/ui-preview').glob('*.java'))
@@ -122,7 +137,9 @@ def run():
         system_path = output / f'idea-system-{os.getpid()}-{theme}'
         config_path = output / f'idea-config-{os.getpid()}-{theme}'
         try:
-            java_args(java, ['--add-exports=java.desktop/sun.awt=ALL-UNNAMED',
+            java_args(java, [f'-Dlattice.preview.mysql={drivers["mysql"]}',
+                         f'-Dlattice.preview.hsqldb={drivers["hsqldb"]}',
+                         '--add-exports=java.desktop/sun.awt=ALL-UNNAMED',
                          '--add-opens=java.base/java.lang=ALL-UNNAMED',
                          '--add-opens=java.base/java.io=ALL-UNNAMED',
                          '--add-opens=java.base/java.nio=ALL-UNNAMED',

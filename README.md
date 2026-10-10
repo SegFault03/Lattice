@@ -109,7 +109,7 @@ Use `python3` if that is your system's Python command. All optional development/
 
 ### Quick local UI testing
 
-To render the five featured production Swing screens in light mode, run `python scripts/ui-preview.py` with JDK 21 and the cached IntelliJ SDK, then open `build/ui-preview/index.html`. It uses a headless IntelliJ test application for platform services without opening an IDE window. Pass `--all-previews` for the light/dark gallery. The five README images in `screenshots/` are refreshed by default; review them and commit them with UI changes. See [UI previews](docs/UI_PREVIEW.md) for setup and the full-IDE capture commands.
+To render the five featured production Swing screens in light mode, run `python scripts/ui-preview.py` with optional JDK 21 and IntelliJ SDK paths (missing inputs are downloaded), then open `build/ui-preview/index.html`. It uses a headless IntelliJ test application for platform services without opening an IDE window. Pass `--all-previews` for the light/dark gallery. The five README images in `screenshots/` are refreshed by default; review them and commit them with UI changes. See [UI previews](docs/UI_PREVIEW.md) for setup and the full-IDE capture commands.
 
 To run the tooling and pure Java tests, build the ZIP, find an installed IntelliJ IDEA, and deploy the freshly built plugin:
 
@@ -123,13 +123,13 @@ Use `--dry-run` to inspect the target without making changes, `--list-ides` to l
 
 ## Validation
 
-On Linux, run the full disposable validation flow with [the one-shot validation runner](scripts/one-shot-test.py), Python 3.11+ and Docker:
+On Linux or Windows, run the full disposable validation flow with [the one-shot validation runner](scripts/one-shot-test.py), Python 3.11+ (Linux uses Docker; Windows uses native MySQL ZIP fixtures):
 
 ```text
 python scripts/one-shot-test.py
 ```
 
-The default run builds and tests the plugin, checks the ZIP, runs live MySQL/HSQLDB functional tests, verifies IntelliJ 2025.1–2025.3, and exercises the complete JDBC/Java 8 matrix. It does not render screenshots; use `python scripts/ui-preview.py` for standalone Swing previews or `./scripts/review-intellij-ui.sh` for real-IDE UI flows. `--skip-compatibility` runs the build and live functional checks; `--compatibility-only` runs the IDE and JDBC matrices; `--database-compatibility-only` runs just the JDBC matrix when Plugin Verifier runs separately. Actions uses the isolated compatibility modes for PR and release matrices; routine checks use the Gradle cache. The runner uses temporary Gradle, verifier and JDBC caches; it uses an installed JDK 21 or downloads one, and downloads a temporary Java 8 runtime when needed. Docker, network access and at least 10 GiB free workspace space are required. Ports 3306 and 9001 are used by the base functional checks; 3306 by the database matrix; and 19020–19029 by Plugin Verifier. A failure exits nonzero, preserves command logs and a failure summary in `build/one-shot-test/`, and removes the temporary tools and caches.
+The default run builds and tests the plugin, checks the ZIP, runs live MySQL/HSQLDB functional tests, verifies IntelliJ 2025.1–2025.3, and exercises the complete JDBC/Java 8 matrix. It does not render screenshots; use `python scripts/ui-preview.py` for standalone Swing previews or `./scripts/linux/review-intellij-ui.sh` on Linux/X11 and `.\scripts\windows\review-intellij-ui.ps1` on Windows for real-IDE UI flows. `--skip-compatibility` runs the build and live functional checks; `--compatibility-only` runs the IDE and JDBC matrices; `--database-compatibility-only` runs just the JDBC matrix when Plugin Verifier runs separately. Actions uses the isolated compatibility modes for PR and release matrices; routine checks use the Gradle cache. The runner uses temporary Gradle, verifier and JDBC caches; it uses an installed JDK 21 or downloads one, and downloads a temporary Java 8 runtime when needed. Network access for missing dependencies and at least 10 GiB free download space are required; Docker is needed for Linux fixtures. Ports 3306 and 9001 are used by the base functional checks; 3306 by the database matrix; and 19020–19029 by Plugin Verifier. A failure exits nonzero, preserves command logs and a failure summary in `build/one-shot-test/`, and removes owned tools/caches by default. Use `--download-dir`, `--binaries-dir`, explicit binary paths and `--no-cleanup` for reusable local assets; every Python CLI has a matching PowerShell launcher under `scripts/windows/`. See [all Windows commands and options](docs/WINDOWS_SCRIPTS.md). See [dependency options](docs/SCRIPTS.md#binary-paths-downloads-and-cleanup).
 
 Use `--java-home` to select a full JDK 21 explicitly. For a shorter check against disposable MySQL 8.4/HSQLDB fixtures, see [the functional test guide](docs/CONTRIBUTING.md). The lower-level `scripts/test.py` runner remains available for focused build and fixture tests.
 
@@ -141,11 +141,11 @@ Use `--java-home` to select a full JDK 21 explicitly. For a shorter check agains
 | [docs/](docs/README.md) | Development, release, support and compatibility guides |
 | `scripts/` | Portable development and release helpers; tooling tests in `scripts/tests/` |
 | `.github/` | GitHub issue forms, pull request template and workflows |
-| `assets/`, `licenses/`, `lib/` | Branding, dependency license texts and fallback-test JDBC JARs |
+| `assets/`, `licenses/` | Branding and dependency license texts |
 | `build/` | Ignored generated output, distribution ZIPs and validation reports |
 | `screenshots/` | The five tracked README preview images |
 
-Workstation-only helpers and notes live in locally excluded `scripts/local/` and `docs/local/`. README, LICENSE, agent instructions and the Gradle wrapper launchers retain their root entry points.
+Legacy workstation helpers are preserved outside the repository; private notes remain in ignored `docs/local/`. README, LICENSE, agent instructions and the Gradle wrapper launchers retain their root entry points. The five README screenshots are the only tracked generated artifacts.
 
 ## Releases and support
 

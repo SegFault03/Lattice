@@ -1,33 +1,34 @@
 #!/usr/bin/env python3
-"""Run Lattice's headless Linux validation in disposable tool/cache directories.
+"""Run Lattice's headless Linux/Windows validation in disposable tool/cache directories.
 
 The runner checks tooling, Java unit tests, package integrity, live database behavior,
 all supported IntelliJ targets, and the documented Java 8/JDBC compatibility matrix.
 It never starts an IDE; use review-intellij-ui.sh for real UI validation.
-Docker images pulled by this run are removed after their case.
+Downloaded assets are removed by default; --no-cleanup retains them for reuse.
 """
 from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
-import hashlib
-import json
 import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 import platform
 import re
 import shutil
 import shlex
 import socket
-import subprocess
+import processes as subprocess
 import sys
 import tarfile
-import tempfile
 import threading
 import time
 import urllib.parse
 import urllib.request
 import uuid
+
+from common import gradle_command, resolved_path
+from dependencies import Dependencies, add_dependency_options, executable
+from test import fixture_port, port_number
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -112,24 +113,35 @@ class CommandRunner:
                 output.write(f"cwd: {cwd}\ncommand: {display}\n\n")
                 process = subprocess.Popen(command, cwd=cwd, env=merged_env,
                                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                           text=True, encoding="utf-8", errors="replace", bufsize=1)
+                                           text=True, encoding="utf-8", errors="replace", bufsize=1,
+                                           **({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" else {"start_new_session": True}))
+
+                def terminate_owned_tree():
+                    if process.poll() is None:
+                        process.kill()
 
                 def terminate_if_late():
                     if process.poll() is None:
                         timed_out.set()
-                        process.kill()
+                        terminate_owned_tree()
 
                 timer = threading.Timer(timeout, terminate_if_late)
                 timer.daemon = True
                 timer.start()
-                assert process.stdout is not None
-                with process.stdout:
-                    for line in process.stdout:
-                        output.write(line)
-                        output.flush()
-                        print(line, end="", flush=True)
-                returncode = process.wait()
-                timer.cancel()
+                try:
+                    assert process.stdout is not None
+                    with process.stdout:
+                        for line in process.stdout:
+                            output.write(line)
+                            output.flush()
+                            print(line, end="", flush=True)
+                    returncode = process.wait()
+                except BaseException:
+                    terminate_owned_tree()
+                    process.wait(timeout=30)
+                    raise
+                finally:
+                    timer.cancel()
         except OSError as failure:
             with log.open("a", encoding="utf-8") as output:
                 output.write(f"\nCould not start command: {failure}\n")
@@ -143,17 +155,16 @@ class CommandRunner:
 
 
 def check_linux() -> None:
-    if not sys.platform.startswith("linux"):
-        raise RunnerError("one-shot-test.py currently supports Linux only")
+    if not (sys.platform.startswith("linux") or sys.platform == "win32"):
+        raise RunnerError("one-shot-test.py supports Linux and Windows only")
     if sys.version_info < (3, 11):
         raise RunnerError("Python 3.11 or newer is required")
 
 
 def require_free_port(port: int) -> None:
     with socket.socket() as listener:
-        # Ignore harmless TCP TIME_WAIT sockets left by a just-stopped fixture;
-        # an active listener still prevents this bind.
-        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        # Unix permits reuse after shutdown; Windows requires exclusive ownership.
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE if os.name == 'nt' else socket.SO_REUSEADDR, 1)
         try:
             listener.bind(("127.0.0.1", port))
         except OSError as failure:
@@ -169,111 +180,12 @@ def java_major(java: Path) -> int:
     return int(match.group(1))
 
 
-def find_java_home(explicit: Path | None) -> Path | None:
-    candidates: list[Path] = []
-    if explicit:
-        candidates.append(explicit.expanduser())
-    if os.environ.get("JAVA_HOME"):
-        candidates.append(Path(os.environ["JAVA_HOME"]).expanduser())
-    path_java = shutil.which("java")
-    if path_java:
-        candidates.append(Path(path_java).resolve().parent.parent)
-    for candidate in candidates:
-        java = candidate / "bin/java"
-        javac = candidate / "bin/javac"
-        if java.is_file() and javac.is_file() and java_major(java) == 21:
-            return candidate.resolve()
-        if explicit and candidate == explicit.expanduser():
-            raise RunnerError(f"--java-home must be a full JDK 21: {candidate}")
-    return None
-
-
-def release_asset(major: int, image_type: str) -> dict[str, str]:
-    repository = f"adoptium/temurin{major}-binaries"
-    release_url = f"https://api.github.com/repos/{repository}/releases/latest"
-    request = urllib.request.Request(release_url, headers={"User-Agent": "Lattice-one-shot-test/1.0",
-                                                            "Accept": "application/vnd.github+json"})
-    with urllib.request.urlopen(request, timeout=60) as response:
-        release = json.load(response)
-    stem = f"OpenJDK{major}U-{image_type}_x64_linux_hotspot_"
-    package = next((asset for asset in release["assets"]
-                    if asset["name"].startswith(stem) and asset["name"].endswith(".tar.gz")), None)
-    if package is None:
-        raise RunnerError(f"Temurin release {release.get('tag_name')} has no Linux x64 Java {major} {image_type} archive")
-    checksum_asset = next((asset for asset in release["assets"]
-                           if asset["name"] == package["name"] + ".sha256.txt"), None)
-    if checksum_asset is None:
-        raise RunnerError(f"Temurin did not publish a SHA-256 file for {package['name']}")
-    checksum_request = urllib.request.Request(checksum_asset["browser_download_url"],
-                                             headers={"User-Agent": "Lattice-one-shot-test/1.0"})
-    with urllib.request.urlopen(checksum_request, timeout=60) as response:
-        checksum_text = response.read(1024).decode("ascii")
-    checksum = checksum_text.split()[0].lower()
-    if not re.fullmatch(r"[0-9a-f]{64}", checksum):
-        raise RunnerError(f"Temurin published an invalid Java {major} SHA-256")
-    return {"link": package["browser_download_url"], "checksum": checksum, "name": package["name"]}
-
-
-def safe_tar_member(member: tarfile.TarInfo, destination: Path) -> tarfile.TarInfo | None:
-    root = destination.resolve()
-    target = (destination / member.name).resolve()
-    if not target.is_relative_to(root):
-        raise RunnerError(f"Archive path escapes tool directory: {member.name}")
-    if member.issym() or member.islnk():
-        link_name = PurePosixPath(member.linkname)
-        link_target = (target.parent / Path(*link_name.parts)).resolve()
-        if link_name.is_absolute() or not link_target.is_relative_to(root):
-            raise RunnerError(f"Unsafe link in runtime archive: {member.name}")
-    elif not (member.isdir() or member.isfile()):
-        return None
-    return member
-
-
 def extract_tar(archive: Path, destination: Path) -> None:
-    destination.mkdir(parents=True, exist_ok=True)
-    with tarfile.open(archive, "r:gz") as bundle:
-        data_filter = getattr(tarfile, "data_filter", None)
-        for member in bundle.getmembers():
-            safe = safe_tar_member(member, destination)
-            if safe is None:
-                continue
-            if data_filter:
-                safe = data_filter(safe, str(destination))
-                if safe is None:
-                    continue
-                bundle.extract(safe, destination, filter="data")
-            else:
-                bundle.extract(safe, destination)
-
-
-def download_runtime(tools: Path, major: int, image_type: str) -> Path:
-    asset = release_asset(major, image_type)
-    archive = tools / asset["name"]
-    tools.mkdir(parents=True, exist_ok=True)
-    print(f"  Downloading checksum-verified Temurin {major} {image_type} to the temporary workspace", flush=True)
-    digest = hashlib.sha256()
-    with urllib.request.urlopen(asset["link"], timeout=180) as response, archive.open("wb") as output:
-        while True:
-            chunk = response.read(1024 * 1024)
-            if not chunk:
-                break
-            digest.update(chunk)
-            output.write(chunk)
-    if digest.hexdigest() != asset["checksum"]:
-        archive.unlink(missing_ok=True)
-        raise RunnerError(f"Java {major} archive checksum mismatch")
-    extraction = tools / f"temurin-{major}-{image_type}"
+    from dependencies import extract
     try:
-        extract_tar(archive, extraction)
-    finally:
-        archive.unlink(missing_ok=True)
-    java_files = sorted(extraction.rglob("java"))
-    candidates = [path.parent.parent for path in java_files
-                  if path.name == "java" and path.parent.name == "bin" and path.is_file()]
-    runtime = next((path for path in candidates if java_major(path / "bin/java") == major), None)
-    if runtime is None:
-        raise RunnerError(f"Could not locate the downloaded Java {major} runtime")
-    return runtime.resolve()
+        extract(archive, destination)
+    except tarfile.FilterError as failure:
+        raise RunnerError(f'Runtime archive escapes tool directory: {failure}') from failure
 
 
 def prepare_proxy_environment(env: dict[str, str], java_home: Path, tools: Path) -> dict[str, str]:
@@ -293,7 +205,7 @@ def prepare_proxy_environment(env: dict[str, str], java_home: Path, tools: Path)
             tools.mkdir(parents=True, exist_ok=True)
             truststore = tools / "proxy-truststore"
             shutil.copy2(source, truststore)
-            keytool = java_home / "bin/keytool"
+            keytool = executable(java_home, "keytool")
             subprocess.run([str(keytool), "-importcert", "-noprompt", "-alias", "lattice-one-shot-proxy",
                             "-file", cert, "-keystore", str(truststore), "-storepass", "changeit"],
                            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -303,11 +215,14 @@ def prepare_proxy_environment(env: dict[str, str], java_home: Path, tools: Path)
 
 
 def copy_source(destination: Path) -> Path:
+    # A caller may place downloads inside the checkout. Exclude that subtree
+    # before creating the copy so it cannot recursively copy its own output.
+    nested = destination.resolve().relative_to(ROOT.resolve()).parts[0] if destination.resolve().is_relative_to(ROOT.resolve()) else None
     def ignore(_directory: str, names: list[str]) -> set[str]:
-        return {name for name in names if name in {
-            ".git", ".gradle", "build", "out", ".idea", ".venv", "venv", "__pycache__", ".pytest_cache",
+        return {name for name in names if name == nested or name.startswith("lattice-run-") or name in {
+            ".git", ".gradle", ".intellijPlatform", "allure-results", ".haze", "local", "build", "out", ".idea", ".venv", "venv", "__pycache__", ".pytest_cache",
         }}
-    shutil.copytree(ROOT, destination, ignore=ignore, symlinks=True)
+    shutil.copytree(ROOT, destination, ignore=ignore, symlinks=os.name != 'nt')
     return destination
 
 
@@ -321,39 +236,45 @@ def project_version(source: Path) -> str:
 
 def run_gradle(runner: CommandRunner, source: Path, *tasks: str, properties: list[str] | None = None,
                name: str, timeout: int = 900) -> None:
-    command = [str(source / "gradlew"), "--no-daemon", "--console=plain", "--stacktrace", *tasks]
+    command = gradle_command(source) + ["--no-daemon", "--console=plain", "--stacktrace", *tasks]
+    if os.name == 'nt' and any(any(c in arg for c in '\"&|<>^%!\r\n') for arg in [str(source), *(properties or [])]):
+        raise RunnerError('Windows Gradle paths must not contain shell metacharacters')
     command.extend(properties or [])
+    if runner.env.get('LATTICE_BUILD_IDE'):
+        sdk = runner.env['LATTICE_BUILD_IDE']
+        if os.name == 'nt' and any(c in sdk for c in '\"&|<>^%!\r\n'):
+            raise RunnerError('Windows SDK paths must not contain shell metacharacters')
+        command.append('-Plattice.ide.home=' + sdk)
     runner.run(command, cwd=source, name=name, timeout=timeout)
 
 
 def run_plugin_verifier(runner: CommandRunner, source: Path, env: dict[str, str],
-                        temp: Path, archive: Path, java_home: Path, version: str) -> None:
+                        temp: Path, archive: Path, java_home: Path, version: str, deps=None, args=None) -> None:
     cache = temp / "verifier-cache"
     command = [sys.executable, str(source / "scripts/verify-plugin.py"), str(archive),
                "--ide-version", version, "--java-home", str(java_home),
                "--cache", str(cache), "--reports", str(source / "build/compatibility/verifier")]
+    if deps is not None:
+        sdk = deps.ide((args.ide_homes or {}).get(version) or (args.ide_home if version == '2025.1' else None), version)
+        command += ['--ide-home', str(sdk)]
+        if args.verifier_jar:
+            command += ['--verifier-jar', str(args.verifier_jar)]
+        elif deps.existing('tools/verifier/verifier-cli-1.410-all.jar'):
+            command += ['--verifier-jar', str(deps.existing('tools/verifier/verifier-cli-1.410-all.jar'))]
     runner.run(command, cwd=source, env=env, name=f"plugin-verifier-{version}", timeout=900)
-    # The matrix is deliberately serial: do not retain several multi-gigabyte IDE archives.
-    for path in [cache / "ides" / version, cache / "archives/ides" / f"idea-{version}-linux.tar.gz"]:
-        if path.is_dir():
-            shutil.rmtree(path)
-        else:
-            path.unlink(missing_ok=True)
-    for path in (cache / "ides").glob(version + "-*") if (cache / "ides").exists() else ():
-        shutil.rmtree(path, ignore_errors=True)
 
 
-def docker_image_exists(image: str) -> bool:
-    return subprocess.run(["docker", "image", "inspect", image], stdout=subprocess.DEVNULL,
+def docker_image_exists(image: str, docker=None) -> bool:
+    return subprocess.run([docker or "docker", "image", "inspect", image], stdout=subprocess.DEVNULL,
                           stderr=subprocess.DEVNULL, check=False).returncode == 0
 
 
-def remove_downloaded_image(image: str) -> None:
+def remove_downloaded_image(image: str, docker=None) -> None:
     last_error = ""
     for attempt in range(10):
-        result = subprocess.run(["docker", "image", "rm", image], capture_output=True,
+        result = subprocess.run([docker or "docker", "image", "rm", image], capture_output=True,
                                 text=True, check=False)
-        if result.returncode == 0 or not docker_image_exists(image):
+        if result.returncode == 0 or not docker_image_exists(image, docker):
             return
         last_error = result.stderr.strip()
         if attempt < 9:
@@ -362,26 +283,27 @@ def remove_downloaded_image(image: str) -> None:
 
 
 @contextmanager
-def mysql_server(runner: CommandRunner, image_tag: str, port: int = 3306):
+def mysql_server(runner: CommandRunner, image_tag: str, port: int = 3306, cleanup=True):
+    docker = runner.env.get("LATTICE_DOCKER", "docker")
     image = f"mysql:{image_tag}"
-    preexisting = docker_image_exists(image)
+    preexisting = docker_image_exists(image, docker)
     name = "lattice-one-shot-" + uuid.uuid4().hex[:12]
     created = False
     log_path = runner.logs / f"mysql-{image_tag}.container.log"
     try:
-        runner.run(["docker", "run", "--detach", "--name", name,
+        runner.run([docker or "docker", "run", "--detach", "--name", name,
                     "--publish", f"127.0.0.1:{port}:3306", "--env", "MYSQL_ALLOW_EMPTY_PASSWORD=yes",
                     "--env", "MYSQL_ROOT_HOST=%", "--env", "MYSQL_DATABASE=shop_db", image],
                    cwd=ROOT, name=f"docker-run-mysql-{image_tag}", timeout=600)
         created = True
         deadline = time.monotonic() + 180
         while time.monotonic() < deadline:
-            ping = subprocess.run(["docker", "exec", name, "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"],
+            ping = subprocess.run([docker or "docker", "exec", name, "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"],
                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
             if ping.returncode == 0:
                 print(f"  MySQL {image_tag} is accepting connections on 127.0.0.1:{port}", flush=True)
                 break
-            state = subprocess.run(["docker", "inspect", "--format", "{{.State.Running}} {{.State.ExitCode}}", name],
+            state = subprocess.run([docker or "docker", "inspect", "--format", "{{.State.Running}} {{.State.ExitCode}}", name],
                                    capture_output=True, text=True, check=False)
             if state.returncode != 0 or state.stdout.strip().startswith("false"):
                 raise RunnerError(f"MySQL {image_tag} fixture stopped before becoming ready ({state.stdout.strip() or 'container unavailable'}); see {log_path}")
@@ -390,18 +312,18 @@ def mysql_server(runner: CommandRunner, image_tag: str, port: int = 3306):
             raise RunnerError(f"MySQL {image_tag} did not become ready within 180 seconds")
         yield
     finally:
-        container_exists = subprocess.run(["docker", "container", "inspect", name],
+        container_exists = subprocess.run([docker or "docker", "container", "inspect", name],
                                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                           check=False).returncode == 0
         if created or container_exists:
             with log_path.open("w", encoding="utf-8") as output:
-                subprocess.run(["docker", "logs", name], stdout=output, stderr=subprocess.STDOUT, check=False)
-            subprocess.run(["docker", "stop", "--timeout", "15", name], stdout=subprocess.DEVNULL,
+                subprocess.run([docker or "docker", "logs", name], stdout=output, stderr=subprocess.STDOUT, check=False)
+            subprocess.run([docker or "docker", "stop", "--timeout", "15", name], stdout=subprocess.DEVNULL,
                            stderr=subprocess.DEVNULL, check=False)
-            subprocess.run(["docker", "rm", "--force", name], stdout=subprocess.DEVNULL,
+            subprocess.run([docker or "docker", "rm", "--force", name], stdout=subprocess.DEVNULL,
                            stderr=subprocess.DEVNULL, check=False)
-        if not preexisting:
-            remove_downloaded_image(image)
+        if cleanup and not preexisting:
+            remove_downloaded_image(image, docker)
             print(f"  Removed downloaded Docker image {image}", flush=True)
 
 
@@ -409,7 +331,7 @@ def prepare_java8_probe(source: Path, java_home: Path, probe_classes: Path,
                         runner: CommandRunner, env: dict[str, str]) -> None:
     source_file = source / "src/test/java/com/segfault03/ideadb/Java8DriverProbe.java"
     probe_classes.mkdir(parents=True, exist_ok=True)
-    runner.run([str(java_home / "bin/javac"), "--release", "8", "-encoding", "UTF-8",
+    runner.run([str(executable(java_home, "javac")), "--release", "8", "-encoding", "UTF-8",
                 "-d", str(probe_classes), str(source_file)], cwd=source,
                name="compile-java8-probe", timeout=120, env=env)
 
@@ -447,6 +369,16 @@ def validation_plan(args: argparse.Namespace) -> tuple[bool, bool, bool, int]:
     return run_base, run_ide_compatibility, run_database_compatibility, step_count
 
 
+def path_mapping(values, versions):
+    result = {}
+    for value in values:
+        version, separator, path = value.partition('=')
+        if not separator or version not in versions or not path or version in result:
+            raise ValueError('Expected a unique supported VERSION=PATH: ' + value)
+        result[version] = resolved_path(path)
+    return result
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--java-home", type=Path,
@@ -458,7 +390,26 @@ def main() -> int:
                        help="Run the IDE verifier and JDBC compatibility matrices; build the plugin but skip ordinary tests")
     modes.add_argument("--database-compatibility-only", action="store_true",
                        help="Run only the JDBC/Java 8 matrix; useful when Plugin Verifier runs separately")
+    parser.add_argument('--java8-home', type=Path, help='Java 8 runtime; download if missing')
+    parser.add_argument('--ide-home', type=Path, help='Build baseline IntelliJ 2025.1 home')
+    parser.add_argument('--ide-sdk', action='append', default=[], metavar='VERSION=PATH', help='Repeat for each verification SDK')
+    parser.add_argument('--mysql-home', action='append', default=[], metavar='VERSION=PATH', help='Repeat for each native MySQL server')
+    parser.add_argument('--verifier-jar', type=Path)
+    parser.add_argument('--jdbc-dir', type=Path, help='Existing mysql/ and hsqldb/ driver folders (copied into disposable cache)')
+    parser.add_argument('--runtime-dir', type=Path)
+    parser.add_argument('--sevenzip', type=Path)
+    parser.add_argument('--docker', help='Docker CLI; selects Docker on Windows (daemon must already be running)')
+    parser.add_argument('--mysql-port', type=port_number, help='Owned MySQL fixture port; default: automatic free port for each server')
+    parser.add_argument('--hsqldb-port', type=port_number, help='Owned live HSQLDB fixture port; default: automatic free port')
+    add_dependency_options(parser, cleanup=True)
     args = parser.parse_args()
+    try:
+        args.ide_homes = path_mapping(args.ide_sdk, IDE_VERSIONS)
+        args.mysql_homes = path_mapping(args.mysql_home, tuple(v for v, _ in MYSQL_MATRIX))
+    except ValueError as error:
+        parser.error(str(error))
+    deps = Dependencies(args)
+    native = os.name == 'nt' and not args.docker or bool(args.mysql_homes)
     run_base, run_ide_compatibility, run_database_compatibility, step_count = validation_plan(args)
     progress = Progress(step_count)
     active = "preflight"
@@ -467,30 +418,30 @@ def main() -> int:
     source: Path | None = None
     diagnostics: Path | None = None
     try:
-        with progress.step("Linux, Python, Docker and port preflight"):
+        with progress.step("Host, Python, fixture and port preflight"):
             active = progress.active
             check_linux()
-            if shutil.which("docker") is None:
+            if not native and shutil.which(args.docker or "docker") is None:
                 raise RunnerError("Docker CLI is required for the disposable MySQL compatibility fixtures")
-            subprocess.run(["docker", "info"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-            require_free_port(3306)
-            if run_base:
-                require_free_port(9001)
-            if run_ide_compatibility:
-                for port in range(19020, 19030):
-                    require_free_port(port)
+            if not native:
+                subprocess.run([args.docker or 'docker', 'info'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+            mysql_port = fixture_port(args.mysql_port, 3306)
+            hsql_port = fixture_port(args.hsqldb_port, 9001) if run_base else None
             required_space = 10 * 1024**3
-            if shutil.disk_usage(ROOT).free < required_space:
-                raise RunnerError("The workspace needs at least 10 GiB free for the isolated SDK and build downloads")
-            print(f"  Host: {platform.platform()} | Python {platform.python_version()} | Docker available", flush=True)
+            volume = deps.base
+            while not volume.exists():
+                volume = volume.parent
+            if shutil.disk_usage(volume).free < required_space:
+                raise RunnerError("The download volume needs at least 10 GiB free for the isolated SDK and build downloads")
+            print(f"  Host: {platform.platform()} | Python {platform.python_version()} | fixtures preflight passed", flush=True)
 
         build_root = ROOT / "build"
         build_root.mkdir(parents=True, exist_ok=True)
         diagnostics = build_root / "one-shot-test" / f".running-{uuid.uuid4().hex}"
         logs = diagnostics / "logs"
         logs.mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(prefix=".lattice-one-shot-", dir=build_root) as directory:
-            temp_path = Path(directory)
+        with deps:
+            temp_path = deps.workspace()
             tools = temp_path / "tools"
             source = copy_source(temp_path / "source")
             progress_runner_env: dict[str, str]
@@ -498,25 +449,32 @@ def main() -> int:
             java_home: Path
             java8_home: Path
             probe_classes = temp_path / "java8-probe"
-            gradle_home = temp_path / "gradle-home"
             development_cache = temp_path / "lattice-cache"
             jdbc_cache = temp_path / "jdbc-cache"
 
             with progress.step("Create temporary tool, Gradle and JDBC caches"):
                 active = progress.active
-                java_home = find_java_home(args.java_home) or download_runtime(tools, 21, "jdk")
-                if java_major(java_home / "bin/java") != 21 or not (java_home / "bin/javac").is_file():
+                java_home = deps.java(args.java_home)
+                if java_major(executable(java_home, "java")) != 21 or not executable(java_home, "javac").is_file():
                     raise RunnerError("Validation requires a full JDK 21")
-                progress_runner_env = prepare_proxy_environment(os.environ.copy(), java_home, tools)
+                progress_runner_env = prepare_proxy_environment(deps.environment(java_home), java_home, tools)
                 progress_runner_env.update({
                     "JAVA_HOME": str(java_home),
-                    "GRADLE_USER_HOME": str(gradle_home),
                     "LATTICE_DEV_CACHE": str(development_cache),
                     "LATTICE_ONE_SHOT_TEMP": str(temp_path),
                 })
+                if args.ide_home or args.binaries_dir:
+                    progress_runner_env['LATTICE_BUILD_IDE'] = str(deps.ide(args.ide_home))
+                if args.docker:
+                    progress_runner_env['LATTICE_DOCKER'] = args.docker
                 runner = CommandRunner(logs, progress_runner_env, progress)
                 if run_database_compatibility:
-                    java8_home = download_runtime(tools, 8, "jre")
+                    java8_home = deps.java(args.java8_home, major=8, jdk=False)
+                    seed = args.jdbc_dir or (args.binaries_dir / 'jdbc' if args.binaries_dir else None)
+                    if seed:
+                        if not seed.is_dir():
+                            raise RunnerError('--jdbc-dir must contain mysql/ and hsqldb/ folders')
+                        shutil.copytree(seed, jdbc_cache, dirs_exist_ok=True)
                     prepare_java8_probe(source, java_home, probe_classes, runner, progress_runner_env)
                     print(f"  JDK 21: {java_home}\n  Java 8 runtime: {java8_home}", flush=True)
                 else:
@@ -541,7 +499,25 @@ def main() -> int:
 
                 with progress.step("Run MySQL 8.4 and HSQLDB live functional suites"):
                     active = progress.active
-                    command = [sys.executable, "scripts/test.py", "--live", "--mysql", "--hsqldb", "--integration-only"]
+                    command = [sys.executable, 'scripts/test.py', '--live', '--mysql', '--hsqldb', '--integration-only',
+                               '--mysql-port', str(mysql_port), '--hsqldb-port', str(hsql_port),
+                               '--java-home', str(java_home), '--gradle-user-home', progress_runner_env['GRADLE_USER_HOME'],
+                               '--download-dir', str(temp_path / 'live-dependencies')]
+                    if progress_runner_env.get('LATTICE_BUILD_IDE'):
+                        command += ['--ide-home', progress_runner_env['LATTICE_BUILD_IDE']]
+                    if native:
+                        from windows.native_mysql import mysql_home
+                        command += ['--mysql-home', str(mysql_home(deps, '8.4.2', args.mysql_homes.get('8.4.2')))]
+                    if args.binaries_dir:
+                        command += ['--binaries-dir', str(args.binaries_dir)]
+                    if args.runtime_dir:
+                        command += ['--runtime-dir', str(args.runtime_dir)]
+                    if args.sevenzip:
+                        command += ['--sevenzip', str(args.sevenzip)]
+                    if args.docker:
+                        command += ['--docker', args.docker]
+                    if not args.cleanup:
+                        command += ['--no-cleanup']
                     runner.run(command, cwd=source, name="live-functional-suites", timeout=900)
 
             if run_ide_compatibility:
@@ -561,22 +537,30 @@ def main() -> int:
                     for index, version in enumerate(IDE_VERSIONS, 1):
                         print(f"  IDE compatibility {index}/{len(IDE_VERSIONS)}: IntelliJ IDEA {version}", flush=True)
                         run_plugin_verifier(runner, source, progress_runner_env, temp_path,
-                                            archive, java_home, version)
+                                            archive, java_home, version, deps, args)
 
             if run_database_compatibility:
                 with progress.step("Run MySQL server and Connector/J matrix one server at a time"):
                     active = progress.active
                     for index, (server_version, driver_versions) in enumerate(MYSQL_MATRIX, 1):
+                        matrix_port = fixture_port(args.mysql_port, 3306)
                         print(f"  MySQL compatibility {index}/{len(MYSQL_MATRIX)}: server {server_version}; drivers {', '.join(driver_versions)}",
                               flush=True)
-                        with mysql_server(runner, server_version):
+                        if native:
+                            from windows.native_mysql import mysql_fixture
+                            fixture = mysql_fixture(deps, server_version, args.mysql_homes.get(server_version), logs=logs,
+                                                    runtime_dir=args.runtime_dir, sevenzip=args.sevenzip, port=matrix_port)
+                        else:
+                            fixture = mysql_server(runner, server_version, port=matrix_port, cleanup=args.cleanup)
+                        with fixture:
                             properties = [
                                 "-Plattice.compatibility.mode=mysql",
-                                "-Plattice.compatibility.port=3306",
+                                f"-Plattice.compatibility.port={matrix_port}",
                                 f"-Plattice.compatibility.server={server_version}",
-                                f"-Plattice.compatibility.java8={java8_home / 'bin/java'}",
+                                f"-Plattice.compatibility.java8={executable(java8_home, 'java')}",
                                 f"-Plattice.compatibility.probe={probe_classes}",
                                 f"-Plattice.compatibility.cache={jdbc_cache}",
+                                f"-Plattice.compatibility.cleanup={str(args.cleanup and os.name != 'nt').lower()}",
                                 f"-Plattice.compatibility.output={source / 'build/compatibility'}",
                             ]
                             run_gradle(runner, source, "databaseCompatibilityTest", properties=properties,
@@ -586,23 +570,24 @@ def main() -> int:
                     active = progress.active
                     properties = [
                         "-Plattice.compatibility.mode=hsqldb",
-                        f"-Plattice.compatibility.java8={java8_home / 'bin/java'}",
+                        f"-Plattice.compatibility.java8={executable(java8_home, 'java')}",
                         f"-Plattice.compatibility.probe={probe_classes}",
                         f"-Plattice.compatibility.cache={jdbc_cache}",
+                                f"-Plattice.compatibility.cleanup={str(args.cleanup and os.name != 'nt').lower()}",
                         f"-Plattice.compatibility.output={source / 'build/compatibility'}",
                     ]
                     run_gradle(runner, source, "databaseCompatibilityTest", properties=properties,
                                name=f"hsqldb-matrix-{len(HSQL_VERSIONS)}-versions", timeout=1800)
 
         if args.skip_compatibility:
-            scope = "Linux build and live functional checks (real IDE UI checks run separately)"
+            scope = "Linux/Windows build and live functional checks (real IDE UI checks run separately)"
         elif args.compatibility_only:
-            scope = "Linux IntelliJ and JDBC compatibility checks"
+            scope = "Linux/Windows IntelliJ and JDBC compatibility checks"
         elif args.database_compatibility_only:
-            scope = "Linux JDBC/Java 8 compatibility matrix"
+            scope = "Linux/Windows JDBC/Java 8 compatibility matrix"
         else:
-            scope = "all Linux one-shot validation steps"
-        print(f"\nPASS: {scope} passed; temporary tools and caches were removed.", flush=True)
+            scope = "all Linux/Windows one-shot validation steps"
+        print(f"\nPASS: {scope} passed; dependencies {'cleaned' if args.cleanup else 'retained'}.", flush=True)
         if diagnostics:
             shutil.rmtree(diagnostics, ignore_errors=True)
         return 0

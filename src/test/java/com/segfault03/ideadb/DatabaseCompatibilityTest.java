@@ -78,7 +78,7 @@ public final class DatabaseCompatibilityTest {
                 "com.segfault03.ideadb.Java8DriverProbe",type,url).inheritIO().start();
         require(probe.waitFor(45,TimeUnit.SECONDS) && probe.exitValue()==0,"Java 8 driver failed: " + type + " / " + jar.getFileName());
     }
-    private static void delete(Path path) throws Exception { if (path != null) Files.deleteIfExists(path); }
+    private static void delete(Path path) throws Exception { if (path != null && !Boolean.getBoolean("lattice.test.keepDependencies")) Files.deleteIfExists(path); }
     public static void main(String[] args) throws Exception {
         if(args[0].equals("download")) {
             for(DatabaseType type:DatabaseType.values()) {
@@ -88,6 +88,7 @@ public final class DatabaseCompatibilityTest {
             return;
         }
         List<Throwable> failures=new ArrayList<>();
+        List<Path> downloaded=new ArrayList<>();
         if(args[0].equals("mysql")) {
             int port=Integer.parseInt(args[1]); String server=args[2];
             Path java8=args.length > 3 ? Path.of(args[3]) : null;
@@ -99,13 +100,16 @@ public final class DatabaseCompatibilityTest {
                     if (java8 != null && tests != null) java8Probe(java8,tests,jar,"MYSQL","jdbc:mysql://127.0.0.1:"+port+"/?useSSL=false");
                     var config=new ConnectionConfig(DatabaseType.MYSQL,"compatibility"); config.setPort(port); config.setDriverSource(DriverSource.DOWNLOAD); config.setDriverVersion(version); flow(config,version,jar);
                 } catch(Throwable failure) { failure.printStackTrace(); failures.add(failure); }
-                finally { try { delete(jar); } catch(Exception cleanup) { failures.add(cleanup); } }
+                finally { if (jar != null) downloaded.add(jar); }
             }
         } else {
-            Path java8=Path.of(args[1]), tests=Path.of(args[2]); int port=19020;
+            Path java8=Path.of(args[1]), tests=Path.of(args[2]);
             for(String version:args.length > 3 ? List.of(args[3]) : HSQL) {
                 Path jar=null;
-                int selectedPort=port++;
+                int selectedPort;
+                try(var listener=new java.net.ServerSocket(0,0,java.net.InetAddress.getByName("127.0.0.1"))) {
+                    selectedPort=listener.getLocalPort();
+                }
                 Path logs = Path.of(System.getProperty("lattice.test.output", "build/compatibility"));
                 Files.createDirectories(logs);
                 Process server=null;
@@ -129,11 +133,15 @@ public final class DatabaseCompatibilityTest {
                 } catch(Throwable failure) { failure.printStackTrace(); failures.add(failure); }
                 finally {
                     if(server!=null && !server.waitFor(5,TimeUnit.SECONDS)) { server.destroy(); server.waitFor(5,TimeUnit.SECONDS); }
-                    try { delete(jar); } catch(Exception cleanup) { failures.add(cleanup); }
+                    if (jar != null) downloaded.add(jar);
                 }
             }
         }
         MANAGER.closeAll(); DriverRegistry.getInstance().dispose();
+        // Windows keeps jars locked until their owning URLClassLoaders are closed.
+        for (Path jar : downloaded) {
+            try { delete(jar); } catch(Exception cleanup) { failures.add(cleanup); }
+        }
         if(!failures.isEmpty()) throw new AssertionError(failures.size()+" compatibility cases failed",failures.get(0));
     }
 }

@@ -512,8 +512,11 @@ public class FunctionalRegressionTest {
             drafts();
             credentials();
             ConnectionConfig mysql = new ConnectionConfig(DatabaseType.MYSQL, "regression MySQL"); mysql.setDatabaseName("shop_db");
+            mysql.setPort(Integer.getInteger("lattice.test.mysql.port", 3306));
             runEngine(mysql);
-            runEngine(new ConnectionConfig(DatabaseType.HSQLDB, "regression HSQLDB"));
+            var hsql = new ConnectionConfig(DatabaseType.HSQLDB, "regression HSQLDB");
+            hsql.setPort(Integer.getInteger("lattice.test.hsqldb.port", 9001));
+            runEngine(hsql);
             System.out.println("PASS functional regression assertions: " + assertions);
         } finally { manager.closeAll(); }
     }
