@@ -124,11 +124,34 @@ class DependencyTests(unittest.TestCase):
                 self.assertEqual(deps.workspace() / 'gradle-home', Path(deps.environment(root)['GRADLE_USER_HOME']))
             with patch.dict(os.environ, {'GRADLE_USER_HOME': str(root / 'shared')}):
                 with Dependencies(self.options(root)) as deps:
-                    self.assertEqual(root / 'shared', Path(deps.environment(root)['GRADLE_USER_HOME']))
+                    self.assertEqual((root / 'shared').resolve(), Path(deps.environment(root)['GRADLE_USER_HOME']))
                 options = self.options(root)
                 options.gradle_user_home = root / 'explicit'
                 with Dependencies(options) as deps:
-                    self.assertEqual(root / 'explicit', Path(deps.environment(root)['GRADLE_USER_HOME']))
+                    self.assertEqual((root / 'explicit').resolve(), Path(deps.environment(root)['GRADLE_USER_HOME']))
+
+    def test_shared_gradle_cache_alias_is_preserved_during_cleanup(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {}, clear=True):
+            root = Path(directory)
+            cache = root / 'shared'
+            cache.mkdir()
+            marker = cache / 'keep.txt'
+            marker.write_text('shared cache', encoding='utf-8')
+            alias = root / 'cache-link'
+            try:
+                alias.symlink_to(cache, target_is_directory=True)
+            except OSError as error:
+                if os.name == 'nt' and error.winerror == 1314:
+                    self.skipTest('Creating Windows symlinks requires privileges or Developer Mode')
+                raise
+            options = self.options(root)
+            options.gradle_user_home = alias
+            with Dependencies(options) as deps:
+                self.assertEqual(cache.resolve(), Path(deps.environment(root)['GRADLE_USER_HOME']))
+                owned = deps.workspace()
+            self.assertFalse(owned.exists())
+            self.assertTrue(alias.is_symlink())
+            self.assertEqual('shared cache', marker.read_text(encoding='utf-8'))
 
     def test_unresolved_cache_variables_fail_before_creating_directories(self):
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {}, clear=True):
@@ -148,7 +171,7 @@ class DependencyTests(unittest.TestCase):
             args = self.options(root)
             args.gradle_user_home = Path('%LATTICE_TEST_PROFILE%/.gradle')
             with Dependencies(args) as deps:
-                self.assertEqual(root / '.gradle', Path(deps.environment(root)['GRADLE_USER_HOME']))
+                self.assertEqual((root / '.gradle').resolve(), Path(deps.environment(root)['GRADLE_USER_HOME']))
 
     @unittest.skipUnless(os.name == 'nt', 'Windows wrapper socket defaults')
     def test_windows_wrapper_uses_ipv4_and_preserves_java_options(self):
