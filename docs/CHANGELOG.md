@@ -4,6 +4,9 @@ Patch notes are selected by the exact release version, including prerelease suff
 
 ## [Unreleased]
 
+- Table and SQL actions reflect selection, input, pending edits and busy states. The table filter bar includes Clear; disabled icons match their labels, and keyboard focus remains visible without leaving a focus outline after mouse clicks.
+- Table headers stop at the last column. Table filters, schema dialogs and toolbars adapt to narrow windows, with consistent light/dark palettes and clearer loading, validation and cancellation feedback.
+- Production Swing action assertions and real-IDE UI reviews run in CI. Development scripts share dependency reuse and cleanup options, with native Windows database fixtures and tracked child-process lifetimes.
 - Plain text fields, dropdown selectors and editable selectors share their text inset; the shared border no longer adds IntelliJ's native combo-box padding twice.
 - Driver discovery runs off the UI thread, follows child Maven version overrides and validates relative parent coordinates. Switching database types applies the matching project default while preserving manual and saved selections.
 - Driver identity stays stable when selected artifacts disappear; session switches retire the previous connection. Retained JAR validation checks entry data/CRCs, removes corrupt owned files, and preserves valid files on cancellation.
