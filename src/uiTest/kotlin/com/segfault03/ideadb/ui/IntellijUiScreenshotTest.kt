@@ -504,7 +504,10 @@ class IntellijUiScreenshotTest {
                 })
                 return@useDriverAndCloseIde
             }
-            driverSourceCombo.selectItem("Available drivers")
+            selectComboItemWithKeyboard(driverSourceCombo, "Available drivers")
+            waitUntil("available driver card is showing after switching source") {
+                availableDriverCombo.component.isShowing()
+            }
             availableDriverCombo.selectItem("2.7.3-jdk8 · DOWNLOADED")
             assertDriverSummary(connectionDialog, "2.7.3-jdk8 · DOWNLOADED")
 
@@ -1763,6 +1766,27 @@ class IntellijUiScreenshotTest {
         robot.waitForIdle()
     }
 
+    private fun selectComboItemWithKeyboard(combo: JComboBoxUiComponent, label: String) {
+        val index = combo.listValues().indexOf(label)
+        check(index >= 0) { "Missing combo item '$label': ${combo.listValues()}" }
+        // Navigate the real popup and verify its result before using the next card.
+        clickComboArrow(combo)
+        val robot = Robot()
+        robot.keyPress(KeyEvent.VK_HOME)
+        robot.keyRelease(KeyEvent.VK_HOME)
+        repeat(index) {
+            robot.keyPress(KeyEvent.VK_DOWN)
+            robot.keyRelease(KeyEvent.VK_DOWN)
+        }
+        robot.keyPress(KeyEvent.VK_ENTER)
+        robot.keyRelease(KeyEvent.VK_ENTER)
+        robot.waitForIdle()
+        waitUntil("combo selection '$label'") {
+            combo.driver.cast(combo.component, LiveComboSelection::class).getSelectedIndex() == index
+        }
+        println("Keyboard combo transition verified: $label")
+    }
+
     private fun pressEscape() {
         val robot = Robot()
         robot.keyPress(KeyEvent.VK_ESCAPE)
@@ -1883,6 +1907,9 @@ interface LiveIcon {
 
 @Remote("java.lang.Object")
 interface LiveObject { fun getClass(): LiveClass }
+
+@Remote("javax.swing.JComboBox")
+interface LiveComboSelection { fun getSelectedIndex(): Int }
 
 @Remote("java.lang.Class")
 interface LiveClass { fun getName(): String }
