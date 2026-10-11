@@ -103,6 +103,8 @@ jobs:
           python3 scripts/test.py --live --hsqldb --build
           --version "$RELEASE_VERSION"
           --notes-file build/release/patch-notes.html
+      - name: Validate production Swing previews and action states
+        run: python3 scripts/ui-preview.py --all-previews
       - name: Render dark and light production UI inside IntelliJ IDEA
         env:
           LATTICE_UI_PLUGIN_VERSION: ${{ steps.metadata.outputs.version }}
@@ -147,6 +149,7 @@ jobs:
             build/test-results/
             build/fixtures/
             build/ui-review/
+            build/ui-preview/
 
   database-compatibility:
     needs: build

@@ -34,7 +34,7 @@ The Java 8/legacy-driver matrix is documented in [compatibility](compatibility.m
 
 Run pure tests for every change. Run live suites for database behavior; check the release ZIP and Plugin Verifier for platform/dependency changes. Describe the trigger, changed behavior, validation and remaining limits in pull requests. The cross-platform workflow builds/tests on Windows, Linux and macOS; the release workflow additionally runs live fixtures and verifies three IntelliJ 2025 releases.
 
-Use `python scripts/ui-preview.py` for fast Swing previews. For real-IDE layout and action flows, use `./scripts/linux/review-intellij-ui.sh` on Linux/X11 or `.\scripts\windows\review-intellij-ui.ps1` on Windows; static compatibility does not establish those behaviors. Dynamic unload and project-close testing remain separate checks. Never commit passwords, connection state, user databases, generated outputs, local SDKs or native test binaries.
+Use `python scripts/ui-preview.py` for fast Swing previews. Linux CI and release validation run `python3 scripts/ui-preview.py --all-previews`, including the harness's action-state assertions, and retain the preview gallery. For real-IDE layout and action flows, use `./scripts/linux/review-intellij-ui.sh` on Linux/X11 or `.\scripts\windows\review-intellij-ui.ps1` on Windows; static compatibility does not establish those behaviors. Dynamic unload and project-close testing remain separate checks. Never commit passwords, connection state, user databases, generated outputs, local SDKs or native test binaries.
 
 ## Dependencies and packaging
 

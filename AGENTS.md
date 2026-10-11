@@ -2,6 +2,12 @@
 
 Lattice is a Java 21 IntelliJ Platform plugin for MySQL/HSQLDB browsing, SQL, table editing and schema tools; use the committed Gradle wrapper.
 
+## Working on changes
+- Before implementation or validation, read the relevant documentation linked below, including script options and dependency reuse requirements.
+- Add or update focused regression tests for behavior changes and run the validation appropriate to the change. Report failures and remaining validation limits; do not treat a blocked check as passing.
+- Review CI and release workflows when adding or changing tests, scripts, dependencies or validation steps. Update them if required to run the relevant checks; leave adequate existing coverage unchanged.
+- Update relevant documentation when behavior, workflows or commands change. Keep generated outputs, credentials and workstation-specific assets out of Git.
+
 ## Scripts
 - [`test.py`](scripts/test.py) — run builds, Java tests and optional disposable database fixtures.
 - [`one-shot-test.py`](scripts/one-shot-test.py) — run isolated Linux/Windows build, live and compatibility checks.

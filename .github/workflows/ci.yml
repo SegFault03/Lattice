@@ -42,6 +42,9 @@ jobs:
       - name: Build and run unit tests
         if: matrix.os != 'ubuntu-24.04'
         run: python scripts/test.py --build
+      - name: Validate production Swing previews and action states
+        if: matrix.os == 'ubuntu-24.04'
+        run: python3 scripts/ui-preview.py --all-previews
       - name: Render dark and light UI inside IntelliJ IDEA
         if: matrix.os == 'ubuntu-24.04'
         run: |
@@ -67,6 +70,7 @@ jobs:
             build/test-results/
             build/fixtures/
             build/ui-review/
+            build/ui-preview/
           retention-days: 7
 
   ide-compatibility:
