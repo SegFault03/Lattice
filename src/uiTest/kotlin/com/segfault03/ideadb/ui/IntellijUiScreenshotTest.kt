@@ -77,9 +77,13 @@ class IntellijUiScreenshotTest {
             Files.isRegularFile(mavenRepository.resolve("com/mysql/mysql-connector-j/$version/mysql-connector-j-$version.jar"))
         }) { "Expected the MySQL Connector/J Maven fixtures in $mavenRepository" }
         Files.createDirectories(projectDirectory.resolve(".idea"))
+        projectDirectory.resolve(".idea/.name").writeText("lattice-ui-test")
+        // JDBC dependencies are supplied locally. Resolving Maven build plugins
+        // over the network can otherwise keep startup indicators busy for minutes.
         projectDirectory.resolve(".idea/workspace.xml").writeText("""
             <project version="4"><component name="MavenImportPreferences">
               <option name="generalSettings"><MavenGeneralSettings>
+                <option name="workOffline" value="true"/>
                 <option name="localRepository" value="${mavenRepository.toString().replace("&", "&amp;").replace("\"", "&quot;")}"/>
               </MavenGeneralSettings></option>
             </component></project>
@@ -97,6 +101,12 @@ class IntellijUiScreenshotTest {
             CurrentTestMethod.hyphenateWithClass(),
             TestCase(ideInfo, LocalProjectInfo(projectDirectory)),
         )
+        // Windows' native idea64 launcher does not consume JDK_JAVA_OPTIONS.
+        // Keep the IDE and the Driver/Robot test JVM in the same coordinate space.
+        testContext.applyVMOptionsPatch {
+            addSystemProperty("sun.java2d.uiScale", "1.0")
+            addSystemProperty("ide.ui.scale", "1.0")
+        }
         // Starter keeps the test IDE's config between runs. Reset only this test plugin's
         // saved connections so every run begins at the same real empty-state screen.
         Files.deleteIfExists(testContext.paths.configDir.resolve("options/LatticeSettings.xml"))
@@ -774,6 +784,19 @@ class IntellijUiScreenshotTest {
             captureScreen(screenshotsDirectory.resolve("table-auto-refresh-options.png"))
             pressEscape()
             if (styleOnly) {
+                assertFilterLayout(tableEditor, 1)
+                tableEditor.x { byAccessibleName("Export data") }.waitFound().click()
+                captureScreen(screenshotsDirectory.resolve("table-export-menu.png"))
+                frame.x { byVisibleText("Current page (includes pending edits)") }.waitFound().click()
+                val sqlExport = frame.xx { byVisibleText("SQL…") }.list().first {
+                    withContext(OnDispatcher.EDT) {
+                        cast(it.component, LiveMenuItem::class).getParent().getInvoker().getText() == "Current page (includes pending edits)"
+                    }
+                }
+                captureScreen(screenshotsDirectory.resolve("table-export-sql-submenu.png"))
+                assertPaintedSurface(sqlExport, dataGrid, "SQL export submenu")
+                pressEscape()
+                pressEscape()
                 frame.resize(narrowWidth, narrowHeight)
                 openToolbarOverflow(tableEditor, "Table actions").also {
                     captureScreen(screenshotsDirectory.resolve("table-narrow-toolbar-expanded-pending.png"))
@@ -783,15 +806,58 @@ class IntellijUiScreenshotTest {
                     assertActionContrast(it.x { byAccessibleName("Revert pending changes") }.waitFound())
                     closeToolbarOverflow(it)
                 }
+                frame.resize(normalWidth, normalHeight)
+                databaseTree.fixture.rightClickPath(peoplePath.joinToString(databaseTree.fixture.separator()))
+                frame.x { byVisibleText("Open in SQL console") }.waitFound().click()
+                val console = frame.x { byJavaClass("com.segfault03.ideadb.ui.SqlQueryConsolePanel") }.waitFound()
+                waitUntil("console database picker ready") { console.x { byVisibleText("Run") }.waitFound().component.isEnabled() }
+                captureScreen(screenshotsDirectory.resolve("sql-console-ready.png"))
+                val reviewedLightThemes = mutableListOf(themeId)
+                // Reuse the live table and console to check every bundled light
+                // palette without repeating IDE startup and database setup.
+                if (System.getProperty("ui.style.lightThemes").toBoolean()) {
+                    for (lightTheme in listOf("ExperimentalLight", "ExperimentalLightWithLightHeader",
+                        "IntelliJ", "JetBrainsLightTheme", "Islands Light").filter {
+                        it != themeId && (it != "Islands Light" || "Islands Light" in availableThemes)
+                    }) {
+                        withContext(OnDispatcher.EDT) {
+                            laf.setCurrentLookAndFeel(laf.findLaf(lightTheme), true)
+                            laf.updateUI()
+                        }
+                        check(laf.getCurrentUIThemeLookAndFeel().getId() == lightTheme)
+                        val themeDirectory = screenshotsDirectory.resolve(lightTheme)
+                        Files.createDirectories(themeDirectory)
+                        captureScreen(themeDirectory.resolve("sql-console-ready.png"))
+                        databaseTree.fixture.rightClickPath(peoplePath.joinToString(databaseTree.fixture.separator()))
+                        frame.x { byVisibleText("Open data editor") }.waitFound().click()
+                        assertFilterLayout(tableEditor, 1)
+                        captureScreen(themeDirectory.resolve("table-filters.png"))
+                        tableEditor.x { byAccessibleName("Export data") }.waitFound().click()
+                        frame.x { byVisibleText("Current page (includes pending edits)") }.waitFound().click()
+                        val themedSqlExport = frame.xx { byVisibleText("SQL…") }.list().first {
+                            withContext(OnDispatcher.EDT) {
+                                cast(it.component, LiveMenuItem::class).getParent().getInvoker().getText() == "Current page (includes pending edits)"
+                            }
+                        }
+                        captureScreen(themeDirectory.resolve("table-export-sql-submenu.png"))
+                        assertPaintedSurface(themedSqlExport, dataGrid, "$lightTheme SQL export submenu")
+                        pressEscape()
+                        pressEscape()
+                        databaseTree.fixture.rightClickPath(peoplePath.joinToString(databaseTree.fixture.separator()))
+                        frame.x { byVisibleText("Open in SQL console") }.waitFound().click()
+                        reviewedLightThemes.add(lightTheme)
+                    }
+                }
                 Files.writeString(screenshotsDirectory.resolve("runtime-evidence.txt"), buildString {
                     appendLine("IDE target: IntelliJ IDEA $productCode ${System.getProperty("ui.ide.version")} (${System.getProperty("ui.ide.build")})")
                     appendLine("Actual IDE theme: ${actualTheme.getName()} (${actualTheme.getId()})")
                     appendLine("Available IDE themes: $availableThemes")
+                    appendLine("Light theme palettes reviewed: $reviewedLightThemes")
                     appendLine("UI driver: JetBrains Starter and Driver; real production DatabaseMainPanel, TableDataEditorPanel, DatabaseTable and JTable editors")
                     appendLine("IDE JBR release: ${Files.readString(ideHome.resolve("jbr/release")).lineSequence().filter { it.startsWith("JAVA_VERSION=") || it.startsWith("IMPLEMENTOR=") }.joinToString(", ")}")
                     appendLine("IDE display: ${displayBounds.width}x${displayBounds.height}; scale 1")
                     appendLine("Verified: six explorer actions in native hover overflow and working Add Connection invoker; failed connection status; valid/invalid/unchanged table edits; text and integer editor theme surfaces; native menu background; full auto-refresh caption; white active action labels and painted glyphs in normal and overflow toolbars")
-                    appendLine("Scope: focused UI regressions; the default review continues through commit, export, alter-table and SQL flows")
+                    appendLine("Scope: focused UI regressions including SQL export submenu palette, table filters and console layout; the default review continues through commit, export, alter-table and SQL flows")
                 })
                 println("Focused real IDE UI regression review passed: $themeId")
                 return@useDriverAndCloseIde
@@ -1545,7 +1611,15 @@ class IntellijUiScreenshotTest {
         val popups = toolbar.driver.ui.xx {
             byType("com.intellij.openapi.actionSystem.impl.ActionToolbarImpl\$PopupToolbar")
         }.list().map { toolbar.driver.cast(it.component, LiveSwingComponent::class) }
-        Robot().mouseMove(10, 10)
+        var outside = Point()
+        toolbar.driver.ui.ideFrame {
+            val origin = component.getLocationOnScreen()
+            outside = Point(origin.x + component.width / 2, origin.y + component.height / 2)
+        }
+        val robot = Robot()
+        robot.mouseMove(outside.x, outside.y)
+        robot.mousePress(InputEvent.BUTTON1_DOWN_MASK)
+        robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
         pressEscape()
         waitUntil("native hover toolbar dismissed") {
             popups.all { !it.isShowing() }

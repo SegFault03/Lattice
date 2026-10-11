@@ -27,7 +27,7 @@ $assets = 'C:\path\to\test-binaries'
 .\scripts\windows\probe-hsqldb-cancellation.ps1 --java-home "$assets\ides\2025.1\jbr"
 ```
 
-The two Windows UI scripts use native PowerShell flags: `-JavaHome`, `-IdeHome` (IDE to launch), `-BuildIdeHome` (2025.1 compile SDK), `-DownloadDir`, `-BinariesDir`, `-GradleUserHome`, `-Cleanup` / `-NoCleanup`, and `-Python`. Review additionally accepts `-FixtureCache` (mysql/ and hsqldb/ JDBC folders) and `-MavenRepository` (a reusable Maven-layout fixture repository). Missing jars are prepared for both capture and review. The UI bootstrap defaults to retention; cleanup leaves screenshots and logs under build/. Use an interactive desktop with the test IDE in the foreground.
+The two Windows UI scripts use native PowerShell flags: `-JavaHome`, `-IdeHome` (IDE to launch), `-BuildIdeHome` (2025.1 compile SDK), `-DownloadDir`, `-BinariesDir`, `-GradleUserHome`, `-Cleanup` / `-NoCleanup`, and `-Python`. Review additionally accepts `-FixtureCache` (mysql/ and hsqldb/ JDBC folders) and `-MavenRepository` (a reusable Maven-layout fixture repository). Missing jars are prepared for both capture and review. The UI bootstrap defaults to retention; cleanup leaves screenshots and logs under build/. Use an interactive desktop; capture automatically restores the newly launched test IDE to the foreground while preserving its dialogs and menus.
 
 ```powershell
 .\scripts\windows\review-intellij-ui.ps1 -Themes @('ExperimentalDark') -StyleOnly -BinariesDir $assets -DownloadDir "$assets\downloads" -GradleUserHome "$env:USERPROFILE\.gradle" -Cleanup

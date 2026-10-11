@@ -24,9 +24,7 @@ final class DatabaseExplorerToolbar extends JPanel {
                             Runnable removeConnection, Runnable refreshConnection,
                             Runnable openConsole, Runnable showHelp) {
         setLayout(new BoxLayout(this, BoxLayout.X_AXIS));
-        setBorder(BorderFactory.createCompoundBorder(
-                JBUI.Borders.customLineBottom(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR),
-                JBUI.Borders.empty(6, 12)));
+        setBorder(JBUI.Borders.empty(6, 12));
         add = button(AllIcons.General.Add, "Add connection…", null, true);
         add.addActionListener(e -> addConnection.accept((Component)e.getSource()));
         edit = button(AllIcons.General.Settings, "Edit connection…", editConnection);
@@ -44,9 +42,6 @@ final class DatabaseExplorerToolbar extends JPanel {
         removeAll(); // Transfer the existing production controls and their listeners.
         JComponent toolbar = DatabaseActionToolbar.create(target, "Explorer actions",
                 add, edit, remove, null, refresh, console, null, help);
-        toolbar.setBorder(BorderFactory.createCompoundBorder(
-                JBUI.Borders.customLineBottom(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR),
-                toolbar.getBorder()));
         return toolbar;
     }
 

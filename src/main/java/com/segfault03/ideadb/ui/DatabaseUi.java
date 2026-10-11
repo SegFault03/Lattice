@@ -22,6 +22,20 @@ public final class DatabaseUi {
     /** Native IDEA popup painting, palette, borders and window handling in every theme. */
     public static JPopupMenu popupMenu() { return new com.intellij.openapi.ui.JBPopupMenu(); }
 
+    /** Match JBPopupMenu's surface/window settings for Swing's internally owned submenus. */
+    public static JMenu submenu(String text) {
+        return new JMenu(text) {
+            @Override public JPopupMenu getPopupMenu() {
+                JPopupMenu popup = super.getPopupMenu();
+                // IDEA's popup UI paints the theme surface; Swing's opaque fill can
+                // cover it with a black rectangle in native light themes.
+                popup.setOpaque(false);
+                popup.setLightWeightPopupEnabled(false);
+                return popup;
+            }
+        };
+    }
+
     /** Every connection entry point offers the same database choice. */
     public static JPopupMenu connectionMenu(Consumer<DatabaseType> choose) {
         JPopupMenu menu = popupMenu();

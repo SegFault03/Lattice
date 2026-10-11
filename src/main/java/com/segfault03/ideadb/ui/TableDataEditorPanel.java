@@ -138,9 +138,6 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         filterBtn.addActionListener(e -> loadData(1, pageSize));
         JBLabel whereLabel = new JBLabel("WHERE");
         JBLabel orderLabel = new JBLabel("ORDER BY");
-        int filterLabelWidth = Math.max(whereLabel.getPreferredSize().width, orderLabel.getPreferredSize().width);
-        whereLabel.setPreferredSize(new Dimension(filterLabelWidth, whereLabel.getPreferredSize().height));
-        orderLabel.setPreferredSize(new Dimension(filterLabelWidth, orderLabel.getPreferredSize().height));
         JPanel filters = new TableFilterPanel(DatabaseUi.labeledInput(whereLabel, whereField),
                 DatabaseUi.labeledInput(orderLabel, orderField), filterBtn);
         filters.setBorder(BorderFactory.createCompoundBorder(
@@ -824,7 +821,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     }
 
     private void addExportFormats(JPopupMenu menu,String label,ExportScope scope) {
-        JMenu submenu=new JMenu(label);
+        JMenu submenu=DatabaseUi.submenu(label);
         for(String format:new String[]{"csv","json","sql"}) {
             JMenuItem item=new JMenuItem(format.toUpperCase(java.util.Locale.ROOT) + "…");
             item.addActionListener(event -> exportData(format,scope)); submenu.add(item);

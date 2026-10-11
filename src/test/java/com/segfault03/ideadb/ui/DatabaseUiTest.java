@@ -7,6 +7,27 @@ import java.awt.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DatabaseUiTest {
+    @Test void exportSubmenusUseTheNativePopupSurfaceAndKeepSwingMenuNavigation() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            JMenu submenu = DatabaseUi.submenu("Current page");
+            JMenuItem sql = new JMenuItem("SQL…");
+            java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+            sql.addActionListener(event -> calls.incrementAndGet());
+            submenu.add(sql);
+            for (int pass = 0; pass < 2; pass++) {
+                if (pass > 0) SwingUtilities.updateComponentTreeUI(submenu);
+                JPopupMenu popup = submenu.getPopupMenu();
+                assertFalse(popup.isOpaque());
+                assertFalse(popup.isLightWeightPopupEnabled());
+                assertSame(submenu, popup.getInvoker());
+                assertSame(sql, submenu.getItem(0));
+                assertSame(popup, submenu.getSubElements()[0]);
+            }
+            sql.doClick(0);
+            assertEquals(1, calls.get());
+        });
+    }
+
     @Test void emphasizedGlyphIsWhiteRatherThanGrayAndPreservesTransparency() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             Icon gray = new Icon() {

@@ -249,10 +249,6 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
 
     private JPanel labeledPicker(String text, JComponent picker) {
         JBLabel label = new JBLabel(text);
-        int width = 0;
-        for (String title : new String[]{"Database", "History", "Template"})
-            width = Math.max(width, new JBLabel(title).getPreferredSize().width);
-        label.setPreferredSize(new Dimension(width, label.getPreferredSize().height));
         label.setLabelFor(picker);
         return DatabaseUi.labeledInput(label, picker);
     }

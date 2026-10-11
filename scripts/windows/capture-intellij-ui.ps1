@@ -144,7 +144,8 @@ try {
     }
     Write-Host "Using Java 21: $selectedJavaHome"
     Write-Host "Using Windows desktop: $($desktop.Width)x$($desktop.Height)"
-    Write-Host 'Keep the test IDE visible and in the foreground during automation.'
+    Write-Host 'The capture script restores the newly launched test IDE to the foreground during automation.'
+    $foregroundJob = Start-Job -FilePath (Join-Path $PSScriptRoot 'internal/foreground-test-ide.ps1') -ArgumentList (Get-Date)
     $scriptErrorPreference = $ErrorActionPreference
     try {
         # Java writes its harmless JDK_JAVA_OPTIONS notice to stderr. PowerShell 5
@@ -153,6 +154,9 @@ try {
         Invoke-LatticeCommand (@($env:COMSPEC, '/d', '/c', '.\gradlew.bat') + $gradleArguments) $Python
         $gradleExitCode = $LASTEXITCODE
     } finally {
+        Stop-Job -Job $foregroundJob
+        Receive-Job -Job $foregroundJob -ErrorAction Continue | Out-Host
+        Remove-Job -Job $foregroundJob
         $ErrorActionPreference = $scriptErrorPreference
     }
     if ($gradleExitCode -ne 0) { throw "Gradle uiScreenshotTest failed with exit code $gradleExitCode." }

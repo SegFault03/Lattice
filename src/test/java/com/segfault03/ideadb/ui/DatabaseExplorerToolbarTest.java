@@ -20,6 +20,8 @@ class DatabaseExplorerToolbarTest {
             Runnable action = calls::incrementAndGet;
             DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(
                     component -> action.run(), action, action, action, action, action);
+            assertInstanceOf(javax.swing.border.EmptyBorder.class, toolbar.getBorder(),
+                    "The explorer must leave the section boundary to the IDE tool-window header");
             List<JButton> buttons = new ArrayList<>();
             for (Component child : toolbar.getComponents()) {
                 if (child instanceof JButton button) buttons.add(button);

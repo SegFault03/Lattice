@@ -188,6 +188,7 @@ intellijPlatformTesting.testIdeUi.register("uiScreenshotTest") {
         systemProperty("ui.review.enabled", providers.gradleProperty("lattice.ui.review").orElse("false").get())
         systemProperty("ui.inputs.only", providers.gradleProperty("lattice.ui.inputsOnly").orElse("false").get())
         systemProperty("ui.style.only", providers.gradleProperty("lattice.ui.styleOnly").orElse("false").get())
+        systemProperty("ui.style.lightThemes", providers.gradleProperty("lattice.ui.lightThemes").orElse("false").get())
         systemProperty("ui.maven.repository", providers.gradleProperty("lattice.ui.maven.repository").orElse(layout.buildDirectory.dir("ui-test-maven/repository").map { it.asFile.absolutePath }).get())
         val ide = tasks.named<RunIdeTask>("runIde").get()
         // Launch a newer installed IDE without changing the plugin's compilation SDK.
