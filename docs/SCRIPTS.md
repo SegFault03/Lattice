@@ -53,7 +53,7 @@ Common Python commands stay at the root of `scripts/`. PowerShell commands and h
 | `one-shot-test.py` | Headless Linux/Windows validation runner with full, routine-check and compatibility-only modes; real IDE UI checks run separately | Linux or Windows, Python 3.11+, network for missing assets, at least 10 GiB free; Docker required only for Docker fixtures |
 | `ui-preview.py` | Render production Swing screens and refresh the five README screenshots; optionally build a light/dark gallery | Windows, Linux or macOS; JDK 21; local/cached IntelliJ 2025.1 SDK, JUnit, Hamcrest and FlatLaf, or network to download missing assets |
 | `dev-deploy.py` | Test, build, discover a local IDEA, deploy Lattice and restart a running IDE | Installed IntelliJ IDEA 2025.1+; JDK 21; Git for tooling tests |
-| `release.py` | Validate a stable version/tag and generate patch notes/commit history | Git |
+| `release.py` | Validate a version/tag and generate patch notes/commit history; `--marketplace-smoke` requires an explicit prerelease version without a tag | Git |
 | `check-release-archive.py` | Check ZIP layout, descriptor, bytecode, licenses; generate checksums | Built plugin ZIP |
 | `prepare-source-asset.py` | Download/check the pinned corresponding MySQL source archive | Network on first use |
 | `verify-plugin.py` | Check exact ZIP against an IntelliJ SDK | JDK 21; network on first use or `--ide-home` |

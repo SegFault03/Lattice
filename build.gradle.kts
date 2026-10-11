@@ -42,6 +42,7 @@ dependencies {
         if (localIde == null) intellijIdeaCommunity("2025.1") else local(localIde)
         bundledPlugins()
         pluginVerifier("1.410")
+        zipSigner("0.1.24")
         testFramework(TestFrameworkType.Starter, configurationName = "uiTestImplementation")
     }
 
@@ -166,6 +167,11 @@ intellijPlatform {
         ideaVersion { sinceBuild.set("251") }
         providers.gradleProperty("releaseNotesFile").orNull?.let { changeNotes.set(file(it).readText()) }
     }
+    signing {
+        privateKey.set(providers.environmentVariable("LATTICE_SIGNING_PRIVATE_KEY"))
+        certificateChain.set(providers.environmentVariable("LATTICE_SIGNING_CERTIFICATE_CHAIN"))
+        password.set(providers.environmentVariable("LATTICE_SIGNING_PRIVATE_KEY_PASSWORD"))
+    }
     pluginVerification {
         ides {
             create("IC", "2025.1")
@@ -173,6 +179,17 @@ intellijPlatform {
             create("IU", "2025.3")
         }
     }
+}
+
+// Publishing must fail closed; ordinary development builds need no signing secrets.
+if (providers.gradleProperty("lattice.requireSigning").orElse("false").get().toBoolean()) {
+    for (name in listOf("LATTICE_SIGNING_PRIVATE_KEY", "LATTICE_SIGNING_CERTIFICATE_CHAIN")) {
+        require(!providers.environmentVariable(name).orNull.isNullOrBlank()) { "Missing signing secret: $name" }
+    }
+}
+
+tasks.named("verifyPluginSignature") {
+    dependsOn("signPlugin")
 }
 
 intellijPlatformTesting.testIdeUi.register("uiScreenshotTest") {

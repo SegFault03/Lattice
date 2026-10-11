@@ -21,6 +21,15 @@ def validate_version(value):
     return value
 
 
+def validate_smoke_version(value):
+    if not value:
+        raise ValueError("Marketplace smoke testing requires an explicit unused prerelease version")
+    validate_version(value)
+    if "-" not in value:
+        raise ValueError("Marketplace smoke testing requires a prerelease version, e.g. 0.0.2-smoke.1")
+    return value
+
+
 def version_key(value):
     validate_version(value)
     core, _, suffix = value.partition("-")
@@ -95,9 +104,14 @@ def main():
     parser.add_argument("--tag", default=os.environ.get("RELEASE_TAG") or None)
     parser.add_argument("--version", default=os.environ.get("RELEASE_INPUT_VERSION") or None)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--marketplace-smoke", action="store_true", help="Require an explicit prerelease version for the hidden smoke channel")
     parser.add_argument('--git', type=Path, help='Git executable; otherwise PATH, then portable MinGit on Windows')
     add_dependency_options(parser)
     args = parser.parse_args()
+    if args.marketplace_smoke:
+        if args.tag:
+            parser.error("Marketplace smoke testing must not use a release tag")
+        validate_smoke_version(args.version)
     global GIT
     with Dependencies(args) as deps:
         previous = GIT

@@ -4,6 +4,7 @@ Patch notes are selected by the exact release version, including prerelease suff
 
 ## [Unreleased]
 
+- Release ZIPs are signed and their signatures verified before publication. A manual Marketplace smoke mode submits a hidden update with patch notes to the custom smoke channel without creating a GitHub Release.
 - Table and SQL actions reflect selection, input, pending edits and busy states. The table filter bar includes Clear; disabled icons match their labels, and keyboard focus remains visible without leaving a focus outline after mouse clicks.
 - Table headers stop at the last column. Table filters, schema dialogs and toolbars adapt to narrow windows, with consistent light/dark palettes and clearer loading, validation and cancellation feedback.
 - Production Swing action assertions and real-IDE UI reviews run in CI. Development scripts share dependency reuse and cleanup options, with native Windows database fixtures and tracked child-process lifetimes.
@@ -14,6 +15,12 @@ Patch notes are selected by the exact release version, including prerelease suff
 
 - Downloaded JDBC drivers are kept in the IDE cache and offered in the bundled driver list, so a version is downloaded at most once and reused for later connections instead of being fetched again.
 - The packaged driver version is read from the shipped driver JAR instead of duplicated text, and a bundled selection naming a JAR that is no longer stored is reported instead of silently falling back.
+
+## [0.0.2-smoke.1]
+
+- Signed prerelease build for validating Marketplace submission, change notes and installation through the hidden smoke channel.
+- Includes the current database explorer, SQL console, table editing and schema tools for smoke testing after installation.
+- Includes recent UI action-state, layout and JDBC driver-discovery fixes from the development build.
 
 ## [0.0.1-alpha]
 

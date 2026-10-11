@@ -440,7 +440,7 @@ Complete options (forwarded unchanged to Python):
 
 ```text
 usage: release.py [-h] [--root ROOT] [--tag TAG] [--version VERSION]
-                  [--output OUTPUT] [--git GIT] [--download-dir DOWNLOAD_DIR]
+                  [--output OUTPUT] [--marketplace-smoke] [--git GIT] [--download-dir DOWNLOAD_DIR]
                   [--cleanup] [--no-cleanup] [--binaries-dir BINARIES_DIR]
                   [--gradle-user-home GRADLE_USER_HOME]
 
@@ -450,6 +450,7 @@ options:
   --tag TAG
   --version VERSION
   --output OUTPUT
+  --marketplace-smoke   Require an explicit prerelease version without a release tag
   --git GIT             Git executable; otherwise PATH, then portable MinGit
                         on Windows
   --download-dir DOWNLOAD_DIR

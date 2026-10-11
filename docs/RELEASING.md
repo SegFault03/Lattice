@@ -4,7 +4,9 @@
 
 Connect this checkout to the intended GitHub repository and push the release-preparation commit. Ensure the workflow is present on the repository's default branch so its manual Run workflow option is available. Enable Actions and private vulnerability reporting in the repository settings. The workflow uses the repository's `GITHUB_TOKEN`; the publish job requests `contents: write`. No personal access token or Marketplace secret is required for GitHub Releases.
 
-Run **Build, test and release → Run workflow** on the intended branch to validate the hosted pipeline. Manual runs never publish. Review its test and compatibility reports. The Linux build job also runs the complete real-IDE UI review in Dark theme and the focused styling review in Light theme. Inspect its retained screenshots before releasing.
+Run **Build, test and release → Run workflow** on the intended branch to validate the hosted pipeline. Leave **marketplace_smoke** unchecked for a dry run; this never publishes. Review its test and compatibility reports. The Linux build job also runs the complete real-IDE UI review in Dark theme and the focused styling review in Light theme. Inspect its retained screenshots before releasing.
+
+Configure signing secrets before tagged releases. See [signing and Marketplace smoke testing](MARKETPLACE.md) for key generation, GitHub secret names and the manual hidden-channel upload that skips GitHub Releases.
 
 ## Prepare a version
 
@@ -28,13 +30,13 @@ The tag workflow:
 1. Checks out full Git history and validates the version/tag and patch notes.
 2. Runs the Python release-tool tests and Gradle pure/live regression suites with fresh MySQL 8.4 and in-memory HSQLDB fixtures.
 3. Builds `Lattice-X.Y.Z.zip` against IntelliJ 2025.1 / Java 21; embeds the tag version, patch notes and license notices.
-4. Runs the complete real IntelliJ UI scenario in Dark theme and the focused Light-theme review at the release version, validates archive paths, descriptor, bundled drivers/notices and bytecode, then generates SHA-256 asset checksums. The source-preparation step supplies the actual archive filename to validation, artifact upload and publication.
+4. Runs the complete real IntelliJ UI scenario in Dark theme and the focused Light-theme review at the release version, signs and verifies the ZIP, validates archive paths, descriptor, bundled drivers/notices and bytecode, then generates SHA-256 asset checksums. The source-preparation step supplies the actual archive filename to validation, artifact upload and publication.
 5. Verifies that exact ZIP against IDEA 2025.1, 2025.2 and 2025.3 in separate jobs with checksum-verified official SDK downloads. Every verdict must be Compatible.
 6. Runs the JDBC/Java 8 matrix and Windows/macOS baseline checks; publishes a GitHub Release only when every build/test/verification job succeeds.
 
 Release assets are the plugin ZIP, the unmodified MySQL Connector/J 26.7.0 corresponding-source archive and `SHA256SUMS`. The description combines the matching changelog section (or populated Unreleased notes) with all commits since the preceding reachable lower-version release tag. The first release includes the reachable commit history.
 
-Build/test/verification failures publish no release. The publish job uploads assets to a draft, then makes it public after successful upload. A failed publish can leave a draft; remove that failed draft before retrying. Diagnostics and candidate artifacts are retained for seven days. A retry fails if a release already exists; it does not overwrite published assets. Use a new version for changed published artifacts. The workflow does not publish to JetBrains Marketplace, sign the plugin, or perform project-close/dynamic-unload UI tests.
+Build/test/verification failures publish no release. The publish job uploads assets to a draft, then makes it public after successful upload. A failed publish can leave a draft; remove that failed draft before retrying. Diagnostics and candidate artifacts are retained for seven days. A retry fails if a release already exists; it does not overwrite published assets. Use a new version for changed published artifacts. The tag workflow does not publish to JetBrains Marketplace or perform project-close/dynamic-unload UI tests. Marketplace submission is limited to the explicit manual hidden smoke mode.
 
 ## Local dry run
 

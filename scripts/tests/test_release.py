@@ -10,6 +10,12 @@ spec.loader.exec_module(release)
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_smoke_versions_cannot_use_stable_or_implicit_version(self):
+        self.assertEqual("0.0.2-smoke.1", release.validate_smoke_version("0.0.2-smoke.1"))
+        for value in (None, "", "0.0.2", "v0.0.2-smoke.1", "0.0.2-smoke.01", "0.0.2-smoke.1\n"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                release.validate_smoke_version(value)
+
     def test_strict_versions(self):
         for value in ("1.0.0", "10.2.34", "0.0.1-alpha", "1.0.0-rc.1", "1.0.0-alpha-beta"):
             self.assertEqual(value, release.validate_version(value))
