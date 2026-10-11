@@ -153,7 +153,8 @@ public class FunctionalRegressionTest {
             QueryResult exact=data.executeQuery(c,schema,"SELECT * FROM " + table + " WHERE ID<25",options,new QueryExecution());
             check(exact.getRows().size()==25 && !exact.isTruncated(),"An exact-size result must not be marked truncated");
             var cancelled=new QueryExecution(); cancelled.cancel();
-            check(data.executeQuery(c,schema,"SELECT * FROM " + table,options,cancelled).hasError(),"Cancellation before execution must stop the query");
+            QueryResult beforeExecution=data.executeQuery(c,schema,"SELECT * FROM " + table,options,cancelled);
+            check(beforeExecution.isCancelled() && !beforeExecution.hasError(),"Cancellation before execution must stop the query as a neutral outcome");
             Connection delayed=(Connection)java.lang.reflect.Proxy.newProxyInstance(Connection.class.getClassLoader(),new Class[]{Connection.class},(proxy,method,args) -> {
                 Object value=invoke(c,method,args);
                 if(!method.getName().equals("createStatement")) return value;
@@ -172,7 +173,7 @@ public class FunctionalRegressionTest {
                 while(!active.isRunning() && !pending.isDone() && System.nanoTime()<deadline) Thread.sleep(5);
                 Thread.sleep(50); active.cancel();
                 QueryResult result=pending.get(3,TimeUnit.SECONDS);
-                check(result.hasError() && !active.isRunning(),"In-flight cancellation must terminate and detach the statement");
+                check(result.isCancelled() && !result.hasError() && !active.isRunning(),"In-flight cancellation must produce a neutral outcome and detach the statement");
             } finally { executor.shutdownNow(); }
             if(config.getType()==DatabaseType.MYSQL) {
                 QueryResult timeout=data.executeQuery(c,schema,"SELECT SLEEP(2)",new DataService.QueryOptions(25,1,10),new QueryExecution());
@@ -511,8 +512,11 @@ public class FunctionalRegressionTest {
             drafts();
             credentials();
             ConnectionConfig mysql = new ConnectionConfig(DatabaseType.MYSQL, "regression MySQL"); mysql.setDatabaseName("shop_db");
+            mysql.setPort(Integer.getInteger("lattice.test.mysql.port", 3306));
             runEngine(mysql);
-            runEngine(new ConnectionConfig(DatabaseType.HSQLDB, "regression HSQLDB"));
+            var hsql = new ConnectionConfig(DatabaseType.HSQLDB, "regression HSQLDB");
+            hsql.setPort(Integer.getInteger("lattice.test.hsqldb.port", 9001));
+            runEngine(hsql);
             System.out.println("PASS functional regression assertions: " + assertions);
         } finally { manager.closeAll(); }
     }

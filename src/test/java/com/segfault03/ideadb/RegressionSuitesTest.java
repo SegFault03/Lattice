@@ -72,6 +72,13 @@ public class RegressionSuitesTest {
         assertEquals(DriverSource.BUNDLED, configuration.getDriverSource());
         configuration.setDriverSource(DriverSource.DOWNLOAD); configuration.setDriverVersion("5.1.49");
         configuration.setDriverJarPath(java.nio.file.Path.of("drivers", "mysql.jar").toAbsolutePath().toString());
+        // A bundled selection records a stored release, or nothing for the packaged driver.
+        var retained = new ConnectionConfig(DatabaseType.MYSQL, "stored driver");
+        assertEquals("", retained.getDriverVersion());
+        retained.setDriverVersion("8.4.0");
+        assertEquals("8.4.0", retained.copy().getDriverVersion());
+        assertEquals("8.4.0", com.intellij.util.xmlb.XmlSerializer.deserialize(
+                com.intellij.util.xmlb.XmlSerializer.serialize(retained), ConnectionConfig.class).getDriverVersion());
         var restored = com.intellij.util.xmlb.XmlSerializer.deserialize(com.intellij.util.xmlb.XmlSerializer.serialize(configuration.copy()), ConnectionConfig.class);
         assertEquals(DriverSource.DOWNLOAD, restored.getDriverSource());
         assertEquals("5.1.49", restored.getDriverVersion()); assertEquals(configuration.getDriverJarPath(), restored.getDriverJarPath());
@@ -104,15 +111,16 @@ public class RegressionSuitesTest {
     }
     @Test @Tag("integration") void changingDriverRevokesExistingSessions() throws Exception {
         var config = new ConnectionConfig(DatabaseType.HSQLDB, "driver switch");
+        config.setPort(Integer.getInteger("lattice.test.hsqldb.port", 9001));
         var manager = com.segfault03.ideadb.service.DatabaseConnectionManager.getInstance();
         manager.registerConfiguration(config);
         try {
             var previous = manager.getConnection(config);
-            var unchanged = config.copy(); unchanged.setDriverVersion("unused selection");
+            var unchanged = config.copy(); unchanged.setDriverJarPath("unused local JAR field");
             manager.registerConfiguration(unchanged);
             assertSame(previous, manager.getConnection(config), "Unused driver fields must not retire sessions");
             var updated = config.copy(); updated.setDriverSource(DriverSource.LOCAL_JAR);
-            updated.setDriverJarPath(new java.io.File("lib/hsqldb-2.7.4.jar").getAbsolutePath());
+            updated.setDriverJarPath(java.nio.file.Path.of(System.getProperty("lattice.test.drivers"), "hsqldb-2.7.4.jar").toString());
             manager.registerConfiguration(updated);
             assertTrue(previous.isClosed());
             assertThrows(java.sql.SQLException.class, () -> manager.getConnection(config));

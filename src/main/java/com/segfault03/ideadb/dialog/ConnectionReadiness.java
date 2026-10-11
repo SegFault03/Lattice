@@ -13,6 +13,16 @@ import java.nio.file.Path;
 final class ConnectionReadiness {
     private ConnectionReadiness() {}
 
+    private static boolean availableFile(ConnectionConfig config) {
+        Path retained = DriverCatalog.downloadedJar(config.getType(), config.getDriverVersion());
+        if (Files.isRegularFile(retained) && Files.isReadable(retained)) return true;
+        if (config.getDriverJarPath().isBlank()) return false;
+        Path selected = Path.of(config.getDriverJarPath());
+        return Files.isRegularFile(selected) && Files.isReadable(selected)
+                && selected.getFileName() != null
+                && config.getDriverVersion().equals(DriverCatalog.versionOf(config.getType(), selected.getFileName().toString()));
+    }
+
     static String problem(ConnectionConfig config, boolean customUrlMode) {
         if (customUrlMode) {
             String url = config.getCustomUrl().trim();
@@ -38,6 +48,9 @@ final class ConnectionReadiness {
             } else if (config.getDriverSource() == DriverSource.DOWNLOAD) {
                 Path jar = DriverCatalog.downloadedJar(config.getType(), config.getDriverVersion());
                 if (!Files.isRegularFile(jar) || !Files.isReadable(jar)) return "Download the selected driver first";
+            } else if (config.getDriverSource() == DriverSource.BUNDLED && !config.getDriverVersion().isBlank()
+                    && !availableFile(config)) {
+                return "The selected driver is no longer available; download or discover it again";
             }
         } catch (IllegalArgumentException | SecurityException error) {
             return "Choose a valid driver file or version";

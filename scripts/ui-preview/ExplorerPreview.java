@@ -14,7 +14,8 @@ public final class ExplorerPreview {
         JPanel panel = new JPanel(new BorderLayout());
         DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(c -> {}, () -> {},
                 () -> {}, () -> {}, () -> {}, () -> {});
-        panel.add(toolbar, BorderLayout.NORTH);
+        panel.putClientProperty("lattice.preview.explorer.actions", toolbar);
+        panel.add(toolbar.createComponent(panel), BorderLayout.NORTH);
         if (empty) {
             panel.add(new EmptyConnectionPanel(c -> {}), BorderLayout.CENTER);
             return panel;
@@ -76,8 +77,8 @@ public final class ExplorerPreview {
         for (int row = 0; row < tree.getRowCount(); row++) tree.expandRow(row);
         TreeNodeData selection = (TreeNodeData)connection.getUserObject();
         tree.setSelectionPath(new TreePath(connection.getPath()));
+        ((DatabaseExplorerToolbar)panel.getClientProperty("lattice.preview.explorer.actions")).setSelection(selection);
         for (Component component : panel.getComponents()) {
-            if (component instanceof DatabaseExplorerToolbar toolbar) toolbar.setSelection(selection);
             if (component instanceof DatabaseExplorerHint hint) hint.setSelection(selection);
         }
         DefaultMutableTreeNode error = (DefaultMutableTreeNode)connection.getFirstChild();

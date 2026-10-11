@@ -19,7 +19,7 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
 
     private static final class ConnectionGroup {
         private final Map<String, Connection> connections = new java.util.HashMap<>();
-        private ConnectionConfig configuration;
+        private Identity identity;
         private boolean registered;
         private boolean removed;
     }
@@ -27,17 +27,24 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
     private record Identity(String url, String user, String password, boolean autoCommit, com.segfault03.ideadb.model.DriverSource driverSource, String driverVersion, String driverJarPath) {
         static Identity of(ConnectionConfig config) {
             var source = config.getDriverSource();
-            return new Identity(config.buildJdbcUrl(), config.getUser(), config.getPassword(), config.isAutoCommit(), source,
-                    source == com.segfault03.ideadb.model.DriverSource.DOWNLOAD ? config.getDriverVersion() : "",
-                    source == com.segfault03.ideadb.model.DriverSource.LOCAL_JAR ? config.getDriverJarPath() : "");
+            // Explicit selections remain part of identity even after their artifact disappears.
+            // Identity comparison must never consult mutable files or perform JAR I/O under this lock.
+            String version = source == com.segfault03.ideadb.model.DriverSource.LOCAL_JAR ? "" : config.getDriverVersion();
+            String selectedJar = source == com.segfault03.ideadb.model.DriverSource.LOCAL_JAR
+                    || source == com.segfault03.ideadb.model.DriverSource.BUNDLED && !version.isBlank()
+                    ? config.getDriverJarPath() : "";
+            return new Identity(config.buildJdbcUrl(), config.getUser(), config.getPassword(), config.isAutoCommit(), source, version,
+                    selectedJar);
         }
     }
     public void registerConfiguration(ConnectionConfig config) {
         if(disposed) throw new IllegalStateException("Connection manager is disposed");
         ConnectionGroup group = activeConnections.computeIfAbsent(config.getId(), id -> new ConnectionGroup());
         synchronized (group) {
-            if (group.configuration != null && !Identity.of(group.configuration).equals(Identity.of(config))) closeGroup(group);
-            group.configuration = config.copy(); group.registered = true; group.removed = false;
+            Identity identity = Identity.of(config);
+            if (group.identity != null && !group.identity.equals(identity)) closeGroup(group);
+            group.identity = identity;
+            group.registered = true; group.removed = false;
         }
     }
     public void removeConfiguration(String id) {
@@ -47,11 +54,12 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
     private void validateConfiguration(ConnectionGroup group, ConnectionConfig config) throws SQLException {
         if(disposed) throw new SQLException("Connection manager is disposed");
         if (group.removed) throw new SQLException("This connection was removed. Close this editor and choose an existing connection.");
-        if (group.configuration != null && !Identity.of(group.configuration).equals(Identity.of(config))) {
+        Identity identity = Identity.of(config);
+        if (group.identity != null && !group.identity.equals(identity)) {
             if (group.registered) throw new SQLException("Connection settings changed. Close and reopen this editor before accessing the database.");
             closeGroup(group);
         }
-        if (!group.registered) group.configuration = config.copy();
+        if (!group.registered) group.identity = identity;
     }
     private void closeGroup(ConnectionGroup group) {
         group.connections.values().forEach(DatabaseConnectionManager::closeQuietly);
@@ -107,6 +115,25 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
         ConnectionGroup group = activeConnections.get(connectionId);
         if (group == null) return;
         synchronized (group) { closeQuietly(group.connections.remove(sessionId)); }
+    }
+
+    boolean discardInvalidSession(String connectionId, String sessionId) {
+        ConnectionGroup group = activeConnections.get(connectionId);
+        if (group == null) return false;
+        synchronized (group) {
+            Connection connection = group.connections.get(sessionId);
+            if (connection == null) return false;
+            try {
+                if (!connection.isClosed() && connection.isValid(2)) return false;
+            } catch (java.sql.SQLFeatureNotSupportedException unsupported) {
+                return false;
+            } catch (SQLException invalid) {
+                // Some drivers report isClosed() == false after the server has ended the session.
+            }
+            group.connections.remove(sessionId);
+            closeQuietly(connection);
+            return true;
+        }
     }
 
     private static void closeQuietly(Connection conn) {

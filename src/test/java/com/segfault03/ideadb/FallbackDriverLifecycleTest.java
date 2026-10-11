@@ -16,7 +16,8 @@ public final class FallbackDriverLifecycleTest {
                 var driver=registry.getDriver(type); ClassLoader owner=driver.getClass().getClassLoader();
                 if(owner==DriverRegistry.class.getClassLoader()) throw new AssertionError("Fallback classloader was not exercised");
                 var properties=new Properties(); properties.setProperty("user",type==DatabaseType.MYSQL ? "root" : "SA"); properties.setProperty("password","");
-                try(var connection=driver.connect(type==DatabaseType.MYSQL ? "jdbc:mysql://localhost:3306/shop_db" : "jdbc:hsqldb:hsql://localhost:9001/testdb",properties)) { if(connection==null || connection.isClosed()) throw new AssertionError("Fallback connection failed"); }
+                String url=type==DatabaseType.MYSQL ? "jdbc:mysql://localhost:"+Integer.getInteger("lattice.test.mysql.port",3306)+"/shop_db" : "jdbc:hsqldb:hsql://localhost:"+Integer.getInteger("lattice.test.hsqldb.port",9001)+"/testdb";
+                try(var connection=driver.connect(url,properties)) { if(connection==null || connection.isClosed()) throw new AssertionError("Fallback connection failed"); }
                 cleanup.add(Class.forName(JdbcDriverCleanup.class.getName(),true,owner)); loaders.add(owner);
             }
         } finally { registry.dispose(); }

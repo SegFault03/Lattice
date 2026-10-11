@@ -8,32 +8,41 @@ import javax.swing.*;
 import java.awt.*;
 import java.util.function.Consumer;
 
-/** Fixed-size explorer actions grouped like an IntelliJ tool window toolbar. */
+/** Explorer action state shared by the native IDE toolbar and Swing previews. */
 final class DatabaseExplorerToolbar extends JPanel {
+    private final JButton add;
     private final JButton edit;
     private final JButton remove;
     private final JButton refresh;
     private final JButton console;
+    private final JButton help;
     private boolean hasConnections;
+    private boolean busy;
     private TreeNodeData selection;
 
     DatabaseExplorerToolbar(Consumer<Component> addConnection, Runnable editConnection,
                             Runnable removeConnection, Runnable refreshConnection,
                             Runnable openConsole, Runnable showHelp) {
         setLayout(new BoxLayout(this, BoxLayout.X_AXIS));
-        setBorder(BorderFactory.createCompoundBorder(
-                JBUI.Borders.customLineBottom(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR),
-                JBUI.Borders.empty(6, 12)));
-        JButton add = button(AllIcons.General.Add, "Add connection…", null, true);
-        add.addActionListener(e -> addConnection.accept(add));
+        setBorder(JBUI.Borders.empty(6, 12));
+        add = button(AllIcons.General.Add, "Add connection…", null, true);
+        add.addActionListener(e -> addConnection.accept((Component)e.getSource()));
         edit = button(AllIcons.General.Settings, "Edit connection…", editConnection);
         remove = button(AllIcons.General.Remove, "Remove connection settings", removeConnection);
         separator();
         refresh = button(AllIcons.Actions.Refresh, "Refresh", refreshConnection);
         console = button(Icons.CONSOLE, "Open SQL Console", openConsole);
         separator();
-        button(AllIcons.General.ContextHelp, "Welcome to Lattice", showHelp);
+        help = button(AllIcons.General.ContextHelp, "Welcome to Lattice", showHelp);
         setHasConnections(false);
+    }
+
+    /** Use IDEA's single-row overflow arrow and hover popup in the live tool window. */
+    JComponent createComponent(JComponent target) {
+        removeAll(); // Transfer the existing production controls and their listeners.
+        JComponent toolbar = DatabaseActionToolbar.create(target, "Explorer actions",
+                add, edit, remove, null, refresh, console, null, help);
+        return toolbar;
     }
 
     void setHasConnections(boolean hasConnections) {
@@ -46,15 +55,18 @@ final class DatabaseExplorerToolbar extends JPanel {
         updateActions();
     }
 
+    void setBusy(boolean busy) { this.busy = busy; updateActions(); }
+
     private void updateActions() {
-        boolean connectionSelected = hasConnections && selection != null && selection.getConnectionConfig() != null;
+        add.setEnabled(!busy);
+        boolean connectionSelected = !busy && hasConnections && selection != null && selection.getConnectionConfig() != null;
         edit.setEnabled(connectionSelected);
         remove.setEnabled(connectionSelected && selection.getType() == TreeNodeData.NodeType.CONNECTION);
-        refresh.setEnabled(hasConnections && (selection == null || switch (selection.getType()) {
+        refresh.setEnabled(!busy && hasConnections && (selection == null || switch (selection.getType()) {
             case ROOT, CONNECTION, DATABASE, TABLE, VIEW -> true;
             default -> false;
         }));
-        console.setEnabled(hasConnections);
+        console.setEnabled(!busy && hasConnections);
     }
 
     private JButton button(Icon icon, String tooltip, Runnable action) {

@@ -20,7 +20,9 @@ import com.segfault03.ideadb.model.ConnectionTestResult;
 import com.segfault03.ideadb.model.DatabaseType;
 import com.segfault03.ideadb.model.HsqlMode;
 import com.segfault03.ideadb.model.DriverSource;
+import com.segfault03.ideadb.model.InstalledDriver;
 import com.segfault03.ideadb.service.DriverCatalog;
+import com.segfault03.ideadb.service.DriverStore;
 import com.intellij.openapi.ui.ValidationInfo;
 import com.segfault03.ideadb.service.DatabaseConnectionManager;
 import org.jetbrains.annotations.Nullable;
@@ -32,21 +34,40 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.awt.event.ItemEvent;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 
 public class ConnectionDialog extends DialogWrapper {
+    private final @Nullable Project project;
     private final ConnectionConfig config;
+    private final boolean showUrlPreview;
+    private final boolean newConnection;
+    private record DriverSelection(DriverSource source, InstalledDriver available, String downloadVersion, String localJar) {}
+    private final java.util.Map<DatabaseType, DriverSelection> driverSelections = new java.util.EnumMap<>(DatabaseType.class);
+    private final java.util.Map<DatabaseType, List<InstalledDriver>> driverInventory = new java.util.EnumMap<>(DatabaseType.class);
+    private final java.util.Map<DatabaseType, InstalledDriver> projectDefaults = new java.util.EnumMap<>(DatabaseType.class);
+    private final Set<DatabaseType> manuallySelectedDrivers = java.util.EnumSet.noneOf(DatabaseType.class);
+    private DatabaseType displayedDriverType;
+    private boolean updatingDrivers;
+    private boolean discoveryBusy;
+    private java.util.concurrent.Future<?> discoveryTask;
     private JPanel rootPanel;
     private JPanel driverDetails;
     private final ActionLink driverToggle = new ActionLink("Driver options ▸");
     private final JBLabel driverSummary = new JBLabel();
     private boolean uiInitialized;
     private JComboBox<DriverSource> driverSourceCombo;
+    private JComboBox<InstalledDriver> bundledDriverCombo;
     private JComboBox<String> driverVersionCombo;
+    private Set<String> downloadedDriverVersions = Set.of();
+    private Set<String> discoveredDriverVersions = Set.of();
     private TextFieldWithBrowseButton driverJarField;
     private JPanel driverCards;
     private final CardLayout driverLayout = new CardLayout();
     private final JButton downloadDriverButton = new JButton("Download");
     private final JButton listVersionsButton = new JButton("More versions");
+    private final JProgressBar driverProgressBar = new JProgressBar(0, 100);
     private final JBLabel driverStatusLabel = new JBLabel(" ");
     private java.util.concurrent.Future<?> driverTask;
     private java.util.concurrent.Future<?> connectionTask;
@@ -91,7 +112,7 @@ public class ConnectionDialog extends DialogWrapper {
     private JBTextField customUrlUserField;
     private JPasswordField customUrlPasswordField;
 
-    // Preview and Action components
+    // Preview and action components
     private JBLabel urlPreviewLabel;
     private final ActionLink testButton = new ActionLink("Test connection");
     private final JBLabel testStatusLabel = new JBLabel("");
@@ -102,17 +123,29 @@ public class ConnectionDialog extends DialogWrapper {
 
     public ConnectionDialog(@Nullable Project project, ConnectionConfig config, boolean newConnection) {
         super(project, true);
+        this.project = project;
         this.config = config.copy();
+        this.newConnection = newConnection;
+        if (!newConnection || config.getDriverSource() != DriverSource.BUNDLED || !config.getDriverVersion().isBlank()) {
+            InstalledDriver saved = config.getDriverVersion().isBlank() ? DriverStore.packaged(config.getType())
+                    : new InstalledDriver(config.getType(), config.getDriverVersion(), InstalledDriver.Kind.DISCOVERED,
+                    config.getDriverJarPath().isBlank() ? null : java.nio.file.Path.of(config.getDriverJarPath()));
+            driverSelections.put(config.getType(), new DriverSelection(config.getDriverSource(), saved,
+                    config.getDriverVersion(), config.getDriverJarPath()));
+        }
+        this.showUrlPreview = !newConnection;
         testButton.setAutoHideOnDisable(false);
         setTitle(newConnection ? "New connection" : "Edit connection");
         setOKButtonText(newConnection ? "Add connection" : "Save");
         init();
         loadValues();
-        updatePreview();
+        refreshConnectionState();
         uiInitialized = true;
         updateTestAvailability();
-        setDriverExpanded(config.getDriverSource() != DriverSource.BUNDLED);
+        // A named available driver is a deliberate choice, so reveal it instead of hiding it behind the summary.
+        setDriverExpanded(config.getDriverSource() != DriverSource.BUNDLED || !config.getDriverVersion().isBlank());
         refreshFormSize();
+        discoverDrivers();
     }
 
     public ConnectionConfig getResultConfig() {
@@ -159,27 +192,30 @@ public class ConnectionDialog extends DialogWrapper {
         mainCardPanel.add(createCustomUrlPanel(), "JDBC_URL");
         addPart(1, mainCardPanel);
 
-        JPanel urlSection = new JPanel(new BorderLayout());
-        urlSection.add(DatabaseUi.section("JDBC URL"), BorderLayout.NORTH);
-        JPanel previewPanel = new JPanel(new BorderLayout(JBUI.scale(8), 0));
-        urlPreviewLabel = new JBLabel();
-        urlPreviewLabel.setFont(new Font(Font.MONOSPACED, Font.PLAIN, urlPreviewLabel.getFont().getSize()));
-        urlPreviewLabel.setPreferredSize(JBUI.size(320, 28));
-        JButton copyUrl = DatabaseUi.action("", AllIcons.Actions.Copy, "Copy JDBC URL");
-        copyUrl.addActionListener(e -> {
-            if (urlPreviewLabel.getToolTipText() != null)
-                Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(urlPreviewLabel.getToolTipText()), null);
-        });
-        previewPanel.add(urlPreviewLabel, BorderLayout.CENTER);
-        previewPanel.add(copyUrl, BorderLayout.EAST);
-        urlSection.add(previewPanel, BorderLayout.CENTER);
-        addPart(2, urlSection);
+        if (showUrlPreview) {
+            JPanel urlSection = new JPanel(new BorderLayout());
+            urlSection.add(DatabaseUi.section("JDBC URL"), BorderLayout.NORTH);
+            JPanel previewPanel = new JPanel(new BorderLayout(JBUI.scale(8), 0));
+            urlPreviewLabel = new JBLabel();
+            urlPreviewLabel.setFont(new Font(Font.MONOSPACED, Font.PLAIN, urlPreviewLabel.getFont().getSize()));
+            urlPreviewLabel.setPreferredSize(JBUI.size(320, 28));
+            JButton copyUrl = DatabaseUi.action("", AllIcons.Actions.Copy, "Copy JDBC URL");
+            copyUrl.addActionListener(e -> {
+                if (urlPreviewLabel.getToolTipText() != null)
+                    Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(urlPreviewLabel.getToolTipText()), null);
+            });
+            previewPanel.add(urlPreviewLabel, BorderLayout.CENTER);
+            previewPanel.add(copyUrl, BorderLayout.EAST);
+            urlSection.add(previewPanel, BorderLayout.CENTER);
+            addPart(2, urlSection);
+        }
 
-        JPanel driverSection = new JPanel(new BorderLayout());
+        JPanel driverSection = new JPanel(new BorderLayout(0, JBUI.scale(3)));
         driverSection.add(DatabaseUi.section("Driver"), BorderLayout.NORTH);
         JPanel driverBody = new JPanel(new BorderLayout(0, JBUI.scale(6)));
         JPanel summaryRow = new JPanel(new BorderLayout(JBUI.scale(8), 0));
-        driverSummary.setForeground(JBColor.namedColor("Label.infoForeground", new JBColor(0x63666C, 0xB5B8BD)));
+        driverSummary.setForeground(UIManager.getColor("Label.foreground"));
+        driverSummary.getAccessibleContext().setAccessibleName("Selected JDBC driver");
         summaryRow.add(driverSummary, BorderLayout.CENTER);
         summaryRow.add(driverToggle, BorderLayout.EAST);
         driverBody.add(summaryRow, BorderLayout.NORTH);
@@ -188,12 +224,59 @@ public class ConnectionDialog extends DialogWrapper {
         driverSourceCombo = ConnectionFormPanel.width(DatabaseInputs.comboBox(DriverSource.values()), 220);
         driverForm.addRow(0, "Source:", driverSourceCombo, false);
         driverCards = new VisibleCardPanel(driverLayout);
-        driverCards.add(new JPanel(), DriverSource.BUNDLED.name());
+        // Drivers already available locally, including retained downloads and Maven-cached releases.
+        bundledDriverCombo = ConnectionFormPanel.width(DatabaseInputs.comboBox(), 220);
+        ListCellRenderer<? super InstalledDriver> availableRenderer = bundledDriverCombo.getRenderer();
+        bundledDriverCombo.setRenderer((list, driver, index, selected, focus) -> {
+            Component rendered = availableRenderer.getListCellRendererComponent(list, driver, index, selected, focus);
+            if (driver != null && !driver.packaged() && !discoveryBusy
+                    && !driverInventory.getOrDefault(driver.type(), List.of()).contains(driver)
+                    && rendered instanceof JLabel label) {
+                label.setText(driver.version() + " · UNAVAILABLE");
+                label.setEnabled(false);
+            }
+            return rendered;
+        });
+        bundledDriverCombo.getAccessibleContext().setAccessibleName("Available driver");
+        bundledDriverCombo.setToolTipText("Packaged, downloaded, and Maven-discovered drivers already available here.");
+        driverCards.add(bundledDriverCombo, DriverSource.BUNDLED.name());
         JPanel versionPanel = new JPanel(new BorderLayout(0, JBUI.scale(6)));
-        driverVersionCombo = ConnectionFormPanel.width(DatabaseInputs.comboBox(), 220);
+        driverVersionCombo = DatabaseInputs.comboBox();
         driverVersionCombo.setEditable(true);
-        versionPanel.add(driverVersionCombo, BorderLayout.NORTH);
-        versionPanel.add(DatabaseUi.group(listVersionsButton, downloadDriverButton), BorderLayout.SOUTH);
+        driverVersionCombo.getAccessibleContext().setAccessibleName("Driver version");
+        // Styling editable combos resets their renderer, so apply our downloaded marker afterward.
+        ConnectionFormPanel.width(driverVersionCombo, 220);
+        ListCellRenderer<? super String> versionRenderer = driverVersionCombo.getRenderer();
+        driverVersionCombo.setRenderer((list, value, index, selected, focus) -> {
+            Component rendered = versionRenderer.getListCellRendererComponent(list, value, index, selected, focus);
+            if (value instanceof String version && rendered instanceof JLabel label
+                    && (downloadedDriverVersions.contains(version) || discoveredDriverVersions.contains(version))) {
+                String source = downloadedDriverVersions.contains(version) ? "DOWNLOADED" : "DISCOVERED";
+                label.setText(version + " · " + source);
+                label.setForeground(JBColor.namedColor("Label.disabledForeground", new JBColor(0x8C8C8C, 0x777777)));
+                label.setEnabled(false);
+            }
+            return rendered;
+        });
+        // The action buttons below can make this card wider than the fields. Avoid BorderLayout.NORTH
+        // stretching the version editor to the button row's width; keep it aligned with Source.
+        JPanel versionFieldRow = new JPanel(new FlowLayout(FlowLayout.LEADING, 0, 0));
+        versionFieldRow.add(driverVersionCombo);
+        versionPanel.add(versionFieldRow, BorderLayout.NORTH);
+        JPanel versionActionsRow = new JPanel(new FlowLayout(FlowLayout.LEADING, 0, 0));
+        versionActionsRow.setOpaque(false);
+        versionActionsRow.add(listVersionsButton);
+        versionActionsRow.add(Box.createHorizontalStrut(JBUI.scale(8)));
+        versionActionsRow.add(downloadDriverButton);
+        versionPanel.add(versionActionsRow, BorderLayout.SOUTH);
+        driverProgressBar.setStringPainted(false);
+        driverProgressBar.setPreferredSize(new Dimension(JBUI.scale(220), JBUI.scale(4)));
+        driverProgressBar.getAccessibleContext().setAccessibleName("Driver download progress");
+        driverProgressBar.setVisible(false);
+        JPanel progressRow = new JPanel(new FlowLayout(FlowLayout.LEADING, 0, 0));
+        progressRow.setOpaque(false);
+        progressRow.add(driverProgressBar);
+        versionPanel.add(progressRow, BorderLayout.CENTER);
         driverCards.add(versionPanel, DriverSource.DOWNLOAD.name());
         driverJarField = DatabaseInputs.browseField();
         ConnectionFormPanel.width(driverJarField, 360);
@@ -207,18 +290,20 @@ public class ConnectionDialog extends DialogWrapper {
         driverBody.add(driverDetails, BorderLayout.CENTER);
         driverDetails.setVisible(false);
         driverSection.add(driverBody, BorderLayout.CENTER);
-        addPart(3, driverSection);
+        int driverRow = showUrlPreview ? 3 : 2;
+        addPart(driverRow, driverSection);
         driverSourceCombo.addActionListener(e -> {
             showDriverCard((DriverSource) driverSourceCombo.getSelectedItem());
-            updateDriverStatus();
+            driverSelectionChanged();
         });
-        driverVersionCombo.addActionListener(e -> updateDriverStatus());
+        bundledDriverCombo.addActionListener(e -> driverSelectionChanged());
+        driverVersionCombo.addActionListener(e -> driverSelectionChanged());
         downloadDriverButton.addActionListener(e -> runDriverAction(false));
         listVersionsButton.addActionListener(e -> runDriverAction(true));
         refillDriverVersions();
         setupListeners();
         GridBagConstraints space = new GridBagConstraints();
-        space.gridy = 4;
+        space.gridy = driverRow + 1;
         space.weighty = 1;
         space.fill = GridBagConstraints.VERTICAL;
         rootPanel.add(Box.createVerticalGlue(), space);
@@ -271,17 +356,23 @@ public class ConnectionDialog extends DialogWrapper {
 
     @Override
     protected JComponent createSouthPanel() {
-        JPanel south = new JPanel(new BorderLayout(JBUI.scale(12), JBUI.scale(6)));
-        south.setBorder(BorderFactory.createCompoundBorder(
-                JBUI.Borders.customLineTop(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR),
-                JBUI.Borders.empty(12, 8, 0, 8)));
+        JPanel south = new JPanel(new BorderLayout(0, JBUI.scale(6)));
+        south.setBorder(JBUI.Borders.empty(0, 8, 0, 8));
         testStatusLabel.setFont(testStatusLabel.getFont().deriveFont(Font.PLAIN));
+        testStatusLabel.setBorder(JBUI.Borders.empty(6, 0, 0, 0));
         testStatusLabel.setVisible(false);
         south.add(testStatusLabel, BorderLayout.NORTH);
         testButton.addActionListener(e -> doTestConnection());
-        south.add(testButton, BorderLayout.WEST);
+        JPanel actions = new JPanel(new BorderLayout(JBUI.scale(12), JBUI.scale(6)));
+        actions.setBorder(BorderFactory.createCompoundBorder(
+                JBUI.Borders.empty(10, 0, 0, 0),
+                BorderFactory.createCompoundBorder(
+                        JBUI.Borders.customLineTop(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR),
+                        JBUI.Borders.empty(12, 0, 0, 0))));
+        actions.add(testButton, BorderLayout.WEST);
         JComponent defaultButtons = super.createSouthPanel();
-        if (defaultButtons != null) south.add(defaultButtons, BorderLayout.EAST);
+        if (defaultButtons != null) actions.add(defaultButtons, BorderLayout.EAST);
+        south.add(actions, BorderLayout.CENTER);
         return south;
     }
 
@@ -304,7 +395,6 @@ public class ConnectionDialog extends DialogWrapper {
     private void showDriverCard(DriverSource source) {
         if (source == null || driverCards == null) return;
         driverLayout.show(driverCards, source.name());
-        driverCards.setVisible(source != DriverSource.BUNDLED);
         driverCards.revalidate();
         driverCards.repaint();
         if (driverCards.getParent() != null) driverCards.getParent().revalidate();
@@ -368,13 +458,13 @@ public class ConnectionDialog extends DialogWrapper {
         // Toggle between Standard and Custom JDBC URL modes
         standardRadio.addActionListener(e -> {
             mainCardLayout.show(mainCardPanel, "STANDARD");
-            updatePreview();
+            refreshConnectionState();
             refreshFormSize();
         });
 
         customUrlRadio.addActionListener(e -> {
             mainCardLayout.show(mainCardPanel, "JDBC_URL");
-            updatePreview();
+            refreshConnectionState();
             refreshFormSize();
         });
 
@@ -394,8 +484,9 @@ public class ConnectionDialog extends DialogWrapper {
                         hsqlServerPortField.setText("9001");
                     }
                 }
+                rememberDriverSelection();
                 refillDriverVersions();
-                updatePreview();
+                refreshConnectionState();
                 refreshFormSize();
             }
         });
@@ -405,15 +496,15 @@ public class ConnectionDialog extends DialogWrapper {
             if (e.getStateChange() == ItemEvent.SELECTED) {
                 HsqlMode mode = (HsqlMode) hsqlModeCombo.getSelectedItem();
                 hsqlSubCardLayout.show(hsqlSubCardPanel, mode.name());
-                updatePreview();
+                refreshConnectionState();
                 refreshFormSize();
             }
         });
 
         DocumentListener dl = new DocumentListener() {
-            public void insertUpdate(DocumentEvent e) { updatePreview(); }
-            public void removeUpdate(DocumentEvent e) { updatePreview(); }
-            public void changedUpdate(DocumentEvent e) { updatePreview(); }
+            public void insertUpdate(DocumentEvent e) { refreshConnectionState(); }
+            public void removeUpdate(DocumentEvent e) { refreshConnectionState(); }
+            public void changedUpdate(DocumentEvent e) { refreshConnectionState(); }
         };
 
         mysqlHostField.getDocument().addDocumentListener(dl);
@@ -428,11 +519,11 @@ public class ConnectionDialog extends DialogWrapper {
         hsqlServerDbField.getDocument().addDocumentListener(dl);
         hsqlUserField.getDocument().addDocumentListener(dl);
 
-        // Auto-detect type when typing custom JDBC URL
+        // Auto-detect type when typing a custom JDBC URL.
         customUrlField.getDocument().addDocumentListener(new DocumentListener() {
-            public void insertUpdate(DocumentEvent e) { checkUrlPrefix(); updatePreview(); }
-            public void removeUpdate(DocumentEvent e) { checkUrlPrefix(); updatePreview(); }
-            public void changedUpdate(DocumentEvent e) { checkUrlPrefix(); updatePreview(); }
+            public void insertUpdate(DocumentEvent e) { checkUrlPrefix(); refreshConnectionState(); }
+            public void removeUpdate(DocumentEvent e) { checkUrlPrefix(); refreshConnectionState(); }
+            public void changedUpdate(DocumentEvent e) { checkUrlPrefix(); refreshConnectionState(); }
 
             private void checkUrlPrefix() {
                 String u = customUrlField.getText().trim().toLowerCase(java.util.Locale.ROOT);
@@ -445,21 +536,26 @@ public class ConnectionDialog extends DialogWrapper {
         });
 
         customUrlUserField.getDocument().addDocumentListener(dl);
-        driverJarField.getTextField().getDocument().addDocumentListener(dl);
+        DocumentListener driverSelectionListener = new DocumentListener() {
+            public void insertUpdate(DocumentEvent e) { driverSelectionChanged(); }
+            public void removeUpdate(DocumentEvent e) { driverSelectionChanged(); }
+            public void changedUpdate(DocumentEvent e) { driverSelectionChanged(); }
+        };
+        driverJarField.getTextField().getDocument().addDocumentListener(driverSelectionListener);
         if (driverVersionCombo.getEditor().getEditorComponent() instanceof JTextField versionField)
-            versionField.getDocument().addDocumentListener(dl);
+            versionField.getDocument().addDocumentListener(driverSelectionListener);
         nameField.getDocument().addDocumentListener(dl);
     }
 
-    private void updatePreview() {
+    private void refreshConnectionState() {
         updateTestAvailability();
+        if (urlPreviewLabel == null) return;
         if (customUrlRadio.isSelected() && customUrlField.getText().trim().isEmpty()) {
             urlPreviewLabel.setText("Enter a JDBC URL");
             urlPreviewLabel.setToolTipText(null);
             return;
         }
-        ConnectionConfig temp = createTempConfig();
-        String resolvedUrl = temp.buildJdbcUrl();
+        String resolvedUrl = createTempConfig().buildJdbcUrl();
         urlPreviewLabel.setText(resolvedUrl);
         urlPreviewLabel.setToolTipText(resolvedUrl);
     }
@@ -467,18 +563,50 @@ public class ConnectionDialog extends DialogWrapper {
     private void updateTestAvailability() {
         if (driverJarField == null || customUrlField == null) return;
         String problem = ConnectionReadiness.problem(createTempConfig(), customUrlRadio.isSelected());
-        testButton.setEnabled(!driverBusy && !connectionBusy && problem == null);
-        testButton.setToolTipText(driverBusy ? "Wait for the driver download to finish"
+        testButton.setEnabled(!discoveryBusy && !driverBusy && !connectionBusy && problem == null);
+        testButton.setToolTipText(discoveryBusy ? "Looking for locally available drivers" : driverBusy ? "Wait for the driver download to finish"
                 : connectionBusy ? "A connection test is running"
                 : problem == null ? "Test these connection settings" : problem);
     }
 
     private void setDriverStatus(String message) {
         message = java.util.Objects.requireNonNullElse(message, " ");
-        driverStatusLabel.setIcon(null);
-        driverStatusLabel.setText("<html><body width='300'>" + escapeHtml(message) + "</body></html>");
+        DatabaseUi.status(driverStatusLabel, "<html><body width='300'>" + escapeHtml(message) + "</body></html>",
+                driverBusy || discoveryBusy ? DatabaseUi.Tone.BUSY : DatabaseUi.Tone.NORMAL);
         driverStatusLabel.setToolTipText(message);
+        driverStatusLabel.getAccessibleContext().setAccessibleDescription(message);
         refreshFormSize();
+    }
+
+    private void setDriverControlsEnabled(boolean enabled) {
+        driverSourceCombo.setEnabled(enabled);
+        bundledDriverCombo.setEnabled(enabled);
+        driverVersionCombo.setEnabled(enabled);
+        typeCombo.setEnabled(enabled);
+        standardRadio.setEnabled(enabled);
+        customUrlRadio.setEnabled(enabled);
+        customUrlField.setEnabled(enabled);
+        setComponentTreeEnabled(driverJarField, enabled);
+        downloadDriverButton.setEnabled(enabled);
+        listVersionsButton.setEnabled(enabled);
+    }
+
+    private static void setComponentTreeEnabled(Component component, boolean enabled) {
+        component.setEnabled(enabled);
+        if (component instanceof Container container)
+            for (Component child : container.getComponents()) setComponentTreeEnabled(child, enabled);
+    }
+
+    private void updateDriverProgress(long bytesReceived, long totalBytes) {
+        if (isDisposed() || !driverBusy) return;
+        if (totalBytes > 0) {
+            driverProgressBar.setIndeterminate(false);
+            driverProgressBar.setValue((int) Math.min(100, bytesReceived * 100 / totalBytes));
+            driverProgressBar.setToolTipText(bytesReceived + " of " + totalBytes + " bytes");
+        } else {
+            driverProgressBar.setIndeterminate(true);
+            driverProgressBar.setToolTipText("Downloading driver");
+        }
     }
 
     private static String escapeHtml(String text) {
@@ -491,9 +619,12 @@ public class ConnectionDialog extends DialogWrapper {
         c.setName(nameField != null ? nameField.getText().trim() : config.getName());
         DatabaseType type = (DatabaseType) typeCombo.getSelectedItem();
         c.setType(type);
-        c.setDriverSource((DriverSource)driverSourceCombo.getSelectedItem());
-        c.setDriverVersion(String.valueOf(driverVersionCombo.getEditor().getItem()).trim());
-        c.setDriverJarPath(driverJarField.getText().trim());
+        DriverSource driverSource = (DriverSource) driverSourceCombo.getSelectedItem();
+        c.setDriverSource(driverSource);
+        c.setDriverVersion(driverSource == DriverSource.BUNDLED ? selectedBundledVersion()
+                : driverSource == DriverSource.DOWNLOAD ? selectedDriverVersion() : "");
+        c.setDriverJarPath(driverSource == DriverSource.BUNDLED ? selectedBundledJarPath()
+                : driverSource == DriverSource.LOCAL_JAR ? driverJarField.getText().trim() : "");
 
         if (customUrlRadio.isSelected()) {
             c.setCustomUrl(customUrlField.getText().trim());
@@ -536,54 +667,264 @@ public class ConnectionDialog extends DialogWrapper {
         return c;
     }
 
-    private void refillDriverVersions() {
-        driverVersionCombo.removeAllItems();
-        for (String version : DriverCatalog.suggestedVersions((DatabaseType)typeCombo.getSelectedItem())) driverVersionCombo.addItem(version);
+    private void driverSelectionChanged() {
+        if (updatingDrivers) return;
+        if (uiInitialized && displayedDriverType != null) manuallySelectedDrivers.add(displayedDriverType);
+        rememberDriverSelection();
         updateDriverStatus();
     }
+
+    private void rememberDriverSelection() {
+        if (!uiInitialized || updatingDrivers || displayedDriverType == null
+                || discoveryBusy && !manuallySelectedDrivers.contains(displayedDriverType)) return;
+        driverSelections.put(displayedDriverType, new DriverSelection((DriverSource) driverSourceCombo.getSelectedItem(),
+                (InstalledDriver) bundledDriverCombo.getSelectedItem(), selectedDriverVersion(), driverJarField.getText()));
+    }
+
+    private void discoverDrivers() {
+        discoveryBusy = true;
+        setOKActionEnabled(false);
+        updateDriverStatus();
+        discoveryTask = com.segfault03.ideadb.service.DatabaseTaskService.getInstance().submit(() -> {
+            var inventory = new java.util.EnumMap<DatabaseType, List<InstalledDriver>>(DatabaseType.class);
+            var defaults = new java.util.EnumMap<DatabaseType, InstalledDriver>(DatabaseType.class);
+            String error = null;
+            try {
+                var repository = com.segfault03.ideadb.service.MavenRepositoryLocator.localRepository(project);
+                for (DatabaseType type : DatabaseType.values()) {
+                    if (Thread.currentThread().isInterrupted()) return;
+                    inventory.put(type, DriverStore.installedInRepository(type, repository));
+                    if (newConnection) DriverStore.projectDefaultInRepository(type, project, repository)
+                            .ifPresent(driver -> defaults.put(type, driver));
+                }
+            } catch (Exception failure) { error = "Local driver discovery failed; use the bundled driver or a local JAR."; }
+            String failure = error;
+            SwingUtilities.invokeLater(() -> {
+                if (isDisposed()) return;
+                driverInventory.putAll(inventory);
+                projectDefaults.putAll(defaults);
+                discoveryBusy = false;
+                refillDriverVersions();
+                setOKActionEnabled(!driverBusy && !connectionBusy);
+                if (failure != null) setDriverStatus(failure);
+            });
+        });
+    }
+
+    private void refillDriverVersions() {
+        DatabaseType type = (DatabaseType) typeCombo.getSelectedItem();
+        updatingDrivers = true;
+        try {
+            displayedDriverType = type;
+            var drivers = driverInventory.getOrDefault(type, List.of(DriverStore.packaged(type)));
+            downloadedDriverVersions = drivers.stream().filter(driver -> driver.kind() == InstalledDriver.Kind.DOWNLOADED)
+                    .map(InstalledDriver::version).collect(java.util.stream.Collectors.toUnmodifiableSet());
+            discoveredDriverVersions = drivers.stream().filter(driver -> driver.kind() == InstalledDriver.Kind.DISCOVERED)
+                    .map(InstalledDriver::version).collect(java.util.stream.Collectors.toUnmodifiableSet());
+            var selection = driverSelections.get(type);
+            InstalledDriver preferred = selection == null ? projectDefaults.get(type) : selection.available();
+            bundledDriverCombo.removeAllItems();
+            drivers.forEach(bundledDriverCombo::addItem);
+            if (preferred != null) {
+                String path = preferred.jar() == null ? "" : preferred.jar().toString();
+                selectBundledDriver(preferred.version(), path);
+                // An unavailable saved selection must stay visible and fail validation instead of silently falling back.
+                if (!preferred.packaged() && !(bundledDriverCombo.getSelectedItem() instanceof InstalledDriver selected
+                        && selected.version().equals(preferred.version()))) {
+                    bundledDriverCombo.addItem(preferred);
+                    bundledDriverCombo.setSelectedItem(preferred);
+                }
+            }
+            driverVersionCombo.removeAllItems();
+            LinkedHashSet<String> versions = new LinkedHashSet<>(DriverCatalog.suggestedVersions(type));
+            versions.addAll(downloadedDriverVersions);
+            versions.addAll(discoveredDriverVersions);
+            versions.forEach(driverVersionCombo::addItem);
+            driverSourceCombo.setSelectedItem(selection == null ? DriverSource.BUNDLED : selection.source());
+            driverJarField.setText(selection == null ? "" : selection.localJar());
+            if (selection != null && !selection.downloadVersion().isBlank())
+                driverVersionCombo.setSelectedItem(selection.downloadVersion());
+            showDriverCard((DriverSource) driverSourceCombo.getSelectedItem());
+        } finally { updatingDrivers = false; }
+        updateDriverStatus();
+    }
+    private void selectBundledDriver(String version, String jarPath) {
+        if (jarPath != null && !jarPath.isBlank()) {
+            for (int index = 0; index < bundledDriverCombo.getItemCount(); index++) {
+                InstalledDriver driver = bundledDriverCombo.getItemAt(index);
+                if (driver.version().equals(version) && driver.jar() != null && driver.jar().toString().equals(jarPath)) {
+                    bundledDriverCombo.setSelectedIndex(index);
+                    return;
+                }
+            }
+        }
+        for (int index = 0; index < bundledDriverCombo.getItemCount(); index++) {
+            if (bundledDriverCombo.getItemAt(index).version().equals(version)) {
+                bundledDriverCombo.setSelectedIndex(index);
+                return;
+            }
+        }
+    }
     private void updateDriverStatus() {
-        if (driverBusy || driverSourceCombo == null) return;
+        if (updatingDrivers || driverBusy || driverSourceCombo == null) return;
         DatabaseType type = (DatabaseType) typeCombo.getSelectedItem();
         DriverSource source = (DriverSource)driverSourceCombo.getSelectedItem();
-        String bundledVersion = type == DatabaseType.MYSQL ? "26.7.0" : "2.7.4";
-        driverSummary.setText(type.getDisplayName() + (source == DriverSource.BUNDLED ? " " + bundledVersion : "") + " · " + source);
-        driverSummary.setToolTipText(driverSummary.getText());
-        if (source == DriverSource.DOWNLOAD) {
-            try {
-                var path = DriverCatalog.downloadedJar((DatabaseType)typeCombo.getSelectedItem(), String.valueOf(driverVersionCombo.getEditor().getItem()).trim());
+        if (source == null) return;
+        downloadDriverButton.setEnabled(!discoveryBusy && !driverBusy && !connectionBusy);
+        listVersionsButton.setEnabled(!discoveryBusy && !driverBusy && !connectionBusy);
+        String selectedDriver = switch (source) {
+            case BUNDLED -> selectedBundledLabel(type);
+            case DOWNLOAD -> selectedDriverVersion();
+            case LOCAL_JAR -> selectedLocalDriverLabel(type);
+        };
+        String origin = switch (source) {
+            case BUNDLED -> bundledDriverCombo.getSelectedItem() instanceof InstalledDriver driver
+                    ? !driver.packaged() && !discoveryBusy && !driverInventory.getOrDefault(type, List.of()).contains(driver)
+                    ? "UNAVAILABLE" : driver.kind().name() : "BUNDLED";
+            case DOWNLOAD -> downloadedDriverVersions.contains(selectedDriver) ? "DOWNLOADED"
+                    : discoveredDriverVersions.contains(selectedDriver) ? "DISCOVERED" : "DOWNLOAD";
+            case LOCAL_JAR -> "LOCAL JAR";
+        };
+        driverSummary.setText((selectedDriver.isBlank() ? source == DriverSource.LOCAL_JAR ? "Choose a JAR" : "Choose a version" : selectedDriver) + " · " + origin);
+        driverSummary.setToolTipText(formatDriverLabel(type, selectedDriver) + " · " + origin);
+        driverSummary.getAccessibleContext().setAccessibleDescription(driverSummary.getToolTipText());
+        if (source == DriverSource.BUNDLED) {
+            var selected = (InstalledDriver) bundledDriverCombo.getSelectedItem();
+            String packaged = DriverStore.packagedVersion(type);
+            if ("UNAVAILABLE".equals(origin))
+                setDriverStatus("The selected driver is no longer available. Choose another available driver or download it again.");
+            else if (selected != null && selected.kind() == InstalledDriver.Kind.DOWNLOADED)
+                setDriverStatus(selected.version() + " is stored on this machine and ready to use.");
+            else if (selected != null && selected.kind() == InstalledDriver.Kind.DISCOVERED)
+                setDriverStatus(selected.version() + " was found in the Maven local repository and is ready to use.");
+            else setDriverStatus((packaged.isEmpty() ? type.getDisplayName() + " driver" : type.getDisplayName() + " " + packaged)
+                    + " is packaged with the plugin and ready to use.");
+        } else if (source == DriverSource.DOWNLOAD) {
+            String version = selectedDriverVersion();
+            boolean alreadyDownloaded = downloadedDriverVersions.contains(version);
+            boolean alreadyDiscovered = discoveredDriverVersions.contains(version);
+            downloadDriverButton.setEnabled(!discoveryBusy && !driverBusy && !connectionBusy && !alreadyDownloaded && !alreadyDiscovered);
+            if (alreadyDownloaded) setDriverStatus("Downloaded and ready");
+            else if (alreadyDiscovered) setDriverStatus("Discovered in the Maven local repository; select it under Available drivers.");
+            else try {
+                var path = DriverCatalog.downloadedJar(type, version);
                 setDriverStatus(java.nio.file.Files.isRegularFile(path) ? "Downloaded and ready" : "Choose a version, then Download. You can also enter a release version.");
             } catch (IllegalArgumentException error) { setDriverStatus(error.getMessage()); }
-        } else setDriverStatus(source == DriverSource.LOCAL_JAR ? "Select the driver JAR matching your database server." : type.getDisplayName() + " " + bundledVersion + " included and ready to use.");
+        } else setDriverStatus("Select the driver JAR matching your database server.");
+        if (discoveryBusy) setDriverStatus("Looking for locally available drivers…");
         updateTestAvailability();
     }
+    private String selectedDriverVersion() {
+        Object selected = driverVersionCombo.getEditor().getItem();
+        return selected == null ? "" : selected.toString().trim();
+    }
+    /** Blank means the packaged driver; a version names a retained download. */
+    private String selectedBundledVersion() {
+        var selected = (InstalledDriver) bundledDriverCombo.getSelectedItem();
+        return selected != null && !selected.packaged() ? selected.version() : "";
+    }
+    private String selectedBundledJarPath() {
+        var selected = (InstalledDriver) bundledDriverCombo.getSelectedItem();
+        return selected == null || selected.packaged() || selected.jar() == null ? "" : selected.jar().toString();
+    }
+    private String selectedBundledLabel(DatabaseType type) {
+        var selected = (InstalledDriver) bundledDriverCombo.getSelectedItem();
+        String version = selected == null ? "" : selected.version();
+        return version.isBlank() ? DriverStore.packagedVersion(type) : version;
+    }
+    private String formatDriverLabel(DatabaseType type, String version) {
+        String name = type == DatabaseType.MYSQL ? "MySQL Connector/J" : "HSQLDB";
+        return version == null || version.isBlank() ? name : name + " " + version;
+    }
+    private String selectedLocalDriverLabel(DatabaseType type) {
+        String pathText = driverJarField.getText().trim();
+        if (pathText.isEmpty()) return "";
+        try {
+            java.nio.file.Path path = java.nio.file.Path.of(pathText);
+            java.nio.file.Path fileName = path.getFileName();
+            if (fileName == null) return "";
+            String name = fileName.toString();
+            String version = DriverCatalog.versionOf(type, name);
+            if (version.isBlank() && java.nio.file.Files.isRegularFile(path)) {
+                try (java.util.jar.JarFile jar = new java.util.jar.JarFile(path.toFile())) {
+                    var manifest = jar.getManifest();
+                    var attributes = manifest == null ? null : manifest.getMainAttributes();
+                    if (attributes != null) {
+                        for (String attribute : List.of("Implementation-Version", "Bundle-Version", "Specification-Version")) {
+                            String value = attributes.getValue(attribute);
+                            if (value != null && !value.isBlank()) {
+                                version = value.trim();
+                                break;
+                            }
+                        }
+                    }
+                } catch (java.io.IOException ignored) { }
+            }
+            return version.isBlank() ? name : version;
+        } catch (java.nio.file.InvalidPathException | SecurityException ignored) {
+            return "";
+        }
+    }
     private void runDriverAction(boolean listOnly) {
-        if (driverBusy || connectionBusy || isDisposed()) return;
+        if (discoveryBusy || driverBusy || connectionBusy || isDisposed()) return;
         DatabaseType type = (DatabaseType)typeCombo.getSelectedItem();
-        String version = String.valueOf(driverVersionCombo.getEditor().getItem()).trim();
-        driverBusy = true; downloadDriverButton.setEnabled(false); listVersionsButton.setEnabled(false);
-        driverSourceCombo.setEnabled(false); driverVersionCombo.setEnabled(false); typeCombo.setEnabled(false);
+        String version = selectedDriverVersion();
+        if (!listOnly && downloadedDriverVersions.contains(version)) {
+            updateDriverStatus();
+            return;
+        }
+        rememberDriverSelection();
+        driverBusy = true;
+        setDriverControlsEnabled(false);
+        driverProgressBar.setValue(0);
+        driverProgressBar.setIndeterminate(!listOnly);
+        driverProgressBar.setVisible(!listOnly);
         testButton.setEnabled(false); setOKActionEnabled(false);
+        refreshFormSize();
         setDriverStatus(listOnly ? "Loading versions from Maven Central..." : "Downloading and verifying " + version + "...");
         driverTask = com.segfault03.ideadb.service.DatabaseTaskService.getInstance().submit(() -> {
             String error = null; java.util.List<String> versions = null;
-            try { if (listOnly) versions = DriverCatalog.availableVersions(type); else DriverCatalog.download(type, version); }
+            List<InstalledDriver> refreshed = null;
+            try {
+                if (listOnly) versions = DriverCatalog.availableVersions(type);
+                else DriverCatalog.download(type, version, (bytesReceived, totalBytes) ->
+                        SwingUtilities.invokeLater(() -> updateDriverProgress(bytesReceived, totalBytes)));
+                refreshed = DriverStore.installed(type, project);
+            }
             catch (Exception failure) { error = failure.getMessage(); }
             String failure = error; java.util.List<String> available = versions;
+            List<InstalledDriver> inventory = refreshed;
             SwingUtilities.invokeLater(() -> {
                 if (isDisposed()) return;
-                driverBusy = false; downloadDriverButton.setEnabled(true); listVersionsButton.setEnabled(true);
-                driverSourceCombo.setEnabled(true); driverVersionCombo.setEnabled(true); typeCombo.setEnabled(true);
+                driverBusy = false;
+                driverProgressBar.setVisible(false);
+                driverProgressBar.setIndeterminate(false);
+                driverProgressBar.setValue(0);
+                setDriverControlsEnabled(true);
                 setOKActionEnabled(true);
+                if (inventory != null) driverInventory.put(type, inventory);
+                refillDriverVersions();
                 if (available != null) {
-                    driverVersionCombo.removeAllItems(); available.forEach(driverVersionCombo::addItem); driverVersionCombo.setSelectedItem(version);
+                    updatingDrivers = true;
+                    try {
+                        LinkedHashSet<String> mergedVersions = new LinkedHashSet<>(available);
+                        mergedVersions.addAll(downloadedDriverVersions);
+                        mergedVersions.addAll(discoveredDriverVersions);
+                        driverVersionCombo.removeAllItems();
+                        mergedVersions.forEach(driverVersionCombo::addItem);
+                        driverVersionCombo.setSelectedItem(version);
+                    } finally { updatingDrivers = false; }
+                    rememberDriverSelection();
+                    updateDriverStatus();
                 }
-                updateDriverStatus();
+                refreshFormSize();
                 if (failure != null) { setDriverStatus(listOnly ? "Could not load versions; enter a version or retry." : "Download failed; use a local JAR or retry.");
                     driverStatusLabel.setIcon(com.intellij.icons.AllIcons.General.Error); Messages.showErrorDialog(failure, "JDBC Driver"); }
             });
         });
     }
     @Override protected @Nullable ValidationInfo doValidate() {
+        if (discoveryBusy) return new ValidationInfo("Wait for local driver discovery to finish", driverSourceCombo);
         if (driverBusy) return new ValidationInfo("Wait for the driver download to finish", driverSourceCombo);
         if (customUrlRadio.isSelected() && customUrlField.getText().trim().isEmpty()) {
             return new ValidationInfo("Enter a JDBC URL", customUrlField);
@@ -594,6 +935,11 @@ public class ConnectionDialog extends DialogWrapper {
                 var downloaded = DriverCatalog.downloadedJar(candidate.getType(), candidate.getDriverVersion());
                 if (!java.nio.file.Files.isRegularFile(downloaded)) return new ValidationInfo("Download the selected driver first", driverVersionCombo);
                 DriverCatalog.validateJar(candidate.getType(), downloaded);
+            } else if (candidate.getDriverSource() == DriverSource.BUNDLED && !candidate.getDriverVersion().isBlank()) {
+                var selected = (InstalledDriver) bundledDriverCombo.getSelectedItem();
+                if (selected == null || selected.packaged()) return new ValidationInfo("Select an available driver", bundledDriverCombo);
+                if (selected.jar() == null) return new ValidationInfo("The selected driver JAR is unavailable", bundledDriverCombo);
+                DriverCatalog.validateJar(candidate.getType(), selected.jar());
             } else if (candidate.getDriverSource() == DriverSource.LOCAL_JAR) {
                 DriverCatalog.validateJar(candidate.getType(), java.nio.file.Path.of(candidate.getDriverJarPath()));
             }
@@ -601,6 +947,7 @@ public class ConnectionDialog extends DialogWrapper {
         return null;
     }
     @Override protected void dispose() {
+        if (discoveryTask != null) discoveryTask.cancel(true);
         if (driverTask != null) driverTask.cancel(true);
         if (connectionTask != null) connectionTask.cancel(true);
         super.dispose();
@@ -626,8 +973,9 @@ public class ConnectionDialog extends DialogWrapper {
         testStatusLabel.setVisible(true);
 
         connectionBusy = true;
-        updateTestAvailability();
-        downloadDriverButton.setEnabled(false); listVersionsButton.setEnabled(false);
+        setOKActionEnabled(false);
+        setDriverControlsEnabled(false);
+        updateDriverStatus();
 
         connectionTask = com.segfault03.ideadb.service.DatabaseTaskService.getInstance().submit(() -> {
                 if(isDisposed()) return;
@@ -636,8 +984,9 @@ public class ConnectionDialog extends DialogWrapper {
                 SwingUtilities.invokeLater(() -> {
                     if (isDisposed()) return;
                     connectionBusy = false;
-                    updateTestAvailability();
-                    downloadDriverButton.setEnabled(true); listVersionsButton.setEnabled(true);
+                    setOKActionEnabled(true);
+                    setDriverControlsEnabled(true);
+                    updateDriverStatus();
                     if (!sameRequest(requested, createTempConfig())) {
                         DatabaseUi.status(testStatusLabel, "Settings changed · Test again", DatabaseUi.Tone.WARNING); return;
                     }
@@ -653,7 +1002,7 @@ public class ConnectionDialog extends DialogWrapper {
                                 hsqlServerDbField.setText(temp.getDatabaseName());
                                 hsqlUserField.setText(temp.getUser());
                             }
-                            updatePreview();
+                            refreshConnectionState();
                         }
                         DatabaseUi.status(testStatusLabel, "Connected · " + result.getDatabaseProductName() + " " + result.getDatabaseProductVersion(), DatabaseUi.Tone.SUCCESS);
                         testStatusLabel.setToolTipText("Driver: " + result.getDriverName() + " " + result.getDriverVersion() + "; " + result.getResponseTimeMs() + " ms");
@@ -695,7 +1044,13 @@ public class ConnectionDialog extends DialogWrapper {
             hsqlPasswordField.setText(config.getPassword());
         }
 
-        if (!config.getDriverVersion().isBlank()) driverVersionCombo.setSelectedItem(config.getDriverVersion());
+        if (!config.getDriverVersion().isBlank()) {
+            // A saved available driver wins over the packaged default when editing a connection.
+            if (config.getDriverSource() == DriverSource.BUNDLED)
+                selectBundledDriver(config.getDriverVersion(), config.getDriverJarPath());
+            else if (config.getDriverSource() == DriverSource.DOWNLOAD)
+                driverVersionCombo.setSelectedItem(config.getDriverVersion());
+        }
         driverJarField.setText(config.getDriverJarPath());
         driverSourceCombo.setSelectedItem(config.getDriverSource());
         showDriverCard(config.getDriverSource());

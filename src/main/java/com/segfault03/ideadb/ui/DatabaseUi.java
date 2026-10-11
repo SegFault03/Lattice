@@ -1,20 +1,44 @@
 package com.segfault03.ideadb.ui;
 
 import com.intellij.ui.JBColor;
+import com.intellij.util.IconUtil;
 import com.intellij.util.ui.JBUI;
 import com.segfault03.ideadb.model.DatabaseType;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.Objects;
 import java.util.function.Consumer;
+import java.beans.PropertyChangeListener;
+import java.awt.event.ActionEvent;
 
 /** Shared spacing and quiet native action styling for database editor controls. */
 public final class DatabaseUi {
+    public static final Color POSITIVE_ACTION_COLOR = new JBColor(new Color(0x2E7D32), new Color(0x238636));
+    public static final Color DESTRUCTIVE_ACTION_COLOR = new JBColor(new Color(0xC62828), new Color(0xC43D3D));
+
     private DatabaseUi() {}
+
+    /** Native IDEA popup painting, palette, borders and window handling in every theme. */
+    public static JPopupMenu popupMenu() { return new com.intellij.openapi.ui.JBPopupMenu(); }
+
+    /** Match JBPopupMenu's surface/window settings for Swing's internally owned submenus. */
+    public static JMenu submenu(String text) {
+        return new JMenu(text) {
+            @Override public JPopupMenu getPopupMenu() {
+                JPopupMenu popup = super.getPopupMenu();
+                // IDEA's popup UI paints the theme surface; Swing's opaque fill can
+                // cover it with a black rectangle in native light themes.
+                popup.setOpaque(false);
+                popup.setLightWeightPopupEnabled(false);
+                return popup;
+            }
+        };
+    }
 
     /** Every connection entry point offers the same database choice. */
     public static JPopupMenu connectionMenu(Consumer<DatabaseType> choose) {
-        JPopupMenu menu = new JPopupMenu();
+        JPopupMenu menu = popupMenu();
         for (DatabaseType type : DatabaseType.values()) {
             JMenuItem item = new JMenuItem(type.getDisplayName() + "…");
             item.addActionListener(event -> choose.accept(type));
@@ -32,7 +56,7 @@ public final class DatabaseUi {
         label.getAccessibleContext().setAccessibleDescription(text);
         label.setIcon(switch (tone) {
             case NORMAL -> null;
-            case BUSY -> com.intellij.icons.AllIcons.Process.Step_passive;
+            case BUSY -> com.intellij.ui.AnimatedIcon.Default.INSTANCE;
             case SUCCESS -> com.intellij.icons.AllIcons.General.GreenCheckmark;
             case WARNING -> com.intellij.icons.AllIcons.General.Warning;
             case ERROR -> com.intellij.icons.AllIcons.General.Error;
@@ -51,40 +75,7 @@ public final class DatabaseUi {
     }
 
     public static JButton action(String text, Icon icon, String tooltip) {
-        JButton button = new JButton(text, icon) {
-            @Override public Dimension getPreferredSize() {
-                // Size toolbar actions to content, bypassing native dialog-button minimum widths.
-                Insets padding = getInsets();
-                FontMetrics font = getFontMetrics(getFont());
-                String label = getText();
-                Icon glyph = getIcon();
-                int textWidth = label == null || label.isEmpty() ? 0 : font.stringWidth(label);
-                int iconWidth = glyph == null ? 0 : glyph.getIconWidth();
-                int gap = textWidth > 0 && iconWidth > 0 ? getIconTextGap() : 0;
-                return new Dimension(Math.max(JBUI.scale(28), padding.left + padding.right + textWidth + iconWidth + gap),
-                        Math.max(JBUI.scale(28), padding.top + padding.bottom
-                                + Math.max(textWidth > 0 ? font.getHeight() : 0, glyph == null ? 0 : glyph.getIconHeight())));
-            }
-            @Override public Dimension getMinimumSize() { return getPreferredSize(); }
-            @Override protected void paintComponent(Graphics graphics) {
-                ButtonModel model = getModel();
-                if (isEnabled() && (model.isRollover() || model.isPressed() && model.isArmed() || hasFocus())) {
-                    Graphics2D g = (Graphics2D) graphics.create();
-                    try {
-                        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                        g.setColor(model.isPressed() && model.isArmed()
-                                ? JBUI.CurrentTheme.ActionButton.pressedBackground()
-                                : JBUI.CurrentTheme.ActionButton.hoverBackground());
-                        g.fillRoundRect(0, 0, getWidth(), getHeight(), JBUI.scale(6), JBUI.scale(6));
-                        if (hasFocus()) {
-                            g.setColor(JBColor.namedColor("Component.focusColor", new JBColor(0x3574F0, 0x548AF7)));
-                            g.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, JBUI.scale(6), JBUI.scale(6));
-                        }
-                    } finally { g.dispose(); }
-                }
-                super.paintComponent(graphics);
-            }
-        };
+        JButton button = new ActionButton(text, icon);
         button.setToolTipText(tooltip);
         button.getAccessibleContext().setAccessibleName(tooltip);
         button.setBorder(JBUI.Borders.empty(4, 6));
@@ -92,19 +83,238 @@ public final class DatabaseUi {
         button.setContentAreaFilled(false);
         button.setOpaque(false);
         button.setDefaultCapable(false);
-        button.setFocusPainted(false); // The focus cue is painted above with the native theme color.
+        button.setFocusPainted(false); // The focus cue is painted with the native theme color.
         button.setRolloverEnabled(true);
         button.setIconTextGap(JBUI.scale(5));
+        installFocusVisibility(button);
         return button;
+    }
+
+    /** Mouse interaction stays quiet; Tab/Shift+Tab and keyboard interaction show focus. */
+    static void installFocusVisibility(JComponent component) {
+        installMouseFocus(component, component);
+        for (Component child : component.getComponents())
+            if (child instanceof JButton button) installMouseFocus(button, component);
+        if (Boolean.TRUE.equals(component.getClientProperty("lattice.focusVisibilityInstalled"))) return;
+        component.putClientProperty("lattice.focusVisibilityInstalled", Boolean.TRUE);
+        component.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override public void focusGained(java.awt.event.FocusEvent event) {
+                if (event.getCause() == java.awt.event.FocusEvent.Cause.TRAVERSAL_FORWARD
+                        || event.getCause() == java.awt.event.FocusEvent.Cause.TRAVERSAL_BACKWARD
+                        || event.getCause() == java.awt.event.FocusEvent.Cause.TRAVERSAL_UP
+                        || event.getCause() == java.awt.event.FocusEvent.Cause.TRAVERSAL_DOWN)
+                    component.putClientProperty("lattice.mouseFocus", Boolean.FALSE);
+                component.repaint();
+            }
+            @Override public void focusLost(java.awt.event.FocusEvent event) { component.repaint(); }
+        });
+        component.addKeyListener(new java.awt.event.KeyAdapter() {
+            @Override public void keyPressed(java.awt.event.KeyEvent event) {
+                component.putClientProperty("lattice.mouseFocus", Boolean.FALSE);
+                component.repaint();
+            }
+        });
+    }
+
+    private static void installMouseFocus(JComponent target, JComponent component) {
+        if (target.getClientProperty("lattice.mouseFocusOwner") == component) return;
+        target.putClientProperty("lattice.mouseFocusOwner", component);
+        target.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override public void mousePressed(java.awt.event.MouseEvent event) {
+                component.putClientProperty("lattice.mouseFocus", Boolean.TRUE);
+                component.repaint();
+            }
+        });
+    }
+
+    static boolean isFocusVisible(JComponent component) {
+        return !Boolean.TRUE.equals(component.getClientProperty("lattice.mouseFocus"));
+    }
+
+    static void onTextChange(javax.swing.text.JTextComponent input, Runnable update) {
+        input.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            public void insertUpdate(javax.swing.event.DocumentEvent event) { update.run(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent event) { update.run(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent event) { update.run(); }
+        });
+    }
+
+    /** Highlights an enabled toolbar action while leaving disabled actions in the native quiet style. */
+    public static void setActionEmphasis(JButton button, Color color) {
+        if (button instanceof ActionButton actionButton) actionButton.setEmphasisColor(color);
+    }
+
+    /** A popup view of an existing action; state and callbacks still belong to that action. */
+    static JButton mirrorAction(JButton source) {
+        Icon icon = source instanceof ActionButton action ? action.defaultIcon : source.getIcon();
+        ActionButton copy = (ActionButton) action(source.getText(), icon, source.getToolTipText());
+        copy.source = source;
+        copy.iconOnly = source.getIcon() != null && source.getText() != null && !source.getText().isEmpty();
+        copy.copySourceState();
+        copy.addActionListener(event -> {
+            if (!source.isEnabled()) return;
+            ActionEvent forwarded = new ActionEvent(copy, event.getID(), event.getActionCommand(), event.getWhen(), event.getModifiers());
+            for (var listener : source.getActionListeners()) listener.actionPerformed(forwarded);
+        });
+        return copy;
+    }
+
+    private static final class ActionButton extends JButton {
+        private final Icon defaultIcon;
+        private Color emphasisColor;
+        private JButton source;
+        private boolean iconOnly;
+        private Icon disabledGlyph;
+        private Icon disabledSource;
+        private Color disabledColor;
+        private final PropertyChangeListener sourceChanges = event -> copySourceState();
+
+        private ActionButton(String text, Icon icon) {
+            super(text, icon);
+            defaultIcon = icon;
+        }
+
+        @Override public Icon getDisabledIcon() {
+            Icon icon = defaultIcon == null ? getIcon() : defaultIcon;
+            if (icon == null) return null;
+            Color color = UIManager.getColor("Button.disabledText");
+            if (color == null) color = JBColor.namedColor("Label.disabledForeground", JBColor.GRAY);
+            if (disabledGlyph == null || disabledSource != icon || !Objects.equals(disabledColor, color)) {
+                int rgb = color.getRGB() & 0x00FFFFFF;
+                disabledGlyph = IconUtil.filterIcon(icon, () -> new java.awt.image.RGBImageFilter() {
+                    @Override public int filterRGB(int x, int y, int source) {
+                        return (source & 0xFF000000) | rgb;
+                    }
+                }, null);
+                disabledSource = icon;
+                disabledColor = color;
+            }
+            return disabledGlyph;
+        }
+
+        @Override public void setEnabled(boolean enabled) {
+            super.setEnabled(enabled);
+            if (!enabled && getModel() != null) clearInteractionState();
+        }
+
+        private void clearInteractionState() {
+            getModel().setArmed(false);
+            getModel().setPressed(false);
+            getModel().setRollover(false);
+        }
+
+        private void copySourceState() {
+            if (source == null) return;
+            setText(iconOnly ? "" : source.getText());
+            setEnabled(source.isEnabled());
+            setBorder(iconOnly ? JBUI.Borders.empty(4, 6) : source.getBorder());
+            setIconTextGap(source.getIconTextGap());
+            setToolTipText(source.getToolTipText());
+            getAccessibleContext().setAccessibleName(source.getAccessibleContext().getAccessibleName());
+            setEmphasisColor(source instanceof ActionButton action ? action.emphasisColor : null);
+        }
+
+        @Override public void addNotify() {
+            super.addNotify();
+            if (source != null) {
+                source.addPropertyChangeListener(sourceChanges);
+                copySourceState();
+            }
+        }
+
+        @Override public void removeNotify() {
+            if (source != null) source.removePropertyChangeListener(sourceChanges);
+            clearInteractionState();
+            super.removeNotify();
+        }
+
+        private void setEmphasisColor(Color color) {
+            if (Objects.equals(emphasisColor, color)) return;
+            emphasisColor = color;
+            setBackground(color);
+            setForeground(color == null ? null : Color.WHITE);
+            // Colorize preserves source brightness: gray glyphs would stay gray on white.
+            // Filter only RGB, keeping the native icon's alpha, scale and antialiasing.
+            setIcon(color == null || defaultIcon == null ? defaultIcon : IconUtil.filterIcon(defaultIcon,
+                    () -> new java.awt.image.RGBImageFilter() {
+                        @Override public int filterRGB(int x, int y, int rgb) {
+                            return (rgb & 0xFF000000) | 0x00FFFFFF;
+                        }
+                    }, null));
+            putClientProperty("lattice.action.emphasis", color);
+            repaint();
+        }
+
+        @Override public Dimension getPreferredSize() {
+            // Size toolbar actions to content, bypassing native dialog-button minimum widths.
+            Insets padding = getInsets();
+            FontMetrics font = getFontMetrics(getFont());
+            String label = getText();
+            Icon glyph = getIcon();
+            int textWidth = label == null || label.isEmpty() ? 0 : font.stringWidth(label);
+            int iconWidth = glyph == null ? 0 : glyph.getIconWidth();
+            int gap = textWidth > 0 && iconWidth > 0 ? getIconTextGap() : 0;
+            return new Dimension(Math.max(JBUI.scale(28), padding.left + padding.right + textWidth + iconWidth + gap),
+                    Math.max(JBUI.scale(28), padding.top + padding.bottom
+                            + Math.max(textWidth > 0 ? font.getHeight() : 0, glyph == null ? 0 : glyph.getIconHeight())));
+        }
+
+        @Override public Dimension getMinimumSize() { return getPreferredSize(); }
+
+        @Override protected void paintComponent(Graphics graphics) {
+            ButtonModel model = getModel();
+            boolean emphasized = isEnabled() && emphasisColor != null;
+            boolean interactive = isEnabled() && (model.isRollover() || model.isPressed() && model.isArmed());
+            boolean focusVisible = hasFocus() && isFocusVisible(this);
+            if (emphasized || interactive || isEnabled() && focusVisible) {
+                Graphics2D g = (Graphics2D) graphics.create();
+                try {
+                    g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    if (emphasized || interactive) {
+                        g.setColor(emphasized
+                                ? emphasisColor
+                                : model.isPressed() && model.isArmed()
+                                        ? JBUI.CurrentTheme.ActionButton.pressedBackground()
+                                        : JBUI.CurrentTheme.ActionButton.hoverBackground());
+                        g.fillRoundRect(0, 0, getWidth(), getHeight(), JBUI.scale(10), JBUI.scale(10));
+                    }
+                    if (emphasized) {
+                        g.setColor(emphasisColor.darker());
+                        g.setStroke(new BasicStroke(com.intellij.ui.scale.JBUIScale.scale(1f)));
+                        g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, JBUI.scale(10), JBUI.scale(10));
+                    }
+                    if (focusVisible) {
+                        g.setColor(JBColor.namedColor("Component.focusColor", new JBColor(0x3574F0, 0x548AF7)));
+                        g.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, JBUI.scale(6), JBUI.scale(6));
+                    }
+                } finally { g.dispose(); }
+            }
+            super.paintComponent(graphics);
+        }
     }
 
     /** An indivisible group so wrapping never separates a field from its label. */
     public static JPanel group(Component... controls) {
-        FlowLayout layout = new FlowLayout(FlowLayout.LEFT, JBUI.scale(4), 0);
+        return group(4, controls);
+    }
+
+    /** An indivisible group with a caller-selected horizontal gap for compact toolbars. */
+    public static JPanel group(int horizontalGap, Component... controls) {
+        FlowLayout layout = new FlowLayout(FlowLayout.LEFT, JBUI.scale(horizontalGap), 0);
         layout.setAlignOnBaseline(true);
         JPanel group = new JPanel(layout);
         group.setOpaque(false);
         for (Component control : controls) group.add(control);
+        return group;
+    }
+
+    /** Keeps the label visible while allowing the field to shrink in a narrow editor. */
+    public static JPanel labeledInput(JLabel label, JComponent input) {
+        JPanel group = new JPanel(new BorderLayout(JBUI.scale(4), 0));
+        group.setOpaque(false);
+        label.setLabelFor(input);
+        group.add(label, BorderLayout.WEST);
+        group.add(input, BorderLayout.CENTER);
         return group;
     }
 

@@ -29,10 +29,10 @@ sourceSets {
     }
 }
 
-val uiTestImplementation by configurations.getting {
+val uiTestImplementation = configurations.getByName("uiTestImplementation") {
     extendsFrom(configurations.testImplementation.get())
 }
-val uiTestRuntimeOnly by configurations.getting {
+val uiTestRuntimeOnly = configurations.getByName("uiTestRuntimeOnly") {
     extendsFrom(configurations.testRuntimeOnly.get())
 }
 
@@ -96,16 +96,33 @@ tasks.processResources {
     from("licenses") { into("licenses") }
 }
 
+val fallbackDriverJars = tasks.register<Sync>("fallbackDriverJars") {
+    from(configurations.runtimeClasspath.map { files ->
+        files.filter { it.name.startsWith("mysql-connector-") || it.name.startsWith("hsqldb-") }
+    })
+    into(layout.buildDirectory.dir("fallback-drivers"))
+}
+
+tasks.withType<Test>().configureEach {
+    dependsOn(fallbackDriverJars)
+    systemProperty("lattice.test.drivers", layout.buildDirectory.dir("fallback-drivers").get().asFile.absolutePath)
+    systemProperty("lattice.test.mysql.port", providers.environmentVariable("LATTICE_TEST_MYSQL_PORT").orElse("3306").get())
+    systemProperty("lattice.test.hsqldb.port", providers.environmentVariable("LATTICE_TEST_HSQLDB_PORT").orElse("9001").get())
+}
+
 tasks.register<JavaExec>("fallbackDriverTest") {
     description = "Check JDBC loading and disposal without drivers on the application classpath"
     group = "verification"
     dependsOn(tasks.testClasses)
     mainClass.set("com.segfault03.ideadb.FallbackDriverLifecycleTest")
+    systemProperty("lattice.test.mysql.port", providers.environmentVariable("LATTICE_TEST_MYSQL_PORT").orElse("3306").get())
+    systemProperty("lattice.test.hsqldb.port", providers.environmentVariable("LATTICE_TEST_HSQLDB_PORT").orElse("9001").get())
     classpath = sourceSets["main"].output + sourceSets["test"].output +
         sourceSets["main"].compileClasspath.filter {
             !it.name.startsWith("mysql-connector-") && !it.name.startsWith("hsqldb-")
         }
-    args(file("lib").absolutePath)
+    dependsOn(fallbackDriverJars)
+    args(layout.buildDirectory.dir("fallback-drivers").get().asFile.absolutePath)
 }
 
 tasks.register<JavaExec>("databaseCompatibilityTest") {
@@ -134,6 +151,7 @@ tasks.register<JavaExec>("databaseCompatibilityTest") {
             "hsqldb" -> listOf(mode, java8, probeClasses)
             else -> throw GradleException("Unknown compatibility mode: $mode")
         })
+        systemProperty("lattice.test.keepDependencies", !providers.gradleProperty("lattice.compatibility.cleanup").orElse("true").get().toBoolean())
         providers.gradleProperty("lattice.compatibility.cache").orNull?.let {
             systemProperty("lattice.jdbc.cache", it)
         }
@@ -157,18 +175,36 @@ intellijPlatform {
     }
 }
 
-val uiScreenshotTest by intellijPlatformTesting.testIdeUi.registering {
+intellijPlatformTesting.testIdeUi.register("uiScreenshotTest") {
     task {
         val uiTestSourceSet = sourceSets["uiTest"]
         testClassesDirs = uiTestSourceSet.output.classesDirs
         classpath = uiTestSourceSet.runtimeClasspath
         useJUnitPlatform()
+        outputs.upToDateWhen { false } // Rendering must launch the IDE even when code is unchanged.
         systemProperty("java.awt.headless", "false")
-        systemProperty("ui.screenshot.dir", layout.buildDirectory.dir("ui-test-results").get().asFile.absolutePath)
+        systemProperty("ui.screenshot.dir", providers.gradleProperty("lattice.ui.output").orElse(layout.buildDirectory.dir("ui-test-results").get().asFile.absolutePath).get())
+        systemProperty("ui.theme.id", providers.gradleProperty("lattice.ui.theme").orElse("ExperimentalDark").get())
+        systemProperty("ui.review.enabled", providers.gradleProperty("lattice.ui.review").orElse("false").get())
+        systemProperty("ui.inputs.only", providers.gradleProperty("lattice.ui.inputsOnly").orElse("false").get())
+        systemProperty("ui.style.only", providers.gradleProperty("lattice.ui.styleOnly").orElse("false").get())
+        systemProperty("ui.style.lightThemes", providers.gradleProperty("lattice.ui.lightThemes").orElse("false").get())
+        systemProperty("ui.maven.repository", providers.gradleProperty("lattice.ui.maven.repository").orElse(layout.buildDirectory.dir("ui-test-maven/repository").map { it.asFile.absolutePath }).get())
         val ide = tasks.named<RunIdeTask>("runIde").get()
-        systemProperty("ui.ide.home", ide.platformPath.toString())
-        systemProperty("ui.ide.build", ide.productInfo.buildNumber)
-        systemProperty("ui.ide.version", ide.productInfo.version)
+        // Launch a newer installed IDE without changing the plugin's compilation SDK.
+        val uiIdeHome = providers.gradleProperty("lattice.ui.ide.home").orNull
+        if (uiIdeHome == null) {
+            systemProperty("ui.ide.home", ide.platformPath.toString())
+            systemProperty("ui.ide.build", ide.productInfo.buildNumber)
+            systemProperty("ui.ide.version", ide.productInfo.version)
+            systemProperty("ui.ide.product", ide.productInfo.productCode)
+        } else {
+            val info = groovy.json.JsonSlurper().parse(file("$uiIdeHome/product-info.json")) as Map<*, *>
+            systemProperty("ui.ide.home", file(uiIdeHome).absolutePath)
+            systemProperty("ui.ide.build", requireNotNull(info["buildNumber"]).toString())
+            systemProperty("ui.ide.version", requireNotNull(info["version"]).toString())
+            systemProperty("ui.ide.product", requireNotNull(info["productCode"]).toString())
+        }
         testLogging {
             events("passed", "skipped", "failed")
             showStandardStreams = true

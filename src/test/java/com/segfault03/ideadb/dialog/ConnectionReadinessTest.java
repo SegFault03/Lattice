@@ -79,6 +79,16 @@ class ConnectionReadinessTest {
         config.setDriverVersion("../invalid");
         assertNotNull(ConnectionReadiness.problem(config, false));
         config.setDriverSource(DriverSource.BUNDLED);
+        config.setDriverVersion("");
         assertNull(ConnectionReadiness.problem(config, false));
+    }
+
+    @Test void bundledDriverWithoutAStoredJarIsReportedInsteadOfSilentlyReplaced() {
+        ConnectionConfig config = new ConnectionConfig(DatabaseType.MYSQL, "Retained");
+        config.setDriverSource(DriverSource.BUNDLED);
+        config.setDriverVersion("999.999.999");
+        assertNotNull(ConnectionReadiness.problem(config, false), "A missing stored driver must not fall back to the packaged one");
+        config.setDriverVersion("../invalid");
+        assertNotNull(ConnectionReadiness.problem(config, false));
     }
 }
