@@ -1082,7 +1082,9 @@ class IntellijUiScreenshotTest {
                 // Clear adds to the action group's width; font/theme metrics also
                 // vary by OS. Exercise the two-row layout using its live controls.
                 val filters = tableEditor.x { byJavaClass("com.segfault03.ideadb.ui.TableFilterPanel") }.waitFound()
-                val orderInput = tableEditor.x(JTextFieldUI::class.java) { byAccessibleName("ORDER BY") }.waitFound()
+                val orderInput = tableEditor.x(JTextFieldUI::class.java) {
+                    and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("ORDER BY"))
+                }.waitFound()
                 val applyFilter = tableEditor.x { byAccessibleName("Apply filter and sort") }.waitFound()
                 val mediumWidth = withContext(OnDispatcher.EDT) {
                     val whereGroup = cast(cast(whereInput.component, LiveSwingComponent::class).getParent(), LiveSwingComponent::class)
