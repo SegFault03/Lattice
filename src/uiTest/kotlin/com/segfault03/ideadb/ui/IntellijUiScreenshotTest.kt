@@ -143,7 +143,6 @@ class IntellijUiScreenshotTest {
         val normalHeight = minOf(1000, displayBounds.height - 80)
         val narrowWidth = minOf(1000, displayBounds.width - 40)
         val narrowHeight = minOf(800, displayBounds.height - 80)
-        val mediumWidth = minOf(1120, displayBounds.width - 40)
         val mediumHeight = minOf(900, displayBounds.height - 80)
         val wideWidth = minOf(1900, displayBounds.width - 20)
         val wideHeight = minOf(1000, displayBounds.height - 80)
@@ -1080,6 +1079,22 @@ class IntellijUiScreenshotTest {
                 tableEditor.x { byVisibleText("Apply") }.waitFound().click()
                 waitUntil("narrow filter reset") { dataGrid.rowCount() == 1 }
                 val ideWindow = cast(frame.component, Window::class)
+                // Clear adds to the action group's width; font/theme metrics also
+                // vary by OS. Exercise the two-row layout using its live controls.
+                val filters = tableEditor.x { byJavaClass("com.segfault03.ideadb.ui.TableFilterPanel") }.waitFound()
+                val orderInput = tableEditor.x(JTextFieldUI::class.java) { byAccessibleName("ORDER BY") }.waitFound()
+                val applyFilter = tableEditor.x { byAccessibleName("Apply filter and sort") }.waitFound()
+                val mediumWidth = withContext(OnDispatcher.EDT) {
+                    val whereGroup = cast(cast(whereInput.component, LiveSwingComponent::class).getParent(), LiveSwingComponent::class)
+                    val orderGroup = cast(cast(orderInput.component, LiveSwingComponent::class).getParent(), LiveSwingComponent::class)
+                    val actions = cast(cast(applyFilter.component, LiveSwingComponent::class).getParent(), LiveSwingComponent::class)
+                    val insets = cast(filters.component, LiveSwingComponent::class).getInsets()
+                    val targetWidth = orderGroup.getMinimumSize().getWidth().toInt() +
+                        actions.getPreferredSize().getWidth().toInt() + 8 +
+                        whereGroup.getMinimumSize().getWidth().toInt() / 2 + insets.left + insets.right
+                    frame.component.width - filters.component.width + targetWidth
+                }
+                check(mediumWidth <= displayBounds.width - 40) { "Display cannot fit the two-row filter review: $mediumWidth" }
                 frame.resize(mediumWidth, mediumHeight)
                 captureScreen(screenshotsDirectory.resolve("table-medium-filters.png"))
                 assertFilterLayout(tableEditor, 2)
@@ -1398,10 +1413,15 @@ class IntellijUiScreenshotTest {
             and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("ORDER BY"))
         }.waitFound().component
         val apply = editor.x { byAccessibleName("Apply filter and sort") }.waitFound().component
+        val clear = editor.x { byAccessibleName("Clear WHERE and ORDER BY clauses") }.waitFound().component
         fun center(component: com.intellij.driver.sdk.ui.remote.Component) = component.getLocationOnScreen().y + component.height / 2
         val first = center(where)
         val second = center(order)
         val action = center(apply)
+        check(center(clear) == action) { "Apply and Clear must stay on the same row" }
+        check(clear.getLocationOnScreen().x >= apply.getLocationOnScreen().x + apply.width) {
+            "Apply and Clear must not overlap"
+        }
         when (rows) {
             1 -> check(first == second && second == action) { "Filters and Apply must share one row: $first, $second, $action" }
             2 -> check(first < second && second == action) { "Apply must share the second filter row: $first, $second, $action" }
@@ -1817,6 +1837,9 @@ interface LiveSwingComponent {
     fun isVisible(): Boolean
     fun getVisibleRect(): Rectangle
     fun getPreferredSize(): LiveDimension
+    fun getMinimumSize(): LiveDimension
+    fun getParent(): com.intellij.driver.sdk.ui.remote.Component
+    fun getInsets(): java.awt.Insets
     fun getClientProperty(key: String): Boolean?
     fun getForeground(): LiveColor
     fun getBackground(): LiveColor

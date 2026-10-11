@@ -14,13 +14,30 @@ class TableFilterPanelTest {
             JButton clear = DatabaseUi.action("Clear", null, "Clear");
             JPanel actions = DatabaseUi.group(apply, clear);
             TableFilterPanel panel = new TableFilterPanel(where, order, actions);
-            for (int width : new int[]{230, 380, 520, 1100}) {
+            int gap = com.intellij.util.ui.JBUI.scale(8);
+            int twoRowWidth = order.getMinimumSize().width + actions.getPreferredSize().width + gap;
+            int oneRowWidth = twoRowWidth + where.getMinimumSize().width + gap;
+            // Exercise both sides of the wrap boundaries with the full action group.
+            for (int width : new int[]{twoRowWidth - 1, twoRowWidth, oneRowWidth - 1, oneRowWidth, 1100}) {
                 panel.setSize(width, 150);
                 panel.doLayout();
+                where.doLayout();
+                order.doLayout();
                 actions.doLayout();
                 assertEquals(apply.getY(), clear.getY());
                 assertTrue(clear.getX() + clear.getWidth() <= actions.getWidth());
                 assertTrue(actions.getX() + actions.getWidth() <= width);
+                if (width < twoRowWidth) {
+                    assertTrue(where.getY() < order.getY() && order.getY() < actions.getY());
+                } else if (width < oneRowWidth) {
+                    assertTrue(where.getY() < order.getY());
+                    assertEquals(order.getY() + order.getHeight() / 2, actions.getY() + actions.getHeight() / 2);
+                } else {
+                    assertEquals(where.getY() + where.getHeight() / 2, order.getY() + order.getHeight() / 2);
+                    assertEquals(order.getY() + order.getHeight() / 2, actions.getY() + actions.getHeight() / 2);
+                }
+                assertTrue(((BorderLayout) where.getLayout()).getLayoutComponent(BorderLayout.CENTER).getWidth() >= 80);
+                assertTrue(((BorderLayout) order.getLayout()).getLayoutComponent(BorderLayout.CENTER).getWidth() >= 80);
             }
         });
     }
