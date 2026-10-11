@@ -24,6 +24,11 @@ public final class DatabaseSession implements AutoCloseable {
         return operation.run(manager.getConnection(config, sessionId));
     }
 
+    /** Validate only after cancellation; preserve healthy connections and their transactions. */
+    public synchronized boolean discardInvalidConnection() {
+        return !closed && manager.discardInvalidSession(config.getId(), sessionId);
+    }
+
     @Override public synchronized void close() {
         closed = true;
         manager.closeSession(config.getId(), sessionId);

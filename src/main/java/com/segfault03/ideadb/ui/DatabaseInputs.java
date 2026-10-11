@@ -28,6 +28,25 @@ public final class DatabaseInputs {
     public static JPasswordField passwordField() { return new InputPasswordField(); }
     public static <E> JComboBox<E> comboBox() { return new InputComboBox<>(); }
     public static <E> JComboBox<E> comboBox(E[] items) { return new InputComboBox<>(items); }
+    /** Share the real selection model with a native overflow popup, detaching when it closes. */
+    static <E> JComboBox<E> mirrorComboBox(JComboBox<E> source) {
+        JComboBox<E> copy = new InputComboBox<>() {
+            @Override public void addNotify() {
+                setModel(source.getModel());
+                super.addNotify();
+            }
+            @Override public void removeNotify() {
+                super.removeNotify();
+                setModel(new DefaultComboBoxModel<>());
+            }
+        };
+        copy.setModel(source.getModel());
+        copy.setPrototypeDisplayValue(source.getPrototypeDisplayValue());
+        copy.setEnabled(source.isEnabled());
+        copy.setToolTipText(source.getToolTipText());
+        copy.getAccessibleContext().setAccessibleName(source.getAccessibleContext().getAccessibleName());
+        return copy;
+    }
     public static TextFieldWithBrowseButton browseField() { return new InputBrowseField(); }
 
     public static void styleTableEditors(JTable table) {
@@ -68,6 +87,7 @@ public final class DatabaseInputs {
     }
 
     private static void configureCombo(JComboBox<?> combo) {
+        DatabaseUi.installFocusVisibility(combo);
         combo.setRenderer(new DefaultListCellRenderer() {
             @Override public Component getListCellRendererComponent(JList<?> list, Object value, int index,
                                                                     boolean selected, boolean focus) {
@@ -111,7 +131,17 @@ public final class DatabaseInputs {
     }
 
     private static final class InputBorder extends AbstractBorder {
-        @Override public Insets getBorderInsets(Component input) { return JBUI.insets(3, 8); }
+        @Override public Insets getBorderInsets(Component input) {
+            Insets insets = JBUI.insets(3, 8);
+            // BasicComboBoxUI (including IntelliJ's delegates) adds ComboBox.padding
+            // to both the selected-value renderer and editable field's bounds.
+            // Supply only the remainder here so text starts at the same inset as a text field.
+            if (input instanceof JComboBox<?> combo && combo.getUI() instanceof javax.swing.plaf.basic.BasicComboBoxUI) {
+                Insets nativePadding = UIManager.getInsets("ComboBox.padding");
+                if (nativePadding != null) insets.left = Math.max(0, insets.left - nativePadding.left);
+            }
+            return insets;
+        }
         @Override public Insets getBorderInsets(Component input, Insets insets) {
             Insets padding = getBorderInsets(input);
             insets.set(padding.top, padding.left, padding.bottom, padding.right);
@@ -121,7 +151,7 @@ public final class DatabaseInputs {
             Graphics2D g = (Graphics2D)graphics.create();
             try {
                 g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                float inset = JBUI.scale(1f);
+                float inset = com.intellij.ui.scale.JBUIScale.scale(1f);
                 RoundRectangle2D shape = new RoundRectangle2D.Float(x + inset, y + inset,
                         width - 2 * inset, height - 2 * inset, JBUI.scale(8), JBUI.scale(8));
                 Area corners = new Area(new Rectangle(x, y, width, height));
@@ -129,13 +159,14 @@ public final class DatabaseInputs {
                 g.setColor(input.getParent() == null ? input.getBackground() : input.getParent().getBackground());
                 g.fill(corners);
                 String state = input instanceof JComponent component ? String.valueOf(outline(component)) : "";
-                boolean focus = focused(input);
+                boolean focus = focused(input) && (!(input instanceof JComboBox<?> combo)
+                        || combo.isEditable() || DatabaseUi.isFocusVisible(combo));
                 Color color = "error".equalsIgnoreCase(state) ? JBColor.namedColor("Component.errorFocusColor", new JBColor(0xD94B4B, 0xF07878))
                         : "warning".equalsIgnoreCase(state) ? JBColor.namedColor("Component.warningFocusColor", new JBColor(0xC98B23, 0xD9A343))
                         : focus ? JBColor.namedColor("Component.focusColor", new JBColor(0x3574F0, 0x548AF7))
                         : JBColor.namedColor("Component.borderColor", new JBColor(0xB8BDC6, 0x646872));
                 g.setColor(input.isEnabled() ? color : JBColor.namedColor("Component.disabledBorderColor", JBColor.GRAY));
-                g.setStroke(new BasicStroke(JBUI.scale(focus ? 2f : 1f)));
+                g.setStroke(new BasicStroke(com.intellij.ui.scale.JBUIScale.scale(focus ? 2f : 1f)));
                 g.draw(shape);
             } finally { g.dispose(); }
         }
@@ -172,12 +203,14 @@ public final class DatabaseInputs {
         @Override public void paint(Graphics graphics) { paintRounded(this, graphics, super::paint); }
     }
 
-    private static final class InputComboBox<E> extends JComboBox<E> implements SizedInput {
+    private static class InputComboBox<E> extends JComboBox<E> implements SizedInput {
         private boolean initialized;
+        private JList<E> sizingList;
         InputComboBox() { initialize(); }
         InputComboBox(E[] items) { super(items); initialize(); }
         private void initialize() {
             style(this);
+            DatabaseUi.installFocusVisibility(this);
             initialized = true;
             addPropertyChangeListener("editable", event -> configureCombo(this));
             addPropertyChangeListener("editor", event -> configureCombo(this));
@@ -186,8 +219,33 @@ public final class DatabaseInputs {
             super.updateUI();
             if (initialized) style(this);
         }
-        @Override public Dimension getPreferredSize() { return inputSize(this, super.getPreferredSize()); }
-        @Override public Dimension getMinimumSize() { return inputSize(this, super.getMinimumSize()); }
+        @Override public Dimension getPreferredSize() {
+            Dimension size = inputSize(this, super.getPreferredSize());
+            if (!initialized || isEditable() || isPreferredSizeSet()) return size;
+            // Native light-theme delegates reserve additional renderer padding but
+            // can omit it from their preferred width when a custom border is used.
+            if (sizingList == null) sizingList = new JList<>();
+            sizingList.setFont(getFont());
+            int textWidth = 0;
+            E prototype = getPrototypeDisplayValue();
+            for (int index = 0; index < (prototype == null ? getItemCount() : 1); index++) {
+                E value = prototype == null ? getItemAt(index) : prototype;
+                Component rendered = getRenderer().getListCellRendererComponent(sizingList, value, -1, false, false);
+                textWidth = Math.max(textWidth, rendered.getPreferredSize().width);
+            }
+            int arrowWidth = height(this);
+            for (Component child : getComponents()) {
+                if (child instanceof JButton) arrowWidth = child.getPreferredSize().width;
+            }
+            Insets border = getInsets();
+            Insets padding = UIManager.getInsets("ComboBox.padding");
+            size.width = Math.max(size.width, textWidth + arrowWidth + border.left + border.right
+                    + (padding == null ? 0 : padding.left + padding.right));
+            return size;
+        }
+        @Override public Dimension getMinimumSize() {
+            return isMinimumSizeSet() ? inputSize(this, super.getMinimumSize()) : getPreferredSize();
+        }
         @Override public void paint(Graphics graphics) { paintRounded(this, graphics, super::paint); }
     }
 
@@ -239,6 +297,11 @@ public final class DatabaseInputs {
                 input = field;
                 input.putClientProperty("JComponent.outline", null);
                 style(input);
+                // JTable reuses plain Swing editors. Make their surface explicit;
+                // a transparent editor with our border skips native light-theme fill.
+                field.setOpaque(true);
+                field.setBackground(JBColor.namedColor("TextField.background", table.getBackground()));
+                field.setForeground(JBColor.namedColor("TextField.foreground", table.getForeground()));
                 Component rendered = table.getCellRenderer(row, column).getTableCellRendererComponent(
                         table, value, selected, false, row, column);
                 if (rendered instanceof JLabel label) field.setHorizontalAlignment(label.getHorizontalAlignment());

@@ -1,22 +1,21 @@
 # Documentation
 
-All commands in these guides run from the repository root unless stated otherwise.
+All commands run from the repository root unless a guide says otherwise.
 
 | Guide | Contents |
 |---|---|
 | [Contributing](CONTRIBUTING.md) | Build requirements, tests and development practices |
-| [Scripts](SCRIPTS.md) | Portable test, deployment and release helpers |
-| [UI previews](UI_PREVIEW.md) | Render the side panel, connection dialog, table editor/viewer and SQL console outside the IDE; refresh README screenshots |
+| [Scripts](SCRIPTS.md) | Test, UI, deployment and release helpers |
+| [Windows scripts](WINDOWS_SCRIPTS.md) | Every local Windows command and its complete options |
+| [Windows scripts](WINDOWS_SCRIPTS.md) | Every local Windows command and its complete options |
+| [UI previews](UI_PREVIEW.md) | Render production Swing screens and refresh the five README images |
 | [Releasing](RELEASING.md) | Versioning, tags, validation and publication |
 | [Changelog](CHANGELOG.md) | Versioned release notes |
 | [Issue reporting](ISSUE.md) | Bug reports and feature requests |
 | [Security reporting](SECURITY.md) | Private vulnerability reporting |
 | [Compatibility](compatibility.md) | Supported IDE/database combinations and limits |
-| [Final review](final-review.md) | Historical publication review and validation evidence |
 | [Third-party notices](THIRD_PARTY_NOTICES.md) | Bundled dependencies, licenses and source distribution |
 
-GitHub discovers contribution and security guidance in this folder. Issue forms, the pull request template and workflows remain under `.github/` so GitHub can discover them. README and LICENSE remain at the root; agent instructions stay there for automatic discovery, and the Gradle wrapper launchers keep their conventional root locations.
+GitHub discovers contribution and security guidance here. Issue forms, the pull request template and workflows live under `.github/`; agent instructions and Gradle wrapper launchers stay at the repository root.
 
-Portable helpers live in `scripts/`, with their regression tests in `scripts/tests/`. Workstation-only scripts and documentation can live in `scripts/local/` and `docs/local/`; these directories are excluded locally through `.git/info/exclude` and must not be force-added to Git. SDKs, database binaries and private caches stay outside the repository.
-
-Generated build output and retained validation reports live under ignored `build/`. Development dependency caches are also ignored. Clean disposable outputs only after confirming that their processes have stopped; retain the current distribution and any reports needed to support a release or review.
+Portable Python helpers live in `scripts/`; platform entry points live in `scripts/windows/` and `scripts/linux/`, and regression tests live in `scripts/tests/`. Keep SDKs, database binaries, private caches and generated reports outside tracked source; build artifacts are written under ignored `build/`. The five README screenshots are the only tracked generated artifacts.

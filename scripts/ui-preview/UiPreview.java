@@ -22,13 +22,23 @@ import java.util.*;
 import java.util.List;
 import javax.imageio.ImageIO;
 
-/** Paint production Swing components with fixture data, without starting IntelliJ. */
+/** Paint production Swing components with fixture data in a headless IntelliJ test application. */
 public final class UiPreview {
     static Path output;
     static final List<String> snapshots = new ArrayList<>();
     static final Set<String> FEATURED_PREVIEWS = Set.of(
             "side-panel-340", "connection-mysql-600", "table-1100", "table-new-row-1100", "sql-console-1100");
     static boolean featuredOnly;
+    private static Font previewFont() {
+        Set<String> available = Set.of(GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames());
+        List<String> preferred = System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("mac")
+                ? List.of("Helvetica Neue", "Arial", "Liberation Sans", "SansSerif")
+                : System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win")
+                ? List.of("Segoe UI", "Arial", "DejaVu Sans", "SansSerif")
+                : List.of("DejaVu Sans", "Liberation Sans", "Noto Sans", "SansSerif");
+        String family = preferred.stream().filter(available::contains).findFirst().orElse("SansSerif");
+        return new Font(family, Font.PLAIN, 13);
+    }
     static Object field(Object target, String name) throws Exception {
         Field field = target.getClass().getDeclaredField(name);
         field.setAccessible(true);
@@ -44,8 +54,30 @@ public final class UiPreview {
         for (Component component : container.getComponents())
             if (component instanceof Container nested) layout(nested);
     }
+    static void updateToolbars(Container container) throws Exception {
+        if (container instanceof com.intellij.openapi.actionSystem.impl.ActionToolbarImpl toolbar) {
+            // Native action expansion can finish asynchronously, especially for the
+            // first toolbar. Pump the test event queue before offscreen layout/paint.
+            var update = toolbar.updateActionsAsync();
+            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(15);
+            while (!update.isDone()) {
+                com.intellij.util.ui.UIUtil.dispatchAllInvocationEvents();
+                try { update.get(10, java.util.concurrent.TimeUnit.MILLISECONDS); }
+                catch (java.util.concurrent.TimeoutException timeout) {
+                    if (System.nanoTime() >= deadline) throw timeout;
+                }
+            }
+            update.get(); // Propagate action expansion errors rather than painting an empty toolbar.
+            if (!toolbar.hasVisibleActions())
+                throw new AssertionError("Preview toolbar did not populate: " + toolbar.getPlace());
+        } else if (container instanceof com.intellij.openapi.actionSystem.ActionToolbar toolbar)
+            toolbar.updateActionsImmediately();
+        for (Component component : container.getComponents())
+            if (component instanceof Container nested) updateToolbars(nested);
+    }
     static void render(JComponent component, String name, int width, int height) throws Exception {
         component.setSize(width, height);
+        updateToolbars(component);
         for (int pass = 0; pass < 4; pass++) layout(component);
         verifyInputs(component);
         if (featuredOnly && !FEATURED_PREVIEWS.contains(name.replaceFirst("^(light|dark)-", ""))) return;
@@ -65,6 +97,24 @@ public final class UiPreview {
         config.setDatabaseName("shop");
         config.setUser(type == DatabaseType.MYSQL ? "developer" : "SA");
         return config;
+    }
+    static ConnectionDialog connectionDialog(ConnectionConfig config, boolean newConnection) throws Exception {
+        ConnectionDialog dialog = new ConnectionDialog(null, config, newConnection);
+        refreshPreviewDrivers(dialog);
+        return dialog;
+    }
+    static void refreshPreviewDrivers(ConnectionDialog dialog) throws Exception {
+        // Preview background work is blocked. Supply the actual local fixture
+        // inventory and finish discovery before checking/painting ready controls.
+        @SuppressWarnings("unchecked") Map<DatabaseType, List<InstalledDriver>> inventory =
+                (Map<DatabaseType, List<InstalledDriver>>)field(dialog, "driverInventory");
+        for (DatabaseType type : DatabaseType.values())
+            inventory.put(type, com.segfault03.ideadb.service.DriverStore.installedInRepository(
+                    type, output.resolve("fixture-maven-repository")));
+        Field busy = ConnectionDialog.class.getDeclaredField("discoveryBusy");
+        busy.setAccessible(true);
+        busy.setBoolean(dialog, false);
+        invoke(dialog, "refillDriverVersions", new Class<?>[0]);
     }
     static void verifyInputs(Container parent) {
         for (Component child : parent.getComponents()) {
@@ -155,7 +205,7 @@ public final class UiPreview {
                     variant.endsWith("-hsqldb") ? DatabaseType.HSQLDB : DatabaseType.MYSQL, version);
             try {
                 java.nio.file.Files.createDirectories(jar.getParent());
-                java.nio.file.Files.copy(Path.of("lib", variant.endsWith("-hsqldb") ? "hsqldb-2.7.4.jar" : "mysql-connector-j-26.7.0.jar"), jar,
+                java.nio.file.Files.copy(Path.of(System.getProperty(variant.endsWith("-hsqldb") ? "lattice.preview.hsqldb" : "lattice.preview.mysql")), jar,
                         java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             } catch (Exception absent) {
                 throw new AssertionError("Could not stage a retained driver preview", absent);
@@ -166,7 +216,7 @@ public final class UiPreview {
         if (variant.equals("driver-local")) { config.setDriverSource(DriverSource.LOCAL_JAR); config.setDriverJarPath("/home/developer/drivers/mysql-connector-j.jar"); }
         if (variant.equals("mysql-incomplete")) config.setUser("");
         if (variant.equals("hsql-incomplete")) config.setDatabaseName("");
-        ConnectionDialog dialog = new ConnectionDialog(null, config, variant.equals("new"));
+        ConnectionDialog dialog = connectionDialog(config, variant.equals("new"));
         if (variant.endsWith("bundled-expanded") || variant.equals("mysql-collapsed-after-expansion")) {
             JPanel root = (JPanel)field(dialog, "rootPanel");
             int collapsed = root.getPreferredSize().height;
@@ -252,7 +302,7 @@ public final class UiPreview {
         return -1;
     }
     static void verifyConnectionReadiness() throws Exception {
-        ConnectionDialog dialog = new ConnectionDialog(null, config(DatabaseType.MYSQL), true);
+        ConnectionDialog dialog = connectionDialog(config(DatabaseType.MYSQL), true);
         JButton test = (JButton)field(dialog, "testButton");
         JTextField user = (JTextField)field(dialog, "mysqlUserField");
         user.setText("");
@@ -275,14 +325,14 @@ public final class UiPreview {
         // A stored release must be offered without downloading and stay usable after selection.
         Path retained = com.segfault03.ideadb.service.DriverCatalog.downloadedJar(DatabaseType.MYSQL, "8.4.0");
         java.nio.file.Files.createDirectories(retained.getParent());
-        java.nio.file.Files.copy(Path.of("lib", "mysql-connector-j-26.7.0.jar"), retained, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        java.nio.file.Files.copy(Path.of(System.getProperty("lattice.preview.mysql")), retained, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         var bundled = (JComboBox<?>)field(dialog, "bundledDriverCombo");
         // The dialog was built before the file existed; a refresh must pick it up like a new download does.
-        invoke(dialog, "refillBundledDrivers", new Class<?>[0]);
+        refreshPreviewDrivers(dialog);
         if (retainedIndex(bundled) < 0) throw new AssertionError("Stored driver must appear in the bundled list");
         bundled.setSelectedIndex(retainedIndex(bundled));
         if (!test.isEnabled()) throw new AssertionError("A stored driver must allow testing without downloading");
-        invoke(dialog, "refillBundledDrivers", new Class<?>[0]);
+        refreshPreviewDrivers(dialog);
         if (bundled.getSelectedIndex() != retainedIndex(bundled))
             throw new AssertionError("Rebuilding the bundled list must keep the stored driver selected");
         ((JRadioButton)field(dialog, "customUrlRadio")).doClick(0);
@@ -303,6 +353,9 @@ public final class UiPreview {
         String[] names = {"Amelia Brooks", "Liam Chen", "Sofia Patel", "Noah Williams", "Olivia Reyes", "Ethan Kim", "Isabella Rossi", "Lucas Martin", "Mia Thompson", "Aiden Davis", "Charlotte Wilson", "Leo Garcia"};
         for (int i = 0; i < names.length; i++) rows.add(new ArrayList<>(Arrays.asList(1001L + i, names[i], i == 3 ? null : names[i].split(" ")[0].toLowerCase(Locale.ROOT) + "@example.com", i == 4 ? "inactive" : "active", new java.math.BigDecimal(i % 3 == 0 ? "240.50" : "0.00"))));
         invoke(model, "setData", new Class<?>[]{List.class, List.class, List.class}, List.of("id", "name", "email", "status", "balance"), List.of("BIGINT", "VARCHAR", "VARCHAR", "VARCHAR", "DECIMAL"), rows);
+        // The preview task service intentionally does no I/O; release the production panel's
+        // initial loading lock after supplying its fixture rows so edits render as usable.
+        invoke(panel, "setReadRunning", new Class<?>[]{boolean.class}, false);
         JTable table = (JTable) field(panel, "dataTable");
         ((JScrollPane)table.getParent().getParent()).setColumnHeaderView(table.getTableHeader());
         int[] widths = {110, 190, 280, 150, 150};
@@ -376,9 +429,45 @@ public final class UiPreview {
         }
         return null;
     }
+    static com.intellij.openapi.actionSystem.AnAction findToolbarAction(Container container, String tooltip) {
+        for (Component child : container.getComponents()) {
+            if (child instanceof com.intellij.openapi.actionSystem.ActionToolbar toolbar) {
+                for (Object action : toolbar.getActions()) {
+                    if (action instanceof com.intellij.openapi.actionSystem.AnAction candidate
+                            && tooltip.equals(candidate.getTemplatePresentation().getDescription())) return candidate;
+                }
+            }
+            if (child instanceof Container nested) {
+                com.intellij.openapi.actionSystem.AnAction match = findToolbarAction(nested, tooltip);
+                if (match != null) return match;
+            }
+        }
+        return null;
+    }
+    static void performToolbarAction(Container container, String tooltip) {
+        var action = findToolbarAction(container, tooltip);
+        if (action == null) throw new AssertionError("Toolbar action not found: " + tooltip);
+        action.actionPerformed(com.intellij.openapi.actionSystem.AnActionEvent.createFromAnAction(
+                action, null, com.intellij.openapi.actionSystem.ActionPlaces.TOOLBAR,
+                com.intellij.openapi.actionSystem.DataContext.EMPTY_CONTEXT));
+    }
     static void verifyConsoleActions() throws Exception {
         SqlQueryConsolePanel panel = console();
+        panel.setSize(1100, 620);
+        updateToolbars(panel);
+        layout(panel);
         JTextArea editor = (JTextArea)field(panel, "editorArea");
+        panel.setSqlText("");
+        JButton run = (JButton)field(panel, "runBtn");
+        JButton clear = (JButton)field(panel, "clearBtn");
+        if (run.isEnabled() || clear.isEnabled()) throw new AssertionError("Empty SQL must disable Run and Clear");
+        panel.setSqlText("-- Write your query\n/* comment */");
+        if (run.isEnabled() || !clear.isEnabled()) throw new AssertionError("Comments can be cleared but cannot run");
+        panel.setSqlText("-- comment\nSELECT 1");
+        editor.select(0, 10);
+        if (run.isEnabled()) throw new AssertionError("A comment-only selection cannot run");
+        editor.select(11, editor.getText().length());
+        if (!run.isEnabled()) throw new AssertionError("An executable selection must enable Run");
         panel.setSqlText("");
         JComboBox<?> template = (JComboBox<?>)findByTooltip(panel, "Insert a SQL template at the caret");
         template.setSelectedIndex(1);
@@ -388,8 +477,9 @@ public final class UiPreview {
         history.addItem(new QueryHistoryEntry("SELECT 42;"));
         history.setSelectedIndex(1);
         if (!editor.getText().equals("SELECT 42;")) throw new AssertionError("History must restore the full query");
-        ((JButton)findByTooltip(panel, "Clear query text")).doClick(0);
+        performToolbarAction(panel, "Clear query text");
         if (!editor.getText().isEmpty()) throw new AssertionError("Clear action must clear the query");
+        if (run.isEnabled() || clear.isEnabled()) throw new AssertionError("Clear must update both action states");
         panel.setSqlText("SELECT 1; SELECT 2;");
         editor.select(10, 19);
         editor.getActionMap().get("runSql").actionPerformed(new java.awt.event.ActionEvent(editor, 0, "runSql"));
@@ -452,6 +542,38 @@ public final class UiPreview {
     static void verifyCellActions() throws Exception {
         TableDataEditorPanel panel = table(false);
         JTable table = (JTable)field(panel, "dataTable");
+        JButton delete = (JButton)field(panel, "delRowBtn");
+        JButton apply = (JButton)field(panel, "filterBtn");
+        JButton clear = (JButton)field(panel, "clearFilterBtn");
+        if (delete.isEnabled() || apply.isEnabled() || clear.isEnabled())
+            throw new AssertionError("Unselected rows and empty clauses must disable their actions");
+        Class<?> scopeType = Class.forName("com.segfault03.ideadb.ui.TableDataEditorPanel$ExportScope");
+        Object selectedScope = java.util.Arrays.stream(scopeType.getEnumConstants())
+                .filter(value -> value.toString().equals("SELECTED")).findFirst().orElseThrow();
+        JPopupMenu exports = new JPopupMenu();
+        invoke(panel, "addExportFormats", new Class<?>[]{JPopupMenu.class, String.class, scopeType}, exports, "Selected", selectedScope);
+        JMenu selectedExport = (JMenu)exports.getComponent(0);
+        if (selectedExport.isEnabled() || selectedExport.getItem(0).isEnabled())
+            throw new AssertionError("Selected export must be disabled without a selection");
+        table.setRowSelectionInterval(0, 0);
+        if (!delete.isEnabled()) throw new AssertionError("Row selection must enable Delete");
+        exports.removeAll();
+        invoke(panel, "addExportFormats", new Class<?>[]{JPopupMenu.class, String.class, scopeType}, exports, "Selected", selectedScope);
+        if (!((JMenu)exports.getComponent(0)).isEnabled()) throw new AssertionError("Selected export must enable with a selection");
+        table.clearSelection();
+        if (delete.isEnabled()) throw new AssertionError("Clearing selection must disable Delete");
+        JTextField where = (JTextField)field(panel, "whereField");
+        JTextField order = (JTextField)field(panel, "orderField");
+        where.setText("id = 1"); order.setText("id DESC");
+        if (!apply.isEnabled() || !clear.isEnabled()) throw new AssertionError("Clauses must enable Apply and Clear");
+        clear.doClick(0);
+        if (!where.getText().isEmpty() || !order.getText().isEmpty() || apply.isEnabled() || clear.isEnabled())
+            throw new AssertionError("Clear must reset both clauses and their actions");
+        invoke(panel, "setReadRunning", new Class<?>[]{boolean.class}, true);
+        table.setRowSelectionInterval(0, 0);
+        if (delete.isEnabled()) throw new AssertionError("Selection changes while busy must not enable Delete");
+        invoke(panel, "setReadRunning", new Class<?>[]{boolean.class}, false);
+        if (!delete.isEnabled()) throw new AssertionError("Completion must recompute selection state");
         Object model = field(panel, "tableModel");
         JPopupMenu menu = table.getComponentPopupMenu();
         JMenuItem nullAction = (JMenuItem)menu.getComponent(0);
@@ -516,19 +638,89 @@ public final class UiPreview {
         }
     }
 
+    static void renderFeatured(String theme) throws Exception {
+        render(ExplorerPreview.create(config(DatabaseType.MYSQL), false), theme + "-side-panel-340", 340, 620);
+        ConnectionDialog dialog = connectionDialog(config(DatabaseType.MYSQL), true);
+        JComponent connection = dialog.previewPanel();
+        render(connection, theme + "-connection-mysql-600", 600, connection.getPreferredSize().height);
+        render(console(), theme + "-sql-console-1100", 1100, 620);
+        TableDataEditorPanel editor = table(false);
+        render(editor, theme + "-table-1100", 1100, 620);
+        Object model = field(editor, "tableModel");
+        ((TableModel)model).setValueAt("Amelia Stone", 0, 1);
+        invoke(model, "addNewRow", new Class<?>[]{});
+        int newRow = ((TableModel)model).getRowCount() - 1;
+        ((TableModel)model).setValueAt("Grace Lee", newRow, 1);
+        ((TableModel)model).setValueAt("grace@example.com", newRow, 2);
+        invoke(editor, "updatePendingChangesState", new Class<?>[]{});
+        if (!((JButton)field(editor, "saveBtn")).isEnabled())
+            throw new AssertionError("Featured new-row preview must be valid: " + field(model, "validationErrors"));
+        render(editor, theme + "-table-new-row-1100", 1100, 620);
+    }
+
+    private static void initializePreviewApplication() throws Exception {
+        com.intellij.testFramework.common.TestApplicationKt.loadApp();
+        com.intellij.openapi.extensions.PluginDescriptor descriptor = (com.intellij.openapi.extensions.PluginDescriptor)
+                Proxy.newProxyInstance(com.intellij.openapi.extensions.PluginDescriptor.class.getClassLoader(),
+                        new Class<?>[]{com.intellij.openapi.extensions.PluginDescriptor.class}, (proxy, method, values) -> {
+                            return switch (method.getName()) {
+                                case "getPluginId" -> com.intellij.openapi.extensions.PluginId.getId("com.segfault03.lattice.preview");
+                                case "getName" -> "Lattice preview";
+                                case "getVersion" -> "preview";
+                                case "getClassLoader" -> UiPreview.class.getClassLoader();
+                                case "getPluginPath" -> Path.of(".");
+                                case "isEnabled", "isBundled", "isImplementationDetail", "allowBundledUpdate" -> false;
+                                case "getDescription", "getVendor", "getSinceBuild", "getUntilBuild" -> "";
+                                case "toString" -> "Lattice preview descriptor";
+                                case "hashCode" -> System.identityHashCode(proxy);
+                                case "equals" -> proxy == values[0];
+                                default -> null;
+                            };
+                        });
+        Object application = com.intellij.openapi.application.ApplicationManager.getApplication();
+        registerPreviewService(application, descriptor, com.segfault03.ideadb.service.DatabaseConnectionManager.class,
+                new com.segfault03.ideadb.service.DatabaseConnectionManager());
+        registerPreviewService(application, descriptor, com.segfault03.ideadb.service.DriverRegistry.class,
+                new com.segfault03.ideadb.service.DriverRegistry());
+    }
+
+    private static void registerPreviewService(Object application,
+                                               com.intellij.openapi.extensions.PluginDescriptor descriptor,
+                                               Class<?> serviceClass, Object service) throws Exception {
+        application.getClass().getMethod("registerServiceInstance", Class.class, Object.class,
+                        com.intellij.openapi.extensions.PluginDescriptor.class)
+                .invoke(application, serviceClass, service, descriptor);
+    }
+
     public static void main(String[] args) throws Exception {
-        output = Path.of(args[0]);
-        Files.createDirectories(output);
-        String theme = args[1];
-        featuredOnly = args.length < 3 || !args[2].equals("all");
-        UIManager.setLookAndFeel(theme.equals("dark") ? new FlatDarculaLaf() : new FlatIntelliJLaf());
-        UIManager.put("defaultFont", new Font("SansSerif", Font.PLAIN, 13));
-        JBColor.setDark(theme.equals("dark"));
-        com.intellij.ui.IconManager.Companion.activate(new com.intellij.ui.icons.CoreIconManager());
-        IconLoader.activate();
-        IconLoader.setUseDarkIcons(theme.equals("dark"));
-        SwingUtilities.invokeAndWait(() -> {
-            try {
+        int exitCode = 0;
+        try {
+            initializePreviewApplication();
+            output = Path.of(args[0]);
+            Files.createDirectories(output);
+            String theme = args[1];
+            featuredOnly = args.length < 3 || !args[2].equals("all");
+            UIManager.setLookAndFeel(theme.equals("dark") ? new FlatDarculaLaf() : new FlatIntelliJLaf());
+            Font font = new javax.swing.plaf.FontUIResource(previewFont());
+            UIManager.put("defaultFont", font);
+            for (String key : List.of("Label.font", "Button.font", "ToggleButton.font", "CheckBox.font",
+                    "RadioButton.font", "ComboBox.font", "TextField.font", "PasswordField.font", "TextArea.font",
+                    "Table.font", "TableHeader.font", "Menu.font", "MenuItem.font", "TabbedPane.font",
+                    "TitledBorder.font")) UIManager.put(key, font);
+            JBColor.setDark(theme.equals("dark"));
+            com.intellij.ui.IconManager.Companion.activate(new com.intellij.ui.icons.CoreIconManager());
+            IconLoader.activate();
+            IconLoader.setUseDarkIcons(theme.equals("dark"));
+            if (featuredOnly) {
+                SwingUtilities.invokeAndWait(() -> {
+                    try { renderFeatured(theme); }
+                    catch (Exception exception) { throw new RuntimeException(exception); }
+                });
+                Files.write(output.resolve(theme + "-manifest.txt"), snapshots);
+                return;
+            }
+            SwingUtilities.invokeAndWait(() -> {
+                try {
                 inputPreviews(theme);
                 render(welcome(false), theme + "-welcome-900", 900, 680);
                 render(welcome(false), theme + "-welcome-520", 520, 680);
@@ -619,9 +811,14 @@ public final class UiPreview {
                 render(editor, theme + "-table-error-1100", 1100, 620);
                 render(table(true), theme + "-view-1100", 1100, 620);
                 verifyCellActions();
-            } catch (Exception exception) { throw new RuntimeException(exception); }
-        });
-        Files.write(output.resolve(theme + "-manifest.txt"), snapshots);
-        System.exit(0); // SDK timer threads otherwise keep this screenshot process alive.
+                } catch (Exception exception) { throw new RuntimeException(exception); }
+            });
+            Files.write(output.resolve(theme + "-manifest.txt"), snapshots);
+        } catch (Throwable failure) {
+            failure.printStackTrace();
+            exitCode = 1;
+        } finally {
+            System.exit(exitCode); // Platform timers otherwise keep this screenshot process alive.
+        }
     }
 }

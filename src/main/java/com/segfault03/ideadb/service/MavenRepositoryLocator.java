@@ -23,10 +23,10 @@ public final class MavenRepositoryLocator {
                     settings.getClass().getMethod("setLocalRepository", String.class)
                             .invoke(settings, fixtureRepository);
                 }
-                // Maven resolves effective settings through a suspending operation. Its
-                // non-modal getter rejects the IDE event thread, so use the API designed
-                // for synchronous UI callers.
-                Object repository = managerClass.getMethod("getRepositoryPathUnderModalProgress").invoke(manager);
+                // Use the non-modal API on a worker. Other callers on the EDT retain Maven's UI-safe getter.
+                String getter = javax.swing.SwingUtilities.isEventDispatchThread()
+                        ? "getRepositoryPathUnderModalProgress" : "getRepositoryPath";
+                Object repository = managerClass.getMethod(getter).invoke(manager);
                 Path configured = repository instanceof Path path ? path : null;
                 if (configured != null) return configured;
             } catch (ReflectiveOperationException | RuntimeException | LinkageError unavailable) {

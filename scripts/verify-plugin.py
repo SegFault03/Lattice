@@ -6,11 +6,12 @@ import json
 import os
 from pathlib import Path
 import re
-import subprocess
+import processes as subprocess
 import tarfile
 import urllib.request
 import uuid
 from common import ROOT, cache_directory, java_command
+from dependencies import Dependencies, add_dependency_options, executable
 
 VERIFIER_SHA256 = "59a5ef05cbdf0584cbfd6cb6ca802c74ecf340fdeadc5a73eac24af622c22010"
 VERIFIER_URL = "https://github.com/JetBrains/intellij-plugin-verifier/releases/download/1.410/verifier-cli-1.410-all.jar"
@@ -78,20 +79,49 @@ def main():
     parser.add_argument("--ide-home", type=Path)
     parser.add_argument("--java-home", type=Path)
     parser.add_argument("--cache", type=Path)
+    parser.add_argument("--verifier-jar", type=Path, help="Local checksum-pinned Plugin Verifier 1.410 JAR")
+    add_dependency_options(parser)
     parser.add_argument("--reports", type=Path, default=ROOT / "build/compatibility/verifier-ci")
     args = parser.parse_args()
     if not args.archive.is_file():
         raise ValueError("Plugin archive does not exist")
-    cache = args.cache or cache_directory()
-    sdk = args.ide_home or ide_home(cache, args.ide_version)
-    java = java_command(args.java_home)
-    java_home = args.java_home or (Path(os.environ["JAVA_HOME"]) if os.environ.get("JAVA_HOME") else None)
-    verifier = cache / "tools" / "verifier" / "verifier-cli-1.410-all.jar"
+    with Dependencies(args) as deps:
+        verify(args, deps)
+
+
+def verify(args, deps):
+    cache = args.cache if args.cache and not args.cleanup else deps.workspace()
+    cached_sdk = None
+    if args.cache and args.cleanup:
+        for directory in (args.cache / 'ides').glob(args.ide_version + '*'):
+            if (directory / '.complete').is_file():
+                homes = list(directory.rglob('product-info.json'))
+                if len(homes) == 1:
+                    cached_sdk = homes[0].parent
+                    break
+    existing_sdk = deps.existing(f'ides/{args.ide_version}') or deps.existing(f'static-sdk/ides/{args.ide_version}')
+    if existing_sdk and any(parent.name.startswith('lattice-run-') for parent in existing_sdk.parents) and not (existing_sdk / '.complete').is_file():
+        existing_sdk = None
+    sdk = args.ide_home or cached_sdk or existing_sdk or ide_home(cache if args.cache else cache / 'static-sdk', args.ide_version)
+    if not (sdk / 'product-info.json').is_file():
+        homes = list(sdk.rglob('product-info.json'))
+        if len(homes) != 1:
+            raise ValueError('IDE must contain a unique product-info.json')
+        sdk = homes[0].parent
+    try:
+        java = java_command(args.java_home)
+        java_home = args.java_home or (Path(os.environ['JAVA_HOME']) if os.environ.get('JAVA_HOME') else None)
+    except ValueError:
+        java_home = deps.java(args.java_home)
+        java = str(executable(java_home, 'java'))
+    verifier = args.verifier_jar or (args.cache / 'tools/verifier/verifier-cli-1.410-all.jar' if args.cache and (args.cache / 'tools/verifier/verifier-cli-1.410-all.jar').is_file() else None) or deps.existing('tools/verifier/verifier-cli-1.410-all.jar') or cache / 'tools/verifier/verifier-cli-1.410-all.jar'
     if not verifier.exists():
-        verifier.parent.mkdir(parents=True, exist_ok=True)
-        urllib.request.urlretrieve(VERIFIER_URL, verifier)
+        if args.verifier_jar:
+            raise ValueError('--verifier-jar does not exist')
+        from dependencies import download
+        download(VERIFIER_URL, verifier, VERIFIER_SHA256)
     if digest(verifier) != VERIFIER_SHA256:
-        raise ValueError("Plugin Verifier checksum mismatch")
+        raise ValueError('Plugin Verifier checksum mismatch')
     reports = args.reports / uuid.uuid4().hex
     # The verifier recreates its report directory during startup. Keep scratch
     # outside it so initialization cannot delete the live plugin repository.

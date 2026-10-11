@@ -30,13 +30,17 @@ public final class MavenPomDriverResolver {
     public static Optional<InstalledDriver> find(DatabaseType type, Path projectPom, Path localRepository) {
         if (projectPom == null || localRepository == null) return Optional.empty();
 
-        for (Path pom : projectPoms(projectPom)) {
-            PomModel model = readPom(pom, new LinkedHashSet<>());
+        Map<Path, PomModel> models = new LinkedHashMap<>();
+        for (Path pom : projectPoms(projectPom, models)) {
+            PomModel model = readPom(pom, new LinkedHashSet<>(), models);
             for (Dependency dependency : model.dependencies()) {
                 if (!isDriver(type, dependency.groupId(), dependency.artifactId())) continue;
-                Path jar = DriverCatalog.discoveredJar(type, dependency.version(), localRepository);
-                if (isValidDriverJar(type, dependency.version(), jar)) {
-                    return Optional.of(new InstalledDriver(type, dependency.version(),
+                String version = resolve(dependency.version().isBlank()
+                        ? model.managedVersions().getOrDefault(dependency.groupId() + ":" + dependency.artifactId(), "")
+                        : dependency.version(), model.properties());
+                Path jar = DriverCatalog.discoveredJar(type, version, localRepository);
+                if (isValidDriverJar(type, version, jar)) {
+                    return Optional.of(new InstalledDriver(type, version,
                             InstalledDriver.Kind.DISCOVERED, jar));
                 }
             }
@@ -89,28 +93,42 @@ public final class MavenPomDriverResolver {
         };
     }
 
-    private static List<Path> projectPoms(Path rootPom) {
+    private static List<Path> projectPoms(Path rootPom, Map<Path, PomModel> models) {
         ArrayDeque<Path> pending = new ArrayDeque<>();
         Set<Path> seen = new LinkedHashSet<>();
         List<Path> poms = new ArrayList<>();
-        pending.add(rootPom.toAbsolutePath().normalize());
+        pending.add(canonical(rootPom));
         while (!pending.isEmpty()) {
             Path pom = pending.removeFirst();
             if (!seen.add(pom) || !Files.isRegularFile(pom)) continue;
             poms.add(pom);
-            PomModel model = readPom(pom, new LinkedHashSet<>());
+            PomModel model = readPom(pom, new LinkedHashSet<>(), models);
             for (String module : model.modules()) {
                 Path modulePath = pom.getParent().resolve(module).normalize();
                 Path modulePom = modulePath.getFileName() != null && modulePath.getFileName().toString().equals("pom.xml")
                         ? modulePath : modulePath.resolve("pom.xml");
-                pending.addLast(modulePom.toAbsolutePath().normalize());
+                pending.addLast(canonical(modulePom));
             }
         }
         return poms;
     }
 
-    private static PomModel readPom(Path pom, Set<Path> reading) {
-        Path normalized = pom.toAbsolutePath().normalize();
+    private static Path canonical(Path path) {
+        try { return path.toRealPath(); }
+        catch (java.io.IOException missing) { return path.toAbsolutePath().normalize(); }
+    }
+
+    private static PomModel readPom(Path pom, Set<Path> reading, Map<Path, PomModel> models) {
+        Path normalized = canonical(pom);
+        PomModel cached = models.get(normalized);
+        if (cached != null) return cached;
+        PomModel model = readUncachedPom(normalized, reading, models);
+        models.put(normalized, model);
+        return model;
+    }
+
+    private static PomModel readUncachedPom(Path normalized, Set<Path> reading, Map<Path, PomModel> models) {
+        Path pom = normalized;
         if (!reading.add(normalized) || !Files.isRegularFile(normalized)) return PomModel.empty();
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
@@ -122,7 +140,7 @@ public final class MavenPomDriverResolver {
             Document document = factory.newDocumentBuilder().parse(normalized.toFile());
             Element project = document.getDocumentElement();
 
-            PomModel parent = readParent(pom, project, reading);
+            PomModel parent = readParent(pom, project, reading, models);
             Map<String, String> properties = new LinkedHashMap<>(parent.properties());
             Element propertiesElement = child(project, "properties");
             if (propertiesElement != null) {
@@ -145,14 +163,14 @@ public final class MavenPomDriverResolver {
             putBuiltIn(properties, "pom.artifactId", artifactId);
             putBuiltIn(properties, "project.parent.version", first(parent.version(), resolve(parentVersion, properties)));
             putBuiltIn(properties, "parent.version", first(parent.version(), resolve(parentVersion, properties)));
-            properties.replaceAll((key, value) -> resolve(value, properties));
+            // Keep inherited expressions raw: child properties must interpolate them in the child model.
 
             Map<String, String> managedVersions = new LinkedHashMap<>(parent.managedVersions());
             Element management = child(child(project, "dependencyManagement"), "dependencies");
             for (Element dependency : childrenNamed(management, "dependency")) {
                 String group = resolve(text(child(dependency, "groupId")), properties);
                 String artifact = resolve(text(child(dependency, "artifactId")), properties);
-                String managedVersion = resolve(text(child(dependency, "version")), properties);
+                String managedVersion = text(child(dependency, "version"));
                 if (!group.isBlank() && !artifact.isBlank() && !managedVersion.isBlank())
                     managedVersions.put(group + ":" + artifact, managedVersion);
             }
@@ -163,12 +181,11 @@ public final class MavenPomDriverResolver {
             for (Element dependency : childrenNamed(child(project, "dependencies"), "dependency")) {
                 String group = resolve(text(child(dependency, "groupId")), properties);
                 String artifact = resolve(text(child(dependency, "artifactId")), properties);
-                String dependencyVersion = resolve(text(child(dependency, "version")), properties);
+                String dependencyVersion = text(child(dependency, "version"));
                 String coordinate = group + ":" + artifact;
-                if (dependencyVersion.isBlank()) dependencyVersion = managedVersions.getOrDefault(coordinate, "");
                 if (dependencyVersion.isBlank() && dependenciesByCoordinate.containsKey(coordinate))
                     dependencyVersion = dependenciesByCoordinate.get(coordinate).version();
-                if (!group.isBlank() && !artifact.isBlank() && !dependencyVersion.isBlank())
+                if (!group.isBlank() && !artifact.isBlank())
                     dependenciesByCoordinate.put(coordinate, new Dependency(group, artifact, dependencyVersion));
             }
 
@@ -186,7 +203,7 @@ public final class MavenPomDriverResolver {
         }
     }
 
-    private static PomModel readParent(Path pom, Element project, Set<Path> reading) {
+    private static PomModel readParent(Path pom, Element project, Set<Path> reading, Map<Path, PomModel> models) {
         Element parent = child(project, "parent");
         if (parent == null) return PomModel.empty();
         Element relativePathElement = child(parent, "relativePath");
@@ -194,7 +211,13 @@ public final class MavenPomDriverResolver {
         if (relativePath.isEmpty()) return PomModel.empty();
         Path parentPath = pom.getParent().resolve(relativePath).normalize();
         if (Files.isDirectory(parentPath)) parentPath = parentPath.resolve("pom.xml");
-        return readPom(parentPath, reading);
+        PomModel model = readPom(parentPath, reading, models);
+        // Maven ignores a relative-path POM whose GAV does not match the declared parent.
+        if (!model.groupId().equals(resolve(text(child(parent, "groupId")), model.properties()))
+                || !model.artifactId().equals(resolve(text(child(parent, "artifactId")), model.properties()))
+                || !model.version().equals(resolve(text(child(parent, "version")), model.properties())))
+            return PomModel.empty();
+        return model;
     }
 
     private static boolean isDriver(DatabaseType type, String groupId, String artifactId) {

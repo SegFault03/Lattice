@@ -47,7 +47,7 @@ public class DatabaseToolWindowFactory implements ToolWindowFactory, DumbAware {
         ComponentAdapter listener = new ComponentAdapter() {
             private void apply() {
                 SwingUtilities.invokeLater(() -> {
-                    if (project.isDisposed() || Disposer.isDisposed(panel) || preferences.getBoolean(widthApplied, false)
+                    if (project.isDisposed() || panel.isDisposed() || preferences.getBoolean(widthApplied, false)
                             || !toolWindow.isVisible() || toolWindow.getComponent().getWidth() <= 0) return;
                     if (toolWindow.getAnchor().isHorizontal()) return;
                     preferences.setValue(widthApplied, true);

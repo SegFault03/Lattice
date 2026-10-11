@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$repo_root"
-
-if [[ -z "${JAVA_HOME:-}" && -x "$repo_root/../.jdk21/bin/javac" ]]; then
-    export JAVA_HOME="$repo_root/../.jdk21"
-    export PATH="$JAVA_HOME/bin:$PATH"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+if [[ "${LATTICE_CAPTURE_SUPERVISED:-}" != 1 ]]; then
+    exec python3 "$repo_root/scripts/processes.py" --command -- env LATTICE_CAPTURE_SUPERVISED=1 bash "${BASH_SOURCE[0]}" "$@"
 fi
+cd "$repo_root"
 
 gradle_jvm_options="${GRADLE_OPTS:-}"
 proxy_url="${HTTPS_PROXY:-${https_proxy:-${HTTP_PROXY:-${http_proxy:-}}}}"
@@ -36,6 +34,10 @@ fi
 export JDK_JAVA_OPTIONS="${JDK_JAVA_OPTIONS:+$JDK_JAVA_OPTIONS }$ui_java_options"
 
 if command -v Xvfb >/dev/null 2>&1; then
+    if ! command -v xdpyinfo >/dev/null 2>&1; then
+        echo "xdpyinfo is required to wait for Xvfb; install x11-utils." >&2
+        exit 2
+    fi
     xvfb_display="${XVFB_DISPLAY:-:99}"
     display_number="${xvfb_display#:}"
     if [[ -e "/tmp/.X${display_number}-lock" || -S "/tmp/.X11-unix/X${display_number}" ]]; then
@@ -45,7 +47,12 @@ if command -v Xvfb >/dev/null 2>&1; then
 
     Xvfb "$xvfb_display" -screen 0 1920x1080x24 -dpi 96 -nolisten tcp -ac &
     xvfb_pid=$!
+    window_manager_pid=""
     cleanup() {
+        if [[ -n "$window_manager_pid" ]]; then
+            kill "$window_manager_pid" 2>/dev/null || true
+            wait "$window_manager_pid" 2>/dev/null || true
+        fi
         kill "$xvfb_pid" 2>/dev/null || true
         wait "$xvfb_pid" 2>/dev/null || true
     }
@@ -66,6 +73,17 @@ if command -v Xvfb >/dev/null 2>&1; then
         echo "Timed out waiting for Xvfb display $DISPLAY." >&2
         exit 1
     fi
+    # A real window manager supplies modal borders/title bars and honors IDE resizing.
+    mkdir -p build
+    if command -v xfwm4 >/dev/null 2>&1; then
+        xfwm4 --compositor=off > build/ui-window-manager.log 2>&1 &
+        window_manager_pid=$!
+    elif command -v openbox >/dev/null 2>&1; then
+        openbox > build/ui-window-manager.log 2>&1 &
+        window_manager_pid=$!
+    else
+        echo "No window manager found; modal title bars and desktop shadows may be absent." >&2
+    fi
 elif [[ -z "${DISPLAY:-}" ]]; then
     echo "Xvfb is required for a headless run. Install Xvfb or provide a graphical DISPLAY." >&2
     exit 1
@@ -73,4 +91,8 @@ else
     echo "Using existing display $DISPLAY; install Xvfb for the deterministic 1920x1080 run." >&2
 fi
 
-./gradlew uiScreenshotTest "$@"
+ide_args=()
+if [[ -n "${LATTICE_UI_IDE_HOME:-}" ]]; then
+    ide_args+=("-Plattice.ui.ide.home=$LATTICE_UI_IDE_HOME")
+fi
+./gradlew --no-daemon uiScreenshotTest "${ide_args[@]}" "$@"
