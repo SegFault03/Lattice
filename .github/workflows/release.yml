@@ -291,11 +291,17 @@ jobs:
           MARKETPLACE_HIDDEN: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           test -n "$MARKETPLACE_TOKEN" || { echo 'Missing JETBRAINS_MARKETPLACE_TOKEN secret' >&2; exit 1; }
-          # Reject unexpected combinations instead of accidentally exposing a smoke build.
+          # Explicit exits also work on macOS Bash 3.2, where -e does not stop on [[ ... ]].
           if [[ "$MARKETPLACE_CHANNEL" == "smoke" ]]; then
-            [[ "$MARKETPLACE_HIDDEN" == "true" && "$RELEASE_VERSION" == *-* ]]
+            [[ "$MARKETPLACE_HIDDEN" == "true" && "$RELEASE_VERSION" == *-* ]] || {
+              echo 'Smoke uploads require a hidden prerelease version' >&2
+              exit 1
+            }
           else
-            [[ -z "$MARKETPLACE_CHANNEL" && "$MARKETPLACE_HIDDEN" == "false" ]]
+            [[ -z "$MARKETPLACE_CHANNEL" && "$MARKETPLACE_HIDDEN" == "false" ]] || {
+              echo 'Public uploads require the Stable channel and isHidden=false' >&2
+              exit 1
+            }
           fi
           (cd build/distributions && sha256sum --check --ignore-missing ../release/SHA256SUMS)
           # Keep the token out of command arguments and do not retry an ambiguous upload.

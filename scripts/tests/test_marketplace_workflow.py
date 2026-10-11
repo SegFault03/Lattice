@@ -24,7 +24,7 @@ def upload_script():
 @unittest.skipUnless(BASH, "Bash required to exercise GitHub's upload step")
 class MarketplaceWorkflowTests(unittest.TestCase):
     def run_upload(self, token="test-token", corrupt=False, transport_status=0,
-                   channel="smoke", hidden="true", version=None):
+                   channel="smoke", hidden="true", version=None, errexit=True):
         version = version or ("0.0.2-smoke.1" if channel else "0.0.2-alpha")
         with tempfile.TemporaryDirectory(prefix="lattice-marketplace-test-") as directory:
             root = Path(directory)
@@ -46,7 +46,7 @@ class MarketplaceWorkflowTests(unittest.TestCase):
             env = dict(os.environ, MARKETPLACE_TOKEN=token, RELEASE_VERSION=version,
                        MARKETPLACE_CHANNEL=channel, MARKETPLACE_HIDDEN=hidden,
                        GITHUB_STEP_SUMMARY="summary.md", CURL_STATUS=str(transport_status))
-            result = subprocess.run([BASH, "--noprofile", "--norc", "-e", "-o", "pipefail", "-c",
+            result = subprocess.run([BASH, "--noprofile", "--norc", *(["-e"] if errexit else []), "-o", "pipefail", "-c",
                                      'export PATH="$PWD/bin:$PATH"\n' + upload_script()],
                                     cwd=root, env=env, capture_output=True, text=True, timeout=30)
             def read(name):
@@ -79,6 +79,16 @@ class MarketplaceWorkflowTests(unittest.TestCase):
             with self.subTest(options=options):
                 result, args, _, summary = self.run_upload(**options)
                 self.assertNotEqual(0, result.returncode)
+                self.assertIsNone(args)
+                self.assertIsNone(summary)
+
+    def test_invalid_uploads_stop_even_without_shell_errexit(self):
+        # macOS Bash 3.2 does not apply -e to failed [[ ... ]] conditional commands.
+        for options in ({"hidden": "false"}, {"channel": "", "hidden": "true"},
+                        {"channel": "unknown"}, {"version": "0.0.2"}):
+            with self.subTest(options=options):
+                result, args, _, summary = self.run_upload(errexit=False, **options)
+                self.assertEqual(1, result.returncode)
                 self.assertIsNone(args)
                 self.assertIsNone(summary)
 
