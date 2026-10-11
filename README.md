@@ -22,6 +22,16 @@ Built with help from **Gemini 3.8**, **GPT-6 Luna** and **GPT-6.1 Sol**.
 - Server and driver version information through **Test Connection**.
 - Passwords and custom JDBC URLs stored through IntelliJ PasswordSafe.
 
+## Changes since 0.0.1-alpha (unreleased)
+
+- **JDBC drivers:** Reuse verified downloads across IDE restarts, discover Maven-cached drivers and project defaults, and report missing or corrupt drivers. Discovery runs in the background and preserves manual selections.
+- **UI and themes:** Native toolbars, compact connection forms, responsive filters and schema dialogs, improved light/dark palettes, clearer loading feedback and refreshed previews. Disabled icons match labels; mouse clicks no longer leave focus outlines, while keyboard focus stays visible.
+- **Tables and SQL:** State-aware row, export, Apply, Run and Clear actions; Clear for table filters; headers bounded to columns; typed edit validation and editable auto-generated columns. Cancellation has neutral feedback, and session changes retire old connections.
+- **Development tools:** Shared dependency reuse and cleanup, tracked child processes, portable Windows MySQL fixtures, local IDE deployment, and consolidated Linux/Windows commands and documentation.
+- **Build and validation:** Updated Gradle, IntelliJ build tooling, JDBC drivers and protobuf runtime; migrated the Java namespace to `com.segfault03`. Cross-platform CI now includes production Swing assertions, real-IDE theme/action reviews and compatibility checks against the PR merge build.
+
+See the [changelog](docs/CHANGELOG.md) and [commits since the last release](https://github.com/SegFault03/Lattice/compare/v0.0.1-alpha...staging) for details.
+
 ## Screenshots
 
 Previews use sample data. These five screens are the featured UI previews.
