@@ -52,7 +52,10 @@ public final class DatabaseActionToolbar {
 
         void updatePresentation(Presentation presentation) {
             presentation.setEnabled(source.isEnabled());
-            if (source instanceof JButton button) presentation.setIcon(button.getIcon());
+            if (source instanceof JButton button) {
+                presentation.setIcon(button.getIcon());
+                presentation.setDisabledIcon(button.getDisabledIcon());
+            }
         }
         @Override public void actionPerformed(AnActionEvent event) {
             if (source instanceof JButton button) button.doClick();

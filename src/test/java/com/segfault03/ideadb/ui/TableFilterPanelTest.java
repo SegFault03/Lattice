@@ -6,6 +6,25 @@ import java.awt.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class TableFilterPanelTest {
+    @Test void applyAndClearStayTogetherAtNarrowWidths() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            JPanel where = DatabaseUi.labeledInput(new JLabel("WHERE"), DatabaseInputs.textField(20));
+            JPanel order = DatabaseUi.labeledInput(new JLabel("ORDER BY"), DatabaseInputs.textField(14));
+            JButton apply = DatabaseUi.action("Apply", null, "Apply");
+            JButton clear = DatabaseUi.action("Clear", null, "Clear");
+            JPanel actions = DatabaseUi.group(apply, clear);
+            TableFilterPanel panel = new TableFilterPanel(where, order, actions);
+            for (int width : new int[]{230, 380, 520, 1100}) {
+                panel.setSize(width, 150);
+                panel.doLayout();
+                actions.doLayout();
+                assertEquals(apply.getY(), clear.getY());
+                assertTrue(clear.getX() + clear.getWidth() <= actions.getWidth());
+                assertTrue(actions.getX() + actions.getWidth() <= width);
+            }
+        });
+    }
+
     @Test void filtersStayCompactAndWrapWithoutClipping() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             JPanel where = DatabaseUi.labeledInput(new JLabel("WHERE"), DatabaseInputs.textField(20));

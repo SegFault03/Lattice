@@ -915,6 +915,12 @@ class IntellijUiScreenshotTest {
                 waitUntil("refresh completed and actions restored") { tableEditor.x { byAccessibleName("Refresh table data") }.waitFound().component.isEnabled() }
                 assertButtonReset(tableEditor.x { byAccessibleName("Refresh table data") }.waitFound(), dataGrid)
                 val applyButton = tableEditor.x { byAccessibleName("Apply filter and sort") }.waitFound()
+                check(!applyButton.component.isEnabled()) { "Empty clauses must disable Apply" }
+                check(!tableEditor.x { byAccessibleName("Clear WHERE and ORDER BY clauses") }.waitFound().component.isEnabled())
+                val whereInput = tableEditor.xx(JTextFieldUI::class.java) {
+                    byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField")
+                }.list().first()
+                whereInput.text = "1 = 1"
                 applyButton.click()
                 waitUntil("Apply completed") { applyButton.component.isEnabled() }
                 assertButtonReset(applyButton, dataGrid)
@@ -924,9 +930,6 @@ class IntellijUiScreenshotTest {
                     frame.x { byVisibleText("Count rows") }.waitFound().click()
                 }
                 waitUntil("row count completed") { tableEditor.hasSubtext("1 saved row matches the filter") }
-                val whereInput = tableEditor.xx(JTextFieldUI::class.java) {
-                    byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField")
-                }.list().first()
                 whereInput.text = "\"id\" = -999"
                 tableEditor.x { byVisibleText("Apply") }.waitFound().click()
                 waitUntil("empty filter result") { dataGrid.rowCount() == 0 }
@@ -937,7 +940,9 @@ class IntellijUiScreenshotTest {
                     captureScreen(screenshotsDirectory.resolve("table-filter-error.png"))
                     it.pressButton("OK")
                 }
-                whereInput.text = ""
+                tableEditor.x { byAccessibleName("Clear WHERE and ORDER BY clauses") }.waitFound().click()
+                check(!tableEditor.x { byAccessibleName("Clear WHERE and ORDER BY clauses") }.waitFound().component.isEnabled())
+                check(applyButton.component.isEnabled()) { "Clearing an applied filter must allow resetting the data" }
                 tableEditor.x { byVisibleText("Apply") }.waitFound().click()
                 waitUntil("filter reset") { dataGrid.rowCount() == 1 }
                 databaseTree.fixture.rightClickPath(pathText)
@@ -1101,6 +1106,11 @@ class IntellijUiScreenshotTest {
                 captureScreen(screenshotsDirectory.resolve("sql-console-ready.png"))
                 val runQuery = console.x { byVisibleText("Run") }.waitFound()
                 val stopQuery = console.x { byVisibleText("Stop") }.waitFound()
+                withContext(OnDispatcher.EDT) { queryText.setText("-- Write your query\n") }
+                check(!runQuery.component.isEnabled()) { "Comment-only SQL must disable Run" }
+                console.x { byAccessibleName("Clear query text") }.waitFound().click()
+                check(!runQuery.component.isEnabled())
+                check(!console.x { byAccessibleName("Clear query text") }.waitFound().component.isEnabled())
                 // Bounded real HSQLDB work also exercises cancellation with no prior results.
                 val tenValues = "(VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9))"
                 val cancellationSql = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.SYSTEM_COLUMNS A CROSS JOIN INFORMATION_SCHEMA.SYSTEM_COLUMNS B CROSS JOIN $tenValues C(n) CROSS JOIN $tenValues D(n)"

@@ -458,6 +458,17 @@ public final class UiPreview {
         layout(panel);
         JTextArea editor = (JTextArea)field(panel, "editorArea");
         panel.setSqlText("");
+        JButton run = (JButton)field(panel, "runBtn");
+        JButton clear = (JButton)field(panel, "clearBtn");
+        if (run.isEnabled() || clear.isEnabled()) throw new AssertionError("Empty SQL must disable Run and Clear");
+        panel.setSqlText("-- Write your query\n/* comment */");
+        if (run.isEnabled() || !clear.isEnabled()) throw new AssertionError("Comments can be cleared but cannot run");
+        panel.setSqlText("-- comment\nSELECT 1");
+        editor.select(0, 10);
+        if (run.isEnabled()) throw new AssertionError("A comment-only selection cannot run");
+        editor.select(11, editor.getText().length());
+        if (!run.isEnabled()) throw new AssertionError("An executable selection must enable Run");
+        panel.setSqlText("");
         JComboBox<?> template = (JComboBox<?>)findByTooltip(panel, "Insert a SQL template at the caret");
         template.setSelectedIndex(1);
         template.setSelectedIndex(1);
@@ -468,6 +479,7 @@ public final class UiPreview {
         if (!editor.getText().equals("SELECT 42;")) throw new AssertionError("History must restore the full query");
         performToolbarAction(panel, "Clear query text");
         if (!editor.getText().isEmpty()) throw new AssertionError("Clear action must clear the query");
+        if (run.isEnabled() || clear.isEnabled()) throw new AssertionError("Clear must update both action states");
         panel.setSqlText("SELECT 1; SELECT 2;");
         editor.select(10, 19);
         editor.getActionMap().get("runSql").actionPerformed(new java.awt.event.ActionEvent(editor, 0, "runSql"));
@@ -530,6 +542,38 @@ public final class UiPreview {
     static void verifyCellActions() throws Exception {
         TableDataEditorPanel panel = table(false);
         JTable table = (JTable)field(panel, "dataTable");
+        JButton delete = (JButton)field(panel, "delRowBtn");
+        JButton apply = (JButton)field(panel, "filterBtn");
+        JButton clear = (JButton)field(panel, "clearFilterBtn");
+        if (delete.isEnabled() || apply.isEnabled() || clear.isEnabled())
+            throw new AssertionError("Unselected rows and empty clauses must disable their actions");
+        Class<?> scopeType = Class.forName("com.segfault03.ideadb.ui.TableDataEditorPanel$ExportScope");
+        Object selectedScope = java.util.Arrays.stream(scopeType.getEnumConstants())
+                .filter(value -> value.toString().equals("SELECTED")).findFirst().orElseThrow();
+        JPopupMenu exports = new JPopupMenu();
+        invoke(panel, "addExportFormats", new Class<?>[]{JPopupMenu.class, String.class, scopeType}, exports, "Selected", selectedScope);
+        JMenu selectedExport = (JMenu)exports.getComponent(0);
+        if (selectedExport.isEnabled() || selectedExport.getItem(0).isEnabled())
+            throw new AssertionError("Selected export must be disabled without a selection");
+        table.setRowSelectionInterval(0, 0);
+        if (!delete.isEnabled()) throw new AssertionError("Row selection must enable Delete");
+        exports.removeAll();
+        invoke(panel, "addExportFormats", new Class<?>[]{JPopupMenu.class, String.class, scopeType}, exports, "Selected", selectedScope);
+        if (!((JMenu)exports.getComponent(0)).isEnabled()) throw new AssertionError("Selected export must enable with a selection");
+        table.clearSelection();
+        if (delete.isEnabled()) throw new AssertionError("Clearing selection must disable Delete");
+        JTextField where = (JTextField)field(panel, "whereField");
+        JTextField order = (JTextField)field(panel, "orderField");
+        where.setText("id = 1"); order.setText("id DESC");
+        if (!apply.isEnabled() || !clear.isEnabled()) throw new AssertionError("Clauses must enable Apply and Clear");
+        clear.doClick(0);
+        if (!where.getText().isEmpty() || !order.getText().isEmpty() || apply.isEnabled() || clear.isEnabled())
+            throw new AssertionError("Clear must reset both clauses and their actions");
+        invoke(panel, "setReadRunning", new Class<?>[]{boolean.class}, true);
+        table.setRowSelectionInterval(0, 0);
+        if (delete.isEnabled()) throw new AssertionError("Selection changes while busy must not enable Delete");
+        invoke(panel, "setReadRunning", new Class<?>[]{boolean.class}, false);
+        if (!delete.isEnabled()) throw new AssertionError("Completion must recompute selection state");
         Object model = field(panel, "tableModel");
         JPopupMenu menu = table.getComponentPopupMenu();
         JMenuItem nullAction = (JMenuItem)menu.getComponent(0);

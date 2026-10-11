@@ -7,12 +7,12 @@ import java.awt.*;
 /** Keeps Apply beside the fields when possible, using two balanced rows before stacking. */
 final class TableFilterPanel extends JPanel {
     private final JComponent where, order;
-    private final JButton apply;
+    private final JComponent apply;
     private final JPanel remainder = new JPanel();
     private int rows;
     private boolean shrinking;
 
-    TableFilterPanel(JComponent where, JComponent order, JButton apply) {
+    TableFilterPanel(JComponent where, JComponent order, JComponent apply) {
         super(new GridBagLayout());
         this.where = where;
         this.order = order;

@@ -86,7 +86,57 @@ public final class DatabaseUi {
         button.setFocusPainted(false); // The focus cue is painted with the native theme color.
         button.setRolloverEnabled(true);
         button.setIconTextGap(JBUI.scale(5));
+        installFocusVisibility(button);
         return button;
+    }
+
+    /** Mouse interaction stays quiet; Tab/Shift+Tab and keyboard interaction show focus. */
+    static void installFocusVisibility(JComponent component) {
+        installMouseFocus(component, component);
+        for (Component child : component.getComponents())
+            if (child instanceof JButton button) installMouseFocus(button, component);
+        if (Boolean.TRUE.equals(component.getClientProperty("lattice.focusVisibilityInstalled"))) return;
+        component.putClientProperty("lattice.focusVisibilityInstalled", Boolean.TRUE);
+        component.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override public void focusGained(java.awt.event.FocusEvent event) {
+                if (event.getCause() == java.awt.event.FocusEvent.Cause.TRAVERSAL_FORWARD
+                        || event.getCause() == java.awt.event.FocusEvent.Cause.TRAVERSAL_BACKWARD
+                        || event.getCause() == java.awt.event.FocusEvent.Cause.TRAVERSAL_UP
+                        || event.getCause() == java.awt.event.FocusEvent.Cause.TRAVERSAL_DOWN)
+                    component.putClientProperty("lattice.mouseFocus", Boolean.FALSE);
+                component.repaint();
+            }
+            @Override public void focusLost(java.awt.event.FocusEvent event) { component.repaint(); }
+        });
+        component.addKeyListener(new java.awt.event.KeyAdapter() {
+            @Override public void keyPressed(java.awt.event.KeyEvent event) {
+                component.putClientProperty("lattice.mouseFocus", Boolean.FALSE);
+                component.repaint();
+            }
+        });
+    }
+
+    private static void installMouseFocus(JComponent target, JComponent component) {
+        if (target.getClientProperty("lattice.mouseFocusOwner") == component) return;
+        target.putClientProperty("lattice.mouseFocusOwner", component);
+        target.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override public void mousePressed(java.awt.event.MouseEvent event) {
+                component.putClientProperty("lattice.mouseFocus", Boolean.TRUE);
+                component.repaint();
+            }
+        });
+    }
+
+    static boolean isFocusVisible(JComponent component) {
+        return !Boolean.TRUE.equals(component.getClientProperty("lattice.mouseFocus"));
+    }
+
+    static void onTextChange(javax.swing.text.JTextComponent input, Runnable update) {
+        input.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            public void insertUpdate(javax.swing.event.DocumentEvent event) { update.run(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent event) { update.run(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent event) { update.run(); }
+        });
     }
 
     /** Highlights an enabled toolbar action while leaving disabled actions in the native quiet style. */
@@ -114,11 +164,32 @@ public final class DatabaseUi {
         private Color emphasisColor;
         private JButton source;
         private boolean iconOnly;
+        private Icon disabledGlyph;
+        private Icon disabledSource;
+        private Color disabledColor;
         private final PropertyChangeListener sourceChanges = event -> copySourceState();
 
         private ActionButton(String text, Icon icon) {
             super(text, icon);
             defaultIcon = icon;
+        }
+
+        @Override public Icon getDisabledIcon() {
+            Icon icon = defaultIcon == null ? getIcon() : defaultIcon;
+            if (icon == null) return null;
+            Color color = UIManager.getColor("Button.disabledText");
+            if (color == null) color = JBColor.namedColor("Label.disabledForeground", JBColor.GRAY);
+            if (disabledGlyph == null || disabledSource != icon || !Objects.equals(disabledColor, color)) {
+                int rgb = color.getRGB() & 0x00FFFFFF;
+                disabledGlyph = IconUtil.filterIcon(icon, () -> new java.awt.image.RGBImageFilter() {
+                    @Override public int filterRGB(int x, int y, int source) {
+                        return (source & 0xFF000000) | rgb;
+                    }
+                }, null);
+                disabledSource = icon;
+                disabledColor = color;
+            }
+            return disabledGlyph;
         }
 
         @Override public void setEnabled(boolean enabled) {
@@ -194,7 +265,8 @@ public final class DatabaseUi {
             ButtonModel model = getModel();
             boolean emphasized = isEnabled() && emphasisColor != null;
             boolean interactive = isEnabled() && (model.isRollover() || model.isPressed() && model.isArmed());
-            if (emphasized || interactive || isEnabled() && hasFocus()) {
+            boolean focusVisible = hasFocus() && isFocusVisible(this);
+            if (emphasized || interactive || isEnabled() && focusVisible) {
                 Graphics2D g = (Graphics2D) graphics.create();
                 try {
                     g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -211,7 +283,7 @@ public final class DatabaseUi {
                         g.setStroke(new BasicStroke(com.intellij.ui.scale.JBUIScale.scale(1f)));
                         g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, JBUI.scale(10), JBUI.scale(10));
                     }
-                    if (hasFocus()) {
+                    if (focusVisible) {
                         g.setColor(JBColor.namedColor("Component.focusColor", new JBColor(0x3574F0, 0x548AF7)));
                         g.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, JBUI.scale(6), JBUI.scale(6));
                     }

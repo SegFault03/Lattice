@@ -7,6 +7,73 @@ import java.awt.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DatabaseUiTest {
+    @Test void emptyAndCommentOnlySqlCannotRunButExecutableCommentsAndStatementsCan() {
+        for (String sql : new String[]{"", " \n\t", "; ;", "-- Write your query\n", "/* explanation */ ; # comment\r\n", "/* unfinished"})
+            assertFalse(SqlQueryConsolePanel.hasExecutableSql(sql), sql);
+        for (String sql : new String[]{"SELECT 1", "-- comment\nSELECT 1", "/* note */ SELECT '/*'", "/*! SELECT 1 */"})
+            assertTrue(SqlQueryConsolePanel.hasExecutableSql(sql), sql);
+    }
+
+    @Test void applyIsAvailableForClausesAndForClearingAnAppliedFilterOrSort() {
+        assertFalse(TableDataEditorPanel.canApplyFilter(" \t", "", "", ""));
+        assertTrue(TableDataEditorPanel.canApplyFilter("id = 1", "", "", ""));
+        assertTrue(TableDataEditorPanel.canApplyFilter("", "id DESC", "", ""));
+        assertTrue(TableDataEditorPanel.canApplyFilter("", "", "id = 1", ""));
+        assertTrue(TableDataEditorPanel.canApplyFilter("", "", "", "id DESC"));
+    }
+
+    @Test void mouseFocusIsQuietAndKeyboardTraversalRestoresTheCue() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            JComponent[] controls = {DatabaseUi.action("Options", null, "Options"), DatabaseInputs.comboBox(new String[]{"Off"})};
+            for (JComponent control : controls) {
+                java.awt.event.MouseEvent click = new java.awt.event.MouseEvent(control,
+                        java.awt.event.MouseEvent.MOUSE_PRESSED, 0, 0, 2, 2, 1, false);
+                for (var listener : control.getMouseListeners()) listener.mousePressed(click);
+                assertFalse(DatabaseUi.isFocusVisible(control));
+                java.awt.event.FocusEvent traversal = new java.awt.event.FocusEvent(control,
+                        java.awt.event.FocusEvent.FOCUS_GAINED, false, null, java.awt.event.FocusEvent.Cause.TRAVERSAL_FORWARD);
+                for (var listener : control.getFocusListeners()) listener.focusGained(traversal);
+                assertTrue(DatabaseUi.isFocusVisible(control));
+            }
+        });
+    }
+
+    @Test void disabledGlyphUsesTheLabelColorAndPreservesAlphaIncludingInToolbarPresentation() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            Object previous = UIManager.get("Button.disabledText");
+            try {
+                UIManager.put("Button.disabledText", new Color(0xA0A8B0));
+                Icon icon = new Icon() {
+                    public int getIconWidth() { return 2; }
+                    public int getIconHeight() { return 1; }
+                    public void paintIcon(Component c, Graphics g, int x, int y) {
+                        g.setColor(Color.BLACK); g.fillRect(x, y, 1, 1);
+                        g.setColor(new Color(0, 0, 0, 128)); g.fillRect(x + 1, y, 1, 1);
+                    }
+                };
+                JButton button = DatabaseUi.action("Commit", icon, "Commit");
+                DatabaseUi.setActionEmphasis(button, DatabaseUi.POSITIVE_ACTION_COLOR);
+                button.setEnabled(false);
+                var pixels = new java.awt.image.BufferedImage(2, 1, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+                Graphics2D graphics = pixels.createGraphics();
+                try { button.getDisabledIcon().paintIcon(button, graphics, 0, 0); }
+                finally { graphics.dispose(); }
+                assertEquals(0xFFA0A8B0, pixels.getRGB(0, 0));
+                int translucent = pixels.getRGB(1, 0);
+                assertEquals(128, translucent >>> 24, "Antialiasing alpha must be preserved");
+                Color painted = new Color(translucent, true);
+                assertTrue(Math.abs(painted.getRed() - 160) <= 1 && Math.abs(painted.getGreen() - 168) <= 1
+                        && Math.abs(painted.getBlue() - 176) <= 1, "Allow premultiplied-alpha rounding");
+                Presentation presentation = new Presentation();
+                new DatabaseActionToolbar.ControlAction(button, null).updatePresentation(presentation);
+                assertSame(button.getDisabledIcon(), presentation.getDisabledIcon());
+                assertFalse(presentation.isEnabled());
+                UIManager.put("Button.disabledText", new Color(0x606870));
+                assertNotSame(presentation.getDisabledIcon(), button.getDisabledIcon(), "Theme changes must refresh the glyph");
+            } finally { UIManager.put("Button.disabledText", previous); }
+        });
+    }
+
     @Test void exportSubmenusUseTheNativePopupSurfaceAndKeepSwingMenuNavigation() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             JMenu submenu = DatabaseUi.submenu("Current page");

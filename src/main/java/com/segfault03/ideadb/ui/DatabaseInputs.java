@@ -87,6 +87,7 @@ public final class DatabaseInputs {
     }
 
     private static void configureCombo(JComboBox<?> combo) {
+        DatabaseUi.installFocusVisibility(combo);
         combo.setRenderer(new DefaultListCellRenderer() {
             @Override public Component getListCellRendererComponent(JList<?> list, Object value, int index,
                                                                     boolean selected, boolean focus) {
@@ -158,7 +159,8 @@ public final class DatabaseInputs {
                 g.setColor(input.getParent() == null ? input.getBackground() : input.getParent().getBackground());
                 g.fill(corners);
                 String state = input instanceof JComponent component ? String.valueOf(outline(component)) : "";
-                boolean focus = focused(input);
+                boolean focus = focused(input) && (!(input instanceof JComboBox<?> combo)
+                        || combo.isEditable() || DatabaseUi.isFocusVisible(combo));
                 Color color = "error".equalsIgnoreCase(state) ? JBColor.namedColor("Component.errorFocusColor", new JBColor(0xD94B4B, 0xF07878))
                         : "warning".equalsIgnoreCase(state) ? JBColor.namedColor("Component.warningFocusColor", new JBColor(0xC98B23, 0xD9A343))
                         : focus ? JBColor.namedColor("Component.focusColor", new JBColor(0x3574F0, 0x548AF7))
@@ -208,6 +210,7 @@ public final class DatabaseInputs {
         InputComboBox(E[] items) { super(items); initialize(); }
         private void initialize() {
             style(this);
+            DatabaseUi.installFocusVisibility(this);
             initialized = true;
             addPropertyChangeListener("editable", event -> configureCombo(this));
             addPropertyChangeListener("editor", event -> configureCombo(this));

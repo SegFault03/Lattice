@@ -65,6 +65,9 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     private JBLabel statusLabel;
     private JButton saveBtn;
     private JButton revertBtn;
+    private JButton filterBtn;
+    private JButton clearFilterBtn;
+    private JButton delRowBtn;
 
     private DatabaseTable dataTable;
     private EditableTableModel tableModel;
@@ -74,6 +77,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     private int pageSize = 100;
     private long totalRowCount = -1;
     private String appliedWhere = "";
+    private String appliedOrder = "";
     private enum ExportScope { PAGE, SELECTED, ALL_PERSISTED }
     private boolean mutationRunning;
     private boolean readRunning;
@@ -134,12 +138,19 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         orderField = DatabaseInputs.textField(14);
         orderField.setToolTipText("SQL ORDER BY clause; blank uses the primary key when available");
         orderField.addActionListener(e -> loadData(1, pageSize));
-        JButton filterBtn = DatabaseUi.action("Apply", AllIcons.Actions.Execute, "Apply filter and sort");
+        filterBtn = DatabaseUi.action("Apply", AllIcons.Actions.Execute, "Apply filter and sort");
         filterBtn.addActionListener(e -> loadData(1, pageSize));
+        DatabaseUi.onTextChange(whereField, this::updateContextActions);
+        DatabaseUi.onTextChange(orderField, this::updateContextActions);
+        clearFilterBtn = DatabaseUi.action("Clear", Icons.CLEAR, "Clear WHERE and ORDER BY clauses");
+        clearFilterBtn.addActionListener(event -> {
+            whereField.setText("");
+            orderField.setText("");
+        });
         JBLabel whereLabel = new JBLabel("WHERE");
         JBLabel orderLabel = new JBLabel("ORDER BY");
         JPanel filters = new TableFilterPanel(DatabaseUi.labeledInput(whereLabel, whereField),
-                DatabaseUi.labeledInput(orderLabel, orderField), filterBtn);
+                DatabaseUi.labeledInput(orderLabel, orderField), DatabaseUi.group(filterBtn, clearFilterBtn));
         filters.setBorder(BorderFactory.createCompoundBorder(
                 JBUI.Borders.customLineBottom(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR),
                 JBUI.Borders.empty(2, 12, 6, 12)));
@@ -163,7 +174,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             }
         });
 
-        JButton delRowBtn = DatabaseUi.action("", AllIcons.General.Remove, "Delete selected rows");
+        delRowBtn = DatabaseUi.action("", AllIcons.General.Remove, "Delete selected rows");
         delRowBtn.setToolTipText("Delete selected rows immediately after confirmation");
         delRowBtn.addActionListener(e -> deleteSelectedRows());
         JMenuItem nullBtn=new JMenuItem("Set to NULL");
@@ -235,7 +246,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         JComponent toolbar = DatabaseActionToolbar.create(this, "Table actions",
                 refreshBtn, null, addRowBtn, delRowBtn, null, saveBtn, revertBtn, null,
                 exportBtn, consoleBtn, optionsBtn, null, autoRefreshCombo);
-        operationControls.addAll(List.of(refreshBtn, filterBtn, addRowBtn, delRowBtn, exportBtn,
+        operationControls.addAll(List.of(refreshBtn, filterBtn, clearFilterBtn, addRowBtn, delRowBtn, exportBtn,
                 consoleBtn, optionsBtn, autoRefreshCombo, whereField, orderField,
                 pageSizeCombo, prevPageBtn, nextPageBtn));
         heading.add(toolbar, BorderLayout.NORTH);
@@ -302,11 +313,29 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         footer.add(detailsAndNavigation, BorderLayout.CENTER);
         add(footer, BorderLayout.SOUTH);
         dataTable.getSelectionModel().addListSelectionListener(event -> {
-            if (!event.getValueIsAdjusting()) updateValidationDetails(tableModel.getValidationErrors());
+            if (!event.getValueIsAdjusting()) {
+                updateValidationDetails(tableModel.getValidationErrors());
+                updateContextActions();
+            }
         });
         dataTable.getColumnModel().getSelectionModel().addListSelectionListener(event -> {
             if (!event.getValueIsAdjusting()) updateValidationDetails(tableModel.getValidationErrors());
         });
+        tableModel.addTableModelListener(event -> updateContextActions());
+        updateContextActions();
+    }
+
+    private void updateContextActions() {
+        if (dataTable == null) return;
+        boolean available = !isBusy() && !disposed;
+        delRowBtn.setEnabled(available && dataTable.getSelectedRowCount() > 0);
+        clearFilterBtn.setEnabled(available && (!whereField.getText().isEmpty() || !orderField.getText().isEmpty()));
+        filterBtn.setEnabled(available && !tableModel.hasPendingChanges()
+                && canApplyFilter(whereField.getText(), orderField.getText(), appliedWhere, appliedOrder));
+    }
+
+    static boolean canApplyFilter(String where, String order, String appliedWhere, String appliedOrder) {
+        return !where.isBlank() || !order.isBlank() || !appliedWhere.isBlank() || !appliedOrder.isBlank();
     }
 
     private void onAutoRefreshChanged() {
@@ -390,6 +419,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     tableMetadata.setColumns(cols);
                     totalRowCount = knownCount;
                     appliedWhere = where;
+                    appliedOrder = order;
                     currentPage = requestedPage;
                     pageSize = requestedSize;
                     tableModel.setData(result.getColumnNames(), result.getColumnTypes(), result.getRows());
@@ -489,6 +519,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 saveBtn.isEnabled() ? DatabaseUi.POSITIVE_ACTION_COLOR : null
         );
         updateValidationDetails(errors);
+        updateContextActions();
     }
 
     private void updateValidationDetails(Map<CellCoord, String> errors) {
@@ -802,6 +833,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         }
         dataTable.setEnabled(!isBusy());
         updatePendingChangesState();
+        updateContextActions();
     }
 
     private void showExportMenu(Component invoker) {
@@ -822,8 +854,13 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
 
     private void addExportFormats(JPopupMenu menu,String label,ExportScope scope) {
         JMenu submenu=DatabaseUi.submenu(label);
+        boolean available = !isBusy() && !disposed
+                && (scope != ExportScope.SELECTED || dataTable.getSelectedRowCount() > 0)
+                && (scope != ExportScope.PAGE || tableModel.getRowCount() > 0);
+        submenu.setEnabled(available);
         for(String format:new String[]{"csv","json","sql"}) {
             JMenuItem item=new JMenuItem(format.toUpperCase(java.util.Locale.ROOT) + "…");
+            item.setEnabled(available);
             item.addActionListener(event -> exportData(format,scope)); submenu.add(item);
         }
         menu.add(submenu);

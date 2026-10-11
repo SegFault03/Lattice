@@ -44,6 +44,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     private JComboBox<String> databaseCombo;
     private JBTextArea editorArea;
     private JButton runBtn;
+    private JButton clearBtn;
     private JComboBox<QueryHistoryEntry> historyCombo;
     private JTabbedPane resultsTabs;
     private DatabaseTable resultsTable;
@@ -97,7 +98,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         resultLimit = DatabaseInputs.comboBox(new Integer[]{100, 1000, 10000});
         resultLimit.setSelectedItem(1000);
         resultLimit.setToolTipText("Maximum rows returned by the next query");
-        JButton clearBtn = DatabaseUi.action("Clear", Icons.CLEAR, "Clear query text");
+        clearBtn = DatabaseUi.action("Clear", Icons.CLEAR, "Clear query text");
         clearBtn.addActionListener(e -> editorArea.setText(""));
         JComponent toolbar = DatabaseActionToolbar.create(this, "SQL actions", runBtn, cancelBtn, null,
                 clearBtn, null, DatabaseActionToolbar.picker("Database", databaseCombo));
@@ -148,6 +149,9 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         editorArea.setTabSize(4);
         editorArea.setText("-- " + config.getName() + "\n-- Write your query and press " + runShortcut + " to execute\n\n");
         editorArea.setCaretPosition(editorArea.getText().length());
+        DatabaseUi.onTextChange(editorArea, this::updateRunEnabled);
+        editorArea.addCaretListener(event -> updateRunEnabled());
+        updateRunEnabled();
 
         // Keyboard Shortcut: Ctrl+Enter / Cmd+Enter to Run
         KeyStroke runKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, menuShortcut);
@@ -260,12 +264,9 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
 
     private void executeCurrentSql() {
         if (running || loadingDatabases || disposed) return;
-        String sql = editorArea.getSelectedText();
-        if (sql == null || sql.trim().isEmpty()) {
-            sql = editorArea.getText().trim();
-        }
+        String sql = currentSql();
 
-        if (sql.isEmpty()) {
+        if (!hasExecutableSql(sql)) {
             return;
         }
 
@@ -366,10 +367,40 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
             resultsTabs.setTitleAt(0, "Previous results");
             resultsTabs.setToolTipTextAt(0, "These results are from the last successful query");
         }
-        runBtn.setEnabled(!running && !loadingDatabases);
+        updateRunEnabled();
         cancelBtn.setEnabled(running);
         databaseCombo.setEnabled(!running && !loadingDatabases);
         resultLimit.setEnabled(!running);
+    }
+
+    private String currentSql() {
+        String text = editorArea.getText();
+        // Document listeners may run before the caret is clamped after a replacement.
+        int start = Math.min(editorArea.getSelectionStart(), text.length());
+        int end = Math.min(editorArea.getSelectionEnd(), text.length());
+        String selected = text.substring(start, end);
+        return selected.isBlank() ? text.trim() : selected.trim();
+    }
+
+    private void updateRunEnabled() {
+        runBtn.setEnabled(!running && !loadingDatabases && !disposed && hasExecutableSql(currentSql()));
+        clearBtn.setEnabled(!running && !disposed && !editorArea.getText().isEmpty());
+    }
+
+    /** Introductory comments and empty statement separators are not a query. */
+    static boolean hasExecutableSql(String sql) {
+        for (int i = 0; i < sql.length();) {
+            char c = sql.charAt(i);
+            if (Character.isWhitespace(c) || c == ';') { i++; continue; }
+            if (sql.startsWith("--", i) || c == '#') {
+                while (i < sql.length() && sql.charAt(i) != '\n' && sql.charAt(i) != '\r') i++;
+            } else if (sql.startsWith("/*", i) && !sql.startsWith("/*!", i)) {
+                int end = sql.indexOf("*/", i + 2);
+                if (end < 0) return false;
+                i = end + 2;
+            } else return true;
+        }
+        return false;
     }
 
     private void cancelExecution() {

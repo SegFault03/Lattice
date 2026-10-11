@@ -12,7 +12,7 @@ import javax.swing.table.JTableHeader;
 import java.awt.*;
 import java.awt.event.MouseEvent;
 
-/** Shared database grids with a persistent header band and no hover surfaces. */
+/** Shared database grids with column-aligned headers and no hover surfaces. */
 public final class DatabaseTable extends JBTable {
     public DatabaseTable(TableModel model) {
         super(model);
@@ -42,9 +42,22 @@ public final class DatabaseTable extends JBTable {
             }
             @Override public String getToolTipText(MouseEvent event) { return null; }
             @Override public Point getToolTipLocation(MouseEvent event) { return null; }
+            @Override protected void paintComponent(Graphics graphics) {
+                // Header viewports can stretch beyond an AUTO_RESIZE_OFF table.
+                // Keep native header painting within the actual column bounds.
+                Graphics2D copy = (Graphics2D)graphics.create();
+                try {
+                    copy.setColor(DatabaseTable.this.getBackground());
+                    copy.fillRect(0, 0, getWidth(), getHeight());
+                    int width = getColumnModel().getTotalColumnWidth();
+                    int x = getComponentOrientation().isLeftToRight() ? 0 : getWidth() - width;
+                    copy.clipRect(x, 0, width, getHeight());
+                    super.paintComponent(copy);
+                } finally { copy.dispose(); }
+            }
             @Override public void updateUI() {
                 super.updateUI();
-                if (getParent() instanceof JViewport viewport) viewport.setBackground(getBackground());
+                if (getParent() instanceof JViewport viewport) viewport.setBackground(DatabaseTable.this.getBackground());
             }
         };
     }
@@ -64,7 +77,7 @@ public final class DatabaseTable extends JBTable {
         JBScrollPane scroll = new JBScrollPane(this);
         scroll.setBorder(JBUI.Borders.empty());
         scroll.setColumnHeaderView(getTableHeader());
-        scroll.getColumnHeader().setBackground(getTableHeader().getBackground());
+        scroll.getColumnHeader().setBackground(getBackground());
         scroll.getViewport().setBackground(getBackground());
         return scroll;
     }
