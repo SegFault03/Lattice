@@ -661,7 +661,15 @@ class IntellijUiScreenshotTest {
             waitUntil("empty table data loaded") { tableEditor.hasSubtext("0 rows") }
             check(dataGrid.rowCount() == 0) { "New LATTICE_PEOPLE table should start empty" }
             captureScreen(screenshotsDirectory.resolve("table-editor-empty.png"))
-            if (review) assertFilterLayout(tableEditor, 1)
+            if (review) {
+                assertFilterLayout(tableEditor, 1)
+                val filterReviewWidth = twoRowFilterWindowWidth(frame, tableEditor)
+                check(filterReviewWidth <= displayBounds.width - 40) { "Display cannot fit the two-row filter review: $filterReviewWidth" }
+                frame.resize(filterReviewWidth, mediumHeight)
+                captureScreen(screenshotsDirectory.resolve("table-medium-filters-initial.png"))
+                assertFilterLayout(tableEditor, 2)
+                frame.resize(normalWidth, normalHeight)
+            }
 
             val commitButton = tableEditor.x { byAccessibleName("Commit pending changes to the database") }.waitFound()
             val revertButton = tableEditor.x { byAccessibleName("Revert pending changes") }.waitFound()
@@ -1079,23 +1087,7 @@ class IntellijUiScreenshotTest {
                 tableEditor.x { byVisibleText("Apply") }.waitFound().click()
                 waitUntil("narrow filter reset") { dataGrid.rowCount() == 1 }
                 val ideWindow = cast(frame.component, Window::class)
-                // Clear adds to the action group's width; font/theme metrics also
-                // vary by OS. Exercise the two-row layout using its live controls.
-                val filters = tableEditor.x { byJavaClass("com.segfault03.ideadb.ui.TableFilterPanel") }.waitFound()
-                val orderInput = tableEditor.x(JTextFieldUI::class.java) {
-                    and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("ORDER BY"))
-                }.waitFound()
-                val applyFilter = tableEditor.x { byAccessibleName("Apply filter and sort") }.waitFound()
-                val mediumWidth = withContext(OnDispatcher.EDT) {
-                    val whereGroup = cast(cast(whereInput.component, LiveSwingComponent::class).getParent(), LiveSwingComponent::class)
-                    val orderGroup = cast(cast(orderInput.component, LiveSwingComponent::class).getParent(), LiveSwingComponent::class)
-                    val actions = cast(cast(applyFilter.component, LiveSwingComponent::class).getParent(), LiveSwingComponent::class)
-                    val insets = cast(filters.component, LiveSwingComponent::class).getInsets()
-                    val targetWidth = orderGroup.getMinimumSize().getWidth().toInt() +
-                        actions.getPreferredSize().getWidth().toInt() + 8 +
-                        whereGroup.getMinimumSize().getWidth().toInt() / 2 + insets.left + insets.right
-                    frame.component.width - filters.component.width + targetWidth
-                }
+                val mediumWidth = twoRowFilterWindowWidth(frame, tableEditor)
                 check(mediumWidth <= displayBounds.width - 40) { "Display cannot fit the two-row filter review: $mediumWidth" }
                 frame.resize(mediumWidth, mediumHeight)
                 captureScreen(screenshotsDirectory.resolve("table-medium-filters.png"))
@@ -1404,6 +1396,29 @@ class IntellijUiScreenshotTest {
             val ratio = contrastRatio(live.getForeground().getRGB(), live.getBackground().getRGB())
             check(ratio >= 4.5) { "Selected driver summary contrast is too low: $ratio" }
             println("P3 driver summary: $expected; live palette contrast $ratio:1")
+        }
+    }
+
+    private fun twoRowFilterWindowWidth(frame: IdeaFrameUI, editor: UiComponent): Int {
+        // Clear adds to the action group; font/theme metrics vary by OS.
+        val filters = editor.x { byJavaClass("com.segfault03.ideadb.ui.TableFilterPanel") }.waitFound()
+        val where = editor.x(JTextFieldUI::class.java) {
+            and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("WHERE"))
+        }.waitFound()
+        val order = editor.x(JTextFieldUI::class.java) {
+            and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("ORDER BY"))
+        }.waitFound()
+        val apply = editor.x { byAccessibleName("Apply filter and sort") }.waitFound()
+        return editor.driver.withContext(OnDispatcher.EDT) {
+            val whereGroup = cast(cast(where.component, LiveSwingComponent::class).getParent(), LiveSwingComponent::class)
+            val orderGroup = cast(cast(order.component, LiveSwingComponent::class).getParent(), LiveSwingComponent::class)
+            val actions = cast(cast(apply.component, LiveSwingComponent::class).getParent(), LiveSwingComponent::class)
+            // The filter panel has symmetric horizontal padding. Its group's X
+            // position measures that padding without crossing Driver's Insets API.
+            val targetWidth = orderGroup.getMinimumSize().getWidth().toInt() +
+                actions.getPreferredSize().getWidth().toInt() + 8 +
+                whereGroup.getMinimumSize().getWidth().toInt() / 2 + 2 * whereGroup.getX()
+            frame.component.width - filters.component.width + targetWidth
         }
     }
 
@@ -1841,7 +1856,7 @@ interface LiveSwingComponent {
     fun getPreferredSize(): LiveDimension
     fun getMinimumSize(): LiveDimension
     fun getParent(): com.intellij.driver.sdk.ui.remote.Component
-    fun getInsets(): java.awt.Insets
+    fun getX(): Int
     fun getClientProperty(key: String): Boolean?
     fun getForeground(): LiveColor
     fun getBackground(): LiveColor
