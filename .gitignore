@@ -50,6 +50,7 @@ test-binaries/
 # Workstation-specific instructions
 TESTING-INSTRUCTIONS.md
 AGENTS
+AGENTS.md
 
 # Downloaded tools, native binaries and archives
 /lib/
