@@ -187,7 +187,7 @@ options:
 
 ## ui-preview.ps1
 
-Render the production Swing UI without opening an IDE; refresh the five tracked README screenshots.
+Render the production Swing UI without opening an IDE; refresh the five tracked README screenshots at higher pixel density (at least 1200 × 760), preserving aspect ratios and README display sizes. The same PNGs can be uploaded to Marketplace.
 
 ```powershell
 .\scripts\windows\ui-preview.ps1 --all-previews @deps

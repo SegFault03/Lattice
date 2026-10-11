@@ -39,23 +39,23 @@ Previews use sample data. These five screens are the featured UI previews.
 
 ### Side panel
 
-![Database side panel with schemas, tables, views and columns](screenshots/side-panel.png)
+<img src="screenshots/side-panel.png" alt="Database side panel with schemas, tables, views and columns" width="340">
 
 ### Connection dialog
 
-![Connection dialog with grouped connection, authentication and driver settings](screenshots/connection-dialog.png)
+<img src="screenshots/connection-dialog.png" alt="Connection dialog with grouped connection, authentication and driver settings" width="600">
 
 ### Table view
 
-![Table data grid with filtering and pagination](screenshots/table-view.png)
+<img src="screenshots/table-view.png" alt="Table data grid with filtering and pagination" width="1100">
 
 ### Editing a table
 
-![Table editor with modified cells, a new row and pending changes](screenshots/table-editing.png)
+<img src="screenshots/table-editing.png" alt="Table editor with modified cells, a new row and pending changes" width="1100">
 
 ### SQL console
 
-![SQL console with a query and its results](screenshots/sql-console.png)
+<img src="screenshots/sql-console.png" alt="SQL console with a query and its results" width="1100">
 
 ## Requirements and compatibility
 

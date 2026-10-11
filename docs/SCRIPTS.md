@@ -90,6 +90,8 @@ Use `--java-home PATH`, `--java8-home PATH`, `--ide-home PATH` for the build bas
 
 ## UI previews and screenshots
 
+The five featured PNGs are rendered at higher pixel density to meet Marketplace's 1200 × 760 recommendation while retaining their aspect ratios. README display widths remain unchanged. These files can be uploaded directly to Marketplace.
+
 For quick component layout feedback and the five README images, run:
 
 ```sh
