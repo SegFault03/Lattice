@@ -7,9 +7,9 @@ All commands run from the repository root unless a guide says otherwise.
 | [Contributing](CONTRIBUTING.md) | Build requirements, tests and development practices |
 | [Scripts](SCRIPTS.md) | Test, UI, deployment and release helpers |
 | [Windows scripts](WINDOWS_SCRIPTS.md) | Every local Windows command and its complete options |
-| [Windows scripts](WINDOWS_SCRIPTS.md) | Every local Windows command and its complete options |
 | [UI previews](UI_PREVIEW.md) | Render production Swing screens and refresh the five README images |
 | [Releasing](RELEASING.md) | Versioning, tags, validation and publication |
+| [Marketplace](MARKETPLACE.md) | Signing, public releases and hidden-channel smoke tests |
 | [Changelog](CHANGELOG.md) | Versioned release notes |
 | [Issue reporting](ISSUE.md) | Bug reports and feature requests |
 | [Security reporting](SECURITY.md) | Private vulnerability reporting |

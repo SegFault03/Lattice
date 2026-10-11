@@ -17,8 +17,8 @@ Configure signing secrets before tagged releases. See [signing and Marketplace s
 5. Create and push a new annotated tag, for example:
 
 ```bash
-git tag -a v0.0.1-alpha -m "Lattice 0.0.1-alpha"
-git push origin v0.0.1-alpha
+git tag -a v0.0.2-alpha -m "Lattice 0.0.2-alpha"
+git push origin v0.0.2-alpha
 ```
 
 These are release commands for the maintainer; no tag is created by the preparation scripts. Tags use `vX.Y.Z` or a SemVer prerelease such as `vX.Y.Z-alpha` / `vX.Y.Z-rc.1`, without numeric leading zeroes. Build metadata suffixes are not supported. Release builds derive the plugin/ZIP version from the tag, overriding the default property. Prerelease suffixes set GitHub's prerelease flag and disable latest designation. Do not reuse a published tag.
@@ -33,10 +33,11 @@ The tag workflow:
 4. Runs the complete real IntelliJ UI scenario in Dark theme and the focused Light-theme review at the release version, signs and verifies the ZIP, validates archive paths, descriptor, bundled drivers/notices and bytecode, then generates SHA-256 asset checksums. The source-preparation step supplies the actual archive filename to validation, artifact upload and publication.
 5. Verifies that exact ZIP against IDEA 2025.1, 2025.2 and 2025.3 in separate jobs with checksum-verified official SDK downloads. Every verdict must be Compatible.
 6. Runs the JDBC/Java 8 matrix and Windows/macOS baseline checks; publishes a GitHub Release only when every build/test/verification job succeeds.
+7. After GitHub publication succeeds, submits the same signed ZIP to JetBrains Marketplace's public Stable channel with `isHidden=false`. This includes alpha/RC tags: GitHub's prerelease flag does not select a Marketplace channel. Marketplace visibility follows JetBrains approval.
 
-Release assets are the plugin ZIP, the unmodified MySQL Connector/J 26.7.0 corresponding-source archive and `SHA256SUMS`. The description combines the matching changelog section (or populated Unreleased notes) with all commits since the preceding reachable lower-version release tag. The first release includes the reachable commit history.
+Release assets are the plugin ZIP, the unmodified MySQL Connector/J 26.7.0 corresponding-source archive and `SHA256SUMS`. The GitHub description combines the matching changelog section (or populated Unreleased notes) with all commits since the preceding reachable lower-version release tag. Marketplace What's New uses the same patch notes rendered as HTML headings, bullet lists and paragraphs; inline code is supported and raw HTML is escaped. The first release includes the reachable commit history.
 
-Build/test/verification failures publish no release. The publish job uploads assets to a draft, then makes it public after successful upload. A failed publish can leave a draft; remove that failed draft before retrying. Diagnostics and candidate artifacts are retained for seven days. A retry fails if a release already exists; it does not overwrite published assets. Use a new version for changed published artifacts. The tag workflow does not publish to JetBrains Marketplace or perform project-close/dynamic-unload UI tests. Marketplace submission is limited to the explicit manual hidden smoke mode.
+Build/test/verification failures publish no release. The publish job uploads assets to a draft, then makes it public after successful upload. A failed GitHub publish can leave a draft; remove that failed draft before retrying. Diagnostics and candidate artifacts are retained for seven days. A GitHub publish retry fails if a release already exists; it does not overwrite published assets. Use a new version for changed published artifacts. A failed Marketplace submission leaves the GitHub Release intact: check whether Marketplace accepted the version, then rerun only the Marketplace job if it is absent. Do not rerun a successful GitHub publish job. The workflow does not perform project-close/dynamic-unload UI tests.
 
 ## Local dry run
 

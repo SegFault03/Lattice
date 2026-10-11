@@ -17,19 +17,21 @@ BASH = shutil.which("bash") if os.name != "nt" else next(
 
 
 def upload_script():
-    step = WORKFLOW.split("      - name: Upload signed ZIP to hidden smoke channel\n", 1)[1]
+    step = WORKFLOW.split("      - name: Upload signed ZIP to Marketplace\n", 1)[1]
     return textwrap.dedent(step.split("        run: |\n", 1)[1].split("      - name:", 1)[0])
 
 
 @unittest.skipUnless(BASH, "Bash required to exercise GitHub's upload step")
 class MarketplaceWorkflowTests(unittest.TestCase):
-    def run_upload(self, token="test-token", corrupt=False, transport_status=0):
+    def run_upload(self, token="test-token", corrupt=False, transport_status=0,
+                   channel="smoke", hidden="true", version=None):
+        version = version or ("0.0.2-smoke.1" if channel else "0.0.2-alpha")
         with tempfile.TemporaryDirectory(prefix="lattice-marketplace-test-") as directory:
             root = Path(directory)
             (root / "build/distributions").mkdir(parents=True)
             (root / "build/release").mkdir()
             (root / "bin").mkdir()
-            archive = root / "build/distributions/Lattice-0.0.2-smoke.1.zip"
+            archive = root / f"build/distributions/Lattice-{version}.zip"
             archive.write_bytes(b"signed candidate fixture")
             digest = hashlib.sha256(archive.read_bytes()).hexdigest()
             (root / "build/release/SHA256SUMS").write_bytes(
@@ -41,7 +43,8 @@ class MarketplaceWorkflowTests(unittest.TestCase):
                             'printf \'{"id":123}\' > build/release/marketplace-upload.json\n'
                             'exit "${CURL_STATUS:-0}"\n', encoding="utf-8", newline="\n")
             curl.chmod(0o755)
-            env = dict(os.environ, MARKETPLACE_TOKEN=token, RELEASE_VERSION="0.0.2-smoke.1",
+            env = dict(os.environ, MARKETPLACE_TOKEN=token, RELEASE_VERSION=version,
+                       MARKETPLACE_CHANNEL=channel, MARKETPLACE_HIDDEN=hidden,
                        GITHUB_STEP_SUMMARY="summary.md", CURL_STATUS=str(transport_status))
             result = subprocess.run([BASH, "--noprofile", "--norc", "-e", "-o", "pipefail", "-c",
                                      'export PATH="$PWD/bin:$PATH"\n' + upload_script()],
@@ -60,7 +63,24 @@ class MarketplaceWorkflowTests(unittest.TestCase):
         self.assertIn("file=@build/distributions/Lattice-0.0.2-smoke.1.zip", args)
         self.assertNotIn("test-token", args)
         self.assertIn("Authorization: Bearer test-token", header)
-        self.assertIn("No GitHub Release was created", summary)
+        self.assertIn("channel `smoke`, with `isHidden=true`", summary)
+
+    def test_tagged_release_uses_public_stable_channel(self):
+        result, args, _, summary = self.run_upload(channel="", hidden="false")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("channel=\n", args)
+        self.assertIn("isHidden=false", args)
+        self.assertIn("file=@build/distributions/Lattice-0.0.2-alpha.zip", args)
+        self.assertIn("channel `Stable`, with `isHidden=false`", summary)
+
+    def test_invalid_channel_visibility_combination_prevents_upload(self):
+        for options in ({"hidden": "false"}, {"channel": "", "hidden": "true"},
+                        {"channel": "unknown"}, {"version": "0.0.2"}):
+            with self.subTest(options=options):
+                result, args, _, summary = self.run_upload(**options)
+                self.assertNotEqual(0, result.returncode)
+                self.assertIsNone(args)
+                self.assertIsNone(summary)
 
     def test_missing_token_or_corrupt_candidate_prevents_upload(self):
         for options in ({"token": ""}, {"corrupt": True}):
@@ -76,10 +96,16 @@ class MarketplaceWorkflowTests(unittest.TestCase):
         self.assertIsNotNone(args)
         self.assertIsNone(summary)
 
-    def test_smoke_submission_requires_all_release_gates_and_manual_opt_in(self):
-        job = WORKFLOW.split("  marketplace-smoke:\n", 1)[1]
-        self.assertIn("needs: [build, cross-platform-checks, verify, database-compatibility]", job)
-        self.assertIn("if: github.event_name == 'workflow_dispatch' && inputs.marketplace_smoke", job)
+    def test_submission_requires_release_gates_and_successful_github_publish_or_smoke_opt_in(self):
+        job = WORKFLOW.split("  marketplace:\n", 1)[1]
+        self.assertIn("needs: [build, cross-platform-checks, verify, database-compatibility, publish]", job)
+        self.assertIn("always()", job)
+        for gate in ("build", "cross-platform-checks", "verify", "database-compatibility", "publish"):
+            self.assertIn(f"needs.{gate}.result == 'success'", job)
+        self.assertIn("github.event_name == 'workflow_dispatch' && inputs.marketplace_smoke", job)
+        self.assertIn("github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')", job)
+        self.assertIn("MARKETPLACE_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && 'smoke' || '' }}", job)
+        self.assertIn("MARKETPLACE_HIDDEN: ${{ github.event_name == 'workflow_dispatch' }}", job)
         self.assertNotIn("gh release", job)
-        publish = WORKFLOW.split("  publish:\n", 1)[1].split("  marketplace-smoke:\n", 1)[0]
+        publish = WORKFLOW.split("  publish:\n", 1)[1].split("  marketplace:\n", 1)[0]
         self.assertIn("github.event_name == 'push'", publish)

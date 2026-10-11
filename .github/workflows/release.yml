@@ -267,9 +267,15 @@ jobs:
             --notes-file build/release/release-notes.md "${release_flags[@]}"
           gh release edit "$GITHUB_REF_NAME" --draft=false
 
-  marketplace-smoke:
-    needs: [build, cross-platform-checks, verify, database-compatibility]
-    if: github.event_name == 'workflow_dispatch' && inputs.marketplace_smoke
+  marketplace:
+    needs: [build, cross-platform-checks, verify, database-compatibility, publish]
+    # always() permits smoke runs when the GitHub publish job is intentionally skipped.
+    if: >-
+      always() && !cancelled() && needs.build.result == 'success' &&
+      needs.cross-platform-checks.result == 'success' && needs.verify.result == 'success' &&
+      needs.database-compatibility.result == 'success' &&
+      ((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.publish.result == 'success') ||
+       (github.event_name == 'workflow_dispatch' && inputs.marketplace_smoke))
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -277,28 +283,36 @@ jobs:
         with:
           name: release-candidate
           path: build
-      - name: Upload signed ZIP to hidden smoke channel
+      - name: Upload signed ZIP to Marketplace
         env:
           MARKETPLACE_TOKEN: ${{ secrets.JETBRAINS_MARKETPLACE_TOKEN }}
           RELEASE_VERSION: ${{ needs.build.outputs.version }}
+          MARKETPLACE_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && 'smoke' || '' }}
+          MARKETPLACE_HIDDEN: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           test -n "$MARKETPLACE_TOKEN" || { echo 'Missing JETBRAINS_MARKETPLACE_TOKEN secret' >&2; exit 1; }
+          # Reject unexpected combinations instead of accidentally exposing a smoke build.
+          if [[ "$MARKETPLACE_CHANNEL" == "smoke" ]]; then
+            [[ "$MARKETPLACE_HIDDEN" == "true" && "$RELEASE_VERSION" == *-* ]]
+          else
+            [[ -z "$MARKETPLACE_CHANNEL" && "$MARKETPLACE_HIDDEN" == "false" ]]
+          fi
           (cd build/distributions && sha256sum --check --ignore-missing ../release/SHA256SUMS)
           # Keep the token out of command arguments and do not retry an ambiguous upload.
           printf 'header = "Authorization: Bearer %s"\n' "$MARKETPLACE_TOKEN" | \
             curl --config - --fail-with-body --silent --show-error --max-time 300 \
               --form-string 'xmlId=com.segfault03.lattice' \
               --form "file=@build/distributions/Lattice-$RELEASE_VERSION.zip" \
-              --form-string 'channel=smoke' --form-string 'isHidden=true' \
+              --form-string "channel=$MARKETPLACE_CHANNEL" --form-string "isHidden=$MARKETPLACE_HIDDEN" \
               https://plugins.jetbrains.com/api/updates/upload \
               --output build/release/marketplace-upload.json
           cat build/release/marketplace-upload.json
-          printf '### Marketplace smoke submission\n\nSubmitted Lattice %s to channel `smoke`, with `isHidden=true`. No GitHub Release was created. JetBrains approval is still required.\n' "$RELEASE_VERSION" >> "$GITHUB_STEP_SUMMARY"
+          printf '### Marketplace submission\n\nSubmitted Lattice %s to channel `%s`, with `isHidden=%s`. JetBrains approval is still required.\n' "$RELEASE_VERSION" "${MARKETPLACE_CHANNEL:-Stable}" "$MARKETPLACE_HIDDEN" >> "$GITHUB_STEP_SUMMARY"
       - name: Retain Marketplace response
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: marketplace-smoke-response
+          name: marketplace-response
           path: build/release/marketplace-upload.json
           if-no-files-found: ignore
           retention-days: 7

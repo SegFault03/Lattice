@@ -434,7 +434,7 @@ Validate stable/prerelease version metadata and generate release notes from Git 
 .\scripts\windows\release.ps1 --version $version @deps
 ```
 
-`--version` overrides pluginVersion in gradle.properties; `--tag` checks release tag metadata. `--root` defaults to this repository and `--output` to build/release/. `--git` selects an executable; portable MinGit is downloaded on Windows if needed. The command writes release-notes.md, patch-notes.html and version.txt. It does not commit, tag, push or publish.
+`--version` overrides pluginVersion in gradle.properties; `--tag` checks release tag metadata. `--root` defaults to this repository and `--output` to build/release/. `--git` selects an executable; portable MinGit is downloaded on Windows if needed. The command writes release-notes.md, patch-notes.html and version.txt. Marketplace HTML supports changelog headings, flat bullet lists, paragraphs and inline code; raw HTML is escaped. It does not commit, tag, push or publish.
 
 Complete options (forwarded unchanged to Python):
 
