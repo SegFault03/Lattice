@@ -1,5 +1,8 @@
 package com.segfault03.ideadb.ui;
 
+import com.segfault03.ideadb.provider.DatabaseFeature;
+import com.segfault03.ideadb.provider.DatabaseProviders;
+
 import com.intellij.icons.AllIcons;
 import com.intellij.util.ui.JBUI;
 import com.intellij.openapi.project.Project;
@@ -242,8 +245,9 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 consoleItem.addActionListener(e -> DatabaseEditorManager.getInstance(project).openConsole(cfg, null, null));
                 menu.add(consoleItem);
 
-                JMenuItem createDbItem = new JMenuItem("Create " + (cfg.getType() == DatabaseType.MYSQL ? "database…" : "schema…"));
+                JMenuItem createDbItem = new JMenuItem("Create " + DatabaseProviders.get(cfg.getType()).namespaceLabel() + "…");
                 createDbItem.addActionListener(e -> doCreateDatabase(cfg, node, data));
+                createDbItem.setEnabled(DatabaseProviders.get(cfg.getType()).features().contains(DatabaseFeature.CREATE_NAMESPACE));
                 menu.add(createDbItem);
 
                 menu.addSeparator();
@@ -268,10 +272,12 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
 
                 JMenuItem createTableItem = new JMenuItem("Create table…", Icons.TABLE);
                 createTableItem.addActionListener(e -> doCreateTable(cfg, dbName, node));
+                createTableItem.setEnabled(DatabaseProviders.get(cfg.getType()).features().contains(DatabaseFeature.CREATE_TABLE));
                 menu.add(createTableItem);
 
-                JMenuItem dropDbItem = new JMenuItem("Drop " + (cfg.getType() == DatabaseType.MYSQL ? "database…" : "schema…"));
+                JMenuItem dropDbItem = new JMenuItem("Drop " + DatabaseProviders.get(cfg.getType()).namespaceLabel() + "…");
                 dropDbItem.addActionListener(e -> doDropDatabase(cfg, dbName, node));
+                dropDbItem.setEnabled(DatabaseProviders.get(cfg.getType()).features().contains(DatabaseFeature.DROP_NAMESPACE));
                 menu.add(dropDbItem);
 
                 menu.addSeparator();
@@ -297,7 +303,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
 
                 JMenuItem consoleItem = new JMenuItem("Open in SQL console", Icons.CONSOLE);
                 consoleItem.addActionListener(e -> {
-                    String query = "SELECT * FROM " + DdlService.formatTable(cfg,dbName,tm.getName()) + " LIMIT 100;";
+                    String query = DdlService.getInstance().buildSelectSql(cfg, dbName, tm.getName(), List.of());
                     DatabaseEditorManager.getInstance(project).openConsole(cfg, dbName, query);
                 });
                 menu.add(consoleItem);
@@ -314,14 +320,17 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                             }
                         }
                     });
+                    alterItem.setEnabled(DatabaseProviders.get(cfg.getType()).features().contains(DatabaseFeature.MODIFY_COLUMN));
                     menu.add(alterItem);
 
                     JMenuItem truncateItem = new JMenuItem("Truncate table…", AllIcons.General.Remove);
                     truncateItem.addActionListener(e -> doTruncateTable(cfg, dbName, tm.getName()));
+                    truncateItem.setEnabled(DatabaseProviders.get(cfg.getType()).features().contains(DatabaseFeature.TRUNCATE_TABLE));
                     menu.add(truncateItem);
 
                     JMenuItem dropItem = new JMenuItem("Drop table…", AllIcons.General.Remove);
                     dropItem.addActionListener(e -> doDropTable(cfg, dbName, tm.getName(), node));
+                    dropItem.setEnabled(DatabaseProviders.get(cfg.getType()).features().contains(DatabaseFeature.DROP_TABLE));
                     menu.add(dropItem);
                 }
 
@@ -390,8 +399,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         if (!beginNodeLoad(connNode, data, data.isConnected() ? "Loading databases…" : "Connecting to database…")) return;
         tasks.submit(() -> {
             try {
-                Connection conn = DatabaseConnectionManager.getInstance().getConnection(cfg);
-                List<String> dbs = MetadataService.getInstance().getDatabases(conn, cfg);
+                List<String> dbs = DatabaseConnectionManager.getInstance().executeBrowser(cfg, conn -> MetadataService.getInstance().getDatabases(conn, cfg));
 
                 SwingUtilities.invokeLater(() -> {
                     if (!finishNodeLoad(connNode, data, "Loaded databases", DatabaseUi.Tone.NORMAL)) return;
@@ -427,8 +435,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
 
         tasks.submit(() -> {
             try {
-                Connection conn = DatabaseConnectionManager.getInstance().getConnection(cfg);
-                List<TableMetadata> tables = MetadataService.getInstance().getTables(conn, cfg, dbName);
+                List<TableMetadata> tables = DatabaseConnectionManager.getInstance().executeBrowser(cfg, conn -> MetadataService.getInstance().getTables(conn, cfg, dbName));
 
                 SwingUtilities.invokeLater(() -> {
                     if (!finishNodeLoad(dbNode, data, "Loaded tables", DatabaseUi.Tone.NORMAL)) return;
@@ -482,8 +489,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
 
         tasks.submit(() -> {
             try {
-                Connection conn = DatabaseConnectionManager.getInstance().getConnection(cfg);
-                List<ColumnMetadata> cols = MetadataService.getInstance().getColumns(conn, cfg, dbName, tm.getName());
+                List<ColumnMetadata> cols = DatabaseConnectionManager.getInstance().executeBrowser(cfg, conn -> MetadataService.getInstance().getColumns(conn, cfg, dbName, tm.getName()));
                 SwingUtilities.invokeLater(() -> {
                     if (!finishNodeLoad(tableNode, data, "Loaded columns", DatabaseUi.Tone.NORMAL)) return;
                     tm.setColumns(cols);
@@ -612,7 +618,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         updateExplorerStatus(message, DatabaseUi.Tone.BUSY);
         tasks.submitMutation(() -> {
             try {
-                operation.execute(DatabaseConnectionManager.getInstance().getConnection(config));
+                DatabaseConnectionManager.getInstance().executeBrowser(config, conn -> { operation.execute(conn); return null; });
                 SwingUtilities.invokeLater(() -> {
                     if (disposed || project.isDisposed()) return;
                     mutationRunning = false;
@@ -636,7 +642,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         CreateDatabaseDialog dlg = new CreateDatabaseDialog(project, cfg);
         if (!dlg.showAndGet()) return;
         String dbName = dlg.getDatabaseName();
-        String object = cfg.getType() == DatabaseType.MYSQL ? "database" : "schema";
+        String object = DatabaseProviders.get(cfg.getType()).namespaceLabel();
         runMutation(cfg, "Creating " + object + "…", "Create " + object + " failed",
                 conn -> DdlService.getInstance().createDatabase(conn, cfg, dbName), () -> {
                     Messages.showInfoMessage(project, "Created " + object + " '" + dbName + "'.", "Created");
@@ -646,7 +652,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     }
 
     private void doDropDatabase(ConnectionConfig cfg, String dbName, DefaultMutableTreeNode dbNode) {
-        String object = cfg.getType() == DatabaseType.MYSQL ? "database" : "schema";
+        String object = DatabaseProviders.get(cfg.getType()).namespaceLabel();
         if (!DatabaseUi.confirmDestructive(project, "Drop " + object,
                 "Drop " + object + " '" + dbName + "'?\nAll tables and their data will be permanently deleted.", "Drop " + object)) return;
         runMutation(cfg, "Dropping " + object + "…", "Drop " + object + " failed",

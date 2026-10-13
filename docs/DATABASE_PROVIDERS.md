@@ -1,0 +1,102 @@
+# Database providers
+
+Lattice is a JDBC database client for arbitrary user schemas. Production code uses
+IntelliJ services for application lifecycle and provider interfaces for engine
+behavior. It does not require a Spring application context, mapped entities, or
+repository interfaces.
+
+## Boundaries
+
+| Component | Responsibility |
+|---|---|
+| `DatabaseProviders` | Register built-ins and resolve a provider by persisted type or JDBC URL; reject unknown types |
+| `DatabaseProvider` | Connection defaults, URL construction, initialization, namespace selection, fetch behavior, transaction suitability and value handling |
+| `DriverDescriptor` | Maven coordinates, accepted classes, version/classifier and ordering rules, packaged JAR identification and isolated package namespaces |
+| `SqlDialect` | Identifier quoting, qualified names, pagination, generated DDL/DML and native CREATE retrieval |
+| `MetadataAdapter` | Catalog/schema enumeration, JDBC metadata and engine-specific enrichment |
+| `DatabaseFeature` | Explicitly supported optional operations; providers advertise none by default |
+| `DatabaseNamespace` | Independent catalog and schema identifiers |
+
+MySQL and HSQLDB have separate providers, dialects and metadata adapters. Common
+SQL construction lives in `AbstractSqlDialect`; common JDBC metadata reading
+lives in `JdbcMetadataAdapter`. Engine-specific DDL, compatibility workarounds,
+metadata enrichment, streaming rules and SQL literal encoding stay in their
+implementations. Shared services remain facades to preserve existing callers.
+
+`ConnectionConfig` and `DatabaseType` retain their persisted field/enum identities.
+This refactor requires no settings migration and keeps secrets in PasswordSafe.
+A custom JDBC URL must match the selected provider. The connection manager rejects
+a mismatch before loading a driver; provider type is part of cached connection
+identity so a type change retires existing sessions; the connection dialog infers the selection
+from recognized URL prefixes.
+
+The built-in connection form choices are a generic server form and HSQLDB's
+server/file/memory form. A new server provider can use the generic form and its own
+defaults. A provider with different connection inputs needs an additional form.
+The legacy field names in the Swing dialog and HSQLDB fields in persisted settings
+remain for compatibility.
+
+## Adding another JDBC database
+
+1. Add a stable `DatabaseType` ID and register its provider in `DatabaseProviders`.
+2. Supply a driver descriptor with coordinates, supported version rules, driver
+   classes and packages that must load from the selected JAR.
+3. Implement connection behavior, metadata and a dialect. Reuse common helpers
+   only where their SQL and metadata conventions match the new engine.
+4. Advertise supported `DatabaseFeature` operations. Shared DDL entry points guard
+   these features; explorer menus disable unsupported actions. Version-dependent
+   behavior and table transaction suitability must still be checked against the
+   actual server.
+5. Add a driver dependency if the driver is to be bundled, and update packaging,
+   license notices, compatibility fixtures and product descriptions. Drivers that
+   need multiple external dependency JARs require extending the current single-JAR
+   selection/loading mechanism.
+6. Run the provider contract and end-to-end workflows against the new engine,
+   including legacy driver versions where supported.
+
+The current explorer presents one namespace level. Existing APIs convert its
+selection into a catalog for MySQL or schema for HSQLDB. `DatabaseNamespace` keeps
+both identifiers distinct when qualifying names, but an engine requiring an
+interactive catalog-and-schema hierarchy also needs corresponding explorer and
+service API changes. PostgreSQL and H2 are not implemented by this refactor.
+
+## Connection ownership
+
+- `DatabaseSession` pins one connection to a console and serializes operations.
+  Do not replace it with a fresh pool checkout per query: transactions, temporary
+  tables and session settings can span queries.
+- `executeBrowser` serializes an entire explorer/DDL operation on the cached
+  browser connection. Acquisition alone does not protect subsequent JDBC calls.
+- `openConnection` gives an operation an exclusive connection. The caller owns
+  cleanup. Grid mutations use the existing transaction and rollback machinery;
+  editor reads use `DatabaseTaskScope` for cancellation and cleanup.
+- Driver versions remain isolated by classloader. Do not replace explicit driver
+  selection with unrestricted global `DriverManager` lookup.
+
+Spring Data JDBC/JPA target mapped aggregates/entities and do not solve dynamic
+metadata, SQL dialect differences, selected driver versions or session ownership.
+Spring JDBC can reduce boilerplate but is optional. Consider bounded, lazy HikariCP
+pools for short operations only after measuring connection costs; pools would need
+an adapter around the selected driver and explicit disposal/configuration retirement.
+Console sessions must retain their pinning semantics. No pooling dependency is
+introduced here.
+
+## Validation
+
+`DatabaseProviderTest` checks provider completeness, feature opt-in, URL validation,
+namespace quoting, driver rules, values and concurrent browser serialization.
+`ProviderEndToEndTest` runs the same production-service workflow against embedded
+HSQLDB and live MySQL/HSQLDB servers: create/browse metadata, insert/update/delete,
+rollback, pagination, SQL export/reimport, console namespace selection, table
+alterations and cleanup.
+
+```text
+./gradlew test buildPlugin
+python scripts/test.py --live --mysql --hsqldb --integration-only
+```
+
+The existing functional regressions, cancellation tests, credential persistence
+checks, isolated driver lifecycle checks and real IntelliJ UI review also apply.
+See [Contributing](CONTRIBUTING.md) and [UI previews](UI_PREVIEW.md) for fixture and
+IDE setup. Cross-database transactions, automatic retries after uncertain commits,
+and support for non-JDBC sources are outside the provider contract.

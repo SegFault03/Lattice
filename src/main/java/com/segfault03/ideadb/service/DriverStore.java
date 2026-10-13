@@ -1,5 +1,7 @@
 package com.segfault03.ideadb.service;
 
+import com.segfault03.ideadb.provider.DatabaseProviders;
+
 import com.segfault03.ideadb.model.DatabaseType;
 import com.segfault03.ideadb.model.InstalledDriver;
 import com.intellij.openapi.project.Project;
@@ -99,7 +101,7 @@ public final class DriverStore {
      * and the registry's working-directory fallback is not reliable when the IDE starts elsewhere.
      */
     private static File packagedJar(DatabaseType type) {
-        String keyword = type == DatabaseType.MYSQL ? "mysql-connector" : "hsqldb";
+        String keyword = DatabaseProviders.get(type).driver().packagedJarKeyword();
         try {
             var descriptor = PluginManager.getPluginByClass(DriverStore.class);
             Path pluginPath = descriptor == null ? null : descriptor.getPluginPath();

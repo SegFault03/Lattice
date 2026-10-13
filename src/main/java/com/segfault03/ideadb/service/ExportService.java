@@ -1,5 +1,7 @@
 package com.segfault03.ideadb.service;
 
+import com.segfault03.ideadb.provider.DatabaseProviders;
+
 import com.segfault03.ideadb.model.*;
 
 import java.io.BufferedWriter;
@@ -93,18 +95,7 @@ public class ExportService {
         return value instanceof byte[] bytes ? "base64:" + java.util.Base64.getEncoder().encodeToString(bytes) : value.toString();
     }
     private static String sqlLiteral(ConnectionConfig config,Object value,String type) {
-        if(value==null) return "NULL";
-        if(value instanceof byte[] bytes) return "X'" + java.util.HexFormat.of().formatHex(bytes) + "'";
-        if(value instanceof Boolean bool) return bool ? "TRUE" : "FALSE";
-        if(value instanceof Number) { if(!finite(value)) throw new IllegalArgumentException("Non-finite numbers cannot be exported as SQL literals"); return value.toString(); }
-        if(config.getType()==DatabaseType.MYSQL && value instanceof java.sql.Timestamp timestamp && type.toUpperCase(java.util.Locale.ROOT).contains("TIMESTAMP")) {
-            java.time.Instant instant=timestamp.toInstant();
-            java.math.BigDecimal seconds=java.math.BigDecimal.valueOf(instant.getEpochSecond()).add(java.math.BigDecimal.valueOf(instant.getNano(),9));
-            return "FROM_UNIXTIME(" + seconds.toPlainString() + ")";
-        }
-        String text=value.toString();
-        if(config.getType()==DatabaseType.MYSQL) return "CONVERT(X'" + java.util.HexFormat.of().formatHex(text.getBytes(StandardCharsets.UTF_8)) + "' USING utf8mb4)";
-        return "'" + text.replace("'","''") + "'";
+        return DatabaseProviders.get(config.getType()).sqlLiteral(value,type);
     }
 
     /** A fresh persisted query streams all matching rows; page size and dirty grid values do not participate. */
@@ -115,7 +106,7 @@ public class ExportService {
         long count=0;
         try {
             try(java.sql.Statement statement=connection.createStatement()) {
-                statement.setQueryTimeout(60); statement.setFetchSize(config.getType()==DatabaseType.MYSQL ? Integer.MIN_VALUE : 100);
+                statement.setQueryTimeout(60); statement.setFetchSize(DatabaseProviders.get(config.getType()).fetchSize(100));
                 try(java.sql.ResultSet rows=statement.executeQuery(query); BufferedWriter writer=java.nio.file.Files.newBufferedWriter(temporary,StandardCharsets.UTF_8)) {
                     var metadata=rows.getMetaData(); List<String> columns=new java.util.ArrayList<>(), types=new java.util.ArrayList<>();
                     for(int col=1;col<=metadata.getColumnCount();col++) { columns.add(metadata.getColumnLabel(col)); types.add(metadata.getColumnTypeName(col)); }

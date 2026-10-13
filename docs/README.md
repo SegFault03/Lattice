@@ -4,6 +4,7 @@ All commands run from the repository root unless a guide says otherwise.
 
 | Guide | Contents |
 |---|---|
+| [Database providers](DATABASE_PROVIDERS.md) | Architecture, extension steps, connection ownership and validation |
 | [Contributing](CONTRIBUTING.md) | Build requirements, tests and development practices |
 | [Scripts](SCRIPTS.md) | Test, UI, deployment and release helpers |
 | [Windows scripts](WINDOWS_SCRIPTS.md) | Every local Windows command and its complete options |
