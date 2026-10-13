@@ -42,9 +42,11 @@ dependencies {
         if (localIde == null) intellijIdeaCommunity("2025.1") else local(localIde)
         bundledPlugins()
         pluginVerifier("1.410")
+        zipSigner("0.1.24")
         testFramework(TestFrameworkType.Starter, configurationName = "uiTestImplementation")
     }
 
+    implementation("org.postgresql:postgresql:42.7.14") { exclude(group = "org.checkerframework", module = "checker-qual") }
     implementation("org.hsqldb:hsqldb:2.7.4")
     implementation("com.mysql:mysql-connector-j:26.7.0")
     constraints {
@@ -84,7 +86,10 @@ tasks.register<Test>("integrationTest") {
     testClassesDirs = sourceSets["test"].output.classesDirs
     // These live JDBC suites run without an IDE sandbox, but need SDK types.
     classpath = sourceSets["test"].runtimeClasspath + sourceSets["main"].compileClasspath
-    useJUnitPlatform { includeTags("integration") }
+    useJUnitPlatform {
+        includeTags("integration")
+        if (!providers.environmentVariable("LATTICE_TEST_POSTGRES_ENABLED").orElse(providers.environmentVariable("LATTICE_TEST_POSTGRES_PORT").map { "true" }.orElse("false")).get().toBoolean()) excludeTags("postgres")
+    }
     systemProperty("junit.jupiter.extensions.autodetection.enabled", "false")
     shouldRunAfter(tasks.test)
 }
@@ -98,7 +103,7 @@ tasks.processResources {
 
 val fallbackDriverJars = tasks.register<Sync>("fallbackDriverJars") {
     from(configurations.runtimeClasspath.map { files ->
-        files.filter { it.name.startsWith("mysql-connector-") || it.name.startsWith("hsqldb-") }
+        files.filter { it.name.startsWith("mysql-connector-") || it.name.startsWith("hsqldb-") || it.name.startsWith("postgresql-") }
     })
     into(layout.buildDirectory.dir("fallback-drivers"))
 }
@@ -108,6 +113,10 @@ tasks.withType<Test>().configureEach {
     systemProperty("lattice.test.drivers", layout.buildDirectory.dir("fallback-drivers").get().asFile.absolutePath)
     systemProperty("lattice.test.mysql.port", providers.environmentVariable("LATTICE_TEST_MYSQL_PORT").orElse("3306").get())
     systemProperty("lattice.test.hsqldb.port", providers.environmentVariable("LATTICE_TEST_HSQLDB_PORT").orElse("9001").get())
+    systemProperty("lattice.test.postgres.port", providers.environmentVariable("LATTICE_TEST_POSTGRES_PORT").orElse("5432").get())
+    systemProperty("lattice.test.postgres.password", providers.environmentVariable("LATTICE_TEST_POSTGRES_PASSWORD").orElse("lattice-test").get())
+    systemProperty("lattice.test.postgres.authRequired", providers.environmentVariable("LATTICE_TEST_POSTGRES_AUTH_REQUIRED").orElse("false").get())
+    systemProperty("lattice.test.postgres.enabled", providers.environmentVariable("LATTICE_TEST_POSTGRES_ENABLED").orElse("false").get())
 }
 
 tasks.register<JavaExec>("fallbackDriverTest") {
@@ -117,23 +126,28 @@ tasks.register<JavaExec>("fallbackDriverTest") {
     mainClass.set("com.segfault03.ideadb.FallbackDriverLifecycleTest")
     systemProperty("lattice.test.mysql.port", providers.environmentVariable("LATTICE_TEST_MYSQL_PORT").orElse("3306").get())
     systemProperty("lattice.test.hsqldb.port", providers.environmentVariable("LATTICE_TEST_HSQLDB_PORT").orElse("9001").get())
+    systemProperty("lattice.test.postgres.port", providers.environmentVariable("LATTICE_TEST_POSTGRES_PORT").orElse("5432").get())
+    systemProperty("lattice.test.postgres.password", providers.environmentVariable("LATTICE_TEST_POSTGRES_PASSWORD").orElse("lattice-test").get())
+    systemProperty("lattice.test.postgres.authRequired", providers.environmentVariable("LATTICE_TEST_POSTGRES_AUTH_REQUIRED").orElse("false").get())
+    systemProperty("lattice.test.postgres.enabled", providers.environmentVariable("LATTICE_TEST_POSTGRES_ENABLED").orElse("false").get())
     classpath = sourceSets["main"].output + sourceSets["test"].output +
         sourceSets["main"].compileClasspath.filter {
-            !it.name.startsWith("mysql-connector-") && !it.name.startsWith("hsqldb-")
+            !it.name.startsWith("mysql-connector-") && !it.name.startsWith("hsqldb-") && !it.name.startsWith("postgresql-")
         }
     dependsOn(fallbackDriverJars)
     args(layout.buildDirectory.dir("fallback-drivers").get().asFile.absolutePath)
 }
 
 tasks.register<JavaExec>("databaseCompatibilityTest") {
-    description = "Run the downloadable MySQL/HSQLDB driver and Java 8 compatibility matrix"
+    description = "Run the downloadable database driver and Java 8 compatibility matrix"
     group = "verification"
     dependsOn(tasks.testClasses)
-    mainClass.set("com.segfault03.ideadb.DatabaseCompatibilityTest")
+    mainClass.set(if (providers.gradleProperty("lattice.compatibility.mode").orNull == "postgres")
+        "com.segfault03.ideadb.provider.PostgresCompatibilityTest" else "com.segfault03.ideadb.DatabaseCompatibilityTest")
     classpath = sourceSets["test"].runtimeClasspath + sourceSets["main"].compileClasspath
     doFirst {
         val mode = providers.gradleProperty("lattice.compatibility.mode").orNull
-            ?: throw GradleException("Set -Plattice.compatibility.mode=mysql|hsqldb")
+            ?: throw GradleException("Set -Plattice.compatibility.mode=mysql|hsqldb|postgres")
         val java8 = providers.gradleProperty("lattice.compatibility.java8").orNull
             ?: throw GradleException("Set -Plattice.compatibility.java8 to a Java 8 runtime")
         val probeClasses = providers.gradleProperty("lattice.compatibility.probe").orNull
@@ -148,6 +162,9 @@ tasks.register<JavaExec>("databaseCompatibilityTest") {
                 java8,
                 probeClasses,
             )
+            "postgres" -> listOf(mode,
+                providers.gradleProperty("lattice.compatibility.port").get(),
+                providers.gradleProperty("lattice.compatibility.server").get(), java8, probeClasses)
             "hsqldb" -> listOf(mode, java8, probeClasses)
             else -> throw GradleException("Unknown compatibility mode: $mode")
         })
@@ -166,6 +183,11 @@ intellijPlatform {
         ideaVersion { sinceBuild.set("251") }
         providers.gradleProperty("releaseNotesFile").orNull?.let { changeNotes.set(file(it).readText()) }
     }
+    signing {
+        privateKey.set(providers.environmentVariable("LATTICE_SIGNING_PRIVATE_KEY"))
+        certificateChain.set(providers.environmentVariable("LATTICE_SIGNING_CERTIFICATE_CHAIN"))
+        password.set(providers.environmentVariable("LATTICE_SIGNING_PRIVATE_KEY_PASSWORD"))
+    }
     pluginVerification {
         ides {
             create("IC", "2025.1")
@@ -173,6 +195,17 @@ intellijPlatform {
             create("IU", "2025.3")
         }
     }
+}
+
+// Publishing must fail closed; ordinary development builds need no signing secrets.
+if (providers.gradleProperty("lattice.requireSigning").orElse("false").get().toBoolean()) {
+    for (name in listOf("LATTICE_SIGNING_PRIVATE_KEY", "LATTICE_SIGNING_CERTIFICATE_CHAIN")) {
+        require(!providers.environmentVariable(name).orNull.isNullOrBlank()) { "Missing signing secret: $name" }
+    }
+}
+
+tasks.named("verifyPluginSignature") {
+    dependsOn("signPlugin")
 }
 
 intellijPlatformTesting.testIdeUi.register("uiScreenshotTest") {
@@ -187,6 +220,9 @@ intellijPlatformTesting.testIdeUi.register("uiScreenshotTest") {
         systemProperty("ui.theme.id", providers.gradleProperty("lattice.ui.theme").orElse("ExperimentalDark").get())
         systemProperty("ui.review.enabled", providers.gradleProperty("lattice.ui.review").orElse("false").get())
         systemProperty("ui.inputs.only", providers.gradleProperty("lattice.ui.inputsOnly").orElse("false").get())
+        systemProperty("ui.skip.remote.downloads", providers.environmentVariable("LATTICE_UI_SKIP_REMOTE_DOWNLOADS").orElse("false").get())
+        systemProperty("ui.postgres.port", providers.gradleProperty("lattice.ui.postgres.port").orElse(providers.environmentVariable("LATTICE_UI_POSTGRES_PORT")).orElse("0").get())
+        systemProperty("ui.postgres.password", providers.environmentVariable("LATTICE_UI_POSTGRES_PASSWORD").orElse("lattice-test").get())
         systemProperty("ui.style.only", providers.gradleProperty("lattice.ui.styleOnly").orElse("false").get())
         systemProperty("ui.style.lightThemes", providers.gradleProperty("lattice.ui.lightThemes").orElse("false").get())
         systemProperty("ui.maven.repository", providers.gradleProperty("lattice.ui.maven.repository").orElse(layout.buildDirectory.dir("ui-test-maven/repository").map { it.asFile.absolutePath }).get())
@@ -209,5 +245,15 @@ intellijPlatformTesting.testIdeUi.register("uiScreenshotTest") {
             events("passed", "skipped", "failed")
             showStandardStreams = true
         }
+    }
+}
+
+// Reuse the compilation SDK for CI UI fixtures instead of downloading a second IDE.
+tasks.register("writeUiIdeHome") {
+    val ideHome = tasks.named<RunIdeTask>("runIde").get().platformPath.toString()
+    val output = layout.buildDirectory.file("ui-ide-home.txt").get().asFile
+    doLast {
+        output.parentFile.mkdirs()
+        output.writeText(ideHome)
     }
 }

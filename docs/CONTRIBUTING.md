@@ -14,25 +14,26 @@ On Linux/macOS you can also use `./gradlew test buildPlugin`; on Windows use `.\
 ## Database tests
 
 ```text
-python scripts/test.py --live --mysql --hsqldb
+python scripts/test.py --live --mysql --hsqldb --postgres
 ```
 
-The runner owns its MySQL 8.4 fixture and memory-only HSQLDB process, waits for readiness and stops both on exit. Each owned fixture uses an automatically selected free loopback port, printed at startup. `--mysql-port PORT` and `--hsqldb-port PORT` request fixed ports, which must be free. Windows jobs also stop fixture descendants when the runner is killed. Docker must be running when Docker fixtures are selected. Logs are in `build/fixtures/`.
+The runner owns its MySQL 8.4 fixture and memory-only HSQLDB process and optional PostgreSQL 18 Docker fixture, waits for readiness and stops owned fixtures on exit. Each owned fixture uses an automatically selected free loopback port, printed at startup. `--mysql-port PORT`, `--hsqldb-port PORT` and `--postgres-port PORT` request fixed ports, which must be free. Windows jobs also stop fixture descendants when the runner is killed. Docker must be running when Docker fixtures are selected. Logs are in `build/fixtures/`.
 
-To test against fixtures you manage yourself, omit `--mysql` and/or `--hsqldb`. Existing fixtures must be isolated and disposable: tests create/drop schemas and modify table data. They expect:
+To test against fixtures you manage yourself, omit the owned fixture flags (`--mysql`, `--hsqldb`, `--postgres`). Existing fixtures must be isolated and disposable: tests create/drop schemas and modify table data. They expect:
 
 | Engine | Endpoint | Database | User | Password |
 |---|---|---|---|---|
 | MySQL | localhost:3306 | shop_db | root | empty |
 | HSQLDB | localhost:9001 | testdb | SA | empty |
+| PostgreSQL | localhost:5432 | postgres | postgres | lattice-test |
 
-These are test fixture credentials, not recommendations for deployed servers. Use `python scripts/test.py --live` after starting equivalent fixtures; `--mysql-port` / `--hsqldb-port` override external server ports too. Direct Gradle runs use `LATTICE_TEST_MYSQL_PORT` / `LATTICE_TEST_HSQLDB_PORT` environment variables, defaulting to 3306/9001.
+These are test fixture credentials, not recommendations for deployed servers. Use `python scripts/test.py --live` after starting equivalent fixtures; `--mysql-port` / `--hsqldb-port` override external server ports too. Direct Gradle runs use `LATTICE_TEST_MYSQL_PORT` / `LATTICE_TEST_HSQLDB_PORT`, defaulting to 3306/9001. Enable PostgreSQL with `--postgres` or `--postgres-port PORT`; direct Gradle runs use `LATTICE_TEST_POSTGRES_ENABLED=true`, `LATTICE_TEST_POSTGRES_PORT` and `LATTICE_TEST_POSTGRES_PASSWORD`. The PostgreSQL matrix and real-IDE flow also have focused wrappers: `postgres-compatibility.py` and `postgres-ui-review.py`.
 
 The Java 8/legacy-driver matrix is documented in [compatibility](compatibility.md) and is run by `python scripts/one-shot-test.py` on Linux and Windows. The runner copies supplied JDBC jars or downloads missing ones into an owned cache and executes the Java 21 service flow plus a Java 8 driver probe. Cleanup is controlled by `--cleanup` / `--no-cleanup`; Windows defers jar removal until the JVM exits. See [dependency paths](SCRIPTS.md#binary-paths-downloads-and-cleanup). `DatabaseCompatibilityTest` and `Java8DriverProbe` contain the reusable Java checks.
 
 ## Validation and changes
 
-Run pure tests for every change. Run live suites for database behavior; check the release ZIP and Plugin Verifier for platform/dependency changes. Describe the trigger, changed behavior, validation and remaining limits in pull requests. The cross-platform workflow builds/tests on Windows, Linux and macOS; the release workflow additionally runs live fixtures and verifies three IntelliJ 2025 releases.
+Run pure tests for every change. Run live suites for database behavior; check the release ZIP and Plugin Verifier for platform/dependency changes. Describe the trigger, changed behavior, validation and remaining limits in pull requests. Every branch push builds/tests on Windows, Linux and macOS; Linux also runs live functional, regression and integration suites for all three databases, Swing assertions, HSQLDB Dark/Light real-IDE reviews and the PostgreSQL real-IDE scenario. PR merge commits receive the same baseline. Only PRs targeting `staging` or `main` run database/Java 8 and three-IDE compatibility matrices. Releases require a newly created version tag whose commit is reachable from `main`.
 
 Use `python scripts/ui-preview.py` for fast Swing previews. Linux CI and release validation run `python3 scripts/ui-preview.py --all-previews`, including the harness's action-state assertions, and retain the preview gallery. For real-IDE layout and action flows, use `./scripts/linux/review-intellij-ui.sh` on Linux/X11 or `.\scripts\windows\review-intellij-ui.ps1` on Windows; static compatibility does not establish those behaviors. Dynamic unload and project-close testing remain separate checks. Never commit passwords, connection state, user databases, generated outputs, local SDKs or native test binaries.
 

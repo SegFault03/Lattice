@@ -1148,7 +1148,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
 
         @Override
         public boolean isCellEditable(int row, int col) {
-            return !isBusy() && !disposed && !tableMetadata.isView();
+            ColumnMetadata metadata = getColumnMeta(col);
+            return !isBusy() && !disposed && !tableMetadata.isView() && (metadata == null || !metadata.isGenerated());
         }
 
         @Override public Object getValueAt(int row, int col) {

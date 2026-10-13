@@ -7,12 +7,13 @@ import java.util.Properties;
 public final class Java8DriverProbe {
     public static void main(String[] args) throws Exception {
         boolean mysql = args[0].equals("MYSQL");
-        String name = mysql ? "com.mysql.cj.jdbc.Driver" : "org.hsqldb.jdbc.JDBCDriver";
+        boolean postgres = args[0].equals("POSTGRESQL");
+        String name = postgres ? "org.postgresql.Driver" : mysql ? "com.mysql.cj.jdbc.Driver" : "org.hsqldb.jdbc.JDBCDriver";
         Driver driver;
         try { driver = (Driver)Class.forName(name).newInstance(); }
         catch (ClassNotFoundException old) { driver = (Driver)Class.forName(mysql ? "com.mysql.jdbc.Driver" : "org.hsqldb.jdbcDriver").newInstance(); }
-        Properties properties = new Properties(); properties.setProperty("user", mysql ? "root" : "SA"); properties.setProperty("password", "");
-        try (Connection connection = driver.connect(args[1], properties); Statement statement = connection.createStatement(); ResultSet result = statement.executeQuery(mysql ? "SELECT 1" : "VALUES(1)")) {
+        Properties properties = new Properties(); properties.setProperty("user", postgres ? "postgres" : mysql ? "root" : "SA"); properties.setProperty("password", postgres ? "lattice-test" : "");
+        try (Connection connection = driver.connect(args[1], properties); Statement statement = connection.createStatement(); ResultSet result = statement.executeQuery(mysql || postgres ? "SELECT 1" : "VALUES(1)")) {
             if (!result.next() || result.getInt(1) != 1) throw new AssertionError("Java 8 query failed");
             System.out.println("PASS Java 8 " + connection.getMetaData().getDriverVersion() + " / " + connection.getMetaData().getDatabaseProductVersion());
         }

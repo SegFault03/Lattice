@@ -80,15 +80,20 @@ public final class UiPreview {
         updateToolbars(component);
         for (int pass = 0; pass < 4; pass++) layout(component);
         verifyInputs(component);
-        if (featuredOnly && !FEATURED_PREVIEWS.contains(name.replaceFirst("^(light|dark)-", ""))) return;
-        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        boolean featured = FEATURED_PREVIEWS.contains(name.replaceFirst("^(light|dark)-", ""));
+        if (featuredOnly && !featured) return;
+        // Paint at higher pixel density without changing component layout or aspect ratio.
+        // Featured images also serve as Marketplace screenshots (minimum 1200 x 760).
+        int scale = featured ? Math.max(2, Math.max((1200 + width - 1) / width, (760 + height - 1) / height)) : 1;
+        BufferedImage image = new BufferedImage(width * scale, height * scale, BufferedImage.TYPE_INT_RGB);
         Graphics2D graphics = image.createGraphics();
+        graphics.scale(scale, scale);
         graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         component.printAll(graphics);
         graphics.dispose();
         ImageIO.write(image, "png", output.resolve(name + ".png").toFile());
         snapshots.add(name + ".png");
-        System.out.println(name + ": " + width + " x " + height);
+        System.out.println(name + ": " + image.getWidth() + " x " + image.getHeight());
     }
     static ConnectionConfig config(DatabaseType type) {
         ConnectionConfig config = new ConnectionConfig(type, type == DatabaseType.MYSQL ? "Local development" : "Scratch database");
@@ -640,9 +645,7 @@ public final class UiPreview {
 
     static void renderFeatured(String theme) throws Exception {
         render(ExplorerPreview.create(config(DatabaseType.MYSQL), false), theme + "-side-panel-340", 340, 620);
-        ConnectionDialog dialog = connectionDialog(config(DatabaseType.MYSQL), true);
-        JComponent connection = dialog.previewPanel();
-        render(connection, theme + "-connection-mysql-600", 600, connection.getPreferredSize().height);
+        connection(theme, "mysql", 600);
         render(console(), theme + "-sql-console-1100", 1100, 620);
         TableDataEditorPanel editor = table(false);
         render(editor, theme + "-table-1100", 1100, 620);

@@ -4,16 +4,38 @@ Patch notes are selected by the exact release version, including prerelease suff
 
 ## [Unreleased]
 
-- Table and SQL actions reflect selection, input, pending edits and busy states. The table filter bar includes Clear; disabled icons match their labels, and keyboard focus remains visible without leaving a focus outline after mouse clicks.
-- Table headers stop at the last column. Table filters, schema dialogs and toolbars adapt to narrow windows, with consistent light/dark palettes and clearer loading, validation and cancellation feedback.
-- Production Swing action assertions and real-IDE UI reviews run in CI. Development scripts share dependency reuse and cleanup options, with native Windows database fixtures and tracked child-process lifetimes.
-- Plain text fields, dropdown selectors and editable selectors share their text inset; the shared border no longer adds IntelliJ's native combo-box padding twice.
-- Driver discovery runs off the UI thread, follows child Maven version overrides and validates relative parent coordinates. Switching database types applies the matching project default while preserving manual and saved selections.
-- Driver identity stays stable when selected artifacts disappear; session switches retire the previous connection. Retained JAR validation checks entry data/CRCs, removes corrupt owned files, and preserves valid files on cancellation.
-- PR checks now validate the merge commit and reuse its built ZIP for compatibility. Superseded checks are cancelled; release source filenames are passed between jobs and release UI checks use the real IDE.
+- Make PostgreSQL UI-wrapper tests portable across Windows paths and wait for the real-IDE Revert reload before filtering; exercise the busy reload with a gated database response.
 
-- Downloaded JDBC drivers are kept in the IDE cache and offered in the bundled driver list, so a version is downloaded at most once and reused for later connections instead of being fetched again.
-- The packaged driver version is read from the shipped driver JAR instead of duplicated text, and a bundled selection naming a JAR that is no longer stored is reported instead of silently falling back.
+- Run baseline build, functional, regression, integration and UI checks on every branch, including PostgreSQL real-IDE workflows and packaged driver/license validation. Restrict database/Java 8 and IDE compatibility to PRs targeting staging or main.
+- Release only from newly created version tags reachable from main; gate all release jobs on ancestry and disable manual release/Marketplace smoke publishing.
+
+## [0.0.2-alpha]
+
+### JDBC drivers and connections
+
+- Download JDBC drivers once and reuse them from the bundled driver list across connections and IDE restarts.
+- Discover driver versions without blocking the UI, including versions inherited from Maven parent projects. Switching database types applies the matching project default while preserving saved and manually selected drivers.
+- Read bundled driver versions from their shipped JARs. Missing selected artifacts are reported clearly, and retained JARs are checked for corruption before reuse.
+- Preserve driver identity when artifacts disappear, retire the previous connection when switching sessions, and keep valid cached files when a download is cancelled.
+
+### Table and SQL tools
+
+- Table and SQL actions now reflect selection, input, pending edits and busy states. Clear table filters with the new `Clear` action.
+- Improve table headers, narrow-window layouts, schema dialogs and toolbars, with consistent light/dark styling and clearer loading, validation and cancellation feedback.
+- Align text fields and selectors, improve disabled action icons, and keep keyboard focus visible without leaving a focus outline after mouse clicks.
+
+### Release and validation
+
+- Update Gradle and IntelliJ build tooling, JDBC drivers and the protobuf runtime used by the packaged plugin.
+- Sign release ZIPs and verify their signatures before publishing the same tested build to GitHub and JetBrains Marketplace.
+- Display What's New as formatted headings and bullet lists instead of a monospace text block.
+- Expand CI coverage with production Swing assertions, real-IDE UI reviews, PR merge-commit validation and reusable dependency caches. Validate Marketplace uploads without contacting the service in tooling tests.
+
+## [0.0.2-smoke.1]
+
+- Signed prerelease build for validating Marketplace submission, change notes and installation through the hidden smoke channel.
+- Includes the current database explorer, SQL console, table editing and schema tools for smoke testing after installation.
+- Includes recent UI action-state, layout and JDBC driver-discovery fixes from the development build.
 
 ## [0.0.1-alpha]
 

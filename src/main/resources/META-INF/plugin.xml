@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.segfault03.lattice</id>
     <name>Lattice</name>
-    <version>0.0.1-alpha</version>
+    <version>0.0.2-alpha</version>
     <vendor>Lattice contributors</vendor>
 
     <description><![CDATA[
@@ -10,17 +10,24 @@
 
     <h4>Key Features:</h4>
     <ul>
-        <li><b>Supported Databases:</b> <b>MySQL</b> and <b>HSQLDB</b> with a compatible JDBC driver. Tested server releases include MySQL 5.5, 5.6, 5.7 and 8.4, and HSQLDB 2.2.9 through 2.7.4 (Embedded File, In-Memory, and Server modes).</li>
+        <li><b>Supported Databases:</b> <b>MySQL</b>, <b>HSQLDB</b> and <b>PostgreSQL</b> with a compatible JDBC driver. Tested server releases include MySQL 5.5, 5.6, 5.7 and 8.4, and HSQLDB 2.2.9 through 2.7.4 (Embedded File, In-Memory, and Server modes). PostgreSQL supports schema browsing, SQL consoles, data editing, DDL and exports with Java 8 compatible pgJDBC drivers; use 42.7.3 or 42.2.27 for servers older than 9.1.</li>
+        <li><b>Reusable JDBC Drivers:</b> Download a driver version once and reuse it across connections and IDE restarts, or select a local JAR. Driver discovery runs in the background, supports Maven project defaults, and validates cached JARs before reuse.</li>
         <li><b>Database Explorer:</b> Tree view of Catalogs/Databases, Schemas, Tables, Views, Columns (with data types, primary key, and auto-increment indicators).</li>
-        <li><b>Interactive Data Grid:</b> Inline cell editing with early type checking, auto-generated key protection, periodic auto-refresh, add/delete rows, batch commit, revert, filter (WHERE clause), and pagination.</li>
-        <li><b>SQL Query Console:</b> Execute queries with syntax support, Ctrl+Enter execution, result tables, affected row counts, elapsed time, and query history.</li>
+        <li><b>Interactive Data Grid:</b> Inline cell editing with early type checking, auto-generated key protection, periodic auto-refresh, add/delete rows, batch commit, revert, filter (WHERE clause), a Clear filter action, and pagination. Actions reflect selection, pending edits and busy states.</li>
+        <li><b>SQL Query Console:</b> Execute queries with Ctrl+Enter, result tables, affected row counts, elapsed time, and query history.</li>
         <li><b>Visual DDL Wizards:</b> Create databases, design tables, alter tables (add, rename, modify definition, and drop columns), truncate tables, and rename tables.</li>
         <li><b>Export:</b> Export data directly to CSV, JSON, and SQL INSERTs, and export/view CREATE TABLE DDL.</li>
     </ul>
+    <h4>Coming soon:</h4>
+    <p>Support for H2 and other relational databases is planned. The roadmap also includes generating POJOs, DTOs and JavaBeans; SQL syntax highlighting and schema-aware inline suggestions, subject to platform feasibility; and table relationship graphs and dependency trees. These features are not available yet.</p>
     ]]></description>
 
     <change-notes><![CDATA[
-    IntelliJ IDEA 2025+ / Java 21 compatibility, selectable JDBC versions, verified downloads that stay in the bundled driver list, local JAR selection, server-version detection, and older MySQL/HSQLDB compatibility fixes.
+    <ul>
+        <li>Download JDBC drivers once and reuse them across connections and IDE restarts, with background discovery and cached JAR validation.</li>
+        <li>Clear table filters, use actions that reflect selection and pending edits, and work with improved layouts and light/dark styling.</li>
+        <li>Receive signed release builds with verified signatures and formatted release notes.</li>
+    </ul>
     ]]></change-notes>
 
     <idea-version since-build="251"/>

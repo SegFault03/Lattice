@@ -189,6 +189,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--live", action="store_true", help="Run integration and fallback-driver checks")
     parser.add_argument("--hsqldb", action="store_true", help="Own an in-memory HSQLDB fixture for this run")
+    parser.add_argument("--postgres", action="store_true", help="Own a PostgreSQL 18.6 Docker fixture")
+    parser.add_argument("--postgres-port", type=port_number, help="PostgreSQL fixture port; default: automatic when owned, otherwise 5432")
     parser.add_argument("--mysql", action="store_true", help="Own a MySQL fixture (native 8.4.2 on Windows; Docker 8.4 on Linux/macOS)")
     parser.add_argument("--build", action="store_true", help="Also package the plugin ZIP")
     parser.add_argument("--integration-only", action="store_true",
@@ -206,7 +208,7 @@ def main():
     parser.add_argument('--hsqldb-port', type=port_number, help='Owned fixture port (default: automatic); without --hsqldb use external port 9001')
     add_dependency_options(parser, cleanup=True)
     args = parser.parse_args()
-    if (args.hsqldb or args.mysql) and not args.live:
+    if (args.hsqldb or args.mysql or args.postgres) and not args.live:
         parser.error("Fixture options require --live")
     if args.integration_only and not args.live:
         parser.error("--integration-only requires --live")
@@ -219,8 +221,9 @@ def main():
         launch = command(args)
         environment = deps.environment(args.java_home)
         mysql_port = fixture_port(args.mysql_port, 3306, args.mysql)
+        postgres_port = fixture_port(args.postgres_port, 5432, args.postgres)
         hsql_port = fixture_port(args.hsqldb_port, 9001, args.hsqldb)
-        environment.update(LATTICE_TEST_MYSQL_PORT=str(mysql_port), LATTICE_TEST_HSQLDB_PORT=str(hsql_port))
+        environment.update(LATTICE_TEST_MYSQL_PORT=str(mysql_port), LATTICE_TEST_HSQLDB_PORT=str(hsql_port), LATTICE_TEST_POSTGRES_PORT=str(postgres_port), LATTICE_TEST_POSTGRES_ENABLED=str(args.postgres or args.postgres_port is not None).lower(), LATTICE_TEST_POSTGRES_PASSWORD="lattice-test", LATTICE_TEST_POSTGRES_AUTH_REQUIRED=str(args.postgres).lower())
         if args.live:
             print(f'Live test ports: MySQL {mysql_port}, HSQLDB {hsql_port}', flush=True)
         with ExitStack() as fixtures:
@@ -231,6 +234,9 @@ def main():
                                                           runtime_dir=args.runtime_dir, sevenzip=args.sevenzip, port=mysql_port))
                 else:
                     fixtures.enter_context(mysql_fixture(args.cleanup, args.docker or 'docker', port=mysql_port))
+            if args.postgres:
+                from postgres import postgres_fixture
+                fixtures.enter_context(postgres_fixture(postgres_port, docker=args.docker or "docker", cleanup=args.cleanup))
             if args.hsqldb:
                 jar = deps.jdbc('hsqldb', args.hsqldb_jar)
                 fixtures.enter_context(hsqldb_fixture(args.java_home, jar, port=hsql_port))

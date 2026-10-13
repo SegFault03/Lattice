@@ -15,6 +15,15 @@ public class QueryResult {
     private final String error;
     private final boolean cancelled;
     private boolean truncated;
+    private java.util.Set<String> omittedInsertColumns = java.util.Set.of();
+    private String insertOverride = "";
+    public QueryResult withInsertPolicy(java.util.Set<String> omitted, String override) {
+        QueryResult copy = new QueryResult(resultSet,columnNames,columnTypes,rows,affectedRows,executionTimeMs,message,error,cancelled);
+        copy.truncated = truncated; copy.omittedInsertColumns = java.util.Set.copyOf(omitted); copy.insertOverride = override;
+        return copy;
+    }
+    public java.util.Set<String> getOmittedInsertColumns() { return omittedInsertColumns; }
+    public String getInsertOverride() { return insertOverride; }
 
     private QueryResult(boolean resultSet, List<String> columnNames, List<String> columnTypes,
                         List<List<Object>> rows, int affectedRows, long executionTimeMs,

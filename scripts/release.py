@@ -21,6 +21,15 @@ def validate_version(value):
     return value
 
 
+def validate_smoke_version(value):
+    if not value:
+        raise ValueError("Marketplace smoke testing requires an explicit unused prerelease version")
+    validate_version(value)
+    if "-" not in value:
+        raise ValueError("Marketplace smoke testing requires a prerelease version, e.g. 0.0.2-smoke.1")
+    return value
+
+
 def version_key(value):
     validate_version(value)
     core, _, suffix = value.partition("-")
@@ -48,6 +57,44 @@ def patch_notes(changelog, version):
 
 def git(root, *args):
     return subprocess.check_output([GIT, "-C", str(root), *args], text=True, encoding="utf-8").strip()
+
+
+def patch_notes_html(notes):
+    """Render changelog headings, flat bullets and prose as safe Marketplace HTML."""
+    blocks, items, paragraph = [], [], []
+
+    def inline(value):
+        return re.sub(r"`([^`]+)`", r"<code>\1</code>", html.escape(value))
+
+    def flush():
+        if items:
+            blocks.append("<ul>\n" + "\n".join(f"<li>{inline(item)}</li>" for item in items) + "\n</ul>")
+            items.clear()
+        if paragraph:
+            blocks.append(f"<p>{inline(' '.join(paragraph))}</p>")
+            paragraph.clear()
+
+    for line in notes.splitlines():
+        stripped = line.strip()
+        heading = re.fullmatch(r"(#{3,6})\s+(.+)", stripped)
+        if not stripped:
+            flush()
+        elif heading:
+            flush()
+            level = len(heading[1])
+            blocks.append(f"<h{level}>{inline(heading[2])}</h{level}>")
+        elif stripped.startswith("- "):
+            if paragraph:
+                flush()
+            items.append(stripped[2:])
+        elif items and line[:1].isspace():
+            items[-1] += " " + stripped
+        else:
+            if items:
+                flush()
+            paragraph.append(stripped)
+    flush()
+    return "\n".join(blocks) + "\n"
 
 
 def previous_tag(root, version):
@@ -86,7 +133,7 @@ def prepare(root, version, tag=None, repository=None, server="https://github.com
     body += "\n".join(history) if history else "No new commits since the previous release."
     if previous and repository:
         body += f"\n\n[Full comparison]({server}/{repository}/compare/{previous}...{tag or 'HEAD'})"
-    return body + "\n", "<pre>" + html.escape(notes) + "</pre>\n"
+    return body + "\n", patch_notes_html(notes)
 
 
 def main():
@@ -95,9 +142,14 @@ def main():
     parser.add_argument("--tag", default=os.environ.get("RELEASE_TAG") or None)
     parser.add_argument("--version", default=os.environ.get("RELEASE_INPUT_VERSION") or None)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--marketplace-smoke", action="store_true", help="Require an explicit prerelease version for the hidden smoke channel")
     parser.add_argument('--git', type=Path, help='Git executable; otherwise PATH, then portable MinGit on Windows')
     add_dependency_options(parser)
     args = parser.parse_args()
+    if args.marketplace_smoke:
+        if args.tag:
+            parser.error("Marketplace smoke testing must not use a release tag")
+        validate_smoke_version(args.version)
     global GIT
     with Dependencies(args) as deps:
         previous = GIT

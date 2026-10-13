@@ -1,9 +1,9 @@
 package com.segfault03.ideadb.dialog;
 
+import com.segfault03.ideadb.provider.DatabaseProviders;
+
 import com.segfault03.ideadb.model.ConnectionConfig;
-import com.segfault03.ideadb.model.DatabaseType;
 import com.segfault03.ideadb.model.DriverSource;
-import com.segfault03.ideadb.model.HsqlMode;
 import com.segfault03.ideadb.service.DriverCatalog;
 
 import java.nio.file.Files;
@@ -29,13 +29,13 @@ final class ConnectionReadiness {
             if (!url.startsWith("jdbc:") || url.length() <= 5) return "Enter a JDBC URL";
             // Credentials may be embedded in the URL; a separate user/password is optional.
         } else {
-            boolean server = config.getType() == DatabaseType.MYSQL || config.getHsqlMode() == HsqlMode.SERVER;
+            boolean server = DatabaseProviders.get(config.getType()).usesServer(config);
             if (server) {
                 if (config.getHost().isBlank()) return "Enter a host";
                 if (config.getPort() < 1 || config.getPort() > 65535) return "Enter a port from 1 to 65535";
             }
-            if (config.getType() == DatabaseType.HSQLDB && config.getDatabaseName().isBlank())
-                return config.getHsqlMode() == HsqlMode.FILE ? "Choose a database path" : "Enter a database name";
+            String databaseProblem = DatabaseProviders.get(config.getType()).databaseNameProblem(config);
+            if (databaseProblem != null) return databaseProblem;
             // A MySQL database and passwords may be empty (server browsing / passwordless accounts).
             if (config.getUser().isBlank()) return "Enter a user name";
         }

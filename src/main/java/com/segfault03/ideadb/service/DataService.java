@@ -1,7 +1,8 @@
 package com.segfault03.ideadb.service;
 
+import com.segfault03.ideadb.provider.DatabaseProviders;
+
 import com.segfault03.ideadb.model.ConnectionConfig;
-import com.segfault03.ideadb.model.DatabaseType;
 import com.segfault03.ideadb.model.QueryResult;
 
 import java.sql.*;
@@ -29,8 +30,10 @@ public class DataService {
         if(where!=null && !where.isBlank()) sql.append(" WHERE ").append(where.trim());
         if(order!=null && !order.isBlank()) sql.append(" ORDER BY ").append(order.trim());
         else if(!keys.isEmpty()) sql.append(" ORDER BY ").append(keys.stream().map(key -> DdlService.quoteIdentifier(config,key)).collect(java.util.stream.Collectors.joining(", ")));
-        if(limit>0) { sql.append(" LIMIT ").append(limit); if(offset>0) sql.append(" OFFSET ").append(offset); }
-        return executeQuery(conn,db,sql.toString());
+        QueryResult result = executeQuery(conn,db,DatabaseProviders.get(config.getType()).dialect().paginate(sql.toString(),limit,offset));
+        if (!result.isResultSet()) return result;
+        var omitted = MetadataService.getInstance().getColumns(conn,config,db,table).stream().filter(com.segfault03.ideadb.model.ColumnMetadata::isGenerated).map(com.segfault03.ideadb.model.ColumnMetadata::getName).collect(java.util.stream.Collectors.toSet());
+        return result.withInsertPolicy(omitted,DatabaseProviders.get(config.getType()).insertOverride(conn));
     }
     public long countRows(Connection conn,ConnectionConfig config,String db,String table,String where) throws Exception {
         String sql="SELECT COUNT(*) FROM " + DdlService.formatTable(config,db,table) + (where==null || where.isBlank() ? "" : " WHERE " + where.trim());
@@ -56,7 +59,6 @@ public class DataService {
                           Map<String, Object> changes, Map<String, Object> pkVals) throws Exception {
         requireKeys(pkVals);
         if (changes.isEmpty()) return;
-        boolean isMysql = config.getType() == DatabaseType.MYSQL;
         StringBuilder sb = new StringBuilder("UPDATE ");
         sb.append(DdlService.formatTable(config, dbName, tableName)).append(" SET ");
         List<String> columns = new ArrayList<>(changes.keySet());
@@ -75,9 +77,9 @@ public class DataService {
         }
 
         try (PreparedStatement ps = conn.prepareStatement(sb.toString())) {
-            for (int i = 0; i < columns.size(); i++) bind(ps,i + 1, changes.get(columns.get(i)));
+            for (int i = 0; i < columns.size(); i++) bind(config,ps,i + 1, changes.get(columns.get(i)));
             for (int i = 0; i < pkKeys.size(); i++) {
-                bind(ps,i + columns.size() + 1, pkVals.get(pkKeys.get(i)));
+                bind(config,ps,i + columns.size() + 1, pkVals.get(pkKeys.get(i)));
             }
             requireOneRow(ps.executeUpdate());
         }
@@ -87,11 +89,10 @@ public class DataService {
                           Map<String, Object> values) throws Exception {
         if (values.isEmpty()) {
             String target=DdlService.formatTable(config,dbName,tableName);
-            try(PreparedStatement statement=conn.prepareStatement("INSERT INTO " + target + (config.getType()==DatabaseType.MYSQL ? " () VALUES ()" : " DEFAULT VALUES"))) { requireOneRow(statement.executeUpdate()); }
+            try(PreparedStatement statement=conn.prepareStatement(DatabaseProviders.get(config.getType()).dialect().defaultInsert(target))) { requireOneRow(statement.executeUpdate()); }
             return;
         }
 
-        boolean isMysql = config.getType() == DatabaseType.MYSQL;
         StringBuilder sb = new StringBuilder("INSERT INTO ");
         sb.append(DdlService.formatTable(config, dbName, tableName)).append(" (");
 
@@ -101,7 +102,7 @@ public class DataService {
             sb.append(DdlService.quoteIdentifier(config,col));
             if (i < cols.size() - 1) sb.append(", ");
         }
-        sb.append(") VALUES (");
+        sb.append(")").append(DatabaseProviders.get(config.getType()).insertOverride(conn)).append(" VALUES (");
         for (int i = 0; i < cols.size(); i++) {
             sb.append("?");
             if (i < cols.size() - 1) sb.append(", ");
@@ -110,7 +111,7 @@ public class DataService {
 
         try (PreparedStatement ps = conn.prepareStatement(sb.toString())) {
             for (int i = 0; i < cols.size(); i++) {
-                bind(ps,i + 1, values.get(cols.get(i)));
+                bind(config,ps,i + 1, values.get(cols.get(i)));
             }
             ps.executeUpdate();
         }
@@ -120,7 +121,6 @@ public class DataService {
                           Map<String, Object> pkVals) throws Exception {
         requireKeys(pkVals);
 
-        boolean isMysql = config.getType() == DatabaseType.MYSQL;
         StringBuilder sb = new StringBuilder("DELETE FROM ");
         sb.append(DdlService.formatTable(config, dbName, tableName)).append(" WHERE ");
 
@@ -133,15 +133,15 @@ public class DataService {
 
         try (PreparedStatement ps = conn.prepareStatement(sb.toString())) {
             for (int i = 0; i < pkKeys.size(); i++) {
-                bind(ps,i + 1, pkVals.get(pkKeys.get(i)));
+                bind(config,ps,i + 1, pkVals.get(pkKeys.get(i)));
             }
             requireOneRow(ps.executeUpdate());
         }
     }
 
-    private static void bind(PreparedStatement statement,int index,Object value) throws SQLException {
+    private static void bind(ConnectionConfig config,PreparedStatement statement,int index,Object value) throws SQLException {
         // Connector/J maps BigInteger through signed BIGINT unless it is bound as DECIMAL.
-        statement.setObject(index,value instanceof java.math.BigInteger integer ? new java.math.BigDecimal(integer) : value);
+        DatabaseProviders.get(config.getType()).bind(statement,index,value);
     }
 
     private static void requireKeys(Map<String, Object> keys) throws SQLException {
@@ -225,16 +225,7 @@ public class DataService {
     }
 
     private void requireTransactionalTable(Connection conn, ConnectionConfig config, String db, String table) throws SQLException {
-        if (config.getType() != DatabaseType.MYSQL) return;
-        try (PreparedStatement statement = conn.prepareStatement(
-                "SELECT ENGINE FROM information_schema.tables WHERE table_schema=COALESCE(?,DATABASE()) AND table_name=?")) {
-            statement.setString(1, db); statement.setString(2, table);
-            try (ResultSet result = statement.executeQuery()) {
-                if (!result.next() || !"InnoDB".equalsIgnoreCase(result.getString(1))) {
-                    throw new SQLException("Atomic grid changes require an InnoDB table");
-                }
-            }
-        }
+        DatabaseProviders.get(config.getType()).requireTransactionalTable(conn, config, db, table);
     }
 
     public record QueryOptions(int maxRows, int timeoutSeconds, int fetchSize) {
@@ -253,17 +244,14 @@ public class DataService {
         long start = System.nanoTime();
         try {
             execution.checkCancelled();
-            boolean mysql = conn.getMetaData().getDatabaseProductName().equalsIgnoreCase("MySQL");
-            if (dbName != null && !dbName.trim().isEmpty()) {
-                if (mysql) { if (!dbName.equals(conn.getCatalog())) conn.setCatalog(dbName); }
-                else { JdbcSchema.select(conn, dbName); }
-            }
+            var provider = DatabaseProviders.forConnection(conn);
+            provider.beforeQuery(conn, dbName, sql);
             try (Statement stmt = conn.createStatement()) {
                 stmt.setQueryTimeout(options.timeoutSeconds());
                 stmt.setMaxRows(options.maxRows() + 1);
                 // Connector/J's streaming sentinel prevents buffering the whole result client-side.
-                stmt.setFetchSize(mysql ? Integer.MIN_VALUE : options.fetchSize());
-                execution.attach(stmt);
+                stmt.setFetchSize(provider.fetchSize(options.fetchSize()));
+                execution.attach(stmt,()->provider.cancelStatement(stmt));
                 execution.checkCancelled();
                 boolean hasResultSet = stmt.execute(sql);
                 execution.checkCancelled();
@@ -281,13 +269,13 @@ public class DataService {
                         if (rows.size() >= options.maxRows()) { truncated=true; break; }
                         List<Object> row = new ArrayList<>();
                         for (int i=1;i<=colCount;i++) {
-                            Object value = detachValue(rs.getObject(i)); row.add(value);
+                            Object value = detachValue(provider.readValue(rs,md,i)); row.add(value);
                             bytes += value instanceof byte[] binary ? binary.length : value instanceof String text ? text.length()*2L : 32;
                         }
                         if (bytes > 16L * 1024 * 1024) { truncated=true; break; }
                         rows.add(row);
                     }
-                    return QueryResult.forResultSet(cols,types,rows,elapsed(start),truncated);
+                    return QueryResult.forResultSet(cols,types,rows,elapsed(start),truncated).withInsertPolicy(java.util.Set.of(),provider.insertOverride(conn));
                 }
             }
         } catch (Exception error) {

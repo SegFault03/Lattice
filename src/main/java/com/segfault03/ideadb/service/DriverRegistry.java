@@ -1,5 +1,7 @@
 package com.segfault03.ideadb.service;
 
+import com.segfault03.ideadb.provider.DatabaseProviders;
+
 import com.segfault03.ideadb.model.DatabaseType;
 import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.model.DriverSource;
@@ -74,7 +76,7 @@ public class DriverRegistry implements com.intellij.openapi.Disposable {
         }
 
         // Search for matching driver jar file
-        String jarKeyword = type == DatabaseType.MYSQL ? "mysql-connector" : "hsqldb";
+        String jarKeyword = DatabaseProviders.get(type).driver().packagedJarKeyword();
         File driverJar = findJarFile(jarKeyword);
 
         if (driverJar == null || !driverJar.exists()) {
@@ -89,7 +91,7 @@ public class DriverRegistry implements com.intellij.openapi.Disposable {
 
     /** The packaged driver JAR shipped beside the plugin classes, or null when it cannot be located. */
     public synchronized File packagedJar(DatabaseType type) {
-        return findJarFile(type == DatabaseType.MYSQL ? "mysql-connector" : "hsqldb");
+        return findJarFile(DatabaseProviders.get(type).driver().packagedJarKeyword());
     }
 
     /** An explicit selection must never resolve to the bundled driver's classes. */
@@ -145,7 +147,7 @@ public class DriverRegistry implements com.intellij.openapi.Disposable {
                 }
                 // JDBC namespaces are child-first, including resources and static driver registration.
                 // Java/IDE/plugin classes retain the parent loader so java.sql.Driver is shared.
-                if (name.startsWith("com.mysql.") || name.startsWith("org.hsqldb.")) {
+                if (DatabaseProviders.get(type).driver().isolatesClass(name)) {
                     Class<?> loaded = findLoadedClass(name);
                     if (loaded == null) loaded = findClass(name);
                     if (resolve) resolveClass(loaded);
@@ -154,7 +156,7 @@ public class DriverRegistry implements com.intellij.openapi.Disposable {
                 return super.loadClass(name, resolve);
             }
             @Override public URL getResource(String name) {
-                if (name.startsWith("com/mysql/") || name.startsWith("org/hsqldb/")) {
+                if (DatabaseProviders.get(type).driver().isolatesResource(name)) {
                     URL own = findResource(name); if (own != null) return own;
                 }
                 return super.getResource(name);

@@ -10,6 +10,12 @@ spec.loader.exec_module(release)
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_smoke_versions_cannot_use_stable_or_implicit_version(self):
+        self.assertEqual("0.0.2-smoke.1", release.validate_smoke_version("0.0.2-smoke.1"))
+        for value in (None, "", "0.0.2", "v0.0.2-smoke.1", "0.0.2-smoke.01", "0.0.2-smoke.1\n"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                release.validate_smoke_version(value)
+
     def test_strict_versions(self):
         for value in ("1.0.0", "10.2.34", "0.0.1-alpha", "1.0.0-rc.1", "1.0.0-alpha-beta"):
             self.assertEqual(value, release.validate_version(value))
@@ -29,6 +35,16 @@ class ReleaseTests(unittest.TestCase):
     def test_empty_notes_block_release(self):
         with self.assertRaises(ValueError):
             release.patch_notes("## [Unreleased]\n\n## [0.9.0]\n- Old fix", "1.0.0")
+
+    def test_marketplace_notes_use_lists_headings_and_escape_raw_html(self):
+        notes = "### Improvements\n\n- Clear filters with `Clear`.\n- Escape <script>alert(1)</script> & quotes.\n  Continuation.\n\nAdditional context.\nSecond line.\n"
+        rendered = release.patch_notes_html(notes)
+        self.assertIn("<h3>Improvements</h3>", rendered)
+        self.assertIn("<li>Clear filters with <code>Clear</code>.</li>", rendered)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt; &amp; quotes. Continuation.</li>", rendered)
+        self.assertIn("<p>Additional context. Second line.</p>", rendered)
+        self.assertNotIn("<pre>", rendered)
+        self.assertNotIn("<script>", rendered)
 
     def test_history_and_tag_validation(self):
         with tempfile.TemporaryDirectory(prefix="lattice-release-test-") as directory:
@@ -52,7 +68,7 @@ class ReleaseTests(unittest.TestCase):
             self.assertIn("Fix &lt;script&gt; &amp; \\[label\\]", body)
             self.assertNotIn("Initial commit", body)
             self.assertIn("v1.0.0...v1.0.1", body)
-            self.assertIn("- New fix", plugin)
+            self.assertIn("<li>New fix</li>", plugin)
             with self.assertRaises(ValueError):
                 release.prepare(root, "1.0.0", "v1.0.0")
             git("tag", "v1.0.2-alpha")

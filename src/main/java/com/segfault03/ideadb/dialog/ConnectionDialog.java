@@ -1,5 +1,8 @@
 package com.segfault03.ideadb.dialog;
 
+import com.segfault03.ideadb.provider.DatabaseProvider;
+import com.segfault03.ideadb.provider.DatabaseProviders;
+
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.DialogWrapper;
@@ -49,6 +52,7 @@ public class ConnectionDialog extends DialogWrapper {
     private final java.util.Map<DatabaseType, InstalledDriver> projectDefaults = new java.util.EnumMap<>(DatabaseType.class);
     private final Set<DatabaseType> manuallySelectedDrivers = java.util.EnumSet.noneOf(DatabaseType.class);
     private DatabaseType displayedDriverType;
+    private DatabaseType displayedFormType = DatabaseType.MYSQL;
     private boolean updatingDrivers;
     private boolean discoveryBusy;
     private java.util.concurrent.Future<?> discoveryTask;
@@ -186,8 +190,8 @@ public class ConnectionDialog extends DialogWrapper {
         mainCardPanel = new VisibleCardPanel(mainCardLayout);
         dbTypeCardLayout = new CardLayout();
         dbTypeCardPanel = new VisibleCardPanel(dbTypeCardLayout);
-        dbTypeCardPanel.add(createMysqlPanel(), DatabaseType.MYSQL.name());
-        dbTypeCardPanel.add(createHsqlPanel(), DatabaseType.HSQLDB.name());
+        dbTypeCardPanel.add(createMysqlPanel(), DatabaseProvider.ConnectionForm.SERVER.name());
+        dbTypeCardPanel.add(createHsqlPanel(), DatabaseProvider.ConnectionForm.HSQL_MODES.name());
         mainCardPanel.add(dbTypeCardPanel, "STANDARD");
         mainCardPanel.add(createCustomUrlPanel(), "JDBC_URL");
         addPart(1, mainCardPanel);
@@ -472,18 +476,22 @@ public class ConnectionDialog extends DialogWrapper {
         typeCombo.addItemListener(e -> {
             if (e.getStateChange() == ItemEvent.SELECTED) {
                 DatabaseType type = (DatabaseType) typeCombo.getSelectedItem();
-                dbTypeCardLayout.show(dbTypeCardPanel, type.name());
+                dbTypeCardLayout.show(dbTypeCardPanel, DatabaseProviders.get(type).connectionForm().name());
 
-                // Smart default adaptations
-                if (type == DatabaseType.MYSQL) {
-                    if (mysqlPortField.getText().trim().equals("9001") || mysqlPortField.getText().trim().isEmpty()) {
-                        mysqlPortField.setText("3306");
-                    }
-                } else if (type == DatabaseType.HSQLDB) {
-                    if (hsqlServerPortField.getText().trim().equals("3306") || hsqlServerPortField.getText().trim().isEmpty()) {
-                        hsqlServerPortField.setText("9001");
-                    }
+                var provider = DatabaseProviders.get(type);
+                var previous = DatabaseProviders.get(displayedFormType);
+                if (provider.connectionForm() == DatabaseProvider.ConnectionForm.SERVER) {
+                    String port = mysqlPortField.getText().trim();
+                    if (port.isEmpty() || port.equals(String.valueOf(previous.defaultPort()))) mysqlPortField.setText(String.valueOf(provider.defaultPort()));
+                    String database = mysqlDatabaseField.getText().trim();
+                    if (database.isEmpty() || database.equals(previous.defaultDatabase())) mysqlDatabaseField.setText(provider.defaultDatabase());
+                    String user = mysqlUserField.getText().trim();
+                    if (user.isEmpty() || user.equals(previous.defaultUser())) mysqlUserField.setText(provider.defaultUser());
+                } else {
+                    String port = hsqlServerPortField.getText().trim();
+                    if (port.isEmpty() || port.equals(String.valueOf(previous.defaultPort()))) hsqlServerPortField.setText(String.valueOf(provider.defaultPort()));
                 }
+                displayedFormType = type;
                 rememberDriverSelection();
                 refillDriverVersions();
                 refreshConnectionState();
@@ -527,11 +535,9 @@ public class ConnectionDialog extends DialogWrapper {
 
             private void checkUrlPrefix() {
                 String u = customUrlField.getText().trim().toLowerCase(java.util.Locale.ROOT);
-                if (u.startsWith("jdbc:hsqldb:") && typeCombo.getSelectedItem() != DatabaseType.HSQLDB) {
-                    typeCombo.setSelectedItem(DatabaseType.HSQLDB);
-                } else if (u.startsWith("jdbc:mysql:") && typeCombo.getSelectedItem() != DatabaseType.MYSQL) {
-                    typeCombo.setSelectedItem(DatabaseType.MYSQL);
-                }
+                DatabaseProviders.forUrl(u).ifPresent(provider -> {
+                    if (typeCombo.getSelectedItem() != provider.type()) typeCombo.setSelectedItem(provider.type());
+                });
             }
         });
 
@@ -631,10 +637,10 @@ public class ConnectionDialog extends DialogWrapper {
             c.setUser(customUrlUserField.getText().trim());
             c.setPassword(new String(customUrlPasswordField.getPassword()));
             c.setHost("localhost");
-            c.setPort(type == DatabaseType.MYSQL ? 3306 : 9001);
+            c.setPort(DatabaseProviders.get(type).defaultPort());
         } else {
             c.setCustomUrl("");
-            if (type == DatabaseType.MYSQL) {
+            if (DatabaseProviders.get(type).connectionForm() == DatabaseProvider.ConnectionForm.SERVER) {
                 c.setHost(mysqlHostField.getText().trim());
                 try {
                     c.setPort(Integer.parseInt(mysqlPortField.getText().trim()));
@@ -833,7 +839,7 @@ public class ConnectionDialog extends DialogWrapper {
         return version.isBlank() ? DriverStore.packagedVersion(type) : version;
     }
     private String formatDriverLabel(DatabaseType type, String version) {
-        String name = type == DatabaseType.MYSQL ? "MySQL Connector/J" : "HSQLDB";
+        String name = DatabaseProviders.get(type).driver().displayName();
         return version == null || version.isBlank() ? name : name + " " + version;
     }
     private String selectedLocalDriverLabel(DatabaseType type) {
@@ -1019,9 +1025,9 @@ public class ConnectionDialog extends DialogWrapper {
     private void loadValues() {
         nameField.setText(config.getName());
         typeCombo.setSelectedItem(config.getType());
-        dbTypeCardLayout.show(dbTypeCardPanel, config.getType().name());
+        dbTypeCardLayout.show(dbTypeCardPanel, DatabaseProviders.get(config.getType()).connectionForm().name());
 
-        if (config.getType() == DatabaseType.MYSQL) {
+        if (DatabaseProviders.get(config.getType()).connectionForm() == DatabaseProvider.ConnectionForm.SERVER) {
             mysqlHostField.setText(config.getHost());
             mysqlPortField.setText(String.valueOf(config.getPort()));
             mysqlDatabaseField.setText(config.getDatabaseName());

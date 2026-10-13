@@ -1,8 +1,9 @@
 package com.segfault03.ideadb.service;
 
+import com.segfault03.ideadb.provider.DatabaseProviders;
+
 import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.model.ConnectionTestResult;
-import com.segfault03.ideadb.model.DatabaseType;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -24,7 +25,7 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
         private boolean removed;
     }
 
-    private record Identity(String url, String user, String password, boolean autoCommit, com.segfault03.ideadb.model.DriverSource driverSource, String driverVersion, String driverJarPath) {
+    private record Identity(com.segfault03.ideadb.model.DatabaseType type, String url, String user, String password, boolean autoCommit, com.segfault03.ideadb.model.DriverSource driverSource, String driverVersion, String driverJarPath) {
         static Identity of(ConnectionConfig config) {
             var source = config.getDriverSource();
             // Explicit selections remain part of identity even after their artifact disappears.
@@ -33,7 +34,7 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
             String selectedJar = source == com.segfault03.ideadb.model.DriverSource.LOCAL_JAR
                     || source == com.segfault03.ideadb.model.DriverSource.BUNDLED && !version.isBlank()
                     ? config.getDriverJarPath() : "";
-            return new Identity(config.buildJdbcUrl(), config.getUser(), config.getPassword(), config.isAutoCommit(), source, version,
+            return new Identity(config.getType(), config.buildJdbcUrl(), config.getUser(), config.getPassword(), config.isAutoCommit(), source, version,
                     selectedJar);
         }
     }
@@ -76,6 +77,12 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
 
     public Connection getConnection(ConnectionConfig config) throws Exception {
         return getConnection(config, "browser");
+    }
+
+    /** Serialize complete browser operations, not just connection acquisition. */
+    public <T> T executeBrowser(ConnectionConfig config, DatabaseSession.Operation<T> operation) throws Exception {
+        Connection connection = getConnection(config);
+        synchronized (connection) { return operation.run(connection); }
     }
 
     public DatabaseSession createSession(ConnectionConfig config) {
@@ -212,18 +219,9 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
 
     private Connection createRawConnection(ConnectionConfig config) throws Exception {
         if(disposed) throw new SQLException("Connection manager is disposed");
-        DatabaseType type = config.getType();
+        var provider = DatabaseProviders.get(config.getType());
         String url = config.buildJdbcUrl();
-        if (url != null) {
-            String lower = url.trim().toLowerCase(java.util.Locale.ROOT);
-            if (lower.startsWith("jdbc:hsqldb:")) {
-                type = DatabaseType.HSQLDB;
-                config.setType(DatabaseType.HSQLDB);
-            } else if (lower.startsWith("jdbc:mysql:")) {
-                type = DatabaseType.MYSQL;
-                config.setType(DatabaseType.MYSQL);
-            }
-        }
+        if (!provider.acceptsUrl(url)) throw new SQLException("JDBC URL does not match the selected database type");
         Driver driver = DriverRegistry.getInstance().getDriver(config);
 
         Properties props = new Properties();
@@ -238,11 +236,10 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
         if (conn == null) {
             throw new SQLException("Selected JDBC driver does not accept this URL scheme");
         }
-        // Generated URLs declare UTC to the driver; align the server session,
-        // including older Connector/J releases that ignore the modern property.
-        if (type == DatabaseType.MYSQL && config.getCustomUrl().isBlank()) {
-            try (var statement = conn.createStatement()) { statement.execute("SET SESSION time_zone='+00:00'"); }
-            catch (Exception initialization) { try { conn.close(); } catch (SQLException cleanup) { initialization.addSuppressed(cleanup); } throw initialization; }
+        try { provider.initialize(conn, config); }
+        catch (Exception initialization) {
+            try { conn.close(); } catch (SQLException cleanup) { initialization.addSuppressed(cleanup); }
+            throw initialization;
         }
         return conn;
     }

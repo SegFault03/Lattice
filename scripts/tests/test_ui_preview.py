@@ -1,5 +1,7 @@
 """Preview cache discovery and shareable gallery packaging, without launching Java."""
 import importlib.util
+import re
+import struct
 from pathlib import Path
 import sys
 import tempfile
@@ -15,6 +17,25 @@ spec.loader.exec_module(preview)
 
 
 class UiPreviewTests(unittest.TestCase):
+    def test_readme_images_meet_marketplace_resolution_with_original_display_widths(self):
+        root = SCRIPTS.parent
+        readme = (root / 'README.md').read_text(encoding='utf-8')
+        widths = {'side-panel.png': 340, 'connection-dialog.png': 600,
+                  'table-view.png': 1100, 'table-editing.png': 1100, 'sql-console.png': 1100}
+        for name, display_width in widths.items():
+            with self.subTest(name=name):
+                data = (root / 'screenshots' / name).read_bytes()
+                self.assertEqual(data[:8], b'\x89PNG\r\n\x1a\n')
+                width, height = struct.unpack('>II', data[16:24])
+                self.assertGreaterEqual(width, 1200)
+                self.assertGreaterEqual(height, 760)
+                self.assertEqual(width % display_width, 0)
+                self.assertGreaterEqual(width // display_width, 2)
+                tag = re.search(r'<img\b[^>]*src="screenshots/' + re.escape(name) + r'"[^>]*>', readme)
+                self.assertIsNotNone(tag)
+                self.assertIn(f'width="{display_width}"', tag.group())
+                self.assertNotIn('height=', tag.group())
+
     def test_gradle_wrapper_command_matches_host(self):
         with patch.object(preview.os, 'name', 'nt'):
             self.assertEqual(r'.\gradlew.bat', preview.gradle_wrapper())

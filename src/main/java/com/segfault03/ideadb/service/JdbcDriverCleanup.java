@@ -14,7 +14,7 @@ public final class JdbcDriverCleanup {
         var drivers=DriverManager.getDrivers();
         while(drivers.hasMoreElements()) {
             Driver driver=drivers.nextElement();
-            if(driver.getClass().getClassLoader()==owner && (driver.getClass().getName().startsWith("com.mysql.") || driver.getClass().getName().startsWith("org.hsqldb."))) {
+            if(driver.getClass().getClassLoader()==owner) {
                 try { DriverManager.deregisterDriver(driver); } catch(SQLException ignored) { }
             }
         }

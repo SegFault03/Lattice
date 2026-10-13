@@ -20,7 +20,7 @@ public final class DatabaseCompatibilityTest {
         try (Statement statement = connection.createStatement(); ResultSet result = statement.executeQuery(sql)) { require(result.next(), "Missing scalar"); return result.getObject(1); }
     }
     private static void execute(Connection connection, String sql) throws Exception { try (Statement statement = connection.createStatement()) { statement.execute(sql); } }
-    private static void flow(ConnectionConfig config, String version, Path selectedJar) throws Exception {
+    public static void flow(ConnectionConfig config, String version, Path selectedJar) throws Exception {
         var test = MANAGER.testConnection(config);
         require(test.isSuccess(), test.getSummaryMessage());
         require(test.getDriverVersion() != null && !test.getDriverVersion().isBlank(), "No reported driver version");
@@ -73,7 +73,7 @@ public final class DatabaseCompatibilityTest {
         }
         System.out.println("PASS matrix " + test.getDatabaseProductName() + " " + test.getDatabaseProductVersion() + " / driver " + version);
     }
-    private static void java8Probe(Path java8, Path tests, Path jar, String type, String url) throws Exception {
+    public static void java8Probe(Path java8, Path tests, Path jar, String type, String url) throws Exception {
         Process probe=new ProcessBuilder(java8.toString(),"-cp",tests+File.pathSeparator+jar,
                 "com.segfault03.ideadb.Java8DriverProbe",type,url).inheritIO().start();
         require(probe.waitFor(45,TimeUnit.SECONDS) && probe.exitValue()==0,"Java 8 driver failed: " + type + " / " + jar.getFileName());
@@ -83,7 +83,7 @@ public final class DatabaseCompatibilityTest {
         if(args[0].equals("download")) {
             for(DatabaseType type:DatabaseType.values()) {
                 require(DriverCatalog.availableVersions(type).size()>10,"Incomplete version catalogue");
-                for(String version:type==DatabaseType.MYSQL ? MYSQL : HSQL) System.out.println("Downloaded " + version + " " + DriverCatalog.download(type,version));
+                for(String version:type==DatabaseType.MYSQL ? MYSQL : type==DatabaseType.HSQLDB ? HSQL : List.of("42.2.27","42.7.3","42.7.14")) System.out.println("Downloaded " + version + " " + DriverCatalog.download(type,version));
             }
             return;
         }

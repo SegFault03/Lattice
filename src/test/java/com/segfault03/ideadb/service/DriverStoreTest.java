@@ -35,6 +35,15 @@ class DriverStoreTest {
         return jar;
     }
 
+    @Test void mavenDiscoveryRetainsLegacyClassifiersOutsideSuggestedDownloadVersions() throws Exception {
+        System.setProperty("lattice.jdbc.cache", cache.resolve("retained").toString());
+        Path source = stored(DatabaseType.HSQLDB, "2.5.2-jdk8");
+        Path repository = cache.resolve("maven");
+        Path target = repository.resolve(DriverCatalog.artifactPath(DatabaseType.HSQLDB, "2.5.2-jdk8"));
+        Files.createDirectories(target.getParent()); Files.copy(source, target);
+        assertEquals(List.of("2.5.2-jdk8"), DriverCatalog.discoveredVersions(DatabaseType.HSQLDB, repository));
+    }
+
     @Test void storedVersionsAreDiscoveredAndListedAfterThePackagedDriver() throws Exception {
         System.setProperty("lattice.jdbc.cache", cache.toString());
         assertEquals("8.4.0", DriverCatalog.versionOf(DatabaseType.MYSQL, "mysql-connector-j-8.4.0.jar"));

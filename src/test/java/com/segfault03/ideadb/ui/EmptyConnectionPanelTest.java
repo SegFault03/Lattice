@@ -10,14 +10,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 
 class EmptyConnectionPanelTest {
-    @Test void databaseChoiceDispatchesBothTypes() throws Exception {
+    @Test void databaseChoiceDispatchesAllRegisteredTypes() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             java.util.List<com.segfault03.ideadb.model.DatabaseType> choices = new java.util.ArrayList<>();
             JPopupMenu menu = DatabaseUi.connectionMenu(choices::add);
-            assertEquals(2, menu.getComponentCount());
+            assertEquals(com.segfault03.ideadb.model.DatabaseType.values().length, menu.getComponentCount());
             for (Component item : menu.getComponents()) ((JMenuItem)item).doClick(0);
-            assertEquals(java.util.List.of(com.segfault03.ideadb.model.DatabaseType.MYSQL,
-                    com.segfault03.ideadb.model.DatabaseType.HSQLDB), choices);
+            assertEquals(java.util.List.of(com.segfault03.ideadb.model.DatabaseType.values()), choices);
         });
     }
     @Test
