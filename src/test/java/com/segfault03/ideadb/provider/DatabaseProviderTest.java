@@ -31,7 +31,7 @@ class DatabaseProviderTest {
             for (String version : provider.driver().suggestedVersions()) assertTrue(provider.driver().acceptsVersion(version));
         }
         assertNotSame(DatabaseProviders.get(DatabaseType.MYSQL).dialect(), DatabaseProviders.get(DatabaseType.HSQLDB).dialect());
-        assertTrue(DatabaseProviders.forUrl("jdbc:postgresql://localhost/db").isEmpty());
+        assertTrue(DatabaseProviders.forUrl("jdbc:unknown://localhost/db").isEmpty());
         assertThrows(NullPointerException.class, () -> DatabaseProviders.get(null));
     }
 

@@ -114,7 +114,7 @@ abstract class JdbcMetadataAdapter implements MetadataAdapter {
     }
     private static String resolveSchema(DatabaseMetaData meta, String requested) throws java.sql.SQLException {
         if (requested == null) return null;
-        String folded = requested.toUpperCase(Locale.ROOT), fallback = null;
+        String folded = meta.storesLowerCaseIdentifiers() ? requested.toLowerCase(Locale.ROOT) : requested.toUpperCase(Locale.ROOT), fallback = null;
         try (ResultSet rs = meta.getSchemas()) {
             while (rs.next()) {
                 String name = rs.getString("TABLE_SCHEM");
@@ -125,7 +125,7 @@ abstract class JdbcMetadataAdapter implements MetadataAdapter {
         return fallback == null ? requested : fallback;
     }
     private static String resolveTable(DatabaseMetaData meta, String schema, String requested) throws java.sql.SQLException {
-        String folded = requested.toUpperCase(Locale.ROOT), fallback = null;
+        String folded = meta.storesLowerCaseIdentifiers() ? requested.toLowerCase(Locale.ROOT) : requested.toUpperCase(Locale.ROOT), fallback = null;
         try (ResultSet rs = meta.getTables(null, literalPattern(meta,schema), "%", null)) {
             while (rs.next()) {
                 String name = rs.getString("TABLE_NAME");

@@ -40,5 +40,11 @@ public interface DatabaseProvider {
     default Object bitValue(String text) { return new java.math.BigInteger(text, 2).toByteArray(); }
     default Object timeValue(ColumnMetadata column, Object value) { return value instanceof java.sql.Time time ? time.toLocalTime() : java.time.LocalTime.parse(value.toString().trim()); }
     default Object boundValue(Object value) { return value; }
+    default void bind(PreparedStatement statement, int index, Object value) throws SQLException { statement.setObject(index, boundValue(value)); }
+    default Optional<Object> convertSpecialValue(ColumnMetadata column, Object value) { return Optional.empty(); }
+    default Object readValue(ResultSet result, ResultSetMetaData meta, int index) throws SQLException { return result.getObject(index); }
+    default String insertOverride(Connection connection) throws SQLException { return ""; }
+    default AutoCloseable readScope(Connection connection) throws SQLException { return () -> {}; }
+    default List<String> dataTypes() { return List.of("INT", "BIGINT", "VARCHAR", "TEXT", "BOOLEAN", "DECIMAL", "DOUBLE", "DATE", "TIMESTAMP", "BLOB"); }
     String sqlLiteral(Object value, String type);
 }

@@ -7,7 +7,8 @@ import java.util.*;
 /** Built-ins are registered explicitly. A missing provider fails rather than inheriting another engine's SQL. */
 public final class DatabaseProviders {
     private static final Map<DatabaseType, DatabaseProvider> PROVIDERS = Map.of(
-            DatabaseType.MYSQL, new MySqlProvider(), DatabaseType.HSQLDB, new HsqlProvider());
+            DatabaseType.MYSQL, new MySqlProvider(), DatabaseType.HSQLDB, new HsqlProvider(),
+            DatabaseType.POSTGRESQL, new PostgresProvider());
     private DatabaseProviders() {}
     public static DatabaseProvider get(DatabaseType type) {
         DatabaseProvider provider = PROVIDERS.get(Objects.requireNonNull(type, "Database type"));

@@ -10,9 +10,15 @@ public class ColumnMetadata {
     private final boolean primaryKey;
     private final boolean autoIncrement;
     private final String defaultValue;
+    private final boolean generated;
 
     public ColumnMetadata(String name, String typeName, int dataType, int columnSize, int decimalDigits,
                           boolean nullable, boolean primaryKey, boolean autoIncrement, String defaultValue) {
+        this(name, typeName, dataType, columnSize, decimalDigits, nullable, primaryKey, autoIncrement, defaultValue, false);
+    }
+    public ColumnMetadata(String name, String typeName, int dataType, int columnSize, int decimalDigits,
+                          boolean nullable, boolean primaryKey, boolean autoIncrement, String defaultValue, boolean generated) {
+        this.generated = generated;
         this.name = name;
         this.typeName = typeName;
         this.dataType = dataType;
@@ -24,6 +30,7 @@ public class ColumnMetadata {
         this.defaultValue = defaultValue;
     }
 
+    public boolean isGenerated() { return generated; }
     public String getName() { return name; }
     public String getTypeName() { return typeName; }
     public int getDataType() { return dataType; }

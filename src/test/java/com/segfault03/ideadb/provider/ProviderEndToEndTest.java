@@ -29,6 +29,12 @@ class ProviderEndToEndTest {
         workflow(config);
     }
 
+    @Test @Tag("integration") @Tag("postgres") void postgresServerWorkflow() throws Exception {
+        var config = new ConnectionConfig(DatabaseType.POSTGRESQL, "postgres contract");
+        config.setPort(Integer.getInteger("lattice.test.postgres.port",5432));
+        workflow(config);
+    }
+
     private void workflow(ConnectionConfig config) throws Exception {
         var manager = new DatabaseConnectionManager();
         var ddl = DdlService.getInstance(); var data = DataService.getInstance();

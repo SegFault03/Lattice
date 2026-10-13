@@ -99,7 +99,7 @@ public class DataService {
             sb.append(DdlService.quoteIdentifier(config,col));
             if (i < cols.size() - 1) sb.append(", ");
         }
-        sb.append(") VALUES (");
+        sb.append(")").append(DatabaseProviders.get(config.getType()).insertOverride(conn)).append(" VALUES (");
         for (int i = 0; i < cols.size(); i++) {
             sb.append("?");
             if (i < cols.size() - 1) sb.append(", ");
@@ -138,7 +138,7 @@ public class DataService {
 
     private static void bind(ConnectionConfig config,PreparedStatement statement,int index,Object value) throws SQLException {
         // Connector/J maps BigInteger through signed BIGINT unless it is bound as DECIMAL.
-        statement.setObject(index,DatabaseProviders.get(config.getType()).boundValue(value));
+        DatabaseProviders.get(config.getType()).bind(statement,index,value);
     }
 
     private static void requireKeys(Map<String, Object> keys) throws SQLException {
@@ -268,7 +268,7 @@ public class DataService {
                         if (rows.size() >= options.maxRows()) { truncated=true; break; }
                         List<Object> row = new ArrayList<>();
                         for (int i=1;i<=colCount;i++) {
-                            Object value = detachValue(rs.getObject(i)); row.add(value);
+                            Object value = detachValue(provider.readValue(rs,md,i)); row.add(value);
                             bytes += value instanceof byte[] binary ? binary.length : value instanceof String text ? text.length()*2L : 32;
                         }
                         if (bytes > 16L * 1024 * 1024) { truncated=true; break; }

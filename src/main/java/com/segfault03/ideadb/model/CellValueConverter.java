@@ -13,6 +13,8 @@ public final class CellValueConverter {
     public static Object convert(DatabaseType dialect,ColumnMetadata column,Object value) {
         if(column==null || value==RowDefaults.Value.USE_DEFAULT) return value;
         if(value==null) { if(!column.isNullable() && !column.isAutoIncrement()) throw new IllegalArgumentException("Column '" + column.getName() + "' cannot be NULL"); return null; }
+        var special = com.segfault03.ideadb.provider.DatabaseProviders.get(dialect).convertSpecialValue(column,value);
+        if (special.isPresent()) return special.get();
         String type=column.getTypeName().toUpperCase(Locale.ROOT), text=value.toString().trim();
         int jdbc=column.getDataType();
         if(isText(jdbc)) {

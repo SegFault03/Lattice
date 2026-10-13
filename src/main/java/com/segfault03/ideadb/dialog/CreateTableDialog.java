@@ -93,7 +93,7 @@ public class CreateTableDialog extends DialogWrapper {
         DatabaseInputs.styleTableEditors(columnsTable);
 
         // Setup combo box editor for Type column
-        JComboBox<String> typeEditor = DatabaseInputs.comboBox(DATA_TYPES);
+        JComboBox<String> typeEditor = DatabaseInputs.comboBox(com.segfault03.ideadb.provider.DatabaseProviders.get(config.getType()).dataTypes().toArray(String[]::new));
         columnsTable.getColumnModel().getColumn(1).setCellEditor(new DefaultCellEditor(typeEditor));
         sizeColumnHeaders();
 

@@ -102,7 +102,8 @@ public class AlterTableDialog extends DialogWrapper {
         // Every card uses the same rendered label column and top-aligned rows.
         ConnectionFormPanel addPanel = alterForm();
         addColNameField = DatabaseInputs.textField();
-        addColTypeCombo = DatabaseInputs.comboBox(DATA_TYPES);
+        addColTypeCombo = DatabaseInputs.comboBox(com.segfault03.ideadb.provider.DatabaseProviders.get(config.getType()).dataTypes().toArray(String[]::new));
+        addColTypeCombo.setSelectedItem("VARCHAR");
         addColSizeField = DatabaseInputs.textField("255");
         addColNullableCheck = new JBCheckBox("Allow NULL values", true);
         addColDefaultField = DatabaseInputs.textField();
@@ -131,7 +132,7 @@ public class AlterTableDialog extends DialogWrapper {
 
         ConnectionFormPanel modifyColPanel = alterForm();
         modifyColCombo = DatabaseInputs.comboBox(colNames);
-        modifyColTypeCombo = DatabaseInputs.comboBox(DATA_TYPES);
+        modifyColTypeCombo = DatabaseInputs.comboBox(com.segfault03.ideadb.provider.DatabaseProviders.get(config.getType()).dataTypes().toArray(String[]::new));
         modifyColTypeCombo.setEditable(true);
         modifyColSizeField = DatabaseInputs.textField("255");
         modifyColNullableCheck = new JBCheckBox("Allow NULL values", true);

@@ -105,7 +105,7 @@ public class ExportService {
         java.nio.file.Path temporary=java.nio.file.Files.createTempFile(target.getParent(),".lattice-export-",".part");
         long count=0;
         try {
-            try(java.sql.Statement statement=connection.createStatement()) {
+            try(var readScope = DatabaseProviders.get(config.getType()).readScope(connection); java.sql.Statement statement=connection.createStatement()) {
                 statement.setQueryTimeout(60); statement.setFetchSize(DatabaseProviders.get(config.getType()).fetchSize(100));
                 try(java.sql.ResultSet rows=statement.executeQuery(query); BufferedWriter writer=java.nio.file.Files.newBufferedWriter(temporary,StandardCharsets.UTF_8)) {
                     var metadata=rows.getMetaData(); List<String> columns=new java.util.ArrayList<>(), types=new java.util.ArrayList<>();
@@ -116,7 +116,7 @@ public class ExportService {
                     while(rows.next()) {
                         if(Thread.currentThread().isInterrupted()) throw new java.io.InterruptedIOException("Export cancelled");
                         List<Object> row=new java.util.ArrayList<>();
-                        for(int col=1;col<=columns.size();col++) row.add(DataService.detachValue(rows.getObject(col)));
+                        for(int col=1;col<=columns.size();col++) row.add(DataService.detachValue(DatabaseProviders.get(config.getType()).readValue(rows,metadata,col)));
                         if("sql".equals(format)) writeInsert(writer,config,schema,table,columns,types,row);
                         else if("csv".equals(format)) {
                             for(int col=0;col<row.size();col++) { if(col>0) writer.write(","); writer.write(escapeCsv(row.get(col)==null ? "" : textValue(row.get(col)))); } writer.newLine();

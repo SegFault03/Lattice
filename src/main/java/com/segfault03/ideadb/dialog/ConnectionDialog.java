@@ -483,6 +483,8 @@ public class ConnectionDialog extends DialogWrapper {
                 if (provider.connectionForm() == DatabaseProvider.ConnectionForm.SERVER) {
                     String port = mysqlPortField.getText().trim();
                     if (port.isEmpty() || port.equals(String.valueOf(previous.defaultPort()))) mysqlPortField.setText(String.valueOf(provider.defaultPort()));
+                    String database = mysqlDatabaseField.getText().trim();
+                    if (database.isEmpty() || database.equals(previous.defaultDatabase())) mysqlDatabaseField.setText(provider.defaultDatabase());
                     String user = mysqlUserField.getText().trim();
                     if (user.isEmpty() || user.equals(previous.defaultUser())) mysqlUserField.setText(provider.defaultUser());
                 } else {

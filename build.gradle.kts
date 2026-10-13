@@ -46,6 +46,7 @@ dependencies {
         testFramework(TestFrameworkType.Starter, configurationName = "uiTestImplementation")
     }
 
+    implementation("org.postgresql:postgresql:42.7.14") { exclude(group = "org.checkerframework", module = "checker-qual") }
     implementation("org.hsqldb:hsqldb:2.7.4")
     implementation("com.mysql:mysql-connector-j:26.7.0")
     constraints {
@@ -99,7 +100,7 @@ tasks.processResources {
 
 val fallbackDriverJars = tasks.register<Sync>("fallbackDriverJars") {
     from(configurations.runtimeClasspath.map { files ->
-        files.filter { it.name.startsWith("mysql-connector-") || it.name.startsWith("hsqldb-") }
+        files.filter { it.name.startsWith("mysql-connector-") || it.name.startsWith("hsqldb-") || it.name.startsWith("postgresql-") }
     })
     into(layout.buildDirectory.dir("fallback-drivers"))
 }
@@ -109,6 +110,8 @@ tasks.withType<Test>().configureEach {
     systemProperty("lattice.test.drivers", layout.buildDirectory.dir("fallback-drivers").get().asFile.absolutePath)
     systemProperty("lattice.test.mysql.port", providers.environmentVariable("LATTICE_TEST_MYSQL_PORT").orElse("3306").get())
     systemProperty("lattice.test.hsqldb.port", providers.environmentVariable("LATTICE_TEST_HSQLDB_PORT").orElse("9001").get())
+    systemProperty("lattice.test.postgres.port", providers.environmentVariable("LATTICE_TEST_POSTGRES_PORT").orElse("5432").get())
+    systemProperty("lattice.test.postgres.enabled", providers.environmentVariable("LATTICE_TEST_POSTGRES_ENABLED").orElse("false").get())
 }
 
 tasks.register<JavaExec>("fallbackDriverTest") {
@@ -118,9 +121,11 @@ tasks.register<JavaExec>("fallbackDriverTest") {
     mainClass.set("com.segfault03.ideadb.FallbackDriverLifecycleTest")
     systemProperty("lattice.test.mysql.port", providers.environmentVariable("LATTICE_TEST_MYSQL_PORT").orElse("3306").get())
     systemProperty("lattice.test.hsqldb.port", providers.environmentVariable("LATTICE_TEST_HSQLDB_PORT").orElse("9001").get())
+    systemProperty("lattice.test.postgres.port", providers.environmentVariable("LATTICE_TEST_POSTGRES_PORT").orElse("5432").get())
+    systemProperty("lattice.test.postgres.enabled", providers.environmentVariable("LATTICE_TEST_POSTGRES_ENABLED").orElse("false").get())
     classpath = sourceSets["main"].output + sourceSets["test"].output +
         sourceSets["main"].compileClasspath.filter {
-            !it.name.startsWith("mysql-connector-") && !it.name.startsWith("hsqldb-")
+            !it.name.startsWith("mysql-connector-") && !it.name.startsWith("hsqldb-") && !it.name.startsWith("postgresql-")
         }
     dependsOn(fallbackDriverJars)
     args(layout.buildDirectory.dir("fallback-drivers").get().asFile.absolutePath)

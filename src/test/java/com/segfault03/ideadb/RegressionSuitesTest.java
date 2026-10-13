@@ -96,7 +96,7 @@ public class RegressionSuitesTest {
             for (DatabaseType type : DatabaseType.values()) {
                 String sql = com.segfault03.ideadb.service.DdlService.getInstance().buildCreateTableSql(
                         new ConnectionConfig(type, "locale"), "PUBLIC", "items", List.of(column));
-                assertTrue(sql.contains("binary(16)"), sql);
+                assertTrue(type == DatabaseType.POSTGRESQL ? sql.toLowerCase(Locale.ROOT).contains("bytea") : sql.contains("binary(16)"), sql);
             }
         } finally { Locale.setDefault(previous); }
     }
