@@ -286,7 +286,8 @@ public class DataService {
             }
             // Close streaming result sets before metadata queries on the same connection.
             execution.checkCancelled();
-            result = result.withPrimaryKeyColumns(primaryKeyColumns(conn, origins));
+            result = result.withPrimaryKeyColumns(primaryKeyColumns(conn, origins))
+                    .withForeignKeyColumns(foreignKeyColumns(conn, origins));
             execution.checkCancelled();
             return result;
         } catch (Exception error) {
@@ -299,6 +300,12 @@ public class DataService {
     private record ResultTable(String catalog, String schema, String name) {}
 
     static java.util.Set<Integer> primaryKeyColumns(Connection connection, List<ResultColumn> columns) {
+        return keyColumns(connection, columns, false);
+    }
+    static java.util.Set<Integer> foreignKeyColumns(Connection connection, List<ResultColumn> columns) {
+        return keyColumns(connection, columns, true);
+    }
+    private static java.util.Set<Integer> keyColumns(Connection connection, List<ResultColumn> columns, boolean foreign) {
         Map<ResultTable, java.util.Set<String>> keysByTable = new java.util.HashMap<>();
         java.util.Set<Integer> indices = new java.util.HashSet<>();
         for (int index = 0; index < columns.size(); index++) {
@@ -309,8 +316,10 @@ public class DataService {
             if (keys == null) {
                 keys = new java.util.HashSet<>();
                 // Metadata is optional: permissions or unsupported drivers must not fail a successful query.
-                try (ResultSet metadata = connection.getMetaData().getPrimaryKeys(table.catalog(), table.schema(), table.name())) {
-                    if (metadata != null) while (metadata.next()) keys.add(metadata.getString("COLUMN_NAME"));
+                try (ResultSet metadata = foreign
+                        ? connection.getMetaData().getImportedKeys(table.catalog(), table.schema(), table.name())
+                        : connection.getMetaData().getPrimaryKeys(table.catalog(), table.schema(), table.name())) {
+                    if (metadata != null) while (metadata.next()) keys.add(metadata.getString(foreign ? "FKCOLUMN_NAME" : "COLUMN_NAME"));
                 } catch (SQLException unavailable) { }
                 keysByTable.put(table, keys);
             }

@@ -375,7 +375,7 @@ public final class UiPreview {
         meta.addColumn(new ColumnMetadata("id", "BIGINT", java.sql.Types.BIGINT, 0, 0, false, true, true, null));
         meta.addColumn(new ColumnMetadata("name", "VARCHAR", java.sql.Types.VARCHAR, 120, 0, false, false, false, null));
         meta.addColumn(new ColumnMetadata("email", "VARCHAR", java.sql.Types.VARCHAR, 180, 0, true, false, false, null));
-        meta.addColumn(new ColumnMetadata("status", "VARCHAR", java.sql.Types.VARCHAR, 20, 0, false, false, false, "'active'"));
+        meta.addColumn(new ColumnMetadata("status", "VARCHAR", java.sql.Types.VARCHAR, 20, 0, false, false, false, "'active'").withForeignKey(true));
         meta.addColumn(new ColumnMetadata("balance", "DECIMAL", java.sql.Types.DECIMAL, 10, 2, false, false, false, "0"));
         TableDataEditorPanel panel = new TableDataEditorPanel(null, config(DatabaseType.MYSQL), "shop", meta);
         Object model = field(panel, "tableModel");
@@ -396,23 +396,23 @@ public final class UiPreview {
     }
     static SqlQueryConsolePanel console() throws Exception {
         SqlQueryConsolePanel panel = new SqlQueryConsolePanel(null, config(DatabaseType.MYSQL), "shop", List.of("shop", "analytics"));
-        panel.setSqlText("-- Active customers with an outstanding balance\nSELECT id, name, email, balance\nFROM customers\nWHERE status = 'active' AND balance > 0\nORDER BY balance DESC;\n");
+        panel.setSqlText("-- Active customers with an outstanding balance\nSELECT id, name, email, balance, status\nFROM customers\nWHERE status = 'active' AND balance > 0\nORDER BY balance DESC;\n");
         com.segfault03.ideadb.model.ReadOnlyResultModel model = (com.segfault03.ideadb.model.ReadOnlyResultModel)field(panel, "resultsModel");
         model.setDataVector(new Object[][]{
-                {1001L, "Amelia Brooks", "amelia@example.com", new java.math.BigDecimal("240.50")},
-                {1004L, "Noah Williams", null, new java.math.BigDecimal("240.50")},
-                {1007L, "Isabella Rossi", "isabella@example.com", new java.math.BigDecimal("240.50")},
-                {1010L, "Aiden Davis", "aiden@example.com", new java.math.BigDecimal("240.50")}
-        }, new Object[]{"id", "name", "email", "balance"});
-        model.setResult(QueryResult.forResultSet(List.of("id", "name", "email", "balance"),
-                List.of("BIGINT", "VARCHAR", "VARCHAR", "DECIMAL"),
+                {1001L, "Amelia Brooks", "amelia@example.com", new java.math.BigDecimal("240.50"), "active"},
+                {1004L, "Noah Williams", null, new java.math.BigDecimal("240.50"), "active"},
+                {1007L, "Isabella Rossi", "isabella@example.com", new java.math.BigDecimal("240.50"), "active"},
+                {1010L, "Aiden Davis", "aiden@example.com", new java.math.BigDecimal("240.50"), "active"}
+        }, new Object[]{"id", "name", "email", "balance", "status"});
+        model.setResult(QueryResult.forResultSet(List.of("id", "name", "email", "balance", "status"),
+                List.of("BIGINT", "VARCHAR", "VARCHAR", "DECIMAL", "VARCHAR"),
                 java.util.stream.IntStream.range(0, model.getRowCount())
                         .mapToObj(row -> java.util.stream.IntStream.range(0, model.getColumnCount())
                                 .mapToObj(column -> model.getValueAt(row, column)).toList()).toList(), 18)
-                .withPrimaryKeyColumns(Set.of(0)));
+                .withPrimaryKeyColumns(Set.of(0)).withForeignKeyColumns(Set.of(4)));
         JTable table = (JTable)field(panel, "resultsTable");
         ((JScrollPane)table.getParent().getParent()).setColumnHeaderView(table.getTableHeader());
-        int[] widths = {110, 220, 320, 150};
+        int[] widths = {110, 220, 320, 150, 150};
         for (int i = 0; i < widths.length; i++) table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
         com.segfault03.ideadb.ui.DatabaseUi.status((JLabel)field(panel, "statusLabel"), "4 rows · 18 ms", com.segfault03.ideadb.ui.DatabaseUi.Tone.SUCCESS);
         ((JTabbedPane)field(panel, "resultsTabs")).setTitleAt(0, "Results (4)");

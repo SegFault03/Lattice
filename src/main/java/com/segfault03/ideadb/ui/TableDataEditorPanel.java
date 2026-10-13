@@ -945,7 +945,11 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         public int hashCode() { return Objects.hash(row, col); }
     }
 
-    private class EditableTableModel extends AbstractTableModel implements com.segfault03.ideadb.model.PrimaryKeyTableModel {
+    private class EditableTableModel extends AbstractTableModel implements com.segfault03.ideadb.model.KeyTableModel {
+        @Override public boolean isForeignKeyColumn(int column) {
+            ColumnMetadata metadata = getColumnMeta(column);
+            return metadata != null && metadata.isForeignKey();
+        }
         @Override public boolean isPrimaryKeyColumn(int column) {
             ColumnMetadata metadata = getColumnMeta(column);
             return metadata != null && metadata.isPrimaryKey();
@@ -1140,13 +1144,11 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             String colName = columns.get(col);
             ColumnMetadata cm = (col < columnMetaList.size()) ? columnMetaList.get(col) : tableMetadata.getColumn(colName);
             if (cm != null) {
-                if (cm.isPrimaryKey() && cm.isAutoIncrement()) {
-                    return colName + " [PK, Auto]";
-                } else if (cm.isPrimaryKey()) {
-                    return colName + " [PK]";
-                } else if (cm.isAutoIncrement()) {
-                    return colName + " [Auto]";
-                }
+                List<String> tags = new ArrayList<>();
+                if (cm.isPrimaryKey()) tags.add("PK");
+                if (cm.isForeignKey()) tags.add("FK");
+                if (cm.isAutoIncrement()) tags.add("Auto");
+                if (!tags.isEmpty()) return colName + " [" + String.join(", ", tags) + "]";
             }
             return colName;
         }

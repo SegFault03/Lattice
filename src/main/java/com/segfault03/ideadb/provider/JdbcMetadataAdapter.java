@@ -47,6 +47,13 @@ abstract class JdbcMetadataAdapter implements MetadataAdapter {
         }
         fetchColumnsInto(meta, catalog, schema, lookupTable, pkNames, columns);
         enrichColumns(conn, config, database, schema, lookupTable, columns);
+        Set<String> foreignKeys = new HashSet<>();
+        try (ResultSet rs = meta.getImportedKeys(catalog, schema, lookupTable)) {
+            if (rs != null) while (rs.next()) foreignKeys.add(rs.getString("FKCOLUMN_NAME"));
+        } catch (java.sql.SQLException unavailable) {
+            // Foreign-key badges are optional when a driver cannot provide relationship metadata.
+        }
+        columns.replaceAll(column -> column.withForeignKey(foreignKeys.contains(column.getName())));
 
         return columns;
     }

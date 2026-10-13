@@ -15,6 +15,8 @@ public class Icons {
     public static final Icon TABLE = loadIcon("/icons/table.svg", AllIcons.Nodes.DataTables);
     public static final Icon COLUMN = loadIcon("/icons/column.svg", AllIcons.Nodes.DataColumn);
     public static final Icon KEY = loadIcon("/icons/key.svg", AllIcons.Nodes.ResourceBundle);
+    public static final Icon FOREIGN_KEY = loadIcon("/icons/foreign-key.svg", COLUMN);
+    public static final Icon PRIMARY_FOREIGN_KEY = new com.intellij.ui.RowIcon(KEY, FOREIGN_KEY);
     public static final Icon CONSOLE = loadIcon("/icons/console.svg", AllIcons.Actions.Execute);
     public static final Icon STOP = loadIcon("/icons/stop.svg", AllIcons.Actions.Cancel);
     public static final Icon CLEAR = loadIcon("/icons/clear.svg", AllIcons.Actions.Cancel);
