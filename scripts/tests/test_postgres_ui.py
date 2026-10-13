@@ -19,12 +19,14 @@ class PostgresUiRunnerTests(unittest.TestCase):
             finally: closed.append(True)
         deps=MagicMock()
         deps.java.return_value=Path('/tools/jdk')
-        deps.ide.return_value=Path('/tools/IDE with spaces')
+        ide_home=Path('/tools/IDE with spaces')
+        deps.ide.return_value=ide_home
         deps.environment.return_value={'BASE_ENV':'preserved'}
         def launch(command,**kwargs):
             self.assertEqual(command[0],'bash')
             self.assertEqual(command[-1],'ExperimentalDark')
-            self.assertEqual(kwargs['env']['LATTICE_UI_BUILD_IDE_HOME'],'/tools/IDE with spaces')
+            self.assertEqual(kwargs['env']['LATTICE_UI_BUILD_IDE_HOME'],str(ide_home))
+            self.assertEqual(kwargs['env']['LATTICE_UI_IDE_HOME'],str(ide_home))
             self.assertEqual(kwargs['env']['LATTICE_UI_POSTGRES_PORT'],'15432')
             self.assertEqual(kwargs['env']['BASE_ENV'],'preserved')
             raise ui.subprocess.CalledProcessError(1,command)

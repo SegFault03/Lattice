@@ -1127,13 +1127,21 @@ class IntellijUiScreenshotTest {
                     assertTrue(it.x { byAccessibleName("Commit pending changes to the database") }.waitFound().component.isEnabled())
                     assertActionContrast(it.x { byAccessibleName("Commit pending changes to the database") }.waitFound())
                     assertActionContrast(it.x { byAccessibleName("Revert pending changes") }.waitFound())
-                    it.x { byAccessibleName("Revert pending changes") }.waitFound().click()
+                    // Revert resets the model immediately, then reloads asynchronously.
+                    // Hold a real response to verify that actions remain blocked during that reload.
+                    captureBusyState(jdbcFixture, tableEditor, "Loading table data…", "table-narrow-reverting.png", screenshotsDirectory) {
+                        it.x { byAccessibleName("Revert pending changes") }.waitFound().click()
+                    }
                 }
-                waitUntil("narrow Revert restores row") { tableCellText(dataGrid, 0, 1) == "Ada Lovelace" }
+                waitUntil("narrow Revert reload completes") {
+                    tableCellText(dataGrid, 0, 1) == "Ada Lovelace" && dataGrid.component.isEnabled()
+                }
                 closeToolbarOverflow(pendingOverflow)
                 whereInput.text = "\"id\" = -999"
-                tableEditor.x { byVisibleText("Apply") }.waitFound().click()
-                waitUntil("narrow Apply filters rows") { dataGrid.rowCount() == 0 }
+                val narrowApply = tableEditor.x { byVisibleText("Apply") }.waitFound()
+                waitUntil("narrow Apply enabled after Revert reload") { narrowApply.component.isEnabled() }
+                narrowApply.click()
+                waitUntil("narrow Apply filters rows") { dataGrid.rowCount() == 0 && dataGrid.component.isEnabled() }
                 captureScreen(screenshotsDirectory.resolve("table-narrow-filter.png"))
                 assertEditorControlsVisible(tableEditor, "narrow filtered table")
                 whereInput.text = ""

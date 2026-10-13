@@ -4,6 +4,8 @@ Patch notes are selected by the exact release version, including prerelease suff
 
 ## [Unreleased]
 
+- Make PostgreSQL UI-wrapper tests portable across Windows paths and wait for the real-IDE Revert reload before filtering; exercise the busy reload with a gated database response.
+
 - Run baseline build, functional, regression, integration and UI checks on every branch, including PostgreSQL real-IDE workflows and packaged driver/license validation. Restrict database/Java 8 and IDE compatibility to PRs targeting staging or main.
 - Release only from newly created version tags reachable from main; gate all release jobs on ancestry and disable manual release/Marketplace smoke publishing.
 
