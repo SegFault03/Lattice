@@ -365,7 +365,7 @@ def validation_plan(args: argparse.Namespace) -> tuple[bool, bool, bool, int]:
     if run_ide_compatibility:
         step_count += 1
     if run_database_compatibility:
-        step_count += 2
+        step_count += 2 + int(sys.platform == "linux")
     return run_base, run_ide_compatibility, run_database_compatibility, step_count
 
 
@@ -497,12 +497,14 @@ def main() -> int:
                     runner.run([sys.executable, "scripts/check-release-archive.py", str(archive),
                                 "--version", version], cwd=source, name="plugin-archive-check", timeout=300)
 
-                with progress.step("Run MySQL 8.4 and HSQLDB live functional suites"):
+                with progress.step("Run live database functional suites"):
                     active = progress.active
                     command = [sys.executable, 'scripts/test.py', '--live', '--mysql', '--hsqldb', '--integration-only',
                                '--mysql-port', str(mysql_port), '--hsqldb-port', str(hsql_port),
                                '--java-home', str(java_home), '--gradle-user-home', progress_runner_env['GRADLE_USER_HOME'],
                                '--download-dir', str(temp_path / 'live-dependencies')]
+                    if sys.platform == 'linux':
+                        command += ['--postgres']
                     if progress_runner_env.get('LATTICE_BUILD_IDE'):
                         command += ['--ide-home', progress_runner_env['LATTICE_BUILD_IDE']]
                     if native:
@@ -578,6 +580,24 @@ def main() -> int:
                     ]
                     run_gradle(runner, source, "databaseCompatibilityTest", properties=properties,
                                name=f"hsqldb-matrix-{len(HSQL_VERSIONS)}-versions", timeout=1800)
+
+
+                if sys.platform == "linux":
+                    from postgres import POSTGRES_VERSIONS, matrix_fixture
+                    with progress.step("Run PostgreSQL server and Java 8 driver feature matrix"):
+                        active = progress.active
+                        for server_version in POSTGRES_VERSIONS:
+                            matrix_port = fixture_port(None, 5432)
+                            with matrix_fixture(matrix_port, server_version, deps, args.docker or "docker", args.cleanup):
+                                properties = ["-Plattice.compatibility.mode=postgres",
+                                    f"-Plattice.compatibility.port={matrix_port}",
+                                    f"-Plattice.compatibility.server={server_version}",
+                                    f"-Plattice.compatibility.java8={executable(java8_home, 'java')}",
+                                    f"-Plattice.compatibility.probe={probe_classes}",
+                                    f"-Plattice.compatibility.cache={jdbc_cache}",
+                                    f"-Plattice.compatibility.cleanup={str(args.cleanup).lower()}"]
+                                run_gradle(runner, source, "databaseCompatibilityTest", properties=properties,
+                                           name=f"postgres-matrix-{server_version}", timeout=900)
 
         if args.skip_compatibility:
             scope = "Linux/Windows build and live functional checks (real IDE UI checks run separately)"

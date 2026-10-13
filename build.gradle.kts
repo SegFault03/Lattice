@@ -139,14 +139,15 @@ tasks.register<JavaExec>("fallbackDriverTest") {
 }
 
 tasks.register<JavaExec>("databaseCompatibilityTest") {
-    description = "Run the downloadable MySQL/HSQLDB driver and Java 8 compatibility matrix"
+    description = "Run the downloadable database driver and Java 8 compatibility matrix"
     group = "verification"
     dependsOn(tasks.testClasses)
-    mainClass.set("com.segfault03.ideadb.DatabaseCompatibilityTest")
+    mainClass.set(if (providers.gradleProperty("lattice.compatibility.mode").orNull == "postgres")
+        "com.segfault03.ideadb.provider.PostgresCompatibilityTest" else "com.segfault03.ideadb.DatabaseCompatibilityTest")
     classpath = sourceSets["test"].runtimeClasspath + sourceSets["main"].compileClasspath
     doFirst {
         val mode = providers.gradleProperty("lattice.compatibility.mode").orNull
-            ?: throw GradleException("Set -Plattice.compatibility.mode=mysql|hsqldb")
+            ?: throw GradleException("Set -Plattice.compatibility.mode=mysql|hsqldb|postgres")
         val java8 = providers.gradleProperty("lattice.compatibility.java8").orNull
             ?: throw GradleException("Set -Plattice.compatibility.java8 to a Java 8 runtime")
         val probeClasses = providers.gradleProperty("lattice.compatibility.probe").orNull
@@ -161,6 +162,9 @@ tasks.register<JavaExec>("databaseCompatibilityTest") {
                 java8,
                 probeClasses,
             )
+            "postgres" -> listOf(mode,
+                providers.gradleProperty("lattice.compatibility.port").get(),
+                providers.gradleProperty("lattice.compatibility.server").get(), java8, probeClasses)
             "hsqldb" -> listOf(mode, java8, probeClasses)
             else -> throw GradleException("Unknown compatibility mode: $mode")
         })

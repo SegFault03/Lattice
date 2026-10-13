@@ -111,7 +111,7 @@ jobs:
         env:
           RELEASE_VERSION: ${{ steps.metadata.outputs.version }}
         run: >-
-          python3 scripts/test.py --live --hsqldb --build
+          python3 scripts/test.py --live --hsqldb --postgres --build
           --version "$RELEASE_VERSION"
           --notes-file build/release/patch-notes.html
       - name: Validate production Swing previews and action states

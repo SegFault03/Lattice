@@ -38,7 +38,7 @@ jobs:
         run: python -m unittest discover -s scripts/tests -v
       - name: Build and run unit and live functional tests
         if: matrix.os == 'ubuntu-24.04'
-        run: python3 scripts/test.py --live --mysql --hsqldb --build
+        run: python3 scripts/test.py --live --mysql --hsqldb --postgres --build
       - name: Build and run unit tests
         if: matrix.os != 'ubuntu-24.04'
         run: python scripts/test.py --build

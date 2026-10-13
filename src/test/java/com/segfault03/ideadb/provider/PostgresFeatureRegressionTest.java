@@ -66,6 +66,13 @@ public class PostgresFeatureRegressionTest {
             ddl.alterTableModifyColumn(c,config,schema,"Records_%",changed);
             data.insertRow(c,config,schema,"Records_%",Map.of());
             assertEquals("new\\value",scalar(c,"SELECT \"Payload\" FROM " + target + " WHERE \"Id\"=4"));
+            String view=DdlService.formatTable(config,schema,"records_view");
+            sql(c,"CREATE VIEW " + view + " AS SELECT \"Payload\" FROM " + target);
+            var metadata=MetadataService.getInstance().getTables(c,config,schema).stream().filter(t->t.getName().equals("records_view")).findFirst().orElseThrow();
+            assertTrue(metadata.isView());
+            String viewDefinition=ddl.getCreateTableStatement(c,config,schema,metadata);
+            sql(c,"DROP VIEW " + view); sql(c,viewDefinition);
+            assertEquals(2,data.countRows(c,config,schema,"records_view",null));
             if(c.getMetaData().getDatabaseMajorVersion()>=10) {
                 String generated = c.getMetaData().getDatabaseMajorVersion()>=12 ? ", doubled BIGINT GENERATED ALWAYS AS (id*2) STORED" : "";
                 String identity=DdlService.formatTable(config,schema,"identity_table");

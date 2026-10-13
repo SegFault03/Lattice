@@ -12,7 +12,7 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** The same production-service flow runs against embedded and real server providers. */
-class ProviderEndToEndTest {
+public class ProviderEndToEndTest {
     @Test void embeddedHsqlWorkflow() throws Exception {
         var config = new ConnectionConfig(DatabaseType.HSQLDB, "embedded contract");
         config.setCustomUrl("jdbc:hsqldb:mem:provider_" + UUID.randomUUID() + ";shutdown=true");
@@ -36,7 +36,7 @@ class ProviderEndToEndTest {
         workflow(config);
     }
 
-    private void workflow(ConnectionConfig config) throws Exception {
+    public static void workflow(ConnectionConfig config) throws Exception {
         var manager = new DatabaseConnectionManager();
         var ddl = DdlService.getInstance(); var data = DataService.getInstance();
         var provider = DatabaseProviders.get(config.getType());

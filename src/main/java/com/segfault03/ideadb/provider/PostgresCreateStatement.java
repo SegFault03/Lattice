@@ -74,7 +74,7 @@ final class PostgresCreateStatement {
             }
         }
         for (Sequence seq:concat(serials,identities.values())) output.append("SELECT pg_catalog.setval(").append(literal(seq.name())).append(',').append(seq.value()).append(',').append(seq.called()).append(");\n");
-        try (var s=c.prepareStatement("SELECT pg_catalog.pg_get_indexdef(i.indexrelid) FROM pg_catalog.pg_index i WHERE i.indrelid=? AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_constraint k WHERE k.conindid=i.indexrelid) AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_inherits h WHERE h.inhrelid=i.indexrelid) ORDER BY i.indexrelid")) {
+        try (var s=c.prepareStatement("SELECT pg_catalog.pg_get_indexdef(i.indexrelid) FROM pg_catalog.pg_index i WHERE i.indrelid=? AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_depend d WHERE d.classid='pg_catalog.pg_class'::regclass AND d.objid=i.indexrelid AND d.refclassid='pg_catalog.pg_constraint'::regclass AND d.deptype='i') AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_inherits h WHERE h.inhrelid=i.indexrelid) ORDER BY i.indexrelid")) {
             s.setLong(1,oid); try(var rows=s.executeQuery()) { while(rows.next()) output.append(rows.getString(1)).append(";\n"); }
         }
         try (var s=c.prepareStatement("SELECT pg_catalog.pg_get_triggerdef(oid) FROM pg_catalog.pg_trigger WHERE tgrelid=? AND NOT " + (major>=9 ? "tgisinternal" : "tgisconstraint") + " ORDER BY tgname")) {

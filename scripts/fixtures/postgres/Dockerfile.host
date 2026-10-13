@@ -1,0 +1,9 @@
+# Optional host-compiler path for space-constrained VFS Docker hosts.
+FROM debian:trixie-slim
+COPY install/opt/pgsql /opt/pgsql
+RUN chmod -R a+rX /opt/pgsql && useradd --create-home postgres && mkdir /data && chown postgres:postgres /data
+COPY --chmod=755 entrypoint.sh /entrypoint.sh
+USER postgres
+ENV PATH=/opt/pgsql/bin:$PATH
+EXPOSE 5432
+ENTRYPOINT ["/bin/sh", "/entrypoint.sh"]
