@@ -21,7 +21,7 @@ from dependencies import Dependencies, add_dependency_options, executable
 
 FEATURED_SCREENSHOTS = {
     'side-panel.png': 'light-side-panel-340.png',
-    'connection-dialog.png': 'light-connection-mysql-600.png',
+    'connection-dialog.png': 'light-connection-mysql-740.png',
     'table-view.png': 'light-table-1100.png',
     'table-editing.png': 'light-table-new-row-1100.png',
     'sql-console.png': 'light-sql-console-1100.png',

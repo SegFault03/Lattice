@@ -20,7 +20,7 @@ class UiPreviewTests(unittest.TestCase):
     def test_readme_images_meet_marketplace_resolution_with_original_display_widths(self):
         root = SCRIPTS.parent
         readme = (root / 'README.md').read_text(encoding='utf-8')
-        widths = {'side-panel.png': 340, 'connection-dialog.png': 600,
+        widths = {'side-panel.png': 340, 'connection-dialog.png': 740,
                   'table-view.png': 1100, 'table-editing.png': 1100, 'sql-console.png': 1100}
         for name, display_width in widths.items():
             with self.subTest(name=name):

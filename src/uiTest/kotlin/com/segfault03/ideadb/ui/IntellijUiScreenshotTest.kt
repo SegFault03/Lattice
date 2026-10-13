@@ -266,18 +266,15 @@ class IntellijUiScreenshotTest {
             ))) { "Expected bundled and Maven-discovered MySQL releases: $mysqlAvailableDriverLabels" }
             captureScreen(screenshotsDirectory.resolve("mysql-connection-dialog-available-driver-list.png"))
             pressEscape()
-            val mysqlTypeCombo = mysqlDialog.x(JComboBoxUiComponent::class.java) {
-                and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"), byAccessibleName("Database type:"))
-            }.waitFound()
-            mysqlTypeCombo.selectItem("HSQLDB")
+            mysqlDialog.x { byAccessibleName("HSQLDB") }.waitFound().click()
             assertDriverSummary(mysqlDialog, "2.7.2 · DISCOVERED")
             captureScreen(screenshotsDirectory.resolve("driver-type-switch-hsql-project-default.png"))
-            mysqlTypeCombo.selectItem("MySQL")
+            mysqlDialog.x { byAccessibleName("MySQL") }.waitFound().click()
             assertDriverSummary(mysqlDialog, "8.4.0 · DISCOVERED")
             mysqlAvailableDriverCombo.selectItem("26.7.0 · BUNDLED")
-            mysqlTypeCombo.selectItem("HSQLDB")
+            mysqlDialog.x { byAccessibleName("HSQLDB") }.waitFound().click()
             assertDriverSummary(mysqlDialog, "2.7.2 · DISCOVERED")
-            mysqlTypeCombo.selectItem("MySQL")
+            mysqlDialog.x { byAccessibleName("MySQL") }.waitFound().click()
             assertDriverSummary(mysqlDialog, "26.7.0 · BUNDLED")
             captureScreen(screenshotsDirectory.resolve("driver-type-switch-mysql-manual-choice.png"))
             mysqlAvailableDriverCombo.selectItem("8.4.0 · DISCOVERED")
@@ -517,9 +514,7 @@ class IntellijUiScreenshotTest {
             assertDriverSummary(connectionDialog, "2.7.3-jdk8 · DOWNLOADED")
 
             if (postgres) {
-                connectionDialog.x(JComboBoxUiComponent::class.java) {
-                    and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"), byAccessibleName("Database type:"))
-                }.waitFound().selectItem("PostgreSQL")
+                connectionDialog.x { byAccessibleName("PostgreSQL") }.waitFound().click()
                 availableDriverCombo.selectItem("42.7.14 · BUNDLED")
                 assertDriverSummary(connectionDialog, "42.7.14 · BUNDLED")
                 captureScreen(screenshotsDirectory.resolve("postgresql-driver-selection.png"))

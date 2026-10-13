@@ -14,7 +14,7 @@ It paints the plugin's production Swing screens with fixture data and a headless
 - `screenshots/table-editing.png`
 - `screenshots/sql-console.png`
 
-The five featured images are painted directly at higher pixel density: at least 2×, or a larger integer scale to meet the Marketplace recommendation of 1200 × 760 pixels. Component layout and aspect ratio stay unchanged. The README sets their original display widths (340, 600 and 1100 pixels), with height determined automatically. Upload the same PNGs under `screenshots/` to Marketplace; no separate export is needed. The featured light/dark variants in `--all-previews` also use this resolution; other gallery variants keep their original resolution.
+The five featured images are painted directly at higher pixel density: at least 2×, or a larger integer scale to meet the Marketplace recommendation of 1200 × 760 pixels. Component layout and aspect ratio stay unchanged. The README sets their original display widths (340, 740 and 1100 pixels), with height determined automatically. Upload the same PNGs under `screenshots/` to Marketplace; no separate export is needed. The featured light/dark variants in `--all-previews` also use this resolution; other gallery variants keep their original resolution.
 
 It also writes `build/ui-preview/index.html` and a ZIP of the generated preview set. Open the gallery to inspect the captures before committing changed README images.
 

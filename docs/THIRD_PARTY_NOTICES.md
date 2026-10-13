@@ -9,6 +9,8 @@ Lattice's own source is under the [MIT license](../LICENSE). Third-party compone
 | PostgreSQL JDBC 42.7.14 | Plugin dependency; Gradle resolves the JAR from Maven Central | BSD 2-Clause; [license text](../licenses/postgresql-LICENSE.txt), [upstream source](https://github.com/pgjdbc/pgjdbc/tree/REL42.7.14) |
 | Protocol Buffers Java 4.36.2 | Plugin dependency, transitive from Connector/J | BSD 3-Clause; [license text](../licenses/protobuf-LICENSE.txt), [upstream source](https://github.com/protocolbuffers/protobuf/tree/v36.2) |
 
+The MySQL and PostgreSQL source icons are from [Simple Icons](https://github.com/simple-icons/simple-icons) ([CC0](https://github.com/simple-icons/simple-icons/blob/develop/LICENSE.md)). The HSQLDB monogram is an original SVG for this dialog POC. Brand names and marks belong to their respective owners.
+
 The release workflow also attaches the checksum-pinned, unmodified MySQL Connector/J 26.7.0 source archive alongside the plugin ZIP. Retain that corresponding-source asset and these notices when redistributing releases. Distribute locally built ZIPs with the same source archive (see [RELEASING](RELEASING.md)).
 
 User-selected JDBC JARs and downloaded drivers have their own licensing terms. Test SDKs, database executables, Microsoft runtimes, JUnit and Plugin Verifier are stored outside the repository and are not shipped with the plugin.

@@ -40,7 +40,7 @@ public final class DatabaseUi {
     public static JPopupMenu connectionMenu(Consumer<DatabaseType> choose) {
         JPopupMenu menu = popupMenu();
         for (DatabaseType type : DatabaseType.values()) {
-            JMenuItem item = new JMenuItem(type.getDisplayName() + "…");
+            JMenuItem item = new JMenuItem(type.getDisplayName() + "…", Icons.dataSource(type, 16));
             item.addActionListener(event -> choose.accept(type));
             menu.add(item);
         }
