@@ -124,8 +124,12 @@ class IntellijUiScreenshotTest {
         // IDEA's own ProxySelector supersedes JVM proxy flags. Configure the real
         // HTTP Proxy settings in this isolated profile, preserving cloud routing.
         val proxyAddress = System.getenv("HTTPS_PROXY") ?: System.getenv("HTTP_PROXY")
-        if (!proxyAddress.isNullOrBlank()) {
-            val proxy = java.net.URI.create(proxyAddress)
+        val downloadFixture = if (!postgres && !System.getProperty("ui.skip.remote.downloads", "false").toBoolean())
+            DriverDownloadUiFixture(proxyAddress) else null
+        try {
+        val configuredProxy = downloadFixture?.let { "http://127.0.0.1:${it.port}" } ?: proxyAddress
+        if (!configuredProxy.isNullOrBlank()) {
+            val proxy = java.net.URI.create(configuredProxy)
             testContext.paths.configDir.resolve("options/proxy.settings.xml").writeText("""
                 <application><component name="HttpConfigurable">
                   <option name="USE_HTTP_PROXY" value="true"/>
@@ -134,6 +138,12 @@ class IntellijUiScreenshotTest {
                   <option name="PROXY_EXCEPTIONS" value="localhost,127.0.0.1"/>
                 </component></application>
             """.trimIndent())
+        } else Files.deleteIfExists(testContext.paths.configDir.resolve("options/proxy.settings.xml"))
+        if (downloadFixture != null) testContext.applyVMOptionsPatch {
+            addSystemProperty("https.proxyHost", "127.0.0.1")
+            addSystemProperty("https.proxyPort", downloadFixture.port.toString())
+            addSystemProperty("http.proxyHost", "127.0.0.1")
+            addSystemProperty("http.proxyPort", downloadFixture.port.toString())
         }
         testContext.paths.configDir.resolve("options/laf.xml").writeText(
             """<application><component name="LafManager" autodetect="false"><laf themeId="$themeId"/></component></application>""",
@@ -322,18 +332,23 @@ class IntellijUiScreenshotTest {
                 waitUntil("MySQL version $mysqlProgressVersion can be downloaded") {
                     mysqlDownloadButton.component.isEnabled()
                 }
-                mysqlDownloadButton.click()
-                val mysqlProgressBar = mysqlDialog.x(UiComponent::class.java) {
-                    byAccessibleName("Driver download progress")
-                }.waitFound()
-                assertTrue(mysqlProgressBar.component.isVisible(), "The progress bar should appear during a driver download")
-                assertTrue(!mysqlDownloadButton.component.isEnabled(), "Download should be disabled during the transfer")
-                assertTrue(!mysqlDriverVersionCombo.component.isEnabled(), "The version selector should be disabled during the transfer")
-                assertTrue(
-                    mysqlProgressBar.component.width == mysqlDriverVersionCombo.component.width,
-                    "The progress bar should match the driver version selector width",
-                )
-                captureScreen(screenshotsDirectory.resolve("mysql-driver-download-progress.png"), settleMillis = 0)
+                val downloadGate = requireNotNull(downloadFixture)
+                downloadGate.pauseResponses()
+                try {
+                    mysqlDownloadButton.click()
+                    downloadGate.awaitBlockedResponse()
+                    val mysqlProgressBar = mysqlDialog.x(UiComponent::class.java) {
+                        byAccessibleName("Driver download progress")
+                    }.waitFound()
+                    assertTrue(mysqlProgressBar.component.isVisible(), "The progress bar should appear during a driver download")
+                    assertTrue(!mysqlDownloadButton.component.isEnabled(), "Download should be disabled during the transfer")
+                    assertTrue(!mysqlDriverVersionCombo.component.isEnabled(), "The version selector should be disabled during the transfer")
+                    assertTrue(
+                        mysqlProgressBar.component.width == mysqlDriverVersionCombo.component.width,
+                        "The progress bar should match the driver version selector width",
+                    )
+                    captureScreen(screenshotsDirectory.resolve("mysql-driver-download-progress.png"), settleMillis = 0)
+                } finally { downloadGate.resumeResponses() }
                 waitUntil("MySQL driver download and verification") {
                     mysqlDialog.hasSubtext("Downloaded and ready")
                 }
@@ -353,7 +368,15 @@ class IntellijUiScreenshotTest {
                         and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("JDBC URL:"))
                     }.waitFound().text =
                         "jdbc:mysql://127.0.0.1:1/ui_review?connectTimeout=1000"
-                    mysqlDialog.x { byVisibleText("Test connection") }.waitFound().click()
+                    val failureTest = mysqlDialog.x { byVisibleText("Test connection") }.waitFound()
+                    waitUntil("downloaded driver ready for connection testing") { failureTest.component.isEnabled() }
+                    // Switching to JDBC URL resizes the modal. Xvfb can lose Robot
+                    // clicks at its old coordinates; dispatch the real button action
+                    // on the IDE EDT and still require the backend's failure dialog.
+                    withContext(OnDispatcher.EDT) { cast(failureTest.component, LiveToolbarButton::class).doClick() }
+                    waitUntil("failed connection status from the downloaded driver") {
+                        mysqlDialog.hasSubtext("Connection failed · Check the settings")
+                    }
                     frame.x(DialogUiComponent::class.java) { byTitle("Connection Failed") }.waitFound().also {
                         captureScreen(screenshotsDirectory.resolve("mysql-connection-failure.png"))
                         it.pressButton("OK")
@@ -1355,6 +1378,7 @@ class IntellijUiScreenshotTest {
             println("Saved real IDE screenshots to $screenshotsDirectory")
         }
         } finally { jdbcFixture?.close() }
+        } finally { downloadFixture?.close() }
     }
 
     private fun assertDataSourcePicker(dialog: UiComponent) {
@@ -2145,6 +2169,7 @@ interface LiveCellRenderer {
 
 @Remote("javax.swing.JButton")
 interface LiveToolbarButton {
+    fun doClick()
     fun isFocusOwner(): Boolean
     fun getModel(): LiveButtonModel
     fun requestFocusInWindow(): Boolean

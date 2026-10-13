@@ -70,6 +70,15 @@ footer resets its baseline and does not count as animation. First/last samples
 and a full display capture are saved on failure, with the small samples and
 complete exception details also available in the job log.
 
+The download-progress review gates Maven's real HTTPS response through a local
+CONNECT tunnel while checking the progress bar and disabled controls. TLS and
+checksum verification remain end-to-end with Maven Central; the tunnel forwards
+through the configured session proxy when present. Releasing the gate lets the
+normal download and validation complete, avoiding a race with fast transfers.
+After switching the resized dialog to JDBC URL mode, the failed-connection
+regression dispatches the production Swing button action on the IDE event thread
+and requires both the backend's failure status and its error dialog.
+
 Linux CI runs the dark functional review, light styling review and PostgreSQL
 review as separate checks after their shared prerequisites pass. Each suite can
 fail the job independently, and a failure does not suppress the other suites'
