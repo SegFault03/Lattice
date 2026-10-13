@@ -33,6 +33,11 @@ public interface DatabaseProvider {
     DatabaseNamespace namespace(String selected);
     void selectNamespace(Connection connection, String selected) throws SQLException;
     default void initialize(Connection connection, ConnectionConfig config) throws SQLException {}
+    default void cancelStatement(Statement statement) throws SQLException { statement.cancel(); }
+    default void beforeQuery(Connection connection, String selected, String sql) throws SQLException {
+        if (selected != null && !selected.isBlank()) selectNamespace(connection, selected);
+    }
+    default boolean supportsCustomTypes() { return false; }
     int fetchSize(int requested);
     default void requireTransactionalTable(Connection connection, ConnectionConfig config, String selected, String table) throws SQLException {
         if (!connection.getMetaData().supportsTransactions()) throw new SQLException("This database does not support transactional grid changes");

@@ -25,7 +25,7 @@ final class PostgresProvider implements DatabaseProvider {
         String host = config.getHost() == null || config.getHost().isBlank() ? "localhost" : config.getHost().trim();
         String database = config.getDatabaseName() == null || config.getDatabaseName().isBlank() ? defaultDatabase() : config.getDatabaseName().trim();
         String encoded = java.net.URLEncoder.encode(database, java.nio.charset.StandardCharsets.UTF_8).replace("+", "%20");
-        return "jdbc:postgresql://" + host + ":" + (config.getPort() > 0 ? config.getPort() : defaultPort()) + "/" + encoded + "?connectTimeout=10";
+        return "jdbc:postgresql://" + host + ":" + (config.getPort() > 0 ? config.getPort() : defaultPort()) + "/" + encoded + "?connectTimeout=10&loginTimeout=10";
     }
     public DatabaseNamespace namespace(String selected) { return new DatabaseNamespace(null, selected); }
     public void selectNamespace(Connection conn, String selected) throws SQLException {
@@ -34,6 +34,19 @@ final class PostgresProvider implements DatabaseProvider {
     public void initialize(Connection conn, ConnectionConfig config) throws SQLException {
         if (config.getCustomUrl().isBlank()) try (var statement = conn.createStatement()) { statement.execute("SET TIME ZONE 'UTC'"); }
     }
+    public void cancelStatement(Statement statement) throws SQLException {
+        // PgStatement.cancel marks itself cancelled even when its first signal precedes server execution.
+        // Use the connection's protocol cancel so retries can reach the same still-attached execution.
+        try { statement.getConnection().getClass().getMethod("cancelQuery").invoke(statement.getConnection()); }
+        catch (ReflectiveOperationException error) {
+            if (error.getCause() instanceof SQLException sql) throw sql;
+            throw new SQLException("PostgreSQL cancellation failed",error);
+        }
+    }
+    public void beforeQuery(Connection connection, String selected, String sql) throws SQLException {
+        if (!sql.matches("(?is)^(?:\\s|--[^\\r\\n]*(?:\\r?\\n|$)|/\\*.*?\\*/)*(?:ROLLBACK|COMMIT|END|ABORT)\\b.*")) DatabaseProvider.super.beforeQuery(connection,selected,sql);
+    }
+    public boolean supportsCustomTypes() { return true; }
     public int fetchSize(int requested) { return requested; }
     public Object bitValue(String text) { return text; }
     public void bind(PreparedStatement statement, int index, Object value) throws SQLException {
@@ -51,18 +64,26 @@ final class PostgresProvider implements DatabaseProvider {
         if (text.equals("infinity") || text.equals("-infinity")) {
             if (column.getDataType() == Types.DATE || type.contains("timestamp")) return Optional.of(text);
         }
+        if ((column.getDataType()==Types.NUMERIC || column.getDataType()==Types.DECIMAL || column.getDataType()==Types.REAL || column.getDataType()==Types.DOUBLE || column.getDataType()==Types.FLOAT) && Set.of("NaN","Infinity","-Infinity").contains(text)) return Optional.of(text);
         if (type.equals("uuid")) return Optional.of(UUID.fromString(text));
         if (type.equals("timestamptz") || type.contains("timestamp with time zone")) {
-            if (value instanceof OffsetDateTime) return Optional.of(value);
             String normalized = text.replace(' ', 'T').replaceFirst("([+-][0-9]{2})$", "$1:00");
-            return Optional.of(OffsetDateTime.parse(normalized));
+            OffsetDateTime timestamp = value instanceof OffsetDateTime offset ? offset : OffsetDateTime.parse(normalized);
+            requirePrecision(column,timestamp.getNano()); return Optional.of(timestamp);
         }
-        if (type.equals("timetz") || type.contains("time with time zone")) return Optional.of(OffsetTime.parse(text.replaceFirst("([+-][0-9]{2})$", "$1:00")));
+        if (type.equals("timetz") || type.contains("time with time zone")) {
+            OffsetTime time = value instanceof OffsetTime offset ? offset : OffsetTime.parse(text.replaceFirst("([+-][0-9]{2})$", "$1:00"));
+            requirePrecision(column,time.getNano()); return Optional.of(time);
+        }
         if (column.getDataType() == Types.TIME && text.matches("24:00:00(?:\\.0{1,6})?")) return Optional.of(text);
         return Optional.empty();
     }
+    private static void requirePrecision(ColumnMetadata column,int nano) {
+        if (column.getDecimalDigits()<9 && nano % (int)Math.pow(10,9-Math.max(0,column.getDecimalDigits())) != 0) throw new IllegalArgumentException("Temporal value exceeds fractional precision");
+    }
     public Object readValue(ResultSet result, ResultSetMetaData meta, int index) throws SQLException {
         int type = meta.getColumnType(index);
+        if ((type == Types.NUMERIC || type == Types.DECIMAL) && result.getString(index) != null && Set.of("NaN","Infinity","-Infinity").contains(result.getString(index))) return result.getString(index);
         if (meta.getColumnTypeName(index).equals("bit") || meta.getColumnTypeName(index).equals("varbit") || type == Types.DATE || type == Types.TIME || type == Types.TIME_WITH_TIMEZONE || type == Types.TIMESTAMP || type == Types.TIMESTAMP_WITH_TIMEZONE || type == Types.ARRAY || type == Types.OTHER)
             return result.getString(index); // Detach vendor objects, arrays, infinity and timezone values faithfully.
         return result.getObject(index);
@@ -90,6 +111,8 @@ final class PostgresProvider implements DatabaseProvider {
         if (value == null) return "NULL";
         if (value instanceof byte[] bytes) return "decode('" + HexFormat.of().formatHex(bytes) + "','hex')";
         if (value instanceof Boolean bool) return bool ? "TRUE" : "FALSE";
+        if (value instanceof Double number && !Double.isFinite(number)) return textLiteral(number.isNaN() ? "NaN" : number>0 ? "Infinity" : "-Infinity");
+        if (value instanceof Float number && !Float.isFinite(number)) return textLiteral(number.isNaN() ? "NaN" : number>0 ? "Infinity" : "-Infinity");
         if (value instanceof Number) return SqlLiterals.common(value);
         if (type.equalsIgnoreCase("bit") || type.equalsIgnoreCase("varbit")) return "B'" + value.toString().replace("'","''") + "'";
         return textLiteral(value.toString());

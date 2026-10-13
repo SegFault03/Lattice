@@ -42,16 +42,17 @@ public class ColumnMetadata {
     public String getDefaultValue() { return defaultValue; }
 
     public String getFormattedType() {
-        if (columnSize > 0 && !typeName.equalsIgnoreCase("INTEGER") && !typeName.equalsIgnoreCase("INT")
-                && !typeName.equalsIgnoreCase("BIGINT") && !typeName.equalsIgnoreCase("BOOLEAN")
-                && !typeName.equalsIgnoreCase("DATE") && !typeName.equalsIgnoreCase("TIME")
-                && !typeName.equalsIgnoreCase("TIMESTAMP") && !typeName.equalsIgnoreCase("DATETIME")) {
-            if (decimalDigits > 0) {
-                return typeName + "(" + columnSize + "," + decimalDigits + ")";
-            }
-            return typeName + "(" + columnSize + ")";
-        }
-        return typeName;
+        if (typeName.contains("(") || typeName.equalsIgnoreCase("BOOLEAN") || typeName.equalsIgnoreCase("BOOL")) return typeName;
+        boolean sized = switch (dataType) {
+            case java.sql.Types.CHAR, java.sql.Types.VARCHAR, java.sql.Types.NCHAR, java.sql.Types.NVARCHAR,
+                 java.sql.Types.BINARY, java.sql.Types.VARBINARY, java.sql.Types.BIT,
+                 java.sql.Types.NUMERIC, java.sql.Types.DECIMAL -> true;
+            default -> false;
+        };
+        if (!sized || columnSize <= 0) return typeName;
+        if ((dataType == java.sql.Types.NUMERIC || dataType == java.sql.Types.DECIMAL) && decimalDigits > 0)
+            return typeName + "(" + columnSize + "," + decimalDigits + ")";
+        return typeName + "(" + columnSize + ")";
     }
 
     @Override

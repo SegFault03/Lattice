@@ -76,16 +76,17 @@ public class ExportService {
     }
     public void exportToSqlInsert(ConnectionConfig config,String schema,String tableName,QueryResult result,File file) throws Exception {
         try(BufferedWriter writer=new BufferedWriter(new FileWriter(file,StandardCharsets.UTF_8))) {
-            for(List<Object> row:result.getRows()) writeInsert(writer,config,schema,tableName,result.getColumnNames(),result.getColumnTypes(),row);
+            for(List<Object> row:result.getRows()) writeInsert(writer,config,schema,tableName,result.getColumnNames(),result.getColumnTypes(),row,result.getInsertOverride(),result.getOmittedInsertColumns());
         }
     }
-    private void writeInsert(BufferedWriter writer, ConnectionConfig config,String schema,String table,List<String> columns,List<String> types,List<Object> row) throws Exception {
-        writer.write("INSERT INTO " + DdlService.formatTable(config,schema,table) + " (");
-        for(int col=0;col<columns.size();col++) {
-            if(col>0) writer.write(", "); writer.write(DdlService.quoteIdentifier(config,columns.get(col)));
-        }
-        writer.write(") VALUES (");
-        for(int col=0;col<row.size();col++) { if(col>0) writer.write(", "); writer.write(sqlLiteral(config,row.get(col),types.get(col))); }
+    private void writeInsert(BufferedWriter writer, ConnectionConfig config,String schema,String table,List<String> columns,List<String> types,List<Object> row,String override,java.util.Set<String> omitted) throws Exception {
+        String target = DdlService.formatTable(config,schema,table);
+        List<Integer> included = java.util.stream.IntStream.range(0,columns.size()).filter(i -> !omitted.contains(columns.get(i))).boxed().toList();
+        if (included.isEmpty()) { writer.write(DatabaseProviders.get(config.getType()).dialect().defaultInsert(target) + ";\n"); return; }
+        writer.write("INSERT INTO " + target + " (");
+        for (int i=0;i<included.size();i++) { if(i>0) writer.write(", "); writer.write(DdlService.quoteIdentifier(config,columns.get(included.get(i)))); }
+        writer.write(")" + override + " VALUES (");
+        for (int i=0;i<included.size();i++) { if(i>0) writer.write(", "); int index=included.get(i); writer.write(sqlLiteral(config,row.get(index),types.get(index))); }
         writer.write(");\n");
     }
     private static boolean finite(Object value) {
@@ -100,6 +101,8 @@ public class ExportService {
 
     /** A fresh persisted query streams all matching rows; page size and dirty grid values do not participate. */
     public long exportPersisted(java.sql.Connection connection,ConnectionConfig config,String schema,String table,String where,String format,File file) throws Exception {
+        var omitted = MetadataService.getInstance().getColumns(connection,config,schema,table).stream().filter(com.segfault03.ideadb.model.ColumnMetadata::isGenerated).map(com.segfault03.ideadb.model.ColumnMetadata::getName).collect(java.util.stream.Collectors.toSet());
+        String override = DatabaseProviders.get(config.getType()).insertOverride(connection);
         String query="SELECT * FROM " + DdlService.formatTable(config,schema,table) + (where==null || where.isBlank() ? "" : " WHERE " + where);
         java.nio.file.Path target=file.toPath().toAbsolutePath();
         java.nio.file.Path temporary=java.nio.file.Files.createTempFile(target.getParent(),".lattice-export-",".part");
@@ -117,7 +120,7 @@ public class ExportService {
                         if(Thread.currentThread().isInterrupted()) throw new java.io.InterruptedIOException("Export cancelled");
                         List<Object> row=new java.util.ArrayList<>();
                         for(int col=1;col<=columns.size();col++) row.add(DataService.detachValue(DatabaseProviders.get(config.getType()).readValue(rows,metadata,col)));
-                        if("sql".equals(format)) writeInsert(writer,config,schema,table,columns,types,row);
+                        if("sql".equals(format)) writeInsert(writer,config,schema,table,columns,types,row,override,omitted);
                         else if("csv".equals(format)) {
                             for(int col=0;col<row.size();col++) { if(col>0) writer.write(","); writer.write(escapeCsv(row.get(col)==null ? "" : textValue(row.get(col)))); } writer.newLine();
                         } else {

@@ -29,6 +29,7 @@ class PostgresProviderTest {
         assertEquals("E'O''Brien\\\\path\\n'",provider.sqlLiteral("O'Brien\\path\n","text"));
         var tz=new ColumnMetadata("T","TIMESTAMP WITH TIME ZONE",Types.TIMESTAMP,35,6,true,false,false,null);
         assertEquals(java.time.OffsetDateTime.parse("2026-10-13T10:20:30Z"),CellValueConverter.convert(DatabaseType.POSTGRESQL,tz,"2026-10-13 10:20:30+00"));
+        assertThrows(IllegalArgumentException.class,()->CellValueConverter.convert(DatabaseType.POSTGRESQL,tz,"2026-10-13 10:20:30.123456789+00"));
         assertEquals("infinity",CellValueConverter.convert(DatabaseType.POSTGRESQL,tz,"infinity"));
         assertEquals(java.util.UUID.fromString("dd39038f-081d-477a-9153-d931c322d331"),CellValueConverter.convert(DatabaseType.POSTGRESQL,new ColumnMetadata("ID","uuid",Types.OTHER,0,0,false,true,false,null),"dd39038f-081d-477a-9153-d931c322d331"));
     }

@@ -103,6 +103,7 @@ public class AlterTableDialog extends DialogWrapper {
         ConnectionFormPanel addPanel = alterForm();
         addColNameField = DatabaseInputs.textField();
         addColTypeCombo = DatabaseInputs.comboBox(com.segfault03.ideadb.provider.DatabaseProviders.get(config.getType()).dataTypes().toArray(String[]::new));
+        addColTypeCombo.setEditable(com.segfault03.ideadb.provider.DatabaseProviders.get(config.getType()).supportsCustomTypes());
         addColTypeCombo.setSelectedItem("VARCHAR");
         addColSizeField = DatabaseInputs.textField("255");
         addColNullableCheck = new JBCheckBox("Allow NULL values", true);
@@ -133,6 +134,7 @@ public class AlterTableDialog extends DialogWrapper {
         ConnectionFormPanel modifyColPanel = alterForm();
         modifyColCombo = DatabaseInputs.comboBox(colNames);
         modifyColTypeCombo = DatabaseInputs.comboBox(com.segfault03.ideadb.provider.DatabaseProviders.get(config.getType()).dataTypes().toArray(String[]::new));
+        modifyColTypeCombo.setEditable(com.segfault03.ideadb.provider.DatabaseProviders.get(config.getType()).supportsCustomTypes());
         modifyColTypeCombo.setEditable(true);
         modifyColSizeField = DatabaseInputs.textField("255");
         modifyColNullableCheck = new JBCheckBox("Allow NULL values", true);

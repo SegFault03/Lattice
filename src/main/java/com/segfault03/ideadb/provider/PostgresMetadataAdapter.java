@@ -14,6 +14,12 @@ final class PostgresMetadataAdapter extends JdbcMetadataAdapter {
     public String currentSchema(Connection conn) throws SQLException {
         try (var statement = conn.createStatement(); var rows = statement.executeQuery("SELECT current_schema()")) { rows.next(); return rows.getString(1); }
     }
+    public List<TableMetadata> getTables(Connection conn, ConnectionConfig config, String schema) throws Exception {
+        return super.getTables(conn,config,schema == null || schema.isBlank() ? currentSchema(conn) : schema);
+    }
+    public List<ColumnMetadata> getColumns(Connection conn, ConnectionConfig config, String schema, String table) throws Exception {
+        return super.getColumns(conn,config,schema == null || schema.isBlank() ? currentSchema(conn) : schema,table);
+    }
     protected void enrichColumns(Connection conn, ConnectionConfig config, String selected, String schema, String table, List<ColumnMetadata> columns) throws SQLException {
         String generated = conn.getMetaData().getDatabaseMajorVersion() >= 12 ? "a.attgenerated" : "''";
         Map<String, String[]> details = new HashMap<>();
@@ -26,12 +32,13 @@ final class PostgresMetadataAdapter extends JdbcMetadataAdapter {
             String type = switch (c.getTypeName()) {
                 case "int2" -> "SMALLINT"; case "int4" -> "INTEGER"; case "int8" -> "BIGINT";
                 case "float4" -> "REAL"; case "float8" -> "DOUBLE PRECISION"; case "bool" -> "BOOLEAN";
+                case "timestamp" -> "TIMESTAMP"; case "time" -> "TIME"; case "date" -> "DATE"; case "text" -> "TEXT"; case "numeric" -> "NUMERIC"; case "bytea" -> "BYTEA"; case "uuid" -> "UUID"; case "json" -> "JSON"; case "jsonb" -> "JSONB";
                 case "bpchar" -> "CHAR"; case "varchar" -> "VARCHAR";
                 case "timestamptz" -> "TIMESTAMP WITH TIME ZONE"; case "timetz" -> "TIME WITH TIME ZONE";
                 default -> c.getTypeName();
             };
             boolean unconstrained = detail != null && detail[0].equals("numeric");
-            return new ColumnMetadata(c.getName(), type, c.getDataType(), unconstrained || type.equals("bytea") ? 0 : c.getColumnSize(), unconstrained ? Integer.MAX_VALUE : c.getDecimalDigits(), c.isNullable(), c.isPrimaryKey(), c.isAutoIncrement(), c.getDefaultValue(), detail != null && !detail[1].isEmpty());
+            return new ColumnMetadata(c.getName(), type, c.getDataType(), unconstrained || type.equals("BYTEA") ? 0 : c.getColumnSize(), unconstrained ? Integer.MAX_VALUE : c.getDecimalDigits(), c.isNullable(), c.isPrimaryKey(), c.isAutoIncrement() || detail != null && !detail[1].isEmpty(), c.getDefaultValue(), detail != null && !detail[1].isEmpty());
         });
     }
 }

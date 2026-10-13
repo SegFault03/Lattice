@@ -86,7 +86,10 @@ tasks.register<Test>("integrationTest") {
     testClassesDirs = sourceSets["test"].output.classesDirs
     // These live JDBC suites run without an IDE sandbox, but need SDK types.
     classpath = sourceSets["test"].runtimeClasspath + sourceSets["main"].compileClasspath
-    useJUnitPlatform { includeTags("integration") }
+    useJUnitPlatform {
+        includeTags("integration")
+        if (!providers.environmentVariable("LATTICE_TEST_POSTGRES_ENABLED").orElse(providers.environmentVariable("LATTICE_TEST_POSTGRES_PORT").map { "true" }.orElse("false")).get().toBoolean()) excludeTags("postgres")
+    }
     systemProperty("junit.jupiter.extensions.autodetection.enabled", "false")
     shouldRunAfter(tasks.test)
 }
@@ -111,6 +114,8 @@ tasks.withType<Test>().configureEach {
     systemProperty("lattice.test.mysql.port", providers.environmentVariable("LATTICE_TEST_MYSQL_PORT").orElse("3306").get())
     systemProperty("lattice.test.hsqldb.port", providers.environmentVariable("LATTICE_TEST_HSQLDB_PORT").orElse("9001").get())
     systemProperty("lattice.test.postgres.port", providers.environmentVariable("LATTICE_TEST_POSTGRES_PORT").orElse("5432").get())
+    systemProperty("lattice.test.postgres.password", providers.environmentVariable("LATTICE_TEST_POSTGRES_PASSWORD").orElse("lattice-test").get())
+    systemProperty("lattice.test.postgres.authRequired", providers.environmentVariable("LATTICE_TEST_POSTGRES_AUTH_REQUIRED").orElse("false").get())
     systemProperty("lattice.test.postgres.enabled", providers.environmentVariable("LATTICE_TEST_POSTGRES_ENABLED").orElse("false").get())
 }
 
@@ -122,6 +127,8 @@ tasks.register<JavaExec>("fallbackDriverTest") {
     systemProperty("lattice.test.mysql.port", providers.environmentVariable("LATTICE_TEST_MYSQL_PORT").orElse("3306").get())
     systemProperty("lattice.test.hsqldb.port", providers.environmentVariable("LATTICE_TEST_HSQLDB_PORT").orElse("9001").get())
     systemProperty("lattice.test.postgres.port", providers.environmentVariable("LATTICE_TEST_POSTGRES_PORT").orElse("5432").get())
+    systemProperty("lattice.test.postgres.password", providers.environmentVariable("LATTICE_TEST_POSTGRES_PASSWORD").orElse("lattice-test").get())
+    systemProperty("lattice.test.postgres.authRequired", providers.environmentVariable("LATTICE_TEST_POSTGRES_AUTH_REQUIRED").orElse("false").get())
     systemProperty("lattice.test.postgres.enabled", providers.environmentVariable("LATTICE_TEST_POSTGRES_ENABLED").orElse("false").get())
     classpath = sourceSets["main"].output + sourceSets["test"].output +
         sourceSets["main"].compileClasspath.filter {

@@ -47,6 +47,15 @@ class QueryExecutionTest {
         } finally { release.countDown(); worker.shutdownNow(); }
     }
 
+    @Test void cancellationIgnoredDuringStartupIsRetriedOnlyUntilThisExecutionFinishes() throws Exception {
+        QueryExecution execution = new QueryExecution();
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        execution.attach(statement(() -> { if (calls.incrementAndGet() == 2) execution.detach(); }));
+        execution.cancel();
+        assertEquals(2,calls.get()); assertFalse(execution.isRunning());
+        execution.cancel(); assertEquals(2,calls.get(),"A completed statement must never be cancelled again");
+    }
+
     private static Statement statement(Runnable cancel) {
         return (Statement) Proxy.newProxyInstance(Statement.class.getClassLoader(), new Class[]{Statement.class},
                 (proxy, method, arguments) -> {

@@ -30,7 +30,10 @@ public class DataService {
         if(where!=null && !where.isBlank()) sql.append(" WHERE ").append(where.trim());
         if(order!=null && !order.isBlank()) sql.append(" ORDER BY ").append(order.trim());
         else if(!keys.isEmpty()) sql.append(" ORDER BY ").append(keys.stream().map(key -> DdlService.quoteIdentifier(config,key)).collect(java.util.stream.Collectors.joining(", ")));
-        return executeQuery(conn,db,DatabaseProviders.get(config.getType()).dialect().paginate(sql.toString(),limit,offset));
+        QueryResult result = executeQuery(conn,db,DatabaseProviders.get(config.getType()).dialect().paginate(sql.toString(),limit,offset));
+        if (!result.isResultSet()) return result;
+        var omitted = MetadataService.getInstance().getColumns(conn,config,db,table).stream().filter(com.segfault03.ideadb.model.ColumnMetadata::isGenerated).map(com.segfault03.ideadb.model.ColumnMetadata::getName).collect(java.util.stream.Collectors.toSet());
+        return result.withInsertPolicy(omitted,DatabaseProviders.get(config.getType()).insertOverride(conn));
     }
     public long countRows(Connection conn,ConnectionConfig config,String db,String table,String where) throws Exception {
         String sql="SELECT COUNT(*) FROM " + DdlService.formatTable(config,db,table) + (where==null || where.isBlank() ? "" : " WHERE " + where.trim());
@@ -242,15 +245,13 @@ public class DataService {
         try {
             execution.checkCancelled();
             var provider = DatabaseProviders.forConnection(conn);
-            if (dbName != null && !dbName.trim().isEmpty()) {
-                provider.selectNamespace(conn, dbName);
-            }
+            provider.beforeQuery(conn, dbName, sql);
             try (Statement stmt = conn.createStatement()) {
                 stmt.setQueryTimeout(options.timeoutSeconds());
                 stmt.setMaxRows(options.maxRows() + 1);
                 // Connector/J's streaming sentinel prevents buffering the whole result client-side.
                 stmt.setFetchSize(provider.fetchSize(options.fetchSize()));
-                execution.attach(stmt);
+                execution.attach(stmt,()->provider.cancelStatement(stmt));
                 execution.checkCancelled();
                 boolean hasResultSet = stmt.execute(sql);
                 execution.checkCancelled();
@@ -274,7 +275,7 @@ public class DataService {
                         if (bytes > 16L * 1024 * 1024) { truncated=true; break; }
                         rows.add(row);
                     }
-                    return QueryResult.forResultSet(cols,types,rows,elapsed(start),truncated);
+                    return QueryResult.forResultSet(cols,types,rows,elapsed(start),truncated).withInsertPolicy(java.util.Set.of(),provider.insertOverride(conn));
                 }
             }
         } catch (Exception error) {

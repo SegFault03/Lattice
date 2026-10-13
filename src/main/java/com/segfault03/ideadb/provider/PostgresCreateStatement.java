@@ -19,7 +19,7 @@ final class PostgresCreateStatement {
         }
         var output = new StringBuilder("-- Catalog reconstruction; referenced tables, types, collations and trigger functions must already exist.\nSET search_path TO " + dialect.quoteIdentifier(schema) + ", pg_catalog;\n");
         if (kind.equals("v") || kind.equals("m")) {
-            try (var s=c.prepareStatement("SELECT pg_catalog.pg_get_viewdef(?,true)")) { s.setLong(1,oid); try(var r=s.executeQuery()) { r.next(); output.append("CREATE ").append(kind.equals("m") ? "MATERIALIZED " : "").append("VIEW ").append(target).append(" AS ").append(r.getString(1)); } }
+            try (var s=c.prepareStatement("SELECT pg_catalog.pg_get_viewdef(?::oid,true)")) { s.setLong(1,oid); try(var r=s.executeQuery()) { r.next(); output.append("CREATE ").append(kind.equals("m") ? "MATERIALIZED " : "").append("VIEW ").append(target).append(" AS ").append(r.getString(1)); } }
             return output.toString();
         }
         String identity = major >= 10 ? "a.attidentity" : "''", generated = major >= 12 ? "a.attgenerated" : "''";
@@ -47,7 +47,7 @@ final class PostgresCreateStatement {
                 }
             }
         }
-        try (var s=c.prepareStatement("SELECT conname,pg_catalog.pg_get_constraintdef(oid,true) FROM pg_catalog.pg_constraint WHERE conrelid=? AND conislocal ORDER BY conname")) {
+        try (var s=c.prepareStatement("SELECT conname,pg_catalog.pg_get_constraintdef(oid,true) FROM pg_catalog.pg_constraint WHERE conrelid=? AND conislocal AND contype<>'n' ORDER BY conname")) {
             s.setLong(1,oid); try (var rows=s.executeQuery()) { while(rows.next()) definitions.add("CONSTRAINT " + dialect.quoteIdentifier(rows.getString(1)) + " " + rows.getString(2)); }
         }
         for (Sequence seq:serials) output.append("CREATE SEQUENCE ").append(seq.name()).append(' ').append(seq.options()).append(";\n");
@@ -62,7 +62,7 @@ final class PostgresCreateStatement {
             if (persistence) try(var s=c.prepareStatement("SELECT relpersistence='u' FROM pg_catalog.pg_class WHERE oid=?")) { s.setLong(1,oid); try(var rows=s.executeQuery()) { rows.next(); unlogged=rows.getBoolean(1); } }
             output.append("CREATE ").append(unlogged ? "UNLOGGED " : "").append("TABLE ").append(target).append(" (\n  ").append(String.join(",\n  ",definitions)).append("\n)");
             if (!parents.isEmpty()) output.append(" INHERITS (").append(parents).append(')');
-            if (kind.equals("p")) try(var s=c.prepareStatement("SELECT pg_catalog.pg_get_partkeydef(?)")) { s.setLong(1,oid); try(var rows=s.executeQuery()) { rows.next(); output.append(" PARTITION BY ").append(rows.getString(1)); } }
+            if (kind.equals("p")) try(var s=c.prepareStatement("SELECT pg_catalog.pg_get_partkeydef(?::oid)")) { s.setLong(1,oid); try(var rows=s.executeQuery()) { rows.next(); output.append(" PARTITION BY ").append(rows.getString(1)); } }
             if (storage!=null && !storage.isBlank()) output.append(" WITH (").append(storage).append(')');
             if (tablespace!=null) output.append(" TABLESPACE ").append(dialect.quoteIdentifier(tablespace));
             output.append(";\n");
@@ -74,13 +74,13 @@ final class PostgresCreateStatement {
             }
         }
         for (Sequence seq:concat(serials,identities.values())) output.append("SELECT pg_catalog.setval(").append(literal(seq.name())).append(',').append(seq.value()).append(',').append(seq.called()).append(");\n");
-        try (var s=c.prepareStatement("SELECT pg_catalog.pg_get_indexdef(i.indexrelid) FROM pg_catalog.pg_index i WHERE i.indrelid=? AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_constraint k WHERE k.conindid=i.indexrelid) ORDER BY i.indexrelid")) {
+        try (var s=c.prepareStatement("SELECT pg_catalog.pg_get_indexdef(i.indexrelid) FROM pg_catalog.pg_index i WHERE i.indrelid=? AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_constraint k WHERE k.conindid=i.indexrelid) AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_inherits h WHERE h.inhrelid=i.indexrelid) ORDER BY i.indexrelid")) {
             s.setLong(1,oid); try(var rows=s.executeQuery()) { while(rows.next()) output.append(rows.getString(1)).append(";\n"); }
         }
         try (var s=c.prepareStatement("SELECT pg_catalog.pg_get_triggerdef(oid) FROM pg_catalog.pg_trigger WHERE tgrelid=? AND NOT " + (major>=9 ? "tgisinternal" : "tgisconstraint") + " ORDER BY tgname")) {
             s.setLong(1,oid); try(var rows=s.executeQuery()) { while(rows.next()) output.append(rows.getString(1)).append(";\n"); }
         }
-        try (var s=c.prepareStatement("SELECT pg_catalog.obj_description(?,'pg_class')")) { s.setLong(1,oid); try(var rows=s.executeQuery()) { rows.next(); if(rows.getString(1)!=null) comments.add("COMMENT ON TABLE " + target + " IS " + literal(rows.getString(1)) + ";"); } }
+        try (var s=c.prepareStatement("SELECT pg_catalog.obj_description(?::oid,'pg_class')")) { s.setLong(1,oid); try(var rows=s.executeQuery()) { rows.next(); if(rows.getString(1)!=null) comments.add("COMMENT ON TABLE " + target + " IS " + literal(rows.getString(1)) + ";"); } }
         output.append(String.join("\n",comments)); return output.toString();
     }
     private static Collection<Sequence> concat(Collection<Sequence> first, Collection<Sequence> second) { var result=new ArrayList<>(first); result.addAll(second); return result; }
