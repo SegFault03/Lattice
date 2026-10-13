@@ -247,3 +247,13 @@ intellijPlatformTesting.testIdeUi.register("uiScreenshotTest") {
         }
     }
 }
+
+// Reuse the compilation SDK for CI UI fixtures instead of downloading a second IDE.
+tasks.register("writeUiIdeHome") {
+    val ideHome = tasks.named<RunIdeTask>("runIde").get().platformPath.toString()
+    val output = layout.buildDirectory.file("ui-ide-home.txt").get().asFile
+    doLast {
+        output.parentFile.mkdirs()
+        output.writeText(ideHome)
+    }
+}

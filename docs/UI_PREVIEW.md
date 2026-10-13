@@ -67,6 +67,12 @@ column changes, SQL outcomes and cancellation/recovery. Screenshots and runtime
 evidence go to `build/ui-review-postgres`. The existing HSQLDB scenario remains
 available through the native review runner.
 
+Every branch push and PR merge build runs this PostgreSQL scenario in Linux CI,
+alongside the HSQLDB Dark/Light reviews and Swing assertions. CI reuses the
+Gradle compilation SDK (`./gradlew writeUiIdeHome`) and retains both UI report
+directories in `tests-ubuntu-24.04`. These are baseline UI checks; the database
+and IDE compatibility matrices run only on PRs targeting `staging` or `main`.
+
 For an external **disposable test server**, set `LATTICE_UI_POSTGRES_PORT` and
 `LATTICE_UI_POSTGRES_PASSWORD` when invoking the native runner. The scenario
 recreates its `public` test schema. Use the wrapper for automatic isolation

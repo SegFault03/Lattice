@@ -123,7 +123,7 @@ Set `LATTICE_UI_IDE_HOME` to an installed Linux IDEA directory to launch another
 
 For a faster review of connection-dialog spacing, explorer overflow, table editor/menu surfaces, auto-refresh sizing and active glyph colors, set `LATTICE_UI_STYLE_ONLY=true` (direct Gradle: `-Plattice.ui.styleOnly=true`). This still opens and edits the production UI inside the full IDE, then stops after those checks; omit it for the complete review.
 
-Linux commit and release CI run the complete Dark-theme review followed by the focused Light-theme review on the pinned IDE. Java and script tests continue to run on Linux, Windows and macOS. The newer-IDE/theme override is available for local compatibility reviews.
+Linux commit CI runs the complete HSQLDB Dark-theme review, focused Light-theme review and the full PostgreSQL Dark-theme scenario on the pinned IDE. PostgreSQL CI reuses the Gradle SDK path written by `./gradlew writeUiIdeHome`, avoiding a second IDE download. Release CI retains the HSQLDB Dark/Light reviews. Java and script tests continue to run on Linux, Windows and macOS. The newer-IDE/theme override is available for local compatibility reviews.
 
 ```bash
 LATTICE_UI_IDE_HOME=/path/to/idea-2026.2.3 ./scripts/linux/review-intellij-ui.sh ExperimentalLight ExperimentalLightWithLightHeader IntelliJ JetBrainsLightTheme "Islands Light" ExperimentalDark Darcula JetBrainsHighContrastTheme "Islands Dark" "Islands Darcula"
@@ -164,3 +164,15 @@ Default user plugin locations follow [JetBrains' IDE directory documentation](ht
 Downloaded development assets use the OS user-cache directory: LocalAppData on Windows, Library/Caches on macOS, XDG_CACHE_HOME or ~/.cache on Linux. Set `LATTICE_DEV_CACHE` or pass a script's `--cache` override to relocate downloads. Build outputs remain in ignored `build/`.
 
 The root `gradlew` / `gradlew.bat` are the standard Gradle wrapper launchers. Public Python helpers live in `scripts/`; platform launchers live in `scripts/windows/` and `scripts/linux/`. Keep workstation-specific instructions and private tools outside the repository. SDKs and native test binaries stay outside this repository. The five README screenshots remain tracked; other generated screenshots and build outputs are ignored. See the [documentation index](README.md) for the project layout.
+
+## GitHub Actions policy
+
+| Event | Commit checks | Database + IDE compatibility | Release/sign/publish |
+| --- | --- | --- | --- |
+| Push to any branch | Linux, Windows, macOS; Linux live + UI suites | No | No |
+| PR targeting `staging` or `main` | Same checks on the merge commit | All three databases/Java 8 and IDEA 2025.1–2025.3 | No |
+| PR targeting another branch | Same checks on the merge commit | No | No |
+| Newly created `v*` tag, commit reachable from `main` | Release baseline/build/live/UI checks | No | Yes |
+| Tag outside `main`, changed/deleted tag, other tag | No release work (rejected or skipped) | No | No |
+
+Branch names are case-sensitive: `staging` and `main`. Tags are branch-independent Git refs; the release guard checks commit ancestry against `origin/main` before all downstream jobs. Manual CI dispatch runs baseline checks only; release dispatch and hidden Marketplace smoke uploads are disabled. Local compatibility and unsigned release dry runs remain available. Diagnostics retain the PostgreSQL UI evidence under `build/ui-review-postgres/` as well as the ordinary UI and test reports.

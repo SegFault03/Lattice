@@ -2,19 +2,17 @@
 
 ## Before the first release
 
-Connect this checkout to the intended GitHub repository and push the release-preparation commit. Ensure the workflow is present on the repository's default branch so its manual Run workflow option is available. Enable Actions and private vulnerability reporting in the repository settings. The workflow uses the repository's `GITHUB_TOKEN`; the publish job requests `contents: write`. No personal access token or Marketplace secret is required for GitHub Releases.
+Enable Actions and configure signing secrets before tagged releases; see [signing and Marketplace publishing](MARKETPLACE.md). The publish job uses the repository's `GITHUB_TOKEN` with `contents: write`.
 
-Run **Build, test and release → Run workflow** on the intended branch to validate the hosted pipeline. Leave **marketplace_smoke** unchecked for a dry run; this never publishes. Review its test and compatibility reports. The Linux build job also runs the complete real-IDE UI review in Dark theme and the focused styling review in Light theme. Inspect its retained screenshots before releasing.
-
-Configure signing secrets before tagged releases. See [signing and Marketplace smoke testing](MARKETPLACE.md) for key generation, GitHub secret names and the manual hidden-channel upload that skips GitHub Releases.
+Validate the change through a PR targeting `staging` or `main`. That workflow runs the database/Java 8 and IDEA 2025.1–2025.3 compatibility matrices on the PR merge build. Every branch push runs baseline build, live and UI checks; inspect the retained UI evidence. Merge the release commit into `main` before creating its tag. There is no manual release or hosted smoke-upload trigger; use local dry runs below.
 
 ## Prepare a version
 
 1. Update `pluginVersion` in `gradle.properties` for ordinary local builds.
 2. Move relevant `docs/CHANGELOG.md` entries into a matching version section, including any prerelease suffix, and keep an Unreleased section for future changes.
-3. Run `python scripts/test.py --live --mysql --hsqldb --build` with the isolated fixtures, plus the Python tooling tests and compatibility checks.
+3. Run `python scripts/test.py --live --mysql --hsqldb --postgres --build` with the isolated fixtures, plus the Python tooling tests and compatibility checks.
 4. Review the packaged plugin and commit the changes.
-5. Create and push a new annotated tag, for example:
+5. From the merged `main` commit, create and push a new annotated tag, for example:
 
 ```bash
 git tag -a v0.0.2-alpha -m "Lattice 0.0.2-alpha"
@@ -27,13 +25,12 @@ These are release commands for the maintainer; no tag is created by the preparat
 
 The tag workflow:
 
-1. Checks out full Git history and validates the version/tag and patch notes.
-2. Runs the Python release-tool tests and Gradle pure/live regression suites with fresh MySQL 8.4 and in-memory HSQLDB fixtures.
+1. Accepts only newly created `v*` tags. Checks out full Git history and requires the tag commit to be reachable from `origin/main` before any downstream job starts. Tags on unmerged branch commits fail this guard; updates/deletions do not release.
+2. Validates the version/tag and patch notes, runs tooling, cross-platform baseline and Gradle pure/live regression suites with fresh MySQL 8.4, HSQLDB and PostgreSQL 18 fixtures.
 3. Builds `Lattice-X.Y.Z.zip` against IntelliJ 2025.1 / Java 21; embeds the tag version, patch notes and license notices.
-4. Runs the complete real IntelliJ UI scenario in Dark theme and the focused Light-theme review at the release version, signs and verifies the ZIP, validates archive paths, descriptor, bundled drivers/notices and bytecode, then generates SHA-256 asset checksums. The source-preparation step supplies the actual archive filename to validation, artifact upload and publication.
-5. Verifies that exact ZIP against IDEA 2025.1, 2025.2 and 2025.3 in separate jobs with checksum-verified official SDK downloads. Every verdict must be Compatible.
-6. Runs the JDBC/Java 8 matrix and Windows/macOS baseline checks; publishes a GitHub Release only when every build/test/verification job succeeds.
-7. After GitHub publication succeeds, submits the same signed ZIP to JetBrains Marketplace's public Stable channel with `isHidden=false`. This includes alpha/RC tags: GitHub's prerelease flag does not select a Marketplace channel. Marketplace visibility follows JetBrains approval.
+4. Runs the real IntelliJ HSQLDB UI scenario in Dark theme and focused Light-theme review at the release version, signs and verifies the ZIP, validates archive paths, descriptor, bundled drivers/notices and bytecode, then generates SHA-256 asset checksums and the corresponding-source asset.
+5. Publishes a GitHub Release only when the main-ancestry guard, build/tests and Windows/macOS baseline checks succeed. Database and IDE compatibility matrices run exclusively on PRs targeting `staging` or `main`, rather than again on tags.
+6. After GitHub publication succeeds, submits the same signed ZIP to Marketplace's public Stable channel with `isHidden=false`. Alpha/RC tags remain GitHub prereleases; Marketplace visibility follows JetBrains approval.
 
 Release assets are the plugin ZIP, the unmodified MySQL Connector/J 26.7.0 corresponding-source archive and `SHA256SUMS`. The GitHub description combines the matching changelog section (or populated Unreleased notes) with all commits since the preceding reachable lower-version release tag. Marketplace What's New uses the same patch notes rendered as HTML headings, bullet lists and paragraphs; inline code is supported and raw HTML is escaped. The first release includes the reachable commit history.
 
@@ -45,7 +42,7 @@ Python 3.11+ is required (3.12 recommended for SDK archive extraction).
 
 ```text
 python scripts/release.py --version 1.0.0
-python scripts/test.py --live --mysql --hsqldb --build --version 1.0.0 --notes-file build/release/patch-notes.html
+python scripts/test.py --live --mysql --hsqldb --postgres --build --version 1.0.0 --notes-file build/release/patch-notes.html
 python scripts/prepare-source-asset.py
 python scripts/check-release-archive.py build/distributions/Lattice-1.0.0.zip --version 1.0.0 --source build/release/mysql-connector-j-26.7.0-source.tar.gz --checksums build/release/SHA256SUMS
 python scripts/verify-plugin.py build/distributions/Lattice-1.0.0.zip --ide-version 2025.1

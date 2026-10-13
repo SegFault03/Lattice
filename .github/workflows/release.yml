@@ -3,17 +3,6 @@ name: Build, test and release
 on:
   push:
     tags: ['v*']
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version for dry run; required unused prerelease version for Marketplace smoke testing'
-        required: false
-        type: string
-      marketplace_smoke:
-        description: 'Submit a signed, hidden update to the smoke channel; never create a GitHub Release'
-        required: false
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -23,7 +12,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  release-ref:
+    # Tags have no branch; accept only tag commits reachable from main.
+    if: github.event_name == 'push' && github.ref_type == 'tag' && github.event.created && !github.event.deleted
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require release tag to point to main
+        run: |
+          git rev-parse --verify 'origin/main^{commit}'
+          git merge-base --is-ancestor "${GITHUB_SHA}^{commit}" origin/main || {
+            echo "Release tags must point to a commit reachable from main." >&2
+            exit 1
+          }
+
   cross-platform-checks:
+    needs: release-ref
     strategy:
       fail-fast: false
       matrix:
@@ -57,6 +65,7 @@ jobs:
           retention-days: 7
 
   build:
+    needs: release-ref
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     outputs:
@@ -79,13 +88,6 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Require release tag to point to main
-        if: github.event_name == 'push'
-        run: |
-          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
-            echo "Release tags must point to a commit reachable from main." >&2
-            exit 1
-          }
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
@@ -98,15 +100,8 @@ jobs:
       - name: Prepare version and patch notes
         id: metadata
         env:
-          RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || '' }}
-          RELEASE_INPUT_VERSION: ${{ inputs.version }}
-          MARKETPLACE_SMOKE: ${{ inputs.marketplace_smoke }}
-        run: |
-          flags=()
-          if [[ "$MARKETPLACE_SMOKE" == "true" ]]; then
-            flags+=(--marketplace-smoke)
-          fi
-          python3 scripts/release.py "${flags[@]}"
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 scripts/release.py
       - name: Compile, test and package
         env:
           RELEASE_VERSION: ${{ steps.metadata.outputs.version }}
@@ -129,7 +124,6 @@ jobs:
         id: source
         run: python3 scripts/prepare-source-asset.py --github-output "$GITHUB_OUTPUT"
       - name: Sign and verify the release ZIP
-        if: github.event_name == 'push' || inputs.marketplace_smoke
         env:
           LATTICE_SIGNING_PRIVATE_KEY: ${{ secrets.LATTICE_SIGNING_PRIVATE_KEY }}
           LATTICE_SIGNING_CERTIFICATE_CHAIN: ${{ secrets.LATTICE_SIGNING_CERTIFICATE_CHAIN }}
@@ -175,69 +169,8 @@ jobs:
             build/ui-review/
             build/ui-preview/
 
-  database-compatibility:
-    needs: build
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
-        with:
-          distribution: temurin
-          java-version: '21'
-      - name: Run the JDBC and Java 8 compatibility matrix
-        run: python3 scripts/one-shot-test.py --database-compatibility-only
-      - name: Retain database compatibility reports
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: release-database-compatibility
-          if-no-files-found: ignore
-          path: |
-            build/compatibility/
-            build/one-shot-test/
-          retention-days: 7
-
-  verify:
-    needs: build
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        ide: ['2025.1', '2025.2', '2025.3']
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
-        with:
-          distribution: temurin
-          java-version: '21'
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: release-candidate
-          path: build
-      - name: Verify the exact release candidate
-        env:
-          RELEASE_VERSION: ${{ needs.build.outputs.version }}
-          IDE_VERSION: ${{ matrix.ide }}
-        run: >-
-          python3 scripts/verify-plugin.py "build/distributions/Lattice-$RELEASE_VERSION.zip"
-          --ide-version "$IDE_VERSION" --java-home "$JAVA_HOME"
-          --cache "$RUNNER_TEMP/lattice-test-binaries"
-      - name: Upload verification reports
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: compatibility-${{ matrix.ide }}
-          retention-days: 7
-          path: build/compatibility/verifier-ci/
-
   publish:
-    needs: [build, cross-platform-checks, verify, database-compatibility]
+    needs: [release-ref, build, cross-platform-checks]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -268,14 +201,8 @@ jobs:
           gh release edit "$GITHUB_REF_NAME" --draft=false
 
   marketplace:
-    needs: [build, cross-platform-checks, verify, database-compatibility, publish]
-    # always() permits smoke runs when the GitHub publish job is intentionally skipped.
-    if: >-
-      always() && !cancelled() && needs.build.result == 'success' &&
-      needs.cross-platform-checks.result == 'success' && needs.verify.result == 'success' &&
-      needs.database-compatibility.result == 'success' &&
-      ((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.publish.result == 'success') ||
-       (github.event_name == 'workflow_dispatch' && inputs.marketplace_smoke))
+    needs: [release-ref, build, cross-platform-checks, publish]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -287,22 +214,15 @@ jobs:
         env:
           MARKETPLACE_TOKEN: ${{ secrets.JETBRAINS_MARKETPLACE_TOKEN }}
           RELEASE_VERSION: ${{ needs.build.outputs.version }}
-          MARKETPLACE_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && 'smoke' || '' }}
-          MARKETPLACE_HIDDEN: ${{ github.event_name == 'workflow_dispatch' }}
+          MARKETPLACE_CHANNEL: ''
+          MARKETPLACE_HIDDEN: 'false'
         run: |
           test -n "$MARKETPLACE_TOKEN" || { echo 'Missing JETBRAINS_MARKETPLACE_TOKEN secret' >&2; exit 1; }
           # Explicit exits also work on macOS Bash 3.2, where -e does not stop on [[ ... ]].
-          if [[ "$MARKETPLACE_CHANNEL" == "smoke" ]]; then
-            [[ "$MARKETPLACE_HIDDEN" == "true" && "$RELEASE_VERSION" == *-* ]] || {
-              echo 'Smoke uploads require a hidden prerelease version' >&2
-              exit 1
-            }
-          else
-            [[ -z "$MARKETPLACE_CHANNEL" && "$MARKETPLACE_HIDDEN" == "false" ]] || {
-              echo 'Public uploads require the Stable channel and isHidden=false' >&2
-              exit 1
-            }
-          fi
+          [[ -z "$MARKETPLACE_CHANNEL" && "$MARKETPLACE_HIDDEN" == "false" ]] || {
+            echo 'Public uploads require the Stable channel and isHidden=false' >&2
+            exit 1
+          }
           (cd build/distributions && sha256sum --check --ignore-missing ../release/SHA256SUMS)
           # Keep the token out of command arguments and do not retry an ambiguous upload.
           printf 'header = "Authorization: Bearer %s"\n' "$MARKETPLACE_TOKEN" | \

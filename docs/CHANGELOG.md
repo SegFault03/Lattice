@@ -4,6 +4,9 @@ Patch notes are selected by the exact release version, including prerelease suff
 
 ## [Unreleased]
 
+- Run baseline build, functional, regression, integration and UI checks on every branch, including PostgreSQL real-IDE workflows and packaged driver/license validation. Restrict database/Java 8 and IDE compatibility to PRs targeting staging or main.
+- Release only from newly created version tags reachable from main; gate all release jobs on ancestry and disable manual release/Marketplace smoke publishing.
+
 ## [0.0.2-alpha]
 
 ### JDBC drivers and connections
@@ -24,7 +27,7 @@ Patch notes are selected by the exact release version, including prerelease suff
 - Update Gradle and IntelliJ build tooling, JDBC drivers and the protobuf runtime used by the packaged plugin.
 - Sign release ZIPs and verify their signatures before publishing the same tested build to GitHub and JetBrains Marketplace.
 - Display What's New as formatted headings and bullet lists instead of a monospace text block.
-- Expand CI coverage with production Swing assertions, real-IDE UI reviews, PR merge-commit validation and reusable dependency caches. Keep hidden Marketplace smoke tests available without creating GitHub Releases.
+- Expand CI coverage with production Swing assertions, real-IDE UI reviews, PR merge-commit validation and reusable dependency caches. Validate Marketplace uploads without contacting the service in tooling tests.
 
 ## [0.0.2-smoke.1]
 

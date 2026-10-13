@@ -143,7 +143,7 @@ python scripts/one-shot-test.py
 
 The default run builds and tests the plugin, checks the ZIP, runs live database functional tests (including PostgreSQL on Linux), verifies IntelliJ 2025.1–2025.3, and exercises the complete JDBC/Java 8 matrix. It does not render screenshots; use `python scripts/ui-preview.py` for standalone Swing previews or `./scripts/linux/review-intellij-ui.sh` on Linux/X11 and `.\scripts\windows\review-intellij-ui.ps1` on Windows for real-IDE UI flows.
 
-Use `--skip-compatibility` for the build and live functional checks, `--compatibility-only` for the IDE and JDBC matrices, or `--database-compatibility-only` for just the JDBC matrix when Plugin Verifier runs separately. Actions uses the isolated compatibility modes for PR and release matrices; routine checks use the Gradle cache.
+Use `--skip-compatibility` for the build and live functional checks, `--compatibility-only` for the IDE and JDBC matrices, or `--database-compatibility-only` for just the JDBC matrix when Plugin Verifier runs separately. Actions uses the isolated compatibility modes only for PRs targeting `staging` or `main`; routine checks use the Gradle cache.
 
 The runner uses temporary Gradle, verifier and JDBC caches. It uses an installed JDK 21 or downloads one, and downloads a temporary Java 8 runtime when needed. Network access for missing dependencies and at least 10 GiB of download space are required; Linux fixtures also require Docker.
 
@@ -167,7 +167,9 @@ Legacy workstation helpers are preserved outside the repository; private notes r
 
 ## Releases and support
 
-A tag such as `v0.0.2-alpha` triggers the [release workflow](.github/workflows/release.yml): live tests, ZIP validation, signing, signature verification and IntelliJ 2025.1–2025.3 compatibility checks, followed by a GitHub Release and submission of the same signed ZIP to JetBrains Marketplace. GitHub Releases include patch notes, commit history, checksums and corresponding MySQL sources. Versions with prerelease suffixes are marked as GitHub prereleases and are not designated latest; Marketplace submissions use the public Stable channel and become available after JetBrains approval. Manual runs are dry runs unless the hidden Marketplace smoke option is explicitly selected.
+Every branch push runs cross-platform build/unit checks and Linux live functional, regression, integration and real-IDE UI checks (HSQLDB and PostgreSQL). PR merge commits receive these checks too. Database/Java 8 and IntelliJ 2025.1–2025.3 compatibility matrices run only for PRs targeting `staging` or `main`.
+
+A new tag such as `v0.0.2-alpha` triggers the [release workflow](.github/workflows/release.yml) only after its commit is verified as reachable from `main`. Tags have no branch of their own; a tag on an unmerged feature commit is rejected before any build, signing or publication job. The tag pipeline runs release build/live/UI checks, ZIP validation, signing and signature verification, then publishes a GitHub Release and submits the same signed ZIP to JetBrains Marketplace. Compatibility matrices are confined to PRs. GitHub Releases include patch notes, commit history, checksums and corresponding MySQL sources. Prereleases are not designated latest; Marketplace submissions use the public Stable channel and become available after JetBrains approval. There is no manual release trigger; use the local dry-run commands in [Releasing](docs/RELEASING.md).
 
 See [CHANGELOG](docs/CHANGELOG.md), [RELEASING](docs/RELEASING.md), [Marketplace publishing](docs/MARKETPLACE.md), [issue reporting](docs/ISSUE.md) and [security reporting](docs/SECURITY.md).
 

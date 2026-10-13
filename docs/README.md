@@ -10,7 +10,7 @@ All commands run from the repository root unless a guide says otherwise.
 | [Windows scripts](WINDOWS_SCRIPTS.md) | Every local Windows command and its complete options |
 | [UI previews](UI_PREVIEW.md) | Render production Swing screens and refresh the five README images |
 | [Releasing](RELEASING.md) | Versioning, tags, validation and publication |
-| [Marketplace](MARKETPLACE.md) | Signing, public releases and hidden-channel smoke tests |
+| [Marketplace](MARKETPLACE.md) | Signing, tag-only public releases and local preparation |
 | [Changelog](CHANGELOG.md) | Versioned release notes |
 | [Issue reporting](ISSUE.md) | Bug reports and feature requests |
 | [Security reporting](SECURITY.md) | Private vulnerability reporting |
