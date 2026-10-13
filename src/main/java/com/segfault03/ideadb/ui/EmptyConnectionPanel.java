@@ -23,7 +23,7 @@ final class EmptyConnectionPanel extends JPanel {
         ActionLink link = new ActionLink("Add a connection…");
         link.setIcon(com.intellij.icons.AllIcons.General.ButtonDropTriangle);
         link.setHorizontalTextPosition(SwingConstants.LEFT);
-        link.setToolTipText("Choose MySQL or HSQLDB");
+        link.setToolTipText("Choose a database type");
         // Dialog focus restoration otherwise leaves the link's blue focus border visible
         // after a mouse click. Keep that indicator for keyboard traversal only.
         link.setFocusPainted(false);

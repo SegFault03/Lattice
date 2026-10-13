@@ -10,7 +10,7 @@
 
     <h4>Key Features:</h4>
     <ul>
-        <li><b>Supported Databases:</b> <b>MySQL</b> and <b>HSQLDB</b> with a compatible JDBC driver. Tested server releases include MySQL 5.5, 5.6, 5.7 and 8.4, and HSQLDB 2.2.9 through 2.7.4 (Embedded File, In-Memory, and Server modes).</li>
+        <li><b>Supported Databases:</b> <b>MySQL</b>, <b>HSQLDB</b> and <b>PostgreSQL</b> with a compatible JDBC driver. Tested server releases include MySQL 5.5, 5.6, 5.7 and 8.4, and HSQLDB 2.2.9 through 2.7.4 (Embedded File, In-Memory, and Server modes). PostgreSQL supports schema browsing, SQL consoles, data editing, DDL and exports with Java 8 compatible pgJDBC drivers; use 42.7.3 or 42.2.27 for servers older than 9.1.</li>
         <li><b>Reusable JDBC Drivers:</b> Download a driver version once and reuse it across connections and IDE restarts, or select a local JAR. Driver discovery runs in the background, supports Maven project defaults, and validates cached JARs before reuse.</li>
         <li><b>Database Explorer:</b> Tree view of Catalogs/Databases, Schemas, Tables, Views, Columns (with data types, primary key, and auto-increment indicators).</li>
         <li><b>Interactive Data Grid:</b> Inline cell editing with early type checking, auto-generated key protection, periodic auto-refresh, add/delete rows, batch commit, revert, filter (WHERE clause), a Clear filter action, and pagination. Actions reflect selection, pending edits and busy states.</li>
@@ -19,7 +19,7 @@
         <li><b>Export:</b> Export data directly to CSV, JSON, and SQL INSERTs, and export/view CREATE TABLE DDL.</li>
     </ul>
     <h4>Coming soon:</h4>
-    <p>Support for PostgreSQL, H2 and other relational databases is planned. The roadmap also includes generating POJOs, DTOs and JavaBeans; SQL syntax highlighting and schema-aware inline suggestions, subject to platform feasibility; and table relationship graphs and dependency trees. These features are not available yet.</p>
+    <p>Support for H2 and other relational databases is planned. The roadmap also includes generating POJOs, DTOs and JavaBeans; SQL syntax highlighting and schema-aware inline suggestions, subject to platform feasibility; and table relationship graphs and dependency trees. These features are not available yet.</p>
     ]]></description>
 
     <change-notes><![CDATA[

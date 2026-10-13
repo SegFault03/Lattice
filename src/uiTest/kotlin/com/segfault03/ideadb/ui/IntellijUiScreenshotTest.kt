@@ -65,6 +65,10 @@ class IntellijUiScreenshotTest {
         val screenshotsDirectory = Path.of(requireNotNull(System.getProperty("ui.screenshot.dir")))
         val review = System.getProperty("ui.review.enabled").toBoolean()
         val styleOnly = System.getProperty("ui.style.only").toBoolean()
+        val postgresPort = Integer.getInteger("ui.postgres.port", 0)
+        val postgres = postgresPort > 0
+        val postgresPassword = System.getProperty("ui.postgres.password", "lattice-test")
+        val peopleSql = if (postgres) "\"public\".\"LATTICE_PEOPLE\"" else "PUBLIC.LATTICE_PEOPLE"
         val themeId = System.getProperty("ui.theme.id", "ExperimentalDark")
         var downloadedButtonEnabledAfterModeSwitch: Boolean? = null
         screenshotsDirectory.toFile().deleteRecursively()
@@ -146,7 +150,7 @@ class IntellijUiScreenshotTest {
         val mediumHeight = minOf(900, displayBounds.height - 80)
         val wideWidth = minOf(1900, displayBounds.width - 20)
         val wideHeight = minOf(1000, displayBounds.height - 80)
-        val jdbcFixture = if (review && !styleOnly) HsqlUiFixture() else null
+        val jdbcFixture = if (review && !styleOnly) JdbcUiFixture(postgresPort, postgresPassword) else null
         try {
         testContext.apply {
             PluginConfigurator(this).installPluginFromPath(
@@ -284,84 +288,86 @@ class IntellijUiScreenshotTest {
                 mysqlAvailableDriverCombo.selectItem("8.4.0 · DISCOVERED")
             }
 
-            val mysqlDriverSourceCombo = mysqlDialog.x(JComboBoxUiComponent::class.java) {
-                and(
-                    byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"),
-                    byAccessibleName("Source:"),
-                )
-            }.waitFound()
-            mysqlDriverSourceCombo.selectItem("Download a version")
-            val mysqlDriverVersionCombo = mysqlDialog.x(JComboBoxUiComponent::class.java) {
-                and(
-                    byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"),
-                    byAccessibleName("Driver version"),
-                )
-            }.waitFound()
-            Thread.sleep(300)
-            clickComboArrow(mysqlDriverVersionCombo)
-            Thread.sleep(300)
-            val mysqlDownloadVersions = mysqlDriverVersionCombo.listValues()
-            println("MySQL download-version entries: ${mysqlDownloadVersions.joinToString()}")
-            check(mysqlDownloadVersions.containsAll(listOf(
-                "9.0.0 · DISCOVERED", "8.4.0 · DISCOVERED", "8.0.33 · DISCOVERED",
-            ))) { "Expected Maven-discovered MySQL releases in the download-version list: $mysqlDownloadVersions" }
-            captureScreen(screenshotsDirectory.resolve("mysql-connection-dialog-download-version-list.png"))
-            pressEscape()
-            clickComboArrow(mysqlDriverVersionCombo)
-            selectNextComboPopupRow()
-            waitUntil("discovered MySQL driver cannot be downloaded again") {
-                !mysqlDialog.x { byVisibleText("Download") }.waitFound().component.isEnabled()
-            }
-            val mysqlProgressVersion = "5.1.49"
-            mysqlDriverVersionCombo.selectItem(mysqlProgressVersion)
-            assertDriverSummary(mysqlDialog, "5.1.49 · DOWNLOAD")
-            val mysqlDownloadButton = mysqlDialog.x { byVisibleText("Download") }.waitFound()
-            waitUntil("MySQL version $mysqlProgressVersion can be downloaded") {
-                mysqlDownloadButton.component.isEnabled()
-            }
-            mysqlDownloadButton.click()
-            val mysqlProgressBar = mysqlDialog.x(UiComponent::class.java) {
-                byAccessibleName("Driver download progress")
-            }.waitFound()
-            assertTrue(mysqlProgressBar.component.isVisible(), "The progress bar should appear during a driver download")
-            assertTrue(!mysqlDownloadButton.component.isEnabled(), "Download should be disabled during the transfer")
-            assertTrue(!mysqlDriverVersionCombo.component.isEnabled(), "The version selector should be disabled during the transfer")
-            assertTrue(
-                mysqlProgressBar.component.width == mysqlDriverVersionCombo.component.width,
-                "The progress bar should match the driver version selector width",
-            )
-            captureScreen(screenshotsDirectory.resolve("mysql-driver-download-progress.png"), settleMillis = 0)
-            waitUntil("MySQL driver download and verification") {
-                mysqlDialog.hasSubtext("Downloaded and ready")
-            }
-            check(!mysqlDownloadButton.component.isEnabled()) {
-                "A successfully downloaded driver should not be offered for download again"
-            }
-            if (review) {
-                assertDriverSummary(mysqlDialog, "5.1.49 · DOWNLOADED")
-                captureScreen(screenshotsDirectory.resolve("mysql-driver-downloaded.png"))
-                mysqlDriverSourceCombo.selectItem("Available drivers")
-                mysqlAvailableDriverCombo.selectItem("5.1.49 · DOWNLOADED")
-                assertDriverSummary(mysqlDialog, "5.1.49 · DOWNLOADED")
-                captureScreen(screenshotsDirectory.resolve("mysql-driver-summary-retained.png"))
+            if (!postgres && !System.getProperty("ui.skip.remote.downloads", "false").toBoolean()) {
+                val mysqlDriverSourceCombo = mysqlDialog.x(JComboBoxUiComponent::class.java) {
+                    and(
+                        byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"),
+                        byAccessibleName("Source:"),
+                    )
+                }.waitFound()
                 mysqlDriverSourceCombo.selectItem("Download a version")
-                mysqlDialog.x { byVisibleText("JDBC URL") }.waitFound().click()
-                mysqlDialog.x(JTextFieldUI::class.java) {
-                    and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("JDBC URL:"))
-                }.waitFound().text =
-                    "jdbc:mysql://127.0.0.1:1/ui_review?connectTimeout=1000"
-                mysqlDialog.x { byVisibleText("Test connection") }.waitFound().click()
-                frame.x(DialogUiComponent::class.java) { byTitle("Connection Failed") }.waitFound().also {
-                    captureScreen(screenshotsDirectory.resolve("mysql-connection-failure.png"))
-                    it.pressButton("OK")
+                val mysqlDriverVersionCombo = mysqlDialog.x(JComboBoxUiComponent::class.java) {
+                    and(
+                        byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"),
+                        byAccessibleName("Driver version"),
+                    )
+                }.waitFound()
+                Thread.sleep(300)
+                clickComboArrow(mysqlDriverVersionCombo)
+                Thread.sleep(300)
+                val mysqlDownloadVersions = mysqlDriverVersionCombo.listValues()
+                println("MySQL download-version entries: ${mysqlDownloadVersions.joinToString()}")
+                check(mysqlDownloadVersions.containsAll(listOf(
+                    "9.0.0 · DISCOVERED", "8.4.0 · DISCOVERED", "8.0.33 · DISCOVERED",
+                ))) { "Expected Maven-discovered MySQL releases in the download-version list: $mysqlDownloadVersions" }
+                captureScreen(screenshotsDirectory.resolve("mysql-connection-dialog-download-version-list.png"))
+                pressEscape()
+                clickComboArrow(mysqlDriverVersionCombo)
+                selectNextComboPopupRow()
+                waitUntil("discovered MySQL driver cannot be downloaded again") {
+                    !mysqlDialog.x { byVisibleText("Download") }.waitFound().component.isEnabled()
                 }
-                captureScreen(screenshotsDirectory.resolve("mysql-connection-failure-inline.png"))
-                downloadedButtonEnabledAfterModeSwitch = mysqlDownloadButton.component.isEnabled()
-                check(downloadedButtonEnabledAfterModeSwitch == false) {
-                    "A retained driver must remain unavailable for download after a failed connection test"
+                val mysqlProgressVersion = "5.1.49"
+                mysqlDriverVersionCombo.selectItem(mysqlProgressVersion)
+                assertDriverSummary(mysqlDialog, "5.1.49 · DOWNLOAD")
+                val mysqlDownloadButton = mysqlDialog.x { byVisibleText("Download") }.waitFound()
+                waitUntil("MySQL version $mysqlProgressVersion can be downloaded") {
+                    mysqlDownloadButton.component.isEnabled()
                 }
-                check(mysqlDialog.x { byVisibleText("More versions") }.waitFound().component.isEnabled()) {
-                    "More versions must unlock after connection testing"
+                mysqlDownloadButton.click()
+                val mysqlProgressBar = mysqlDialog.x(UiComponent::class.java) {
+                    byAccessibleName("Driver download progress")
+                }.waitFound()
+                assertTrue(mysqlProgressBar.component.isVisible(), "The progress bar should appear during a driver download")
+                assertTrue(!mysqlDownloadButton.component.isEnabled(), "Download should be disabled during the transfer")
+                assertTrue(!mysqlDriverVersionCombo.component.isEnabled(), "The version selector should be disabled during the transfer")
+                assertTrue(
+                    mysqlProgressBar.component.width == mysqlDriverVersionCombo.component.width,
+                    "The progress bar should match the driver version selector width",
+                )
+                captureScreen(screenshotsDirectory.resolve("mysql-driver-download-progress.png"), settleMillis = 0)
+                waitUntil("MySQL driver download and verification") {
+                    mysqlDialog.hasSubtext("Downloaded and ready")
+                }
+                check(!mysqlDownloadButton.component.isEnabled()) {
+                    "A successfully downloaded driver should not be offered for download again"
+                }
+                if (review) {
+                    assertDriverSummary(mysqlDialog, "5.1.49 · DOWNLOADED")
+                    captureScreen(screenshotsDirectory.resolve("mysql-driver-downloaded.png"))
+                    mysqlDriverSourceCombo.selectItem("Available drivers")
+                    mysqlAvailableDriverCombo.selectItem("5.1.49 · DOWNLOADED")
+                    assertDriverSummary(mysqlDialog, "5.1.49 · DOWNLOADED")
+                    captureScreen(screenshotsDirectory.resolve("mysql-driver-summary-retained.png"))
+                    mysqlDriverSourceCombo.selectItem("Download a version")
+                    mysqlDialog.x { byVisibleText("JDBC URL") }.waitFound().click()
+                    mysqlDialog.x(JTextFieldUI::class.java) {
+                        and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("JDBC URL:"))
+                    }.waitFound().text =
+                        "jdbc:mysql://127.0.0.1:1/ui_review?connectTimeout=1000"
+                    mysqlDialog.x { byVisibleText("Test connection") }.waitFound().click()
+                    frame.x(DialogUiComponent::class.java) { byTitle("Connection Failed") }.waitFound().also {
+                        captureScreen(screenshotsDirectory.resolve("mysql-connection-failure.png"))
+                        it.pressButton("OK")
+                    }
+                    captureScreen(screenshotsDirectory.resolve("mysql-connection-failure-inline.png"))
+                    downloadedButtonEnabledAfterModeSwitch = mysqlDownloadButton.component.isEnabled()
+                    check(downloadedButtonEnabledAfterModeSwitch == false) {
+                        "A retained driver must remain unavailable for download after a failed connection test"
+                    }
+                    check(mysqlDialog.x { byVisibleText("More versions") }.waitFound().component.isEnabled()) {
+                        "More versions must unlock after connection testing"
+                    }
                 }
             }
             mysqlDialog.pressButton("Cancel")
@@ -510,6 +516,15 @@ class IntellijUiScreenshotTest {
             availableDriverCombo.selectItem("2.7.3-jdk8 · DOWNLOADED")
             assertDriverSummary(connectionDialog, "2.7.3-jdk8 · DOWNLOADED")
 
+            if (postgres) {
+                connectionDialog.x(JComboBoxUiComponent::class.java) {
+                    and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"), byAccessibleName("Database type:"))
+                }.waitFound().selectItem("PostgreSQL")
+                availableDriverCombo.selectItem("42.7.14 · BUNDLED")
+                assertDriverSummary(connectionDialog, "42.7.14 · BUNDLED")
+                captureScreen(screenshotsDirectory.resolve("postgresql-driver-selection.png"))
+            }
+
             if (jdbcFixture != null) {
                 connectionDialog.x { byVisibleText("JDBC URL") }.waitFound().click()
                 connectionDialog.x(JTextFieldUI::class.java) {
@@ -517,13 +532,16 @@ class IntellijUiScreenshotTest {
                 }.waitFound().text = jdbcFixture.jdbcUrl
                 connectionDialog.x(JTextFieldUI::class.java) {
                     and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("User:"))
-                }.waitFound().text = "SA"
+                }.waitFound().text = if (postgres) "postgres" else "SA"
+                if (postgres) connectionDialog.x(JTextFieldUI::class.java) {
+                    and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputPasswordField"), byAccessibleName("Password:"))
+                }.waitFound().text = postgresPassword
                 captureBusyState(jdbcFixture, connectionDialog, "Testing connection…", "connection-testing.png", screenshotsDirectory) {
                     connectionDialog.x { byVisibleText("Test connection") }.waitFound().click()
                 }
             } else connectionDialog.x { byVisibleText("Test connection") }.waitFound().click()
-            waitUntil("successful HSQLDB connection test") {
-                connectionDialog.hasSubtext("Connected · HSQL Database Engine")
+            waitUntil("successful database connection test") {
+                connectionDialog.hasSubtext(if (postgres) "Connected · PostgreSQL" else "Connected · HSQL Database Engine")
             }
             Thread.sleep(500)
             captureScreen(screenshotsDirectory.resolve("connection-tested.png"))
@@ -542,8 +560,9 @@ class IntellijUiScreenshotTest {
                 databaseTree.fixture.expandRow(1)
             } else databaseTree.fixture.expandRow(1)
             val connectionPath = arrayOf("Data Sources", "Lattice UI demo")
-            val publicSchemaPath = connectionPath + "PUBLIC"
-            waitUntil("connected HSQLDB schema in the explorer") {
+            val schemaName = if (postgres) "public" else "PUBLIC"
+            val publicSchemaPath = connectionPath + schemaName
+            waitUntil("connected schema in the explorer") {
                 databaseTree.pathExists(*publicSchemaPath)
             }
             captureScreen(screenshotsDirectory.resolve("connected-explorer.png"))
@@ -553,34 +572,36 @@ class IntellijUiScreenshotTest {
                 captureScreen(screenshotsDirectory.resolve("connection-context-menu.png"))
                 frame.x { byVisibleText("Edit connection…") }.waitFound().click()
                 frame.x(DialogUiComponent::class.java) { byTitle("Edit connection") }.waitFound().also {
-                    assertDriverSummary(it, "2.7.3-jdk8 · DOWNLOADED")
+                    assertDriverSummary(it, if (postgres) "42.7.14 · BUNDLED" else "2.7.3-jdk8 · DOWNLOADED")
                     captureScreen(screenshotsDirectory.resolve("edit-connection.png"))
                     it.pressButton("Cancel")
                 }
-                // A saved manual choice must not silently change when its retained JAR disappears.
-                val missingDriverFiles = listOf(retainedHsqlFixture,
-                    mavenRepository.resolve("org/hsqldb/hsqldb/2.7.3/hsqldb-2.7.3-jdk8.jar"))
-                val backups = mutableListOf<Pair<Path, Path>>()
-                try {
-                    for (jar in missingDriverFiles) {
-                        val backup = jar.resolveSibling(jar.fileName.toString() + ".ui-test-backup")
-                        Files.move(jar, backup, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
-                        backups.add(jar to backup)
-                    }
-                    databaseTree.fixture.rightClickPath(connectionPath.joinToString(databaseTree.fixture.separator()))
-                    frame.x { byVisibleText("Edit connection…") }.waitFound().click()
-                    frame.x(DialogUiComponent::class.java) { byTitle("Edit connection") }.waitFound().also {
-                        assertDriverSummary(it, "2.7.3-jdk8 · UNAVAILABLE")
-                        check(!it.x { byVisibleText("Test connection") }.waitFound().component.isEnabled())
-                        val save = it.x { byVisibleText("Save") }.waitFound()
-                        if (save.component.isEnabled()) save.click()
-                        check(it.component.isShowing()) { "Saving an unavailable explicit driver must keep the dialog open" }
-                        captureScreen(screenshotsDirectory.resolve("edit-connection-unavailable-driver.png"))
-                        it.pressButton("Cancel")
-                    }
-                } finally {
-                    backups.asReversed().forEach { (jar, backup) ->
-                        Files.move(backup, jar, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                // The HSQL scenario exercises removal of a retained explicit driver.
+                if (!postgres) {
+                    val missingDriverFiles = listOf(retainedHsqlFixture,
+                        mavenRepository.resolve("org/hsqldb/hsqldb/2.7.3/hsqldb-2.7.3-jdk8.jar"))
+                    val backups = mutableListOf<Pair<Path, Path>>()
+                    try {
+                        for (jar in missingDriverFiles) {
+                            val backup = jar.resolveSibling(jar.fileName.toString() + ".ui-test-backup")
+                            Files.move(jar, backup, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                            backups.add(jar to backup)
+                        }
+                        databaseTree.fixture.rightClickPath(connectionPath.joinToString(databaseTree.fixture.separator()))
+                        frame.x { byVisibleText("Edit connection…") }.waitFound().click()
+                        frame.x(DialogUiComponent::class.java) { byTitle("Edit connection") }.waitFound().also {
+                            assertDriverSummary(it, "2.7.3-jdk8 · UNAVAILABLE")
+                            check(!it.x { byVisibleText("Test connection") }.waitFound().component.isEnabled())
+                            val save = it.x { byVisibleText("Save") }.waitFound()
+                            if (save.component.isEnabled()) save.click()
+                            check(it.component.isShowing()) { "Saving an unavailable explicit driver must keep the dialog open" }
+                            captureScreen(screenshotsDirectory.resolve("edit-connection-unavailable-driver.png"))
+                            it.pressButton("Cancel")
+                        }
+                    } finally {
+                        backups.asReversed().forEach { (jar, backup) ->
+                            Files.move(backup, jar, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                        }
                     }
                 }
                 databaseTree.fixture.rightClickPath(connectionPath.joinToString(databaseTree.fixture.separator()))
@@ -628,7 +649,7 @@ class IntellijUiScreenshotTest {
             frame.x { byVisibleText("Create table…") }.waitFound().click()
 
             val createTableDialog = frame.x(DialogUiComponent::class.java) {
-                byTitle("Create table in PUBLIC")
+                byTitle("Create table in $schemaName")
             }.waitFound()
             createTableDialog.x(JTextFieldUI::class.java) {
                 byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField")
@@ -1010,7 +1031,7 @@ class IntellijUiScreenshotTest {
                 frame.x { byVisibleText("All persisted rows (current filter)") }.waitFound().click()
                 // Scope duplicate CSV entries through their actual Swing submenu owner.
                 val csvAction = frame.xx { byVisibleText("CSV…") }.list().first {
-                    withContext(OnDispatcher.EDT) {
+                    it.component.isShowing() && withContext(OnDispatcher.EDT) {
                         cast(it.component, LiveMenuItem::class).getParent().getInvoker().getText() == "All persisted rows (current filter)"
                     }
                 }
@@ -1027,6 +1048,38 @@ class IntellijUiScreenshotTest {
                 frame.x(DialogUiComponent::class.java) { byTitle("Export Complete") }.waitFound().pressButton("OK")
                 check(Files.readString(exportFile).contains("Ada Lovelace")) { "Real persisted-row export must contain the saved database value" }
                 captureScreen(screenshotsDirectory.resolve("table-export-complete.png"))
+                if (postgres) for (format in listOf("JSON", "SQL")) {
+                    tableEditor.x { byAccessibleName("Export data") }.waitFound().click()
+                    frame.x { byVisibleText("All persisted rows (current filter)") }.waitFound().click()
+                    fun visibleFormat(label: String) = frame.xx { byVisibleText("$label…") }.list().first {
+                        it.component.isShowing() && withContext(OnDispatcher.EDT) {
+                            cast(it.component, LiveMenuItem::class).getParent().getInvoker().getText() == "All persisted rows (current filter)"
+                        }
+                    }
+                    val firstItem = visibleFormat("CSV").component
+                    val chosenItem = visibleFormat(format).component
+                    val firstPoint = firstItem.getLocationOnScreen()
+                    val chosenPoint = chosenItem.getLocationOnScreen()
+                    // Enter the submenu horizontally, then stay inside it while moving down.
+                    // Driver's smooth diagonal move can hover a sibling and close the submenu.
+                    val formatRobot = Robot().apply { autoDelay = 100 }
+                    formatRobot.mouseMove(firstPoint.x + firstItem.width / 2, firstPoint.y + firstItem.height / 2)
+                    formatRobot.mouseMove(chosenPoint.x + chosenItem.width / 2, chosenPoint.y + chosenItem.height / 2)
+                    formatRobot.mousePress(InputEvent.BUTTON1_DOWN_MASK)
+                    formatRobot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
+                    formatRobot.waitForIdle()
+                    val save = frame.x(DialogUiComponent::class.java) { byTitle("Export All Persisted Rows") }.waitFound()
+                    val exported = screenshotsDirectory.resolve("persisted-rows.${format.lowercase()}").toAbsolutePath()
+                    save.xx(JTextFieldUI::class.java) { byType(javax.swing.JTextField::class.java) }
+                        .list().single { it.text.endsWith(".${format.lowercase()}") }.text = exported.toString()
+                    save.pressButton("OK")
+                    frame.x(DialogUiComponent::class.java) { byTitle("Export Complete") }.waitFound().pressButton("OK")
+                    val text = Files.readString(exported)
+                    check(text.contains("Ada Lovelace")) { "$format persisted export lost its saved value" }
+                    if (format == "SQL") check(text.contains("INSERT INTO $peopleSql"))
+                    if (format == "JSON") check(text.trimStart().startsWith("["))
+                    captureScreen(screenshotsDirectory.resolve("postgresql-export-${format.lowercase()}.png"))
+                }
                 tableEditor.x { byAccessibleName("Export data") }.waitFound().click()
                 captureBusyState(jdbcFixture, tableEditor, "Loading CREATE TABLE statement…", "table-loading-ddl.png", screenshotsDirectory) {
                     frame.x { byVisibleText("View CREATE TABLE…") }.waitFound().click()
@@ -1125,7 +1178,7 @@ class IntellijUiScreenshotTest {
                 check(!console.x { byAccessibleName("Clear query text") }.waitFound().component.isEnabled())
                 // Bounded real HSQLDB work also exercises cancellation with no prior results.
                 val tenValues = "(VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9))"
-                val cancellationSql = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.SYSTEM_COLUMNS A CROSS JOIN INFORMATION_SCHEMA.SYSTEM_COLUMNS B CROSS JOIN $tenValues C(n) CROSS JOIN $tenValues D(n)"
+                val cancellationSql = if (postgres) "SELECT pg_sleep(20)" else "SELECT COUNT(*) FROM INFORMATION_SCHEMA.SYSTEM_COLUMNS A CROSS JOIN INFORMATION_SCHEMA.SYSTEM_COLUMNS B CROSS JOIN $tenValues C(n) CROSS JOIN $tenValues D(n)"
                 withContext(OnDispatcher.EDT) { queryText.setText(cancellationSql) }
                 runQuery.click()
                 waitUntil("first SQL query running") { stopQuery.component.isEnabled() }
@@ -1140,30 +1193,30 @@ class IntellijUiScreenshotTest {
                         "Cancelling the first query must not invent results"
                     }
                 }
-                withContext(OnDispatcher.EDT) { queryText.setText("SELECT * FROM PUBLIC.LATTICE_PEOPLE") }
+                withContext(OnDispatcher.EDT) { queryText.setText("SELECT * FROM $peopleSql") }
                 console.x { byVisibleText("Run") }.waitFound().click()
                 waitUntil("SQL SELECT completed") { console.hasSubtext("1 row ·") }
                 val sqlGrid = console.x(JTableUiComponent::class.java) { byJavaClass("com.segfault03.ideadb.ui.DatabaseTable") }.waitFound()
                 captureScreen(screenshotsDirectory.resolve("sql-console-results.png"))
                 assertNullContrast(sqlGrid, 0, 2)
                 captureScreen(screenshotsDirectory.resolve("sql-console-null-unselected.png"))
-                withContext(OnDispatcher.EDT) { queryText.setText("SELECT * FROM PUBLIC.LATTICE_PEOPLE UNION ALL SELECT * FROM PUBLIC.LATTICE_PEOPLE") }
+                withContext(OnDispatcher.EDT) { queryText.setText("SELECT * FROM $peopleSql UNION ALL SELECT * FROM $peopleSql") }
                 console.x { byVisibleText("Run") }.waitFound().click()
                 waitUntil("plural SQL row count") { console.hasSubtext("2 rows ·") }
                 captureScreen(screenshotsDirectory.resolve("sql-console-multiple-rows.png"))
-                withContext(OnDispatcher.EDT) { queryText.setText("SELECT * FROM PUBLIC.LATTICE_PEOPLE WHERE \"id\" = -999") }
+                withContext(OnDispatcher.EDT) { queryText.setText("SELECT * FROM $peopleSql WHERE \"id\" = -999") }
                 console.x { byVisibleText("Run") }.waitFound().click()
                 waitUntil("empty SQL result") { console.hasSubtext("0 rows") }
                 captureScreen(screenshotsDirectory.resolve("sql-console-empty-results.png"))
-                withContext(OnDispatcher.EDT) { queryText.setText("UPDATE PUBLIC.LATTICE_PEOPLE SET \"name\" = 'Ada Lovelace' WHERE \"id\" = -999") }
+                withContext(OnDispatcher.EDT) { queryText.setText("UPDATE $peopleSql SET \"name\" = 'Ada Lovelace' WHERE \"id\" = -999") }
                 console.x { byVisibleText("Run") }.waitFound().click()
                 waitUntil("zero affected rows") { console.hasSubtext("0 rows affected ·") }
                 captureScreen(screenshotsDirectory.resolve("sql-console-update-zero.png"))
-                withContext(OnDispatcher.EDT) { queryText.setText("UPDATE PUBLIC.LATTICE_PEOPLE SET \"name\" = 'Ada Lovelace' WHERE \"id\" = $changedId") }
+                withContext(OnDispatcher.EDT) { queryText.setText("UPDATE $peopleSql SET \"name\" = 'Ada Lovelace' WHERE \"id\" = $changedId") }
                 console.x { byVisibleText("Run") }.waitFound().click()
                 waitUntil("SQL update completed") { console.hasSubtext("1 row affected ·") }
                 captureScreen(screenshotsDirectory.resolve("sql-console-update.png"))
-                withContext(OnDispatcher.EDT) { queryText.setText("SELECT * FROM PUBLIC.LATTICE_PEOPLE") }
+                withContext(OnDispatcher.EDT) { queryText.setText("SELECT * FROM $peopleSql") }
                 console.x { byVisibleText("Run") }.waitFound().click()
                 waitUntil("results restored before cancellation/error review") { console.hasSubtext("1 row ·") }
                 // Bounded real database work lasts a few seconds. An unbounded four-way
@@ -1177,19 +1230,21 @@ class IntellijUiScreenshotTest {
                 assertAnimatedBusy(console.x { byAccessibleName("SQL query status") }.waitFound())
                 captureScreen(screenshotsDirectory.resolve("sql-console-running.png"), settleMillis = 0)
                 val cancellationStart = System.nanoTime()
+                if (postgres) jdbcFixture.pauseResponses()
                 stopQuery.click()
                 waitUntil("immediate cancellation feedback", timeoutMillis = 2000) { console.hasSubtext("Cancelling query…") }
                 println("P2 cancellation feedback after ${(System.nanoTime() - cancellationStart) / 1_000_000} ms")
                 check(!runQuery.component.isEnabled() && !stopQuery.component.isEnabled()) { "A cancelling query must block Run and repeated Stop" }
                 assertAnimatedBusy(console.x { byAccessibleName("SQL query status") }.waitFound())
                 captureScreen(screenshotsDirectory.resolve("sql-console-cancelling.png"), settleMillis = 0)
+                if (postgres) jdbcFixture.resumeResponses()
                 waitUntil("SQL cancellation completes") { runQuery.component.isEnabled() }
                 assertQueryOutcome(console, cancelled = true)
                 captureScreen(screenshotsDirectory.resolve("sql-console-cancelled.png"))
                 val previousTabs = cast(console.x { byJavaClass("javax.swing.JTabbedPane") }.waitFound().component, LiveTabs::class)
                 withContext(OnDispatcher.EDT) { previousTabs.setSelectedIndex(0) }
                 check(sqlGrid.rowCount() == 1) { "Cancellation must retain previous results" }
-                withContext(OnDispatcher.EDT) { queryText.setText("SELECT * FROM PUBLIC.LATTICE_PEOPLE") }
+                withContext(OnDispatcher.EDT) { queryText.setText("SELECT * FROM $peopleSql") }
                 runQuery.click()
                 waitUntil("session usable after cancellation") { runQuery.component.isEnabled() && console.hasSubtext("1 row ·") }
                 withContext(OnDispatcher.EDT) { queryText.setText("SELECT * FROM TABLE_THAT_DOES_NOT_EXIST") }
@@ -1259,12 +1314,19 @@ class IntellijUiScreenshotTest {
                 appendLine("Available IDE themes: $availableThemes")
                 appendLine("Driver input sizes: source=${sourceWidth}x$sourceHeight, version=${versionWidth}x$versionHeight; left edges: $sourceLeft, $selectorLeft; actions: $actionsLeft")
                 appendLine("Commit button size: $commitSize; Revert button size: $revertSize")
-                appendLine("Review observation: downloaded MySQL Download button enabled after JDBC URL / failed test = $downloadedButtonEnabledAfterModeSwitch")
+                if (downloadedButtonEnabledAfterModeSwitch != null)
+                    appendLine("Review observation: downloaded MySQL Download button enabled after JDBC URL / failed test = $downloadedButtonEnabledAfterModeSwitch")
                 appendLine("Configured Maven local repository fixture: $mavenRepository")
                 appendLine("Project POM default drivers: MySQL 8.4.0, HSQLDB 2.7.2")
                 appendLine("Discovered MySQL Connector/J releases: 9.0.0, 8.4.0, 8.0.33")
                 appendLine("Discovered HSQLDB releases: 2.7.2, 2.6.1-jdk8, 2.4.1")
-                appendLine("Driver download flow: MySQL 5.1.49 downloaded from Maven Central; progress bar displayed and download controls were disabled during transfer")
+                if (!postgres && !System.getProperty("ui.skip.remote.downloads", "false").toBoolean())
+                    appendLine("Driver download flow: MySQL 5.1.49 downloaded from Maven Central; progress bar displayed and download controls were disabled during transfer")
+                if (postgres) {
+                    appendLine("PostgreSQL driver selection: 42.7.14 · BUNDLED in the production connection dialog")
+                    appendLine("Persisted exports: CSV, JSON and SQL files saved and inspected for the committed value")
+                    appendLine("SQL console: SELECT/update/error outcomes, empty/retained-result cancellation and session recovery verified")
+                }
                 appendLine("IDE display: ${displayBounds.width}x${displayBounds.height}")
                 appendLine("IDE frame bounds: $ideFrameBounds")
                 appendLine("Production root Swing class: com.segfault03.ideadb.ui.DatabaseMainPanel")
@@ -1273,7 +1335,7 @@ class IntellijUiScreenshotTest {
                 appendLine("JetBrains ActionLink child bounds on Welcome screen: $jetBrainsActionLinkBounds")
                 appendLine("IDE JBR release: ${Files.readString(ideHome.resolve("jbr/release")).lineSequence().filter { it.startsWith("JAVA_VERSION=") || it.startsWith("IMPLEMENTOR=") }.joinToString(", ")}")
                 appendLine("Test worker JVM: ${System.getProperty("java.version")} (${System.getProperty("java.vendor")})")
-                appendLine("Connection flow: Driver-created HSQLDB in-memory connection, live test connection succeeded")
+                appendLine("Connection flow: ${if (postgres) "PostgreSQL server $postgresPort / pgJDBC 42.7.14" else "HSQLDB in-memory server"}; live test connection succeeded")
                 appendLine("Table insert validation: empty row displayed its auto ID and nullable timestamp defaults, marked its missing required name invalid, and kept Commit disabled until the name was supplied")
                 appendLine("Table edit validation: unchanged integer stayed clean; invalid integer was highlighted and blocked Commit; restoring the original stayed clean; a valid changed integer committed and reloaded")
                 appendLine("Table flow: created LATTICE_PEOPLE through the production dialog, inserted Ada Lovelace, and edited its ID through the production data grid")
@@ -1287,7 +1349,7 @@ class IntellijUiScreenshotTest {
         } finally { jdbcFixture?.close() }
     }
 
-    private fun captureBusyState(fixture: HsqlUiFixture, root: UiComponent, message: String, filename: String,
+    private fun captureBusyState(fixture: JdbcUiFixture, root: UiComponent, message: String, filename: String,
                                  directory: Path, action: () -> Unit) {
         fixture.pauseResponses()
         try {

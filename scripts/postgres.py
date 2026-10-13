@@ -44,7 +44,7 @@ def postgres_fixture(port, version='18.6', docker='docker', cleanup=True, image=
             with (logs / f'postgres-{version}.log').open('wb') as output:
                 subprocess.run([docker, 'logs', name], stdout=output, stderr=subprocess.STDOUT, check=False)
             subprocess.run([docker, 'stop', '--timeout', '15', name], check=False)
-            subprocess.run([docker, 'rm', '--force', name], stdout=subprocess.DEVNULL,
+            subprocess.run([docker, 'rm', '--force', '--volumes', name], stdout=subprocess.DEVNULL,
                            stderr=subprocess.DEVNULL, check=False)
         if cleanup and not existed:
             remove_downloaded_docker_image(image, docker)

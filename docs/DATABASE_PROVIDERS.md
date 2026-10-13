@@ -17,7 +17,7 @@ repository interfaces.
 | `DatabaseFeature` | Explicitly supported optional operations; providers advertise none by default |
 | `DatabaseNamespace` | Independent catalog and schema identifiers |
 
-MySQL and HSQLDB have separate providers, dialects and metadata adapters. Common
+MySQL, HSQLDB and PostgreSQL have separate providers, dialects and metadata adapters. Common
 SQL construction lives in `AbstractSqlDialect`; common JDBC metadata reading
 lives in `JdbcMetadataAdapter`. Engine-specific DDL, compatibility workarounds,
 metadata enrichment, streaming rules and SQL literal encoding stay in their
@@ -55,10 +55,20 @@ remain for compatibility.
    including legacy driver versions where supported.
 
 The current explorer presents one namespace level. Existing APIs convert its
-selection into a catalog for MySQL or schema for HSQLDB. `DatabaseNamespace` keeps
+selection into a catalog for MySQL or schema for HSQLDB/PostgreSQL. `DatabaseNamespace` keeps
 both identifiers distinct when qualifying names, but an engine requiring an
 interactive catalog-and-schema hierarchy also needs corresponding explorer and
-service API changes. PostgreSQL and H2 are not implemented by this refactor.
+service API changes. PostgreSQL connects to one physical database and presents
+its schemas at this namespace level. H2 is not implemented.
+
+PostgreSQL's provider binds inferred target types for JSON/UUID/arrays, detaches
+server-specific and temporal values before connections close, opens cursor exports
+inside a read transaction, and retries protocol cancellation safely through the
+shared query-execution guard. Native CREATE reconstruction uses version-aware
+catalog queries, with identity from 10 and computed columns from 12. Generated
+columns remain read-only in the grid and are omitted from INSERT exports. Schema
+DDL and column alterations use PostgreSQL's transactional semantics, preserving
+outer transactions through savepoints.
 
 ## Connection ownership
 
@@ -86,7 +96,7 @@ introduced here.
 `DatabaseProviderTest` checks provider completeness, feature opt-in, URL validation,
 namespace quoting, driver rules, values and concurrent browser serialization.
 `ProviderEndToEndTest` runs the same production-service workflow against embedded
-HSQLDB and live MySQL/HSQLDB servers: create/browse metadata, insert/update/delete,
+HSQLDB and live MySQL/HSQLDB/PostgreSQL servers: create/browse metadata, insert/update/delete,
 rollback, pagination, SQL export/reimport, console namespace selection, table
 alterations and cleanup.
 

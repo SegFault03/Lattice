@@ -7,7 +7,7 @@
 [![Rating](https://img.shields.io/jetbrains/plugin/r/rating/34772.svg)](https://plugins.jetbrains.com/plugin/34772)
 [![Get from JetBrains Marketplace](https://img.shields.io/badge/JetBrains%20Marketplace-Lattice-087CFA?logo=intellij-idea&logoColor=white)](https://plugins.jetbrains.com/plugin/34772)
 
-Lattice is a database management plugin for IntelliJ IDEA. Connect to MySQL or HSQLDB, browse schemas, run SQL, edit table data, design tables and export results from your IDE.
+Lattice is a database management plugin for IntelliJ IDEA. Connect to MySQL, HSQLDB or PostgreSQL, browse schemas, run SQL, edit table data, design tables and export results from your IDE.
 
 Built with help from **Gemini 3.8**, **GPT-6 Luna** and **GPT-6.1 Sol**.
 
@@ -65,8 +65,9 @@ IntelliJ IDEA **2025.1 or later**, Community or Ultimate/unified editions, using
 |---|---|
 | MySQL | 5.5.62, 5.6.51, 5.7.44 and 8.4.2 |
 | HSQLDB | 2.2.9 through 2.7.4; file, memory and server modes |
+| PostgreSQL | 8.4 through 18; select a Java 8 compatible pgJDBC (42.7.3 or 42.2.27 for servers older than 9.1) |
 
-Choose a JDBC driver compatible with your server. HSQLDB requires a matching server/file format; some releases offer a `-jdk8` classifier. Java 8 support applies to drivers/database servers; the plugin requires Java 21. See the [compatibility report](docs/compatibility.md) for tested combinations and limits.
+Choose a JDBC driver compatible with your server. HSQLDB requires a matching server/file format; some releases offer a `-jdk8` classifier. Java 8 support applies to JDBC drivers and the HSQLDB server runtime; MySQL and PostgreSQL are native servers. The plugin requires Java 21. See the [compatibility report](docs/compatibility.md) for tested combinations and limits.
 
 ## Install and connect
 
@@ -81,9 +82,9 @@ Choose a JDBC driver compatible with your server. HSQLDB requires a matching ser
 3. Select the ZIP and restart if prompted.
 4. Open the **Lattice** tool window and add a data source.
 
-Select MySQL or HSQLDB, enter connection details, and choose a driver:
+Select MySQL, HSQLDB or PostgreSQL, enter connection details, and choose a driver:
 
-- **Bundled driver**: the plugin includes Connector/J 26.7.0 or HSQLDB 2.7.4, plus every version you have downloaded. Pick one from the list to reuse it without downloading again.
+- **Bundled driver**: the plugin includes Connector/J 26.7.0, HSQLDB 2.7.4 and pgJDBC 42.7.14, plus every version you have downloaded. Pick one from the list to reuse it without downloading again.
 - **Download a version**: choose or enter a version and click **Download**. Downloads are explicit and checksum-verified, and a release is fetched at most once. Afterwards it appears in the bundled list.
 - **Local JAR**: select an existing JDBC driver.
 
@@ -140,7 +141,7 @@ On Linux or Windows, run the full disposable validation flow with [the one-shot 
 python scripts/one-shot-test.py
 ```
 
-The default run builds and tests the plugin, checks the ZIP, runs live MySQL/HSQLDB functional tests, verifies IntelliJ 2025.1–2025.3, and exercises the complete JDBC/Java 8 matrix. It does not render screenshots; use `python scripts/ui-preview.py` for standalone Swing previews or `./scripts/linux/review-intellij-ui.sh` on Linux/X11 and `.\scripts\windows\review-intellij-ui.ps1` on Windows for real-IDE UI flows.
+The default run builds and tests the plugin, checks the ZIP, runs live database functional tests (including PostgreSQL on Linux), verifies IntelliJ 2025.1–2025.3, and exercises the complete JDBC/Java 8 matrix. It does not render screenshots; use `python scripts/ui-preview.py` for standalone Swing previews or `./scripts/linux/review-intellij-ui.sh` on Linux/X11 and `.\scripts\windows\review-intellij-ui.ps1` on Windows for real-IDE UI flows.
 
 Use `--skip-compatibility` for the build and live functional checks, `--compatibility-only` for the IDE and JDBC matrices, or `--database-compatibility-only` for just the JDBC matrix when Plugin Verifier runs separately. Actions uses the isolated compatibility modes for PR and release matrices; routine checks use the Gradle cache.
 
@@ -174,7 +175,7 @@ See [CHANGELOG](docs/CHANGELOG.md), [RELEASING](docs/RELEASING.md), [Marketplace
 
 Planned work includes:
 
-1. Support for more relational databases, including PostgreSQL and H2.
+1. Support for more relational databases, including H2.
 2. More SQL and schema actions, including generating POJOs, DTOs and JavaBeans from tables and query results.
 3. SQL syntax highlighting and inline suggestions informed by connected database schemas, subject to feasibility within the IntelliJ Platform.
 4. Relationship graphs and dependency trees to explore how tables connect through foreign keys.

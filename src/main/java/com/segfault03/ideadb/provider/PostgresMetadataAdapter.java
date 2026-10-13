@@ -29,8 +29,8 @@ final class PostgresMetadataAdapter extends JdbcMetadataAdapter {
         }
         columns.replaceAll(c -> {
             var detail = details.get(c.getName());
-            String type = switch (c.getTypeName()) {
-                case "int2" -> "SMALLINT"; case "int4" -> "INTEGER"; case "int8" -> "BIGINT";
+            String type = switch (c.getTypeName().toLowerCase(Locale.ROOT)) {
+                case "int2", "smallserial", "serial2" -> "SMALLINT"; case "int4", "serial", "serial4" -> "INTEGER"; case "int8", "bigserial", "serial8" -> "BIGINT";
                 case "float4" -> "REAL"; case "float8" -> "DOUBLE PRECISION"; case "bool" -> "BOOLEAN";
                 case "timestamp" -> "TIMESTAMP"; case "time" -> "TIME"; case "date" -> "DATE"; case "text" -> "TEXT"; case "numeric" -> "NUMERIC"; case "bytea" -> "BYTEA"; case "uuid" -> "UUID"; case "json" -> "JSON"; case "jsonb" -> "JSONB";
                 case "bpchar" -> "CHAR"; case "varchar" -> "VARCHAR";
@@ -38,7 +38,7 @@ final class PostgresMetadataAdapter extends JdbcMetadataAdapter {
                 default -> c.getTypeName();
             };
             boolean unconstrained = detail != null && detail[0].equals("numeric");
-            return new ColumnMetadata(c.getName(), type, c.getDataType(), unconstrained || type.equals("BYTEA") ? 0 : c.getColumnSize(), unconstrained ? Integer.MAX_VALUE : c.getDecimalDigits(), c.isNullable(), c.isPrimaryKey(), c.isAutoIncrement() || detail != null && !detail[1].isEmpty(), c.getDefaultValue(), detail != null && !detail[1].isEmpty());
+            return new ColumnMetadata(c.getName(), type, c.getDataType(), unconstrained || type.equals("BYTEA") || type.equals("TEXT") ? 0 : c.getColumnSize(), unconstrained ? Integer.MAX_VALUE : c.getDecimalDigits(), c.isNullable(), c.isPrimaryKey(), c.isAutoIncrement() || detail != null && !detail[1].isEmpty(), c.getDefaultValue(), detail != null && !detail[1].isEmpty());
         });
     }
 }

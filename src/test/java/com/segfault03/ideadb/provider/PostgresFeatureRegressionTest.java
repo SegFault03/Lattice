@@ -61,7 +61,10 @@ public class PostgresFeatureRegressionTest {
             assertEquals(2L,((Number)scalar(c,"SELECT \"Id\" FROM " + target)).longValue());
             assertEquals("O'Brien\\path",scalar(c,"SELECT \"Payload\" FROM " + target));
             assertThrows(SQLException.class,()->data.insertRow(c,config,schema,"Records_%",Map.of("Payload","blocked")));
-            assertEquals(2,MetadataService.getInstance().getColumns(c,config,schema,"Records_%").size());
+            var serialColumns=MetadataService.getInstance().getColumns(c,config,schema,"Records_%");
+            assertEquals(2,serialColumns.size());
+            assertEquals("BIGINT",serialColumns.getFirst().getTypeName());
+            assertTrue(serialColumns.getFirst().isAutoIncrement());
             var changed=new ColumnDefinition("Payload","VARCHAR",100,false,false,false,"TEXT:new\\value");
             ddl.alterTableModifyColumn(c,config,schema,"Records_%",changed);
             data.insertRow(c,config,schema,"Records_%",Map.of());
@@ -107,6 +110,7 @@ public class PostgresFeatureRegressionTest {
             var original=data.fetchData(c,config,schema,"values_table",null,null,10,0); assertFalse(original.hasError(),original.getError());
             var columns=MetadataService.getInstance().getColumns(c,config,schema,"values_table");
             assertEquals("TIMESTAMP WITH TIME ZONE",columns.stream().filter(col->col.getName().equals("tz")).findFirst().orElseThrow().getFormattedType());
+            assertEquals("TEXT",columns.stream().filter(col->col.getName().equals("txt")).findFirst().orElseThrow().getFormattedType());
             assertEquals("NUMERIC",columns.stream().filter(col->col.getName().equals("amount")).findFirst().orElseThrow().getFormattedType());
             for(String format:List.of("sql","csv","json")) {
                 Path output=Files.createTempFile("pg-values", "."+format);

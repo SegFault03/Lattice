@@ -92,6 +92,9 @@ else
 fi
 
 ide_args=()
+if [[ -n "${LATTICE_UI_BUILD_IDE_HOME:-}" ]]; then
+    ide_args+=("-Plattice.ide.home=$LATTICE_UI_BUILD_IDE_HOME")
+fi
 if [[ -n "${LATTICE_UI_IDE_HOME:-}" ]]; then
     ide_args+=("-Plattice.ui.ide.home=$LATTICE_UI_IDE_HOME")
 fi

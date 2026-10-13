@@ -57,12 +57,12 @@ public class WelcomePanel extends JPanel implements AutoCloseable {
         content.add(title, gbc);
         gbc.gridy++;
         gbc.insets = com.intellij.util.ui.JBUI.insets(12, 0, 20, 0);
-        content.add(description("Explore MySQL and HSQLDB from your IDE."), gbc);
+        content.add(description("Explore databases from your IDE."), gbc);
 
         JPanel actions = new JPanel(new WrapLayout(FlowLayout.LEFT, 0, 4));
         actions.setOpaque(false);
         JButton addConnection = new JButton("Add connection…", AllIcons.General.Add);
-        addConnection.setToolTipText("Configure a MySQL or HSQLDB connection");
+        addConnection.setToolTipText("Configure a database connection");
         addConnection.addActionListener(e -> showAddConnectionMenu(addConnection));
         actions.add(addConnection);
         actions.add(Box.createHorizontalStrut(com.intellij.util.ui.JBUI.scale(12)));

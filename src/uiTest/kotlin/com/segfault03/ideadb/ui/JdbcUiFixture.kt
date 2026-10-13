@@ -10,10 +10,10 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
-/** A real HSQLDB server. Only network responses are gated to inspect otherwise brief busy states. */
-internal class HsqlUiFixture : AutoCloseable {
+/** Real JDBC fixtures; response gating makes transient UI states observable without mocking SQL. */
+internal class JdbcUiFixture(private val postgresPort: Int = 0, private val password: String = "lattice-test") : AutoCloseable {
     private val address = InetAddress.getLoopbackAddress()
-    private val serverPort = ServerSocket(0, 50, address).use { it.localPort }
+    private val serverPort = if (postgresPort > 0) postgresPort else ServerSocket(0, 50, address).use { it.localPort }
     private val server = Server()
     private val proxy = ServerSocket(0, 50, address)
     private val sockets = ConcurrentHashMap.newKeySet<Socket>()
@@ -24,19 +24,29 @@ internal class HsqlUiFixture : AutoCloseable {
     private var paused = false
     private var blockedResponse = CountDownLatch(1)
     @Volatile private var closed = false
-    val jdbcUrl = "jdbc:hsqldb:hsql://127.0.0.1:${proxy.localPort}/lattice"
+    val jdbcUrl = if (postgresPort > 0) "jdbc:postgresql://127.0.0.1:${proxy.localPort}/postgres?sslmode=disable&connectTimeout=5&loginTimeout=5" else "jdbc:hsqldb:hsql://127.0.0.1:${proxy.localPort}/lattice"
 
     init {
-        server.setAddress("127.0.0.1")
-        server.setPort(serverPort)
-        server.setDatabaseName(0, "lattice")
-        server.setDatabasePath(0, "mem:lattice_ui_review")
-        server.setDaemon(true)
-        server.setSilent(true)
-        server.setLogWriter(null)
-        server.setErrWriter(null)
-        server.start()
-        check(server.state == ServerConstants.SERVER_STATE_ONLINE) { "HSQLDB fixture failed to start: ${server.serverError}" }
+        if (postgresPort > 0) {
+            java.sql.DriverManager.getConnection("jdbc:postgresql://127.0.0.1:$postgresPort/postgres", "postgres", password).use { connection ->
+                connection.createStatement().use { statement ->
+                    statement.execute("DROP SCHEMA IF EXISTS \"PUBLIC\" CASCADE")
+                    statement.execute("DROP SCHEMA IF EXISTS public CASCADE")
+                    statement.execute("CREATE SCHEMA public")
+                }
+            }
+        } else {
+            server.setAddress("127.0.0.1")
+            server.setPort(serverPort)
+            server.setDatabaseName(0, "lattice")
+            server.setDatabasePath(0, "mem:lattice_ui_review")
+            server.setDaemon(true)
+            server.setSilent(true)
+            server.setLogWriter(null)
+            server.setErrWriter(null)
+            server.start()
+            check(server.state == ServerConstants.SERVER_STATE_ONLINE) { "HSQLDB fixture failed to start: ${server.serverError}" }
+        }
         workers.execute {
             while (!closed) {
                 try {
@@ -99,7 +109,7 @@ internal class HsqlUiFixture : AutoCloseable {
         proxy.close()
         sockets.forEach { it.close() }
         workers.shutdownNow()
-        server.stop()
+        if (postgresPort == 0) server.stop()
         workers.awaitTermination(2, TimeUnit.SECONDS)
     }
 }

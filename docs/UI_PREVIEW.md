@@ -52,3 +52,22 @@ For a focused palette review, pass `-StyleOnly -GradleArgs @('-Plattice.ui.light
 ```
 
 Dependency paths and cleanup are described in the [script reference](SCRIPTS.md#binary-paths-downloads-and-cleanup). Windows capture/review accepts `-DownloadDir`, `-BinariesDir`, `-GradleUserHome`, `-BuildIdeHome`, `-Cleanup` and `-NoCleanup`; missing JDK/SDK/JDBC fixtures are provisioned automatically. Standalone previews accept `--download-dir`, `--cleanup`, `--no-cleanup`, `--flatlaf-jar`, `--junit-jar` and `--hamcrest-jar`.
+
+## PostgreSQL end-to-end review
+
+```bash
+python scripts/postgres-ui-review.py --cleanup --ide-home /path/to/ideaIC-2025.1
+```
+
+The wrapper owns a PostgreSQL 18 fixture on a free loopback port and runs the full
+IntelliJ scenario in the selected theme. It verifies PostgreSQL driver selection,
+authenticated connection, schema/table DDL, grid insertion/edit validation and
+rollback, filters/count/pagination, all persisted exports, native CREATE display,
+column changes, SQL outcomes and cancellation/recovery. Screenshots and runtime
+evidence go to `build/ui-review-postgres`. The existing HSQLDB scenario remains
+available through the native review runner.
+
+For an external **disposable test server**, set `LATTICE_UI_POSTGRES_PORT` and
+`LATTICE_UI_POSTGRES_PASSWORD` when invoking the native runner. The scenario
+recreates its `public` test schema. Use the wrapper for automatic isolation
+and cleanup.

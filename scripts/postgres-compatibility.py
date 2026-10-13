@@ -40,7 +40,7 @@ def main():
                     command=gradle_command()+['databaseCompatibilityTest','-Plattice.compatibility.mode=postgres',
                         f'-Plattice.compatibility.port={port}',f'-Plattice.compatibility.server={version}',
                         f'-Plattice.compatibility.java8={executable(java8,"java")}',f'-Plattice.compatibility.probe={probe}',
-                        f'-Plattice.compatibility.cleanup={str(args.cleanup).lower()}',
+                        '-Plattice.compatibility.cleanup=false',
                         f'-Plattice.compatibility.cache={deps.workspace() / "jdbc"}']
                     if args.ide_home: command += [f'-Plattice.ide.home={args.ide_home}']
                     # Gradle builds share output classes even when fixtures/caches are isolated.

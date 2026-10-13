@@ -4,7 +4,7 @@
 
 Production targets Java 21 and IntelliJ IDEA 2025.1 (build 251). Plugin Verifier 1.410 checked the packaged ZIP against full SDKs without ignored compatibility errors:
 
-The build-tool baseline is Gradle 9.8.0 through the checksum-pinned wrapper and IntelliJ Platform Gradle Plugin 2.19.0. Pure tests, plugin packaging, UI previews, live MySQL/HSQLDB flows, the Java 8 JDBC probes and the IntelliJ matrix are validated separately so a dependency change can be checked against each layer.
+The build-tool baseline is Gradle 9.8.0 through the checksum-pinned wrapper and IntelliJ Platform Gradle Plugin 2.19.0. Pure tests, plugin packaging, UI previews, live MySQL/HSQLDB/PostgreSQL flows, the Java 8 JDBC probes and the IntelliJ matrix are validated separately so a dependency change can be checked against each layer.
 
 | IDEA | Build | Result |
 |---|---|---|
@@ -19,7 +19,7 @@ These results establish binary/API compatibility for the named builds. They do n
 
 ## Database and Java 8 matrix
 
-The Linux one-shot runner is configured to exercise all 57 combinations below with service-level database flows and matching JDBC connection/query probes on Java 8. Plugin services run on Java 21; HSQLDB servers run on Java 8. The plugin itself requires Java 21. Drivers and database server fixtures are processed one at a time and deleted after each case when downloaded by the run.
+The Linux one-shot runner exercises all 57 combinations below with service-level database flows and matching JDBC connection/query probes on Java 8. Plugin services run on Java 21; HSQLDB servers run on Java 8. The plugin itself requires Java 21. Drivers and database server fixtures are processed one at a time and deleted after each case when downloaded by the run.
 
 | Server | Selected JDBC versions | Combinations |
 |---|---|---|
@@ -49,7 +49,7 @@ Each of the 34 PostgreSQL cases checks selected/downloaded/local-JAR identity an
 
 Checks cover selected JAR/classloader identity, download/local-JAR modes, metadata, schema/table creation, pagination/count, insert/update/delete, failed-batch rollback, column changes, native CREATE export and SQL export/reimport row/timestamp preservation. The baseline suite also passed 11 JUnit methods, 300 functional assertions and fallback-driver lifecycle checks.
 
-PostgreSQL validation for this change passed both drivers on 8.4.22, 9.0.23, 9.1.24, 9.3.25 and 12.22–14.24, including native view replay. Earlier runs also passed 9.4.26–9.6.24 before that additional view test. The bundled-driver live suite passed on 18.6. Completion of the remaining matrix cases is pending: the managed environment's outbound proxy started returning HTTP 503 for Maven, PostgreSQL source downloads and Docker registries. These are fixture/download failures, not recorded database assertion passes.
+Validation on 2026-10-13 passed all 34 PostgreSQL cases and all 23 existing MySQL/HSQLDB cases. The PostgreSQL bundled-driver suite also passed against an authenticated 18.6 server. After normalizing serial aliases and unbounded TEXT metadata, the 8.4.22 and 10.23 cases were rerun with both selected drivers, and the current-server regression suite was repeated. The real IntelliJ 2025.1 PostgreSQL scenario passed schema/table/column DDL, grid validation and rollback, all three persisted exports, native CREATE display, SQL outcomes, cancellation and recovery. Plugin Verifier passed the exact packaged candidate on all three 2025 IDE targets.
 
 The floor exercised is MySQL 5.5, HSQLDB 2.2.9 and PostgreSQL 8.4. MySQL text export requires utf8mb4. Historical patches and arbitrary driver/server pairings are not exhaustively tested. Match HSQLDB drivers to server/file formats and choose a compatible Connector/J for MySQL.
 
