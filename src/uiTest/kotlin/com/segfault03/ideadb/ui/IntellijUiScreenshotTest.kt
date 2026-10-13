@@ -266,6 +266,7 @@ class IntellijUiScreenshotTest {
             ))) { "Expected bundled and Maven-discovered MySQL releases: $mysqlAvailableDriverLabels" }
             captureScreen(screenshotsDirectory.resolve("mysql-connection-dialog-available-driver-list.png"))
             pressEscape()
+            assertDataSourcePicker(mysqlDialog)
             mysqlDialog.x { byAccessibleName("HSQLDB") }.waitFound().click()
             assertDriverSummary(mysqlDialog, "2.7.2 · DISCOVERED")
             captureScreen(screenshotsDirectory.resolve("driver-type-switch-hsql-project-default.png"))
@@ -874,6 +875,7 @@ class IntellijUiScreenshotTest {
                         reviewedLightThemes.add(lightTheme)
                     }
                 }
+                verifyKeyHeaderFlow(frame, databaseTree, peoplePath, tableEditor, console, peopleSql, screenshotsDirectory)
                 Files.writeString(screenshotsDirectory.resolve("runtime-evidence.txt"), buildString {
                     appendLine("IDE target: IntelliJ IDEA $productCode ${System.getProperty("ui.ide.version")} (${System.getProperty("ui.ide.build")})")
                     appendLine("Actual IDE theme: ${actualTheme.getName()} (${actualTheme.getId()})")
@@ -883,6 +885,7 @@ class IntellijUiScreenshotTest {
                     appendLine("IDE JBR release: ${Files.readString(ideHome.resolve("jbr/release")).lineSequence().filter { it.startsWith("JAVA_VERSION=") || it.startsWith("IMPLEMENTOR=") }.joinToString(", ")}")
                     appendLine("IDE display: ${displayBounds.width}x${displayBounds.height}; scale 1")
                     appendLine("Verified: six explorer actions in native hover overflow and working Add Connection invoker; failed connection status; valid/invalid/unchanged table edits; text and integer editor theme surfaces; native menu background; full auto-refresh caption; white active action labels and painted glyphs in normal and overflow toolbars")
+                    appendLine("Key header regressions: primary, foreign and combined badges/colors in table and aliased SQL results; markers clear after a new query or schema refresh")
                     appendLine("Scope: focused UI regressions including SQL export submenu palette, table filters and console layout; the default review continues through commit, export, alter-table and SQL flows")
                 })
                 println("Focused real IDE UI regression review passed: $themeId")
@@ -1299,6 +1302,7 @@ class IntellijUiScreenshotTest {
                 withContext(OnDispatcher.EDT) { ideWindow.setBounds((displayBounds.width - normalWidth) / 2, 40, normalWidth, normalHeight) }
                 captureScreen(screenshotsDirectory.resolve("sql-console-normal-after-resize.png"))
                 assertEditorControlsVisible(console, "restored SQL console")
+                verifyKeyHeaderFlow(frame, databaseTree, peoplePath, tableEditor, console, peopleSql, screenshotsDirectory)
                 databaseTree.fixture.rightClickPath(connectionPath.joinToString(databaseTree.fixture.separator()))
                 frame.x { byVisibleText("Remove connection") }.waitFound().click()
                 frame.x(DialogUiComponent::class.java) { byTitle("Remove connection") }.waitFound().also {
@@ -1342,6 +1346,7 @@ class IntellijUiScreenshotTest {
                 appendLine("Table insert validation: empty row displayed its auto ID and nullable timestamp defaults, marked its missing required name invalid, and kept Commit disabled until the name was supplied")
                 appendLine("Table edit validation: unchanged integer stayed clean; invalid integer was highlighted and blocked Commit; restoring the original stayed clean; a valid changed integer committed and reloaded")
                 appendLine("Table flow: created LATTICE_PEOPLE through the production dialog, inserted Ada Lovelace, and edited its ID through the production data grid")
+                appendLine("Key header regressions: primary, foreign and combined badges/colors in table and aliased SQL results; markers clear after a new query or schema refresh")
                 appendLine("Table editor production Swing class: com.segfault03.ideadb.ui.TableDataEditorPanel")
                 appendLine("Database grid production Swing class: com.segfault03.ideadb.ui.DatabaseTable")
             }
@@ -1350,6 +1355,122 @@ class IntellijUiScreenshotTest {
             println("Saved real IDE screenshots to $screenshotsDirectory")
         }
         } finally { jdbcFixture?.close() }
+    }
+
+    private fun assertDataSourcePicker(dialog: UiComponent) {
+        val picker = dialog.x { byJavaClass("com.segfault03.ideadb.dialog.DataSourcePanel") }.waitFound()
+        val name = dialog.x(JTextFieldUI::class.java) {
+            and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("Name:"))
+        }.waitFound()
+        check(picker.component.width <= 180) { "The source picker must stay compact" }
+        check(picker.component.getLocationOnScreen().x + picker.component.width < name.component.getLocationOnScreen().x) {
+            "The source picker must appear to the left of the connection form"
+        }
+        for ((source, port) in listOf("PostgreSQL" to "5432", "HSQLDB" to "9001", "MySQL" to "3306")) {
+            val choice = dialog.x { byAccessibleName(source) }.waitFound()
+            check(requireNotNull(dialog.driver.cast(choice.component, LiveSourceChoice::class).getIcon()).getIconWidth() == 24)
+            choice.click()
+            check(dialog.driver.cast(choice.component, LiveSourceChoice::class).isSelected())
+            val field = dialog.x(JTextFieldUI::class.java) {
+                and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("Port:"))
+            }.waitFound()
+            check(field.text == port) { "$source must select its default port $port" }
+        }
+        println("Compact left source picker: SVGs, source switching, and MySQL/HSQLDB/PostgreSQL ports verified")
+    }
+
+    private fun verifyKeyHeaderFlow(frame: IdeaFrameUI, tree: JTreeUiComponent, peoplePath: Array<String>,
+                                    editor: UiComponent, console: UiComponent, peopleSql: String, directory: Path) {
+        val query = console.xx { byJavaClass("com.intellij.ui.components.JBTextArea") }.list().first()
+        val text = console.driver.cast(query.component, JTextComponent::class)
+        val run = console.x { byVisibleText("Run") }.waitFound()
+        val stop = console.x { byVisibleText("Stop") }.waitFound()
+        fun execute(sql: String) {
+            console.driver.withContext(OnDispatcher.EDT) { text.setText(sql) }
+            run.click()
+            waitUntil("key metadata SQL completed: $sql") { run.component.isEnabled() && !stop.component.isEnabled() }
+            check(!console.hasSubtext("Query failed")) { "Key metadata fixture SQL failed: $sql" }
+        }
+        tree.fixture.rightClickPath(peoplePath.joinToString(tree.fixture.separator()))
+        frame.x { byVisibleText("Open data editor") }.waitFound().click()
+        val revert = editor.x { byAccessibleName("Revert pending changes") }.waitFound()
+        if (revert.component.isEnabled()) revert.click()
+        tree.fixture.rightClickPath(peoplePath.joinToString(tree.fixture.separator()))
+        frame.x { byVisibleText("Open in SQL console") }.waitFound().click()
+        val parent = peopleSql.substringBeforeLast('.') + ".\"UI_KEY_PARENT\""
+        execute("CREATE TABLE $parent (\"id\" INTEGER PRIMARY KEY)")
+        execute("INSERT INTO $parent SELECT \"id\" FROM $peopleSql")
+        execute("ALTER TABLE $peopleSql ADD COLUMN \"parent_id\" INTEGER")
+        execute("ALTER TABLE $peopleSql ADD CONSTRAINT \"UI_KEY_ID_FK\" FOREIGN KEY (\"id\") REFERENCES $parent (\"id\")")
+        execute("ALTER TABLE $peopleSql ADD CONSTRAINT \"UI_KEY_PARENT_FK\" FOREIGN KEY (\"parent_id\") REFERENCES $parent (\"id\")")
+        execute("SELECT \"id\" AS \"key\", \"parent_id\" AS \"key\", \"name\" AS \"label\", \"id\" + 1 AS \"computed\" FROM $peopleSql")
+        val results = console.x(JTableUiComponent::class.java) { byJavaClass("com.segfault03.ideadb.ui.DatabaseTable") }.waitFound()
+        waitUntil("aliased key query columns loaded") { console.driver.cast(results.component, LiveTableEditor::class).getColumnModel().getColumnCount() == 4 }
+        assertKeyHeaders(results, setOf(0), setOf(0, 1), "SQL aliases and dual keys")
+        captureScreen(directory.resolve("sql-key-headers.png"))
+        execute("SELECT \"name\" FROM $peopleSql")
+        waitUntil("ordinary query replaces key columns") { console.driver.cast(results.component, LiveTableEditor::class).getColumnModel().getColumnCount() == 1 }
+        assertKeyHeaders(results, emptySet(), emptySet(), "SQL key markers cleared on later query")
+        tree.fixture.rightClickPath(peoplePath.joinToString(tree.fixture.separator()))
+        frame.x { byVisibleText("Open data editor") }.waitFound().click()
+        editor.x { byAccessibleName("Refresh table data") }.waitFound().click()
+        val grid = editor.x(JTableUiComponent::class.java) { byJavaClass("com.segfault03.ideadb.ui.DatabaseTable") }.waitFound()
+        val live = editor.driver.cast(grid.component, LiveTableEditor::class)
+        waitUntil("foreign-key table metadata reloaded") {
+            val model = live.getModel()
+            (0 until model.getColumnCount()).any { model.getColumnName(it).startsWith("parent_id") }
+        }
+        val foreignColumn = (0 until live.getModel().getColumnCount()).first { live.getModel().getColumnName(it).startsWith("parent_id") }
+        assertKeyHeaders(grid, setOf(0), setOf(0, foreignColumn), "Table metadata and dual keys")
+        captureScreen(directory.resolve("table-key-headers.png"))
+        tree.fixture.rightClickPath(peoplePath.joinToString(tree.fixture.separator()))
+        frame.x { byVisibleText("Open in SQL console") }.waitFound().click()
+        execute("ALTER TABLE $peopleSql DROP CONSTRAINT \"UI_KEY_ID_FK\"")
+        execute("ALTER TABLE $peopleSql DROP CONSTRAINT \"UI_KEY_PARENT_FK\"")
+        execute("ALTER TABLE $peopleSql DROP COLUMN \"parent_id\"")
+        execute("DROP TABLE $parent")
+        tree.fixture.rightClickPath(peoplePath.joinToString(tree.fixture.separator()))
+        frame.x { byVisibleText("Open data editor") }.waitFound().click()
+        editor.x { byAccessibleName("Refresh table data") }.waitFound().click()
+        waitUntil("removed foreign-key column leaves the grid") { live.getModel().getColumnCount() == foreignColumn }
+        assertKeyHeaders(grid, setOf(0), emptySet(), "Table foreign-key markers cleared after schema refresh")
+        println("Live table and SQL key metadata regression passed")
+    }
+
+    private fun assertKeyHeaders(grid: UiComponent, primary: Set<Int>, foreign: Set<Int>, description: String) {
+        val expected = mutableListOf<Int>()
+        val samples = mutableListOf<Point>()
+        grid.driver.withContext(OnDispatcher.EDT) {
+            val table = grid.driver.cast(grid.component, LiveTableEditor::class)
+            val header = table.getTableHeader()
+            val renderer = header.getDefaultRenderer()
+            val columns = table.getColumnModel()
+            val point = header.getLocationOnScreen()
+            val visible = header.getVisibleRect()
+            var offset = 0
+            for (index in 0 until columns.getColumnCount()) {
+                val column = columns.getColumn(index)
+                val painted = renderer.getTableCellRendererComponent(table, column.getHeaderValue(), false, false, -1, index)
+                val icon = grid.driver.cast(painted, LiveLabel::class).getIcon()
+                check((icon != null) == (index in primary || index in foreign))
+                if (index in primary && index in foreign) check(requireNotNull(icon).getIconWidth() >= 32)
+                expected.add(painted.getBackground().getRGB())
+                if (visible.contains(offset + 5, 3)) samples.add(Point(point.x + offset + 5, point.y + 3))
+                else samples.add(Point(-1, -1))
+                offset += column.getWidth()
+            }
+        }
+        for (p in primary) for (f in foreign - primary) check(expected[p] != expected[f]) { "$description: primary and foreign key tints differ" }
+        for (key in primary + foreign) for (plain in expected.indices.filter { it !in primary && it !in foreign }) {
+            check(expected[key] != expected[plain]) { "$description: key and ordinary header tints differ" }
+        }
+        val robot = Robot()
+        robot.mouseMove(10, 10) // Keep toolbar tooltips away from the sampled header pixels.
+        repaintIdeBeforeCapture?.invoke()
+        for ((index, point) in samples.withIndex()) if (point.x >= 0) check(robot.getPixelColor(point.x, point.y).rgb == expected[index]) {
+            "$description: live painted header $index differs from its renderer"
+        }
+        println("Key header pixels and badges verified: $description")
     }
 
     private fun captureBusyState(fixture: JdbcUiFixture, root: UiComponent, message: String, filename: String,
@@ -1371,15 +1492,28 @@ class IntellijUiScreenshotTest {
             val point = label.component.getLocationOnScreen()
             val region = Rectangle(point.x, point.y, minOf(40, label.component.width), label.component.height)
             val robot = Robot()
+            // Closing a modal can leave the native tool-window footer unpainted under Xvfb.
+            // Prime it once, then require subsequent frames to repaint naturally.
+            repaintIdeBeforeCapture?.invoke()
             val first = robot.createScreenCapture(region)
+            var last = first
+            val started = System.nanoTime()
+            val deadline = started + 5_000_000_000L
             var changed = false
-            repeat(5) {
-                Thread.sleep(100)
-                val next = robot.createScreenCapture(region)
-                if ((0 until first.width).any { x -> (0 until first.height).any { y -> first.getRGB(x, y) != next.getRGB(x, y) } }) changed = true
+            while (!changed && System.nanoTime() < deadline) {
+                Thread.sleep(83) // Avoid sampling on the spinner's frame cadence.
+                last = robot.createScreenCapture(region)
+                changed = (0 until first.width).any { x ->
+                    (0 until first.height).any { y -> first.getRGB(x, y) != last.getRGB(x, y) }
+                }
             }
-            check(changed) { "Busy spinner did not animate on the live display: $message" }
-            println("Animated spinner pixels changed on the live IDE display: $message")
+            if (!changed) {
+                javax.imageio.ImageIO.write(first, "png", directory.resolve("$filename-spinner-first.png").toFile())
+                javax.imageio.ImageIO.write(last, "png", directory.resolve("$filename-spinner-last.png").toFile())
+                captureScreen(directory.resolve("$filename-spinner-failure.png"))
+            }
+            check(changed) { "Busy spinner did not animate on the live display within 5 seconds: $message; region=$region" }
+            println("Animated spinner pixels changed on the live IDE display: $message after ${(System.nanoTime() - started) / 1_000_000} ms")
             if (message in listOf("Committing changes…", "Loading table data…", "Counting saved rows…", "Deleting saved rows…", "Exporting persisted rows…", "Loading CREATE TABLE statement…")) {
                 for (name in listOf("Refresh table data", "Add a new row", "Delete selected rows", "Commit pending changes to the database", "Revert pending changes", "Apply filter and sort")) {
                     check(!root.x { byAccessibleName(name) }.waitFound().component.isEnabled()) { "$name must be disabled during $message" }
@@ -1971,7 +2105,11 @@ interface LiveColumn {
 }
 
 @Remote("javax.swing.table.JTableHeader")
-interface LiveTableHeader { fun getDefaultRenderer(): LiveCellRenderer }
+interface LiveTableHeader {
+    fun getDefaultRenderer(): LiveCellRenderer
+    fun getLocationOnScreen(): Point
+    fun getVisibleRect(): Rectangle
+}
 
 @Remote("javax.swing.table.TableCellRenderer")
 interface LiveCellRenderer {
@@ -2053,6 +2191,7 @@ interface LiveViewport { fun getView(): LiveTableEditor }
 
 @Remote("javax.swing.JTable")
 interface LiveTableEditor {
+    fun getModel(): LiveTableModel
     fun getRowCount(): Int
     fun getColumnModel(): LiveColumnModel
     fun getTableHeader(): LiveTableHeader
@@ -2067,4 +2206,16 @@ interface LiveTableEditor {
 @Remote("javax.swing.table.TableCellEditor")
 interface LiveCellEditor {
     fun stopCellEditing(): Boolean
+}
+
+@Remote("javax.swing.table.TableModel")
+interface LiveTableModel {
+    fun getColumnCount(): Int
+    fun getColumnName(column: Int): String
+}
+
+@Remote("javax.swing.JToggleButton")
+interface LiveSourceChoice {
+    fun getIcon(): LiveIcon?
+    fun isSelected(): Boolean
 }

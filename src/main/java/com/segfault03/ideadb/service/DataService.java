@@ -264,7 +264,7 @@ public class DataService {
                     List<String> cols = new ArrayList<>(), types = new ArrayList<>();
                     for (int i=1;i<=colCount;i++) {
                         cols.add(md.getColumnLabel(i)); types.add(md.getColumnTypeName(i));
-                        try { origins.add(new ResultColumn(md.getCatalogName(i), md.getSchemaName(i), md.getTableName(i), md.getColumnName(i))); }
+                        try { origins.add(new ResultColumn(md.getCatalogName(i), provider.sourceSchemaName(md, i), md.getTableName(i), provider.sourceColumnName(md, i))); }
                         catch (SQLException unsupported) { origins.add(new ResultColumn(null, null, null, null)); }
                     }
                     List<List<Object>> rows = new ArrayList<>();
@@ -311,7 +311,10 @@ public class DataService {
         for (int index = 0; index < columns.size(); index++) {
             ResultColumn column = columns.get(index);
             if (column.table() == null || column.table().isBlank() || column.name() == null) continue;
-            ResultTable table = new ResultTable(column.catalog(), column.schema(), column.table());
+            // An empty source catalog means the driver did not report one; it must not filter
+            // key metadata to a nonexistent empty database (notably with pgJDBC).
+            String catalog = column.catalog() == null || column.catalog().isEmpty() ? null : column.catalog();
+            ResultTable table = new ResultTable(catalog, column.schema(), column.table());
             java.util.Set<String> keys = keysByTable.get(table);
             if (keys == null) {
                 keys = new java.util.HashSet<>();

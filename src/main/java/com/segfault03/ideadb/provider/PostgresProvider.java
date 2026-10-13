@@ -81,6 +81,25 @@ final class PostgresProvider implements DatabaseProvider {
     private static void requirePrecision(ColumnMetadata column,int nano) {
         if (column.getDecimalDigits()<9 && nano % (int)Math.pow(10,9-Math.max(0,column.getDecimalDigits())) != 0) throw new IllegalArgumentException("Temporal value exceeds fractional precision");
     }
+    @Override public String sourceColumnName(ResultSetMetaData metadata, int index) throws SQLException {
+        return baseColumnMetadata(metadata, "getBaseColumnName", index);
+    }
+    @Override public String sourceSchemaName(ResultSetMetaData metadata, int index) throws SQLException {
+        return baseColumnMetadata(metadata, "getBaseSchemaName", index);
+    }
+    private static String baseColumnMetadata(ResultSetMetaData metadata, String method, int index) throws SQLException {
+        // pgJDBC's standard methods return an alias and an empty schema. Invoke its base-column APIs
+        // without linking pgJDBC classes, since user drivers can have isolated classloaders.
+        try {
+            return (String) metadata.getClass().getMethod(method, int.class).invoke(metadata, index);
+        } catch (java.lang.reflect.InvocationTargetException failure) {
+            if (failure.getCause() instanceof SQLException sql) throw sql;
+            throw new SQLException("Could not read PostgreSQL source-column metadata", failure.getCause());
+        } catch (ReflectiveOperationException unsupported) {
+            throw new SQLFeatureNotSupportedException("PostgreSQL base-column metadata is unavailable", unsupported);
+        }
+    }
+
     public Object readValue(ResultSet result, ResultSetMetaData meta, int index) throws SQLException {
         int type = meta.getColumnType(index);
         if ((type == Types.NUMERIC || type == Types.DECIMAL) && result.getString(index) != null && Set.of("NaN","Infinity","-Infinity").contains(result.getString(index))) return result.getString(index);

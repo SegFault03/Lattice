@@ -134,6 +134,11 @@ tasks.register<JavaExec>("fallbackDriverTest") {
         sourceSets["main"].compileClasspath.filter {
             !it.name.startsWith("mysql-connector-") && !it.name.startsWith("hsqldb-") && !it.name.startsWith("postgresql-")
         }
+    // Reuse the live metadata assertions without putting JDBC drivers on the parent classpath.
+    classpath += sourceSets["test"].runtimeClasspath.filter {
+        it.name.startsWith("junit-jupiter-api-") || it.name.startsWith("junit-platform-commons-") ||
+            it.name.startsWith("opentest4j-") || it.name.startsWith("apiguardian-api-")
+    }
     dependsOn(fallbackDriverJars)
     args(layout.buildDirectory.dir("fallback-drivers").get().asFile.absolutePath)
 }

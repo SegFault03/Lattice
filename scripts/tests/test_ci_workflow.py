@@ -41,6 +41,21 @@ class WorkflowPolicyTests(unittest.TestCase):
         self.assertIn('--ide-home "$(cat build/ui-ide-home.txt)" --cleanup', baseline)
         self.assertIn('build/ui-review-postgres/', baseline)
 
+    def test_ui_suites_remain_independent_and_fail_the_job_without_hiding_evidence(self):
+        baseline = job(CI, 'commit-checks')
+        for name in ('Run dark IDE functional and regression UI tests',
+                     'Run light IDE styling and key-header regression tests',
+                     'Run PostgreSQL real-IDE functional and regression UI tests'):
+            step = baseline.split(f'      - name: {name}\n', 1)[1].split('      - name:', 1)[0]
+            expression = re.search(r'^        if: (.+)$', step, re.M).group(1)
+            self.assertIn('!cancelled()', expression)
+            self.assertIn("matrix.os == 'ubuntu-24.04'", expression)
+            self.assertIn("steps.ui_display.outcome == 'success'", expression)
+            self.assertIn("steps.swing_previews.outcome == 'success'", expression)
+            self.assertNotIn('continue-on-error', step)
+        self.assertIn('out/ide-tests/tests/**/log/idea.log', baseline)
+        self.assertIn('out/ide-tests/tests/**/log/screenshots/', baseline)
+
     def test_compatibility_runs_only_for_prs_to_staging_or_main(self):
         for name in ('ide-compatibility', 'database-compatibility', 'compatibility'):
             expression = condition(job(CI, name))

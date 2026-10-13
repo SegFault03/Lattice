@@ -3,7 +3,6 @@ package com.segfault03.ideadb.ui;
 import com.intellij.icons.AllIcons;
 import com.intellij.openapi.util.IconLoader;
 import com.intellij.util.IconUtil;
-import com.intellij.util.ui.JBUI;
 import com.segfault03.ideadb.model.DatabaseType;
 
 import javax.swing.*;
@@ -24,7 +23,9 @@ public class Icons {
     /** Shared SVG artwork at the appropriate size for source cards or menu entries. */
     public static Icon dataSource(DatabaseType type, int size) {
         Icon icon = loadIcon("/icons/source-" + type.name().toLowerCase(java.util.Locale.ROOT) + ".svg", DATABASE);
-        return IconUtil.scale(icon, null, (float) JBUI.scale(size) / icon.getIconWidth());
+        // All source SVGs have a 28px view box. Lazy platform icons may report a
+        // placeholder width before loading, so deriving the ratio from that width can overscale them.
+        return IconUtil.scale(icon, null, size / 28f);
     }
 
     private static Icon loadIcon(String path, Icon fallback) {

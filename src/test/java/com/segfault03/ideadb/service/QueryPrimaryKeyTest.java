@@ -24,6 +24,10 @@ class QueryPrimaryKeyTest {
                             + "FROM KEYED A JOIN UNKEYED B ON A.ID = B.ID");
             assertFalse(result.hasError(), result.getError());
             assertEquals(Set.of(0, 1), result.getPrimaryKeyColumns());
+            assertEquals(Set.of(0, 1), DataService.primaryKeyColumns(connection, List.of(
+                    new DataService.ResultColumn("", "PUBLIC", "KEYED", "TENANT"),
+                    new DataService.ResultColumn("", "PUBLIC", "KEYED", "ID"))),
+                    "Unreported catalogs must not exclude otherwise valid key metadata");
             assertEquals(List.of("DISPLAY", "DISPLAY", "DISPLAY", "CALCULATED"), result.getColumnNames());
             assertEquals(Set.of(0, 1), result.withInsertPolicy(Set.of("ID"), "").getPrimaryKeyColumns());
             ReadOnlyResultModel model = new ReadOnlyResultModel();

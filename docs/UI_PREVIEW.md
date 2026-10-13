@@ -53,6 +53,25 @@ For a focused palette review, pass `-StyleOnly -GradleArgs @('-Plattice.ui.light
 
 Dependency paths and cleanup are described in the [script reference](SCRIPTS.md#binary-paths-downloads-and-cleanup). Windows capture/review accepts `-DownloadDir`, `-BinariesDir`, `-GradleUserHome`, `-BuildIdeHome`, `-Cleanup` and `-NoCleanup`; missing JDK/SDK/JDBC fixtures are provisioned automatically. Standalone previews accept `--download-dir`, `--cleanup`, `--no-cleanup`, `--flatlaf-jar`, `--junit-jar` and `--hamcrest-jar`.
 
+## UI regression coverage
+
+The live IDE reviews verify the compact left-hand source picker, SVG sizes and
+provider-specific default ports. They create real foreign-key relationships
+through the SQL console, then check primary, foreign and combined key badges
+and painted header colors in both SQL results and the table editor. Aliased
+queries and later ordinary queries verify that key markers follow source columns
+and clear when results or schema metadata change.
+
+Busy-state checks hold a real JDBC response at the fixture gate. After priming
+the display once (Xvfb can leave a footer unpainted when a modal closes), they
+require natural spinner pixel changes within five seconds. A static spinner
+still fails; first/last samples and a full display capture are saved on failure.
+
+Linux CI runs the dark functional review, light styling review and PostgreSQL
+review as separate checks after their shared prerequisites pass. Each suite can
+fail the job independently, and a failure does not suppress the other suites'
+reports. The artifact also retains native IDE logs, thread dumps and screenshots.
+
 ## PostgreSQL end-to-end review
 
 ```bash
