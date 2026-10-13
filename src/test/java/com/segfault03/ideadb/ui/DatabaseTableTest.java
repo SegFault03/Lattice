@@ -10,6 +10,39 @@ import java.awt.image.BufferedImage;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DatabaseTableTest {
+    @Test void primaryKeyHeadersHaveDistinctPaintedColorsAndFollowModelColumnIndices() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            var model = new com.segfault03.ideadb.model.ReadOnlyResultModel();
+            model.setResult(com.segfault03.ideadb.model.QueryResult.forResultSet(
+                    java.util.List.of("tenant", "id", "name"), java.util.List.of("INT", "INT", "VARCHAR"),
+                    java.util.List.of(), 0).withPrimaryKeyColumns(java.util.Set.of(0, 1)));
+            DatabaseTable table = new DatabaseTable(model);
+            for (Color surface : new Color[]{Color.WHITE, new Color(0x2B2D30)}) {
+                table.setBackground(surface);
+                table.setForeground(surface.equals(Color.WHITE) ? Color.BLACK : Color.WHITE);
+                var header = table.getTableHeader();
+                header.setUI(new com.intellij.ide.ui.laf.darcula.DarculaTableHeaderUI());
+                for (var column : java.util.Collections.list(table.getColumnModel().getColumns())) column.setWidth(100);
+                header.setSize(300, header.getPreferredSize().height);
+                BufferedImage image = new BufferedImage(300, header.getHeight(), BufferedImage.TYPE_INT_RGB);
+                Graphics graphics = image.createGraphics();
+                graphics.setClip(0, 0, 300, header.getHeight());
+                header.paint(graphics);
+                graphics.dispose();
+                assertEquals(image.getRGB(5, 3), image.getRGB(105, 3), "Both composite-key headers use the accent");
+                assertNotEquals(image.getRGB(5, 3), image.getRGB(205, 3), "Keys differ visibly from ordinary headers");
+                var renderer = header.getDefaultRenderer();
+                JLabel label = (JLabel) renderer.getTableCellRendererComponent(table, "name", false, false, -1, 2);
+                assertNull(label.getIcon(), "A recycled renderer must clear the key icon");
+                assertEquals(header.getBackground(), label.getBackground());
+            }
+            table.getColumnModel().moveColumn(2, 0);
+            JLabel label = (JLabel) table.getTableHeader().getDefaultRenderer()
+                    .getTableCellRendererComponent(table, "name", false, false, -1, 0);
+            assertNull(label.getIcon(), "Highlighting follows model indices when columns move");
+        });
+    }
+
     @Test void columnWidthsUseRenderedContentAndCapLongValues() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             DatabaseTable table = new DatabaseTable(new DefaultTableModel(

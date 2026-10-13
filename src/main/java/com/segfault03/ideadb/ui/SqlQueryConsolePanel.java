@@ -48,7 +48,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     private JComboBox<QueryHistoryEntry> historyCombo;
     private JTabbedPane resultsTabs;
     private DatabaseTable resultsTable;
-    private DefaultTableModel resultsModel;
+    private ReadOnlyResultModel resultsModel;
     private JBTextArea messagesArea;
     private JBLabel statusLabel;
 
@@ -303,8 +303,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
                         messagesArea.setForeground(NORMAL_MSG_COLOR);
 
                         // Populate results table
-                        Object[][] values = result.getRows().stream().map(List::toArray).toArray(Object[][]::new);
-                        resultsModel.setDataVector(values, result.getColumnNames().toArray());
+                        resultsModel.setResult(result);
 
                         resultsTable.sizeColumnsToContent();
 

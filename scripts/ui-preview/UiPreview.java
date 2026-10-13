@@ -388,7 +388,7 @@ public final class UiPreview {
         invoke(panel, "setReadRunning", new Class<?>[]{boolean.class}, false);
         JTable table = (JTable) field(panel, "dataTable");
         ((JScrollPane)table.getParent().getParent()).setColumnHeaderView(table.getTableHeader());
-        int[] widths = {110, 190, 280, 150, 150};
+        int[] widths = {148, 190, 280, 150, 150};
         for (int i = 0; i < widths.length; i++) table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
         ((JButton) field(panel, "nextPageBtn")).setEnabled(false);
         ((JLabel) field(panel, "statusLabel")).setText("12 rows · 18 ms · Total: not counted");
@@ -397,13 +397,19 @@ public final class UiPreview {
     static SqlQueryConsolePanel console() throws Exception {
         SqlQueryConsolePanel panel = new SqlQueryConsolePanel(null, config(DatabaseType.MYSQL), "shop", List.of("shop", "analytics"));
         panel.setSqlText("-- Active customers with an outstanding balance\nSELECT id, name, email, balance\nFROM customers\nWHERE status = 'active' AND balance > 0\nORDER BY balance DESC;\n");
-        DefaultTableModel model = (DefaultTableModel)field(panel, "resultsModel");
+        com.segfault03.ideadb.model.ReadOnlyResultModel model = (com.segfault03.ideadb.model.ReadOnlyResultModel)field(panel, "resultsModel");
         model.setDataVector(new Object[][]{
                 {1001L, "Amelia Brooks", "amelia@example.com", new java.math.BigDecimal("240.50")},
                 {1004L, "Noah Williams", null, new java.math.BigDecimal("240.50")},
                 {1007L, "Isabella Rossi", "isabella@example.com", new java.math.BigDecimal("240.50")},
                 {1010L, "Aiden Davis", "aiden@example.com", new java.math.BigDecimal("240.50")}
         }, new Object[]{"id", "name", "email", "balance"});
+        model.setResult(QueryResult.forResultSet(List.of("id", "name", "email", "balance"),
+                List.of("BIGINT", "VARCHAR", "VARCHAR", "DECIMAL"),
+                java.util.stream.IntStream.range(0, model.getRowCount())
+                        .mapToObj(row -> java.util.stream.IntStream.range(0, model.getColumnCount())
+                                .mapToObj(column -> model.getValueAt(row, column)).toList()).toList(), 18)
+                .withPrimaryKeyColumns(Set.of(0)));
         JTable table = (JTable)field(panel, "resultsTable");
         ((JScrollPane)table.getParent().getParent()).setColumnHeaderView(table.getTableHeader());
         int[] widths = {110, 220, 320, 150};

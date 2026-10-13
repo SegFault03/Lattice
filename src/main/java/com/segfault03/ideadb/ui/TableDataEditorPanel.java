@@ -945,7 +945,12 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         public int hashCode() { return Objects.hash(row, col); }
     }
 
-    private class EditableTableModel extends AbstractTableModel {
+    private class EditableTableModel extends AbstractTableModel implements com.segfault03.ideadb.model.PrimaryKeyTableModel {
+        @Override public boolean isPrimaryKeyColumn(int column) {
+            ColumnMetadata metadata = getColumnMeta(column);
+            return metadata != null && metadata.isPrimaryKey();
+        }
+
         private List<String> columns = new ArrayList<>();
         private List<String> types = new ArrayList<>();
         private List<ColumnMetadata> columnMetaList = new ArrayList<>();
