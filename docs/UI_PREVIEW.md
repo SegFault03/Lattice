@@ -63,12 +63,22 @@ queries and later ordinary queries verify that key markers follow source columns
 and clear when results or schema metadata change.
 
 Busy-state checks hold a real JDBC response at the fixture gate. After priming
-the display once (Xvfb can leave a footer unpainted when a modal closes), they
+the display once (Xvfb can leave a footer unpainted when a modal closes) and
+dismissing IDE notification balloons that can cover the footer, they
 require natural spinner pixel changes within five seconds. A static spinner
 still fails. The capture tracks the live footer bounds after layout; moving the
 footer resets its baseline and does not count as animation. First/last samples
 and a full display capture are saved on failure, with the small samples and
 complete exception details also available in the job log.
+The connection scenario deliberately shows a native IDE balloon and verifies
+that it is dismissed before checking the explorer's live animation. Balloon
+fade-out finishes before the baseline and cannot count as spinner movement.
+
+The console also recovers a session that closes after cancellation validation:
+if preparation fails before user SQL is submitted, it reconnects once. SQL that
+has started is never retried. Real server tests cover bundled and legacy HSQLDB
+drivers, preserve healthy uncommitted work, and verify cancellation still works
+after preparation recovery.
 
 The download-progress review gates Maven's real HTTPS response through a local
 CONNECT tunnel while checking the progress bar and disabled controls. TLS and

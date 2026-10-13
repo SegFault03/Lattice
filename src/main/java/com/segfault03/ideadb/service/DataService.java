@@ -255,6 +255,7 @@ public class DataService {
                 stmt.setFetchSize(provider.fetchSize(options.fetchSize()));
                 execution.attach(stmt,()->provider.cancelStatement(stmt));
                 execution.checkCancelled();
+                execution.markSqlStarted();
                 boolean hasResultSet = stmt.execute(sql);
                 execution.checkCancelled();
                 if (!hasResultSet) return QueryResult.forUpdate(stmt.getUpdateCount(), elapsed(start));

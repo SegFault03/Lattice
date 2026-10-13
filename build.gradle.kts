@@ -108,8 +108,21 @@ val fallbackDriverJars = tasks.register<Sync>("fallbackDriverJars") {
     into(layout.buildDirectory.dir("fallback-drivers"))
 }
 
+// Keep the legacy cancellation fixture outside the application/driver classpath.
+val cancellationDriver = configurations.create("cancellationDriver") {
+    isCanBeConsumed = false
+    isTransitive = false
+}
+dependencies { add(cancellationDriver.name, "org.hsqldb:hsqldb:2.7.3:jdk8") }
+val cancellationDriverJar = tasks.register<Sync>("cancellationDriverJar") {
+    from(cancellationDriver)
+    into(layout.buildDirectory.dir("cancellation-driver"))
+}
+
 tasks.withType<Test>().configureEach {
     dependsOn(fallbackDriverJars)
+    dependsOn(cancellationDriverJar)
+    systemProperty("lattice.test.cancellation.driver", layout.buildDirectory.file("cancellation-driver/hsqldb-2.7.3-jdk8.jar").get().asFile.absolutePath)
     systemProperty("lattice.test.drivers", layout.buildDirectory.dir("fallback-drivers").get().asFile.absolutePath)
     systemProperty("lattice.test.mysql.port", providers.environmentVariable("LATTICE_TEST_MYSQL_PORT").orElse("3306").get())
     systemProperty("lattice.test.hsqldb.port", providers.environmentVariable("LATTICE_TEST_HSQLDB_PORT").orElse("9001").get())

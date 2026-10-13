@@ -287,7 +287,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
 
         tasks.submit(() -> {
             try {
-                QueryResult result = session.execute(conn -> DataService.getInstance().executeQuery(conn, database, finalSql, options, current));
+                QueryResult result = session.executeQuery(database, finalSql, options, current);
                 final boolean connectionLost = result.isCancelled() && session.discardInvalidConnection();
 
                 SwingUtilities.invokeLater(() -> {
@@ -320,6 +320,11 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
                         resultsTabs.setSelectedIndex(1);
                         DatabaseUi.status(statusLabel, QueryResult.formatRowCount(result.getAffectedRows()) + " affected · " + result.getExecutionTimeMs() + " ms", DatabaseUi.Tone.SUCCESS);
                     }
+                    if (current.wasConnectionDiscarded() && !config.isAutoCommit()) {
+                        messagesArea.append("\n\nThe previous connection closed. Any uncommitted work in that session was lost.");
+                        if (!result.hasError() && !result.isCancelled())
+                            DatabaseUi.status(statusLabel, statusLabel.getText() + " · Previous uncommitted work lost", DatabaseUi.Tone.WARNING);
+                    }
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
@@ -328,6 +333,8 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
                     setRunning(false);
                     if (current.isCancellationRequested()) showQueryCancellation(-1);
                     else showQueryError(ex.getMessage(), -1);
+                    if (current.wasConnectionDiscarded() && !config.isAutoCommit())
+                        messagesArea.append("\n\nThe previous connection closed. Any uncommitted work in that session was lost.");
                 });
             }
         });

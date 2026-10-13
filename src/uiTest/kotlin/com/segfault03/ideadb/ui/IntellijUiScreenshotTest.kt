@@ -241,6 +241,9 @@ class IntellijUiScreenshotTest {
             // in legacy/high-contrast themes. Paint the live root before desktop capture.
             repaintIdeBeforeCapture = {
                 withContext(OnDispatcher.EDT) {
+                    // Environment notices arrive asynchronously and can cover the
+                    // footer. Dismiss their balloons, not production status/dialogs.
+                    cast(frame.component, LiveIdeFrame::class).getBalloonLayout()?.closeAll()
                     val root = cast(frame.component, LiveFrame::class).getRootPane()
                     root.paintImmediately(0, 0, frame.component.width, frame.component.height)
                 }
@@ -575,8 +578,21 @@ class IntellijUiScreenshotTest {
                     byJavaClass("com.intellij.ui.treeStructure.Tree")
                 }.waitFound()
             }
-            if (jdbcFixture != null) captureBusyState(jdbcFixture, pluginRoot, "Connecting to database…", "explorer-connecting.png", screenshotsDirectory) {
-                databaseTree.fixture.expandRow(1)
+            if (jdbcFixture != null) {
+                var overlay: LiveBalloon? = null
+                captureBusyState(jdbcFixture, pluginRoot, "Connecting to database…", "explorer-connecting.png", screenshotsDirectory,
+                    beforeCapture = {
+                    // Reproduce the first-session notice that covered the spinner
+                    // in CI. It must be dismissed before inspecting native pixels.
+                    overlay = showIdeNotificationOverlay(frame,
+                        pluginRoot.x { byAccessibleName("Database explorer status") }.waitFound())
+                    savePng(screenshotsDirectory.resolve("explorer-notification-overlay.png"),
+                        Robot().createScreenCapture(displayBounds))
+                    }) {
+                    withContext(OnDispatcher.EDT) { cast(databaseTree.component, LiveTree::class).expandRow(1) }
+                }
+                check(requireNotNull(overlay).isDisposed()) { "IDE notification overlay must be dismissed before capturing the spinner" }
+                println("Native notification overlay dismissed; explorer spinner still animates naturally")
             } else databaseTree.fixture.expandRow(1)
             val connectionPath = arrayOf("Data Sources", "Lattice UI demo")
             val schemaName = if (postgres) "public" else "PUBLIC"
@@ -1497,8 +1513,41 @@ class IntellijUiScreenshotTest {
         println("Key header pixels and badges verified: $description")
     }
 
+    private fun showIdeNotificationOverlay(frame: IdeaFrameUI, status: UiComponent): LiveBalloon {
+        val text = "IDE notification overlay regression"
+        lateinit var content: LiveSwingComponent
+        val balloon = frame.driver.withContext(OnDispatcher.EDT) {
+            val label = new(LiveLabel::class, text)
+            check(label.getText() == text)
+            content = cast(label, LiveSwingComponent::class)
+            content.setPreferredSize(new(LiveDimension::class, 350, 80))
+            content.setSize(350, 80)
+            val balloon = utility(LivePopupFactory::class).getInstance()
+                .createBalloonBuilder(content)
+                .setAnimationCycle(0).setHideOnClickOutside(false).setHideOnKeyOutside(false)
+                .setHideOnFrameResize(false).setHideOnAction(false)
+                .createBalloon()
+            requireNotNull(cast(frame.component, LiveIdeFrame::class).getBalloonLayout()).add(balloon)
+            val owner = cast(frame.component, LiveFrame::class).getRootPane().getLocationOnScreen()
+            val footer = status.component.getLocationOnScreen()
+            balloon.setBounds(Rectangle(footer.x - owner.x - 20, footer.y - owner.y - 35, 320, 90))
+            balloon
+        }
+        frame.driver.withContext(OnDispatcher.EDT) {
+            val root = cast(frame.component, LiveFrame::class).getRootPane()
+            root.validate()
+            root.paintImmediately(0, 0, frame.component.width, frame.component.height)
+        }
+        waitUntil("native IDE notification overlay is laid out and showing") {
+            content.isShowing() && content.getVisibleRect().let { it.width > 0 && it.height > 0 }
+        }
+        println("Native IDE balloon content: ${content.getLocationOnScreen()} ${content.getVisibleRect()}; disposed=${balloon.isDisposed()}")
+        check(!balloon.isDisposed())
+        return balloon
+    }
+
     private fun captureBusyState(fixture: JdbcUiFixture, root: UiComponent, message: String, filename: String,
-                                 directory: Path, action: () -> Unit) {
+                                 directory: Path, beforeCapture: (() -> Unit)? = null, action: () -> Unit) {
         fixture.pauseResponses()
         try {
             action()
@@ -1507,6 +1556,7 @@ class IntellijUiScreenshotTest {
             // IDEA's optional plugin recommendation can cover the status bar.
             root.driver.ui.xx { byVisibleText("Don't suggest again") }.list()
                 .filter { it.component.isShowing() }.forEach { it.click() }
+            beforeCapture?.invoke()
             // A tree renderer also exposes the loading text. Inspect the persistent
             // status component, whose screen location and repaint lifecycle are real.
             val label = root.xx { byAccessibleName("Database explorer status") }.list().firstOrNull()
@@ -1518,6 +1568,7 @@ class IntellijUiScreenshotTest {
             // Closing a modal can leave the native tool-window footer unpainted under Xvfb.
             // Prime it once, then require subsequent frames to repaint naturally.
             repaintIdeBeforeCapture?.invoke()
+            Thread.sleep(350) // Let dismissed notification balloons finish fading before the baseline.
             // Revalidation after a dialog closes can move the footer. Read its live
             // geometry after painting and restart the baseline whenever it moves.
             fun liveRegion(): Rectangle = root.driver.withContext(OnDispatcher.EDT) {
@@ -2096,8 +2147,43 @@ interface LiveFrame {
     fun getRootPane(): LiveSwingComponent
 }
 
+@Remote("com.intellij.openapi.wm.IdeFrame")
+interface LiveIdeFrame { fun getBalloonLayout(): LiveBalloonLayout? }
+
+@Remote("com.intellij.ui.BalloonLayout")
+interface LiveBalloonLayout {
+    fun closeAll()
+    fun add(balloon: LiveBalloon)
+}
+
+@Remote("com.intellij.openapi.ui.popup.JBPopupFactory")
+interface LivePopupFactory {
+    fun getInstance(): LivePopupFactory
+    fun createBalloonBuilder(content: LiveSwingComponent): LiveBalloonBuilder
+}
+
+@Remote("com.intellij.openapi.ui.popup.BalloonBuilder")
+interface LiveBalloonBuilder {
+    fun setAnimationCycle(milliseconds: Int): LiveBalloonBuilder
+    fun setHideOnClickOutside(hide: Boolean): LiveBalloonBuilder
+    fun setHideOnKeyOutside(hide: Boolean): LiveBalloonBuilder
+    fun setHideOnFrameResize(hide: Boolean): LiveBalloonBuilder
+    fun setHideOnAction(hide: Boolean): LiveBalloonBuilder
+    fun createBalloon(): LiveBalloon
+}
+
+@Remote("com.intellij.openapi.ui.popup.Balloon")
+interface LiveBalloon {
+    fun isDisposed(): Boolean
+    fun setBounds(bounds: Rectangle)
+}
+
 @Remote("javax.swing.JComponent")
 interface LiveSwingComponent {
+    fun validate()
+    fun setPreferredSize(size: LiveDimension)
+    fun setSize(width: Int, height: Int)
+    fun getLocationOnScreen(): Point
     fun requestFocusInWindow(): Boolean
     fun isShowing(): Boolean
     fun paintImmediately(x: Int, y: Int, width: Int, height: Int)
@@ -2113,6 +2199,9 @@ interface LiveSwingComponent {
     fun getFont(): LiveFont
     fun getFontMetrics(font: LiveFont): LiveFontMetrics
 }
+
+@Remote("javax.swing.JTree")
+interface LiveTree { fun expandRow(row: Int) }
 
 @Remote("java.awt.FontMetrics")
 interface LiveFontMetrics { fun stringWidth(text: String): Int }
