@@ -65,7 +65,10 @@ and clear when results or schema metadata change.
 Busy-state checks hold a real JDBC response at the fixture gate. After priming
 the display once (Xvfb can leave a footer unpainted when a modal closes), they
 require natural spinner pixel changes within five seconds. A static spinner
-still fails; first/last samples and a full display capture are saved on failure.
+still fails. The capture tracks the live footer bounds after layout; moving the
+footer resets its baseline and does not count as animation. First/last samples
+and a full display capture are saved on failure, with the small samples and
+complete exception details also available in the job log.
 
 Linux CI runs the dark functional review, light styling review and PostgreSQL
 review as separate checks after their shared prerequisites pass. Each suite can

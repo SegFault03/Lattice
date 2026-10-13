@@ -1489,19 +1489,39 @@ class IntellijUiScreenshotTest {
                 ?: root.x { byVisibleText(message) }.waitFound()
             assertAnimatedBusy(label)
             // Confirm that the actual icon animates on screen, rather than merely having a spinner class.
-            val point = label.component.getLocationOnScreen()
-            val region = Rectangle(point.x, point.y, minOf(40, label.component.width), label.component.height)
             val robot = Robot()
+            robot.mouseMove(10, 10) // A tooltip must not cover the status component.
             // Closing a modal can leave the native tool-window footer unpainted under Xvfb.
             // Prime it once, then require subsequent frames to repaint naturally.
             repaintIdeBeforeCapture?.invoke()
-            val first = robot.createScreenCapture(region)
+            // Revalidation after a dialog closes can move the footer. Read its live
+            // geometry after painting and restart the baseline whenever it moves.
+            fun liveRegion(): Rectangle = root.driver.withContext(OnDispatcher.EDT) {
+                val live = cast(label.component, LiveSwingComponent::class)
+                check(live.isShowing()) { "Busy status must be showing: $message" }
+                val visible = live.getVisibleRect()
+                val point = label.component.getLocationOnScreen()
+                Rectangle(point.x + visible.x, point.y + visible.y, minOf(40, visible.width), visible.height).also {
+                    check(it.width > 0 && it.height > 0 && Rectangle(Toolkit.getDefaultToolkit().screenSize).contains(it)) {
+                        "Busy status must be inside the live display: $message; region=$it"
+                    }
+                }
+            }
+            var region = liveRegion()
+            var first = robot.createScreenCapture(region)
             var last = first
             val started = System.nanoTime()
             val deadline = started + 5_000_000_000L
             var changed = false
             while (!changed && System.nanoTime() < deadline) {
                 Thread.sleep(83) // Avoid sampling on the spinner's frame cadence.
+                val current = liveRegion()
+                if (current != region) {
+                    println("Busy status moved during layout: $message; $region -> $current")
+                    region = current
+                    first = robot.createScreenCapture(region)
+                    continue
+                }
                 last = robot.createScreenCapture(region)
                 changed = (0 until first.width).any { x ->
                     (0 until first.height).any { y -> first.getRGB(x, y) != last.getRGB(x, y) }
@@ -1511,6 +1531,13 @@ class IntellijUiScreenshotTest {
                 javax.imageio.ImageIO.write(first, "png", directory.resolve("$filename-spinner-first.png").toFile())
                 javax.imageio.ImageIO.write(last, "png", directory.resolve("$filename-spinner-last.png").toFile())
                 captureScreen(directory.resolve("$filename-spinner-failure.png"))
+                // Keep the tiny native samples in the job log as well as the artifact,
+                // so a failed capture can be diagnosed when artifact downloads fail.
+                for ((name, sample) in listOf("first" to first, "last" to last)) {
+                    val bytes = java.io.ByteArrayOutputStream()
+                    javax.imageio.ImageIO.write(sample, "png", bytes)
+                    println("Spinner $name PNG ($message; region=$region): ${java.util.Base64.getEncoder().encodeToString(bytes.toByteArray())}")
+                }
             }
             check(changed) { "Busy spinner did not animate on the live display within 5 seconds: $message; region=$region" }
             println("Animated spinner pixels changed on the live IDE display: $message after ${(System.nanoTime() - started) / 1_000_000} ms")
