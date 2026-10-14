@@ -589,12 +589,12 @@ class IntellijUiScreenshotTest {
                     savePng(screenshotsDirectory.resolve("explorer-notification-overlay.png"),
                         Robot().createScreenCapture(displayBounds))
                     }) {
-                    withContext(OnDispatcher.EDT) { cast(databaseTree.component, LiveTree::class).expandRow(1) }
+                    withContext(OnDispatcher.EDT) { cast(databaseTree.component, LiveTree::class).expandRow(2) }
                 }
                 check(requireNotNull(overlay).isDisposed()) { "IDE notification overlay must be dismissed before capturing the spinner" }
                 println("Native notification overlay dismissed; explorer spinner still animates naturally")
-            } else databaseTree.fixture.expandRow(1)
-            val connectionPath = arrayOf("Data Sources", "Lattice UI demo")
+            } else databaseTree.fixture.expandRow(2)
+            val connectionPath = arrayOf("Data Sources", if (postgres) "PostgreSQL" else "HSQLDB", "Lattice UI demo")
             val schemaName = if (postgres) "public" else "PUBLIC"
             val publicSchemaPath = connectionPath + schemaName
             waitUntil("connected schema in the explorer") {
@@ -602,6 +602,24 @@ class IntellijUiScreenshotTest {
             }
             captureScreen(screenshotsDirectory.resolve("connected-explorer.png"))
             assertExplorerOverflow(pluginRoot, frame, screenshotsDirectory)
+            // Keep a saved but unconnected MySQL source beside the live HSQLDB fixture
+            // so the actual IDE capture exercises more than one source-type section.
+            openConnectionMenu(pluginRoot, frame, "MySQL…")
+            frame.x(DialogUiComponent::class.java) { byTitle("New connection") }.waitFound().also { mysqlDialog ->
+                mysqlDialog.x(JTextFieldUI::class.java) {
+                    and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("Name:"))
+                }.waitFound().text = "Analytics server"
+                mysqlDialog.pressButton("Add connection")
+            }
+            ideFrame { waitForNoOpenedDialogs() }
+            waitUntil("MySQL section alongside the live HSQLDB section") {
+                databaseTree.pathExists("Data Sources", "MySQL")
+            }
+            databaseTree.fixture.expandRow(if (postgres) 4 else 2)
+            waitUntil("HSQLDB connection restored after adding the second source type") {
+                databaseTree.pathExists(*publicSchemaPath)
+            }
+            captureScreen(screenshotsDirectory.resolve("data-source-groups-open.png"))
             if (review && !styleOnly) {
                 databaseTree.fixture.rightClickPath(connectionPath.joinToString(databaseTree.fixture.separator()))
                 captureScreen(screenshotsDirectory.resolve("connection-context-menu.png"))
@@ -2019,7 +2037,13 @@ class IntellijUiScreenshotTest {
         // A late IDE focus change (for example Maven import finishing) can close a
         // transient popup. Retry opening the production menu, not the whole test.
         repeat(3) {
-            root.x { byVisibleText("Add a connection…") }.waitFound().click()
+            val welcomeAction = root.xx { byVisibleText("Add a connection…") }.list().firstOrNull()
+            if (welcomeAction != null) welcomeAction.click()
+            else {
+                val addButton = root.xx { byAccessibleName("Add connection…") }.list().firstOrNull()
+                if (addButton != null) addButton.click()
+                else openToolbarOverflow(root, "Explorer actions").x { byAccessibleName("Add connection…") }.waitFound().click()
+            }
             repeat(20) {
                 val item = frame.xx { byVisibleText(itemText) }.list().firstOrNull()
                 if (item != null) {

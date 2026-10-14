@@ -36,6 +36,12 @@ public class DatabaseTreeCellRenderer extends ColoredTreeCellRenderer {
                 append(data.getName(), SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES);
                 break;
 
+            case SOURCE_TYPE:
+                setIcon(data.getDatabaseType() == null
+                        ? AllIcons.Nodes.DataTables : Icons.dataSource(data.getDatabaseType(), 16));
+                append(data.getName(), SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES);
+                break;
+
             case CONNECTION:
                 String product = data.getConnectionConfig() == null ? "" : " · " + data.getConnectionConfig().getType().getDisplayName();
                 setToolTipText(data.getName() + product + (data.isConnected()

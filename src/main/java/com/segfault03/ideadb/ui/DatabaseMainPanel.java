@@ -115,20 +115,48 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     }
 
     public void loadConnectionsFromState() {
+        java.util.Set<DatabaseType> collapsedTypes = java.util.EnumSet.noneOf(DatabaseType.class);
+        var oldChildren = rootNode.children();
+        while (oldChildren.hasMoreElements()) {
+            DefaultMutableTreeNode child = (DefaultMutableTreeNode) oldChildren.nextElement();
+            if (child.getUserObject() instanceof TreeNodeData data
+                    && data.getType() == TreeNodeData.NodeType.SOURCE_TYPE
+                    && data.getDatabaseType() != null
+                    && !databaseTree.isExpanded(new TreePath(child.getPath()))) {
+                collapsedTypes.add(data.getDatabaseType());
+            }
+        }
         rootNode.removeAllChildren();
         List<ConnectionConfig> configs = DatabaseSettingsState.getInstance().getConnections();
         toolbar.setHasConnections(!configs.isEmpty());
         explorerLayout.show(explorerCards, configs.isEmpty() ? "empty" : "tree");
         if (!configs.isEmpty()) {
+            java.util.Map<DatabaseType, List<ConnectionConfig>> byType = new java.util.EnumMap<>(DatabaseType.class);
             for (ConnectionConfig cfg : configs) {
-                boolean connected = DatabaseConnectionManager.getInstance().isConnected(cfg.getId());
-                DefaultMutableTreeNode connNode = new DefaultMutableTreeNode(TreeNodeData.connection(cfg, connected));
-                connNode.add(new DefaultMutableTreeNode(TreeNodeData.placeholder("Expand to load databases...")));
-                rootNode.add(connNode);
+                byType.computeIfAbsent(cfg.getType(), ignored -> new ArrayList<>()).add(cfg);
+            }
+            List<DatabaseType> types = new ArrayList<>(byType.keySet());
+            types.sort(java.util.Comparator.comparing(DatabaseType::getDisplayName, String.CASE_INSENSITIVE_ORDER));
+            for (DatabaseType type : types) {
+                DefaultMutableTreeNode typeNode = new DefaultMutableTreeNode(TreeNodeData.sourceType(type));
+                for (ConnectionConfig cfg : byType.get(type)) {
+                    boolean connected = DatabaseConnectionManager.getInstance().isConnected(cfg.getId());
+                    DefaultMutableTreeNode connNode = new DefaultMutableTreeNode(TreeNodeData.connection(cfg, connected));
+                    connNode.add(new DefaultMutableTreeNode(TreeNodeData.placeholder("")));
+                    typeNode.add(connNode);
+                }
+                rootNode.add(typeNode);
             }
         }
         treeModel.reload();
         databaseTree.expandPath(new TreePath(rootNode.getPath()));
+        for (int i = 0; i < rootNode.getChildCount(); i++) {
+            DefaultMutableTreeNode typeNode = (DefaultMutableTreeNode) rootNode.getChildAt(i);
+            TreeNodeData data = (TreeNodeData) typeNode.getUserObject();
+            if (!collapsedTypes.contains(data.getDatabaseType())) {
+                databaseTree.expandPath(new TreePath(typeNode.getPath()));
+            }
+        }
         updateSelectionActions();
     }
 
@@ -234,7 +262,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                     data.setConnected(false);
                     data.setLoaded(false);
                     node.removeAllChildren();
-                    node.add(new DefaultMutableTreeNode(TreeNodeData.placeholder("Expand to load databases...")));
+                    node.add(new DefaultMutableTreeNode(TreeNodeData.placeholder("")));
                     treeModel.nodeStructureChanged(node);
                 });
                 menu.add(disconnectItem);

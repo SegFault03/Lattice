@@ -21,7 +21,18 @@ public final class ExplorerPreview {
             return panel;
         }
         DefaultMutableTreeNode root = new DefaultMutableTreeNode(TreeNodeData.root());
-        DefaultMutableTreeNode connection = node(root, TreeNodeData.connection(config, true));
+        java.util.Set<DatabaseType> sourceTypes = new java.util.TreeSet<>(
+                java.util.Comparator.comparing(DatabaseType::getDisplayName, String.CASE_INSENSITIVE_ORDER));
+        sourceTypes.add(config.getType());
+        sourceTypes.add(DatabaseType.MYSQL);
+        sourceTypes.add(DatabaseType.HSQLDB);
+        java.util.Map<DatabaseType, DefaultMutableTreeNode> sourceGroups = new java.util.EnumMap<>(DatabaseType.class);
+        for (DatabaseType type : sourceTypes) {
+            DefaultMutableTreeNode group = node(root, TreeNodeData.sourceType(type));
+            sourceGroups.put(type, group);
+        }
+        DefaultMutableTreeNode sourceGroup = sourceGroups.get(config.getType());
+        DefaultMutableTreeNode connection = node(sourceGroup, TreeNodeData.connection(config, true));
         DefaultMutableTreeNode database = node(connection, TreeNodeData.database(config, "shop"));
         DefaultMutableTreeNode tables = node(database, TreeNodeData.tablesFolder(config, "shop", 3));
         TableMetadata customers = new TableMetadata("shop", null, "customers", "TABLE");
@@ -40,8 +51,12 @@ public final class ExplorerPreview {
         DefaultMutableTreeNode views = node(database, TreeNodeData.viewsFolder(config, "shop", 1));
         node(views, TreeNodeData.table(config, "shop", new TableMetadata("shop", null, "active_customers", "VIEW")));
         node(connection, TreeNodeData.database(config, "analytics"));
+        ConnectionConfig secondMysql = new ConnectionConfig(DatabaseType.MYSQL, "Analytics server");
+        node(sourceGroups.get(DatabaseType.MYSQL), TreeNodeData.connection(secondMysql, false))
+                .add(new DefaultMutableTreeNode(TreeNodeData.placeholder("")));
         ConnectionConfig scratch = new ConnectionConfig(DatabaseType.HSQLDB, "Scratch database");
-        node(root, TreeNodeData.connection(scratch, false));
+        node(sourceGroups.get(DatabaseType.HSQLDB), TreeNodeData.connection(scratch, false))
+                .add(new DefaultMutableTreeNode(TreeNodeData.placeholder("")));
         // IntelliJ's Tree requires application services; JTree shares its Swing
         // layout contract and still uses Lattice's production node renderer.
         JTree tree = new JTree(new DefaultTreeModel(root));
@@ -51,7 +66,14 @@ public final class ExplorerPreview {
         ToolTipManager.sharedInstance().registerComponent(tree);
         tree.setShowsRootHandles(true);
         tree.setBorder(JBUI.Borders.empty(6, 8));
-        for (int row = 0; row < tree.getRowCount(); row++) tree.expandRow(row);
+        tree.expandPath(new TreePath(root.getPath()));
+        for (DefaultMutableTreeNode group : sourceGroups.values()) tree.expandPath(new TreePath(group.getPath()));
+        tree.expandPath(new TreePath(connection.getPath()));
+        tree.expandPath(new TreePath(database.getPath()));
+        tree.expandPath(new TreePath(tables.getPath()));
+        tree.expandPath(new TreePath(selected.getPath()));
+        tree.expandPath(new TreePath(columns.getPath()));
+        tree.expandPath(new TreePath(views.getPath()));
         tree.setSelectionPath(new TreePath(selected.getPath()));
         JBScrollPane scroll = new JBScrollPane(tree);
         scroll.setBorder(JBUI.Borders.empty());
@@ -71,10 +93,13 @@ public final class ExplorerPreview {
         DefaultTreeModel model = (DefaultTreeModel)tree.getModel();
         DefaultMutableTreeNode root = (DefaultMutableTreeNode)model.getRoot();
         root.removeAllChildren();
-        DefaultMutableTreeNode connection = node(root, TreeNodeData.connection(config, false));
+        DefaultMutableTreeNode sourceGroup = node(root, TreeNodeData.sourceType(config.getType()));
+        DefaultMutableTreeNode connection = node(sourceGroup, TreeNodeData.connection(config, false));
         node(connection, TreeNodeData.error("Connection failed · Refresh to retry", "Connection refused at localhost:3306. Check that the server is running."));
         model.reload();
-        for (int row = 0; row < tree.getRowCount(); row++) tree.expandRow(row);
+        tree.expandPath(new TreePath(root.getPath()));
+        tree.expandPath(new TreePath(sourceGroup.getPath()));
+        tree.expandPath(new TreePath(connection.getPath()));
         TreeNodeData selection = (TreeNodeData)connection.getUserObject();
         tree.setSelectionPath(new TreePath(connection.getPath()));
         ((DatabaseExplorerToolbar)panel.getClientProperty("lattice.preview.explorer.actions")).setSelection(selection);
@@ -83,7 +108,7 @@ public final class ExplorerPreview {
         }
         DefaultMutableTreeNode error = (DefaultMutableTreeNode)connection.getFirstChild();
         DatabaseTreeCellRenderer renderer = (DatabaseTreeCellRenderer)tree.getCellRenderer();
-        renderer.getTreeCellRendererComponent(tree, error, false, false, true, 2, false);
+        renderer.getTreeCellRendererComponent(tree, error, false, false, true, 3, false);
         if (renderer.getToolTipText() == null || renderer.getIcon() == null)
             throw new AssertionError("Explorer error must expose an icon and diagnostic tooltip");
         renderer.getTreeCellRendererComponent(tree, root, false, true, false, 0, false);
