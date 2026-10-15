@@ -733,6 +733,67 @@ public final class UiPreview {
         render(ExplorerPreview.search(config(DatabaseType.MYSQL), true), theme + "-explorer-search-focused-1100", 1100, 620);
     }
 
+    static void renderTableTabIcons(String theme) throws Exception {
+        JPanel preview = new JPanel(new BorderLayout(0, 18));
+        preview.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        JTabbedPane tabs = new JTabbedPane();
+        for (DatabaseType type : DatabaseType.values()) {
+            var config = config(type);
+            var file = new com.segfault03.ideadb.editor.TableDataVirtualFile(config, "shop",
+                    new TableMetadata("shop", "public", "customers", "TABLE"));
+            Icon icon = new com.segfault03.ideadb.editor.DatabaseTableIconProvider().getIcon(file, 0, null);
+            verifyTableTabBadge(type, icon);
+            JPanel content = new JPanel(new BorderLayout());
+            content.setBorder(BorderFactory.createEmptyBorder(20, 16, 16, 16));
+            content.add(new JLabel("customers — " + type.getDisplayName()), BorderLayout.NORTH);
+            tabs.addTab("customers [" + type.getDisplayName() + "]", icon, content);
+        }
+        preview.add(tabs, BorderLayout.CENTER);
+        JPanel detail = new JPanel(new GridLayout(1, DatabaseType.values().length, 20, 0));
+        for (DatabaseType type : DatabaseType.values()) {
+            Icon icon = com.segfault03.ideadb.ui.Icons.tableWithDataSource(type);
+            JPanel item = new JPanel(new BorderLayout(0, 10));
+            item.add(new JLabel(type.getDisplayName(), SwingConstants.CENTER), BorderLayout.NORTH);
+            Icon enlarged = new Icon() {
+                public int getIconWidth() { return icon.getIconWidth() * 4; }
+                public int getIconHeight() { return icon.getIconHeight() * 4; }
+                public void paintIcon(Component component, Graphics graphics, int x, int y) {
+                    Graphics2D copy = (Graphics2D) graphics.create();
+                    copy.translate(x, y);
+                    copy.scale(4, 4);
+                    icon.paintIcon(component, copy, 0, 0);
+                    copy.dispose();
+                }
+            };
+            item.add(new JLabel(enlarged, SwingConstants.CENTER), BorderLayout.CENTER);
+            detail.add(item);
+        }
+        preview.add(detail, BorderLayout.SOUTH);
+        render(preview, theme + "-table-tab-icons-760", 760, 300);
+    }
+
+    static void verifyTableTabBadge(DatabaseType type, Icon icon) {
+        if (icon.getIconWidth() != 16 || icon.getIconHeight() != 16)
+            throw new AssertionError("Table tab icon must remain 16 x 16: " + type);
+        BufferedImage pixels = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = pixels.createGraphics();
+        icon.paintIcon(new JLabel(), graphics, 0, 0);
+        graphics.dispose();
+        int expected = switch (type) {
+            case MYSQL -> 0x00758F;
+            case HSQLDB -> 0x7256A8;
+            case POSTGRESQL -> 0x4169E1;
+        };
+        int filled = 0;
+        for (int y = 6; y < 16; y++) for (int x = 0; x < 10; x++) {
+            int argb = pixels.getRGB(x, y);
+            if (x >= 2 && x < 8 && y >= 8 && y < 14 && (argb >>> 24) != 255)
+                throw new AssertionError("Source badge must hide the grid at " + x + "," + y + ": " + type);
+            if ((argb & 0xffffff) == expected) filled++;
+        }
+        if (filled < 10) throw new AssertionError("Missing solid bottom-left source badge: " + type);
+    }
+
     private static void initializePreviewApplication() throws Exception {
         com.intellij.testFramework.common.TestApplicationKt.loadApp();
         com.intellij.openapi.extensions.PluginDescriptor descriptor = (com.intellij.openapi.extensions.PluginDescriptor)
@@ -776,7 +837,8 @@ public final class UiPreview {
             String theme = args[1];
             boolean sourceFilterOnly = args.length >= 3 && args[2].equals("source-filter");
             boolean searchOnly = args.length >= 3 && args[2].equals("search");
-            featuredOnly = !sourceFilterOnly && !searchOnly && (args.length < 3 || !args[2].equals("all"));
+            boolean tabIconsOnly = args.length >= 3 && args[2].equals("tab-icons");
+            featuredOnly = !sourceFilterOnly && !searchOnly && !tabIconsOnly && (args.length < 3 || !args[2].equals("all"));
             UIManager.setLookAndFeel(theme.equals("dark") ? new FlatDarculaLaf() : new FlatIntelliJLaf());
             Font font = new javax.swing.plaf.FontUIResource(previewFont());
             UIManager.put("defaultFont", font);
@@ -788,9 +850,9 @@ public final class UiPreview {
             com.intellij.ui.IconManager.Companion.activate(new com.intellij.ui.icons.CoreIconManager());
             IconLoader.activate();
             IconLoader.setUseDarkIcons(theme.equals("dark"));
-            if (sourceFilterOnly || searchOnly) {
+            if (sourceFilterOnly || searchOnly || tabIconsOnly) {
                 SwingUtilities.invokeAndWait(() -> {
-                    try { if (searchOnly) renderExplorerSearch(theme); else renderSourceFilter(theme); }
+                    try { if (tabIconsOnly) renderTableTabIcons(theme); else if (searchOnly) renderExplorerSearch(theme); else renderSourceFilter(theme); }
                     catch (Exception exception) { throw new RuntimeException(exception); }
                 });
                 Files.write(output.resolve(theme + "-manifest.txt"), snapshots);
@@ -813,6 +875,7 @@ public final class UiPreview {
                 verifyWelcome();
                 renderSourceFilter(theme);
                 renderExplorerSearch(theme);
+                renderTableTabIcons(theme);
                 render(ExplorerPreview.create(config(DatabaseType.MYSQL), true), theme + "-side-panel-empty-340", 340, 620);
                 connectionMenuPreview(ExplorerPreview.create(config(DatabaseType.MYSQL), true),
                         "Add a connection…", theme + "-side-panel-connection-menu-340", 340, 620);

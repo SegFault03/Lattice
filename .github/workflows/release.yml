@@ -109,17 +109,6 @@ jobs:
           python3 scripts/test.py --live --hsqldb --postgres --build
           --version "$RELEASE_VERSION"
           --notes-file build/release/patch-notes.html
-      - name: Validate production Swing previews and action states
-        run: python3 scripts/ui-preview.py --all-previews
-      - name: Render dark and light production UI inside IntelliJ IDEA
-        env:
-          LATTICE_UI_PLUGIN_VERSION: ${{ steps.metadata.outputs.version }}
-          LATTICE_UI_RELEASE_NOTES_FILE: build/release/patch-notes.html
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb xfwm4 x11-utils
-          ./scripts/linux/review-intellij-ui.sh ExperimentalDark
-          LATTICE_UI_STYLE_ONLY=true ./scripts/linux/review-intellij-ui.sh ExperimentalLight
       - name: Prepare corresponding source asset
         id: source
         run: python3 scripts/prepare-source-asset.py --github-output "$GITHUB_OUTPUT"

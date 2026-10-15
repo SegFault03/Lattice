@@ -55,6 +55,16 @@ Dependency paths and cleanup are described in the [script reference](SCRIPTS.md#
 
 ## UI regression coverage
 
+Table tab source badges are included in the full light/dark preview gallery used
+by CI. Rendering checks the standard 16 × 16 icon size, bottom-left placement and
+opaque brand colors that hide the table grid. Provider unit tests cover every
+configured database type, tables and views, caching, and unrelated file icons.
+For a focused review without updating README images:
+
+```bash
+python scripts/ui-preview.py --tab-icons-only --output build/ui-tab-icons
+```
+
 Explorer search has focused Swing previews and real IntelliJ interaction tests:
 
 ```bash
@@ -104,8 +114,9 @@ After switching the resized dialog to JDBC URL mode, the failed-connection
 regression dispatches the production Swing button action on the IDE event thread
 and requires both the backend's failure status and its error dialog.
 
-Linux CI runs the dark functional review, light styling review and PostgreSQL
-review as separate checks after their shared prerequisites pass. Each suite can
+For pull requests targeting `staging` or `main`, Linux CI runs the dark functional review,
+light styling review, search reviews and PostgreSQL review as separate checks
+after their shared prerequisites pass. Each suite can
 fail the job independently, and a failure does not suppress the other suites'
 reports. The artifact also retains native IDE logs, thread dumps and screenshots.
 
@@ -123,10 +134,12 @@ column changes, SQL outcomes and cancellation/recovery. Screenshots and runtime
 evidence go to `build/ui-review-postgres`. The existing HSQLDB scenario remains
 available through the native review runner.
 
-Every branch push and PR merge build runs this PostgreSQL scenario in Linux CI,
-alongside the HSQLDB Dark/Light reviews and Swing assertions. CI reuses the
+Only pull requests targeting `staging` or `main` run this PostgreSQL scenario in Linux CI,
+alongside the HSQLDB Dark/Light reviews and Swing assertions. Pushes, release
+tags, manual workflow runs and PRs to other branches skip UI suites and display
+setup. Builds and unit tests still run on every push and PR. CI reuses the
 Gradle compilation SDK (`./gradlew writeUiIdeHome`) and retains both UI report
-directories in `tests-ubuntu-24.04`. These are baseline UI checks; the database
+directories in `tests-ubuntu-24.04`. The database
 and IDE compatibility matrices run only on PRs targeting `staging` or `main`.
 
 For an external **disposable test server**, set `LATTICE_UI_POSTGRES_PORT` and

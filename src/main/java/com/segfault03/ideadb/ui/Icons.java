@@ -8,6 +8,7 @@ import com.segfault03.ideadb.model.DatabaseType;
 import javax.swing.*;
 
 public class Icons {
+    private static final java.util.Map<DatabaseType, Icon> TABLE_SOURCE_ICONS = new java.util.concurrent.ConcurrentHashMap<>();
     public static final Icon LATTICE = loadIcon("/icons/lattice.svg", AllIcons.Nodes.DataTables);
     public static final Icon LATTICE_LARGE = loadIcon("/icons/lattice_large.svg", AllIcons.Nodes.DataTables);
     public static final Icon DATABASE = loadIcon("/icons/database.svg", AllIcons.Nodes.DataTables);
@@ -26,6 +27,21 @@ public class Icons {
         // All source SVGs have a 28px view box. Lazy platform icons may report a
         // placeholder width before loading, so deriving the ratio from that width can overscale them.
         return IconUtil.scale(icon, null, size / 28f);
+    }
+
+    /** Standard table tab glyph with the source SVG overlapping its bottom-left corner. */
+    public static Icon tableWithDataSource(DatabaseType type) {
+        return TABLE_SOURCE_ICONS.computeIfAbsent(type, source -> {
+            // Opaque badges keep table grid lines from showing through the source artwork.
+            String name = source.name().toLowerCase(java.util.Locale.ROOT);
+            String suffix = source == DatabaseType.HSQLDB ? ".svg" : "-badge.svg";
+            Icon artwork = loadIcon("/icons/source-" + name + suffix, null);
+            Icon badge = artwork == null ? dataSource(source, 10) : IconUtil.scale(artwork, null, 10 / 28f);
+            com.intellij.ui.LayeredIcon icon = new com.intellij.ui.LayeredIcon(2);
+            icon.setIcon(TABLE, 0);
+            icon.setIcon(badge, 1, 0, TABLE.getIconHeight() - badge.getIconHeight());
+            return icon;
+        });
     }
 
     private static Icon loadIcon(String path, Icon fallback) {

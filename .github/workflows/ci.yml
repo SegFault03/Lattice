@@ -51,35 +51,35 @@ jobs:
           python scripts/check-release-archive.py "build/distributions/Lattice-$version.zip" --version "$version"
       - name: Validate production Swing previews and action states
         id: swing_previews
-        if: matrix.os == 'ubuntu-24.04'
+        if: github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main') && matrix.os == 'ubuntu-24.04'
         run: python3 scripts/ui-preview.py --all-previews
       - name: Prepare the real IDE display
         id: ui_display
-        if: matrix.os == 'ubuntu-24.04'
+        if: github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main') && matrix.os == 'ubuntu-24.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb xfwm4 x11-utils
       # Each UI suite still fails the job, but one failure must not suppress the other suites' evidence.
       - name: Run dark IDE functional and regression UI tests
-        if: ${{ !cancelled() && matrix.os == 'ubuntu-24.04' && steps.ui_display.outcome == 'success' && steps.swing_previews.outcome == 'success' }}
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main') && matrix.os == 'ubuntu-24.04' && steps.ui_display.outcome == 'success' && steps.swing_previews.outcome == 'success' }}
         run: ./scripts/linux/review-intellij-ui.sh ExperimentalDark
       - name: Run light IDE styling and key-header regression tests
-        if: ${{ !cancelled() && matrix.os == 'ubuntu-24.04' && steps.ui_display.outcome == 'success' && steps.swing_previews.outcome == 'success' }}
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main') && matrix.os == 'ubuntu-24.04' && steps.ui_display.outcome == 'success' && steps.swing_previews.outcome == 'success' }}
         run: LATTICE_UI_STYLE_ONLY=true ./scripts/linux/review-intellij-ui.sh ExperimentalLight
       - name: Run dark IDE explorer search regression tests
-        if: ${{ !cancelled() && matrix.os == 'ubuntu-24.04' && steps.ui_display.outcome == 'success' && steps.swing_previews.outcome == 'success' }}
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main') && matrix.os == 'ubuntu-24.04' && steps.ui_display.outcome == 'success' && steps.swing_previews.outcome == 'success' }}
         env:
           LATTICE_UI_EXPLORER_SEARCH_ONLY: 'true'
           LATTICE_UI_REVIEW_OUTPUT: build/ui-review/explorer-search
         run: ./scripts/linux/review-intellij-ui.sh ExperimentalDark
       - name: Run light IDE explorer search regression tests
-        if: ${{ !cancelled() && matrix.os == 'ubuntu-24.04' && steps.ui_display.outcome == 'success' && steps.swing_previews.outcome == 'success' }}
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main') && matrix.os == 'ubuntu-24.04' && steps.ui_display.outcome == 'success' && steps.swing_previews.outcome == 'success' }}
         env:
           LATTICE_UI_EXPLORER_SEARCH_ONLY: 'true'
           LATTICE_UI_REVIEW_OUTPUT: build/ui-review/explorer-search
         run: ./scripts/linux/review-intellij-ui.sh ExperimentalLight
       - name: Run PostgreSQL real-IDE functional and regression UI tests
-        if: ${{ !cancelled() && matrix.os == 'ubuntu-24.04' && steps.ui_display.outcome == 'success' && steps.swing_previews.outcome == 'success' }}
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main') && matrix.os == 'ubuntu-24.04' && steps.ui_display.outcome == 'success' && steps.swing_previews.outcome == 'success' }}
         run: |
           ./gradlew writeUiIdeHome --no-daemon --no-configuration-cache
           python3 scripts/postgres-ui-review.py --java-home "$JAVA_HOME" --ide-home "$(cat build/ui-ide-home.txt)" --cleanup

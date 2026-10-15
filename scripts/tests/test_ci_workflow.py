@@ -67,6 +67,30 @@ class WorkflowPolicyTests(unittest.TestCase):
             self.assertIn(f'review-intellij-ui.sh {theme}', step)
         self.assertIn('build/ui-review/', baseline.split('      - name: Retain test reports', 1)[1])
 
+    def test_ui_previews_display_and_ide_suites_only_run_for_staging_or_main_prs(self):
+        baseline = job(CI, 'commit-checks')
+        names = ('Validate production Swing previews and action states', 'Prepare the real IDE display',
+                 'Run dark IDE functional and regression UI tests',
+                 'Run light IDE styling and key-header regression tests',
+                 'Run dark IDE explorer search regression tests',
+                 'Run light IDE explorer search regression tests',
+                 'Run PostgreSQL real-IDE functional and regression UI tests')
+        for name in names:
+            step = baseline.split(f'      - name: {name}\n', 1)[1].split('      - name:', 1)[0]
+            expression = re.search(r'^        if: (.+)$', step, re.M).group(1)
+            for event in ('push', 'pull_request', 'workflow_dispatch'):
+                for base in ('', 'staging', 'main', 'feature/next'):
+                    for system in ('ubuntu-24.04', 'windows-2025', 'macos-15'):
+                        evaluated = expression.replace('${{', '').replace('}}', '').replace('!cancelled()', 'True')
+                        for variable, value in {'github.event_name': event, 'github.base_ref': base, 'matrix.os': system,
+                                                'steps.ui_display.outcome': 'success', 'steps.swing_previews.outcome': 'success'}.items():
+                            evaluated = evaluated.replace(variable, repr(value))
+                        with self.subTest(step=name, event=event, base=base, os=system):
+                            self.assertEqual(event == 'pull_request' and base in ('staging', 'main') and system == 'ubuntu-24.04',
+                                             eval(evaluated.replace('&&', 'and').replace('||', 'or'), {'__builtins__': {}}))
+        for command in ('scripts/ui-preview.py', 'review-intellij-ui.sh', 'uiScreenshotTest', 'postgres-ui-review.py'):
+            self.assertNotIn(command, RELEASE, 'Release tags must not launch UI suites')
+
     def test_compatibility_runs_only_for_prs_to_staging_or_main(self):
         for name in ('ide-compatibility', 'database-compatibility', 'compatibility'):
             expression = condition(job(CI, name))
