@@ -1,3 +1,5 @@
+# Before editing, read AGENTS.md, docs/CI_TESTING.md#before-changing-ci,
+# docs/RELEASING.md and docs/MARKETPLACE.md. Preserve the tag/main ancestry guard.
 name: Build, test and release
 
 on:

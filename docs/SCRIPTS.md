@@ -4,6 +4,11 @@ Install Python 3.11+ for Python entry points; use `python3` where appropriate. P
 
 See [Running Windows scripts locally](WINDOWS_SCRIPTS.md) for every Windows command, complete options, examples and defaults.
 
+Before changing a runner used by CI, read the
+[CI maintenance conventions](CI_TESTING.md#before-changing-ci) and the relevant
+platform, command and cleanup sections of this guide. Keep runner options,
+workflow invocations, portability tests and documentation aligned.
+
 ## Binary paths, downloads and cleanup
 
 Every dependency-using Python CLI supports `--download-dir PATH`, `--cleanup` / `--no-cleanup`, `--binaries-dir PATH` and `--gradle-user-home PATH`. Supply individual paths to avoid downloads; invalid explicit paths fail with an error. Omitted dependencies are discovered in the environment/PATH or the supplied asset collection, then downloaded when needed. Python 3.11+ and PowerShell on Windows are entry-point prerequisites. The build always uses the committed Gradle wrapper, whose distribution and Maven dependencies go to the selected Gradle cache.
@@ -82,7 +87,7 @@ Owned fixtures choose free loopback ports automatically, so an existing MySQL on
 
 ## Linux and Windows one-shot validation
 
-Run `python scripts/one-shot-test.py` (or `powershell -File scripts/windows/one-shot-test.ps1`) for eight steps on Windows and nine on Linux: tooling tests, Gradle unit tests/package validation, live database and fallback-driver tests, IntelliJ 2025.1–2025.3 verification, thirteen Connector/J/server combinations across MySQL 5.5.62/5.6.51/5.7.44/8.4.2, ten HSQLDB/Java 8 combinations, and thirty-four PostgreSQL/Java 8 cases on Linux. This runner does not open an IDE; use the separate UI review entry point.
+Run `python scripts/one-shot-test.py` (or `powershell -File scripts/windows/one-shot-test.ps1`) for tooling tests, Gradle unit tests/package validation, live database and fallback-driver tests, IntelliJ 2025.1–2025.3 verification, thirteen Connector/J/server combinations across MySQL 5.5.62/5.6.51/5.7.44/8.4.2, ten HSQLDB/Java 8 combinations, the H2 driver/server/runtime matrix, and thirty-four PostgreSQL/Java 8 cases on Linux. The runner prints its step count for the selected mode and host. It does not open an IDE; use the separate UI review entry point.
 
 Windows uses portable native MySQL servers, initialized with fresh data under the run's workspace. Existing installation data and `fixture-data` are never used. Missing Windows servers come from Oracle's ZIP archives with published MD5 checksums; missing Microsoft CRT files are extracted from signature-verified redistributables into a private PATH, with a checksum-pinned portable 7-Zip extractor. No server service or system runtime is installed. Linux uses Docker; a running Docker daemon is a prerequisite. `--docker PATH` selects an explicit CLI and also opts Windows into Docker. Containers/processes owned by the run are always stopped, even with `--no-cleanup`. Downloaded Docker images are retained with `--no-cleanup`; existing images are always retained. Docker's image storage is controlled by its daemon, independently of `--download-dir`.
 

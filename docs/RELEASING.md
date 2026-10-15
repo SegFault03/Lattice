@@ -1,5 +1,11 @@
 # Releasing Lattice
 
+Before changing the release workflow, read the
+[CI maintenance conventions](CI_TESTING.md#before-changing-ci), this guide and
+[signing/Marketplace guidance](MARKETPLACE.md). Keep trigger/ancestry policy,
+release tooling, workflow-policy tests and these guides aligned in the same
+change.
+
 ## Before the first release
 
 Enable Actions and configure signing secrets before tagged releases; see [signing and Marketplace publishing](MARKETPLACE.md). The publish job uses the repository's `GITHUB_TOKEN` with `contents: write`.

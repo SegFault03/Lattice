@@ -6,6 +6,58 @@ on Linux, Windows and macOS. The remaining suites run only on `pull_request`
 events whose base branch is exactly `main`. PRs to `staging` receive the commit
 tier. PR validation checks GitHub's prospective merge commit.
 
+## Before changing CI
+
+Read this guide and [Contributing](CONTRIBUTING.md) before editing a workflow,
+CI test task, runner or workflow-policy test. Read the relevant
+[script reference](SCRIPTS.md) sections before choosing or changing commands.
+This guide defines CI policy and suite ownership; the workflow-policy tests in
+`scripts/tests/test_ci_workflow.py` check that the YAML implements it.
+
+Read the additional guides that apply to the change:
+
+| Change | Required reading |
+|---|---|
+| Release triggers, tag guards, versioning or publication | [Releasing](RELEASING.md) |
+| Signing, credentials, release assets or Marketplace upload | [Marketplace](MARKETPLACE.md) and [Releasing](RELEASING.md) |
+| Swing previews, real IDE scenarios or UI artifacts | [UI review](UI_PREVIEW.md) |
+| Java, IDE, JDBC or server matrices | [Compatibility](compatibility.md) |
+| H2 fixtures, drivers or scenarios | [H2 validation](H2_TESTING.md) |
+| Windows commands or portability | [Windows scripts](WINDOWS_SCRIPTS.md) |
+
+Use these conventions for every CI change:
+
+- Preserve the event policy above: commit checks are functional/build only;
+  full validation belongs to main-targeted PRs; publication belongs to new
+  version tags reachable from main. Change policy only when explicitly requested,
+  and update this guide and its policy tests together.
+- Put a check in its existing suite group and confirm it does not repeat another
+  tier or a nested runner's work. Keep functional/regression selection disjoint.
+- Use documented portable runners and the committed Gradle wrapper. Reuse the
+  build SDK/cache and verify the exact built artifact instead of rebuilding it.
+- Pin Actions to commit SHAs with version comments. Keep permissions scoped to
+  the job that needs them and credentials scoped to the consuming step.
+- Use owned, disposable fixtures and preserve their cleanup. Retain diagnostics
+  on failure with unique artifact names. Independent matrix cases must not hide
+  one another's evidence; required failures or unexpected skips must fail the
+  main PR gate.
+- Keep workflow comments as short pointers or explanations of a specific guard.
+  Keep the complete policy here so comments and guides do not diverge.
+
+For every workflow change, run the workflow-policy and documentation checks:
+
+```bash
+python -m unittest discover -s scripts/tests -p 'test_ci_workflow.py' -v
+python -m unittest discover -s scripts/tests -p 'test_layout.py' -v
+actionlint .github/workflows/ci.yml .github/workflows/release.yml
+```
+
+When commands, platforms or fixtures change, also run the tooling suite and the
+affected backend/UI/compatibility checks from the inventory below. For comments
+or documentation alone, the focused checks and workflow lint are sufficient.
+Update the affected guides in the same commit and describe validation and limits
+in the PR. Repository agent instructions are in [AGENTS.md](../AGENTS.md).
+
 ## Suite inventory
 
 | Group | Coverage | Hosts / scope |

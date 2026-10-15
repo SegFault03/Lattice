@@ -1,3 +1,5 @@
+# Before editing, read AGENTS.md and docs/CI_TESTING.md#before-changing-ci.
+# Keep policy, suite selection, workflow tests and related guides aligned.
 name: Build and validation
 
 on:

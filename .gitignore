@@ -51,6 +51,8 @@ test-binaries/
 TESTING-INSTRUCTIONS.md
 AGENTS
 AGENTS.md
+# Shared repository guidance is versioned at the root.
+!/AGENTS.md
 
 # Downloaded tools, native binaries and archives
 /lib/
