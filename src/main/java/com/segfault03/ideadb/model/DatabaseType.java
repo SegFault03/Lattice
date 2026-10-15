@@ -4,7 +4,7 @@ import com.segfault03.ideadb.provider.DatabaseProviders;
 
 /** Stable persisted IDs; behavior is supplied by registered providers. */
 public enum DatabaseType {
-    MYSQL("MySQL"), HSQLDB("HSQLDB"), POSTGRESQL("PostgreSQL");
+    MYSQL("MySQL"), HSQLDB("HSQLDB"), POSTGRESQL("PostgreSQL"), H2("H2");
     private final String displayName;
     DatabaseType(String displayName) { this.displayName = displayName; }
     public String getDisplayName() { return displayName; }

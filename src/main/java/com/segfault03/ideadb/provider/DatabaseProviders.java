@@ -8,7 +8,7 @@ import java.util.*;
 public final class DatabaseProviders {
     private static final Map<DatabaseType, DatabaseProvider> PROVIDERS = Map.of(
             DatabaseType.MYSQL, new MySqlProvider(), DatabaseType.HSQLDB, new HsqlProvider(),
-            DatabaseType.POSTGRESQL, new PostgresProvider());
+            DatabaseType.POSTGRESQL, new PostgresProvider(), DatabaseType.H2, new H2Provider());
     private DatabaseProviders() {}
     public static DatabaseProvider get(DatabaseType type) {
         DatabaseProvider provider = PROVIDERS.get(Objects.requireNonNull(type, "Database type"));
