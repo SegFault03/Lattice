@@ -75,9 +75,9 @@ Each theme saves full desktop screenshots, `runtime-evidence.txt` and its JUnit
 result under `build/h2-validation/ui/`. UI checks assert component state and
 persisted data; screenshots are supporting evidence.
 
-CI runs the TCP/TLS suites on all three host platforms, the complete UI on Linux,
-and includes the H2 matrix in PR compatibility gates. Release validation includes
-TCP/TLS and real-IDE H2 checks before signing.
+CI runs the TCP/TLS suites on all three host platforms. PRs targeting `staging`
+or `main` also run the complete UI on Linux and the H2 compatibility matrix.
+Release validation includes TCP/TLS checks before signing; UI checks run in PRs.
 
 ## Local validation on 15 October 2026
 
@@ -113,3 +113,25 @@ H2's `MODE=PostgreSQL` intentionally reports column aliases as source names and
 omits the source table for aliased columns. Lattice leaves their optional key
 badges empty rather than guessing. Unaliased SQL columns and table-editor columns
 retain key metadata in this mode; the compatibility matrix checks both cases.
+
+### Local validation after merging PR #9
+
+Merged staging `8df0d36` in `0529008`; H2 adaptations are in `069ef96` and
+Swing-preview adaptations in `bcfbc88`. Using the same Linux/JDK/IDE setup as
+above:
+
+| Check | Result |
+|---|---|
+| Ordinary Java / embedded / regression suite | 129 passed, no skips |
+| H2 file/TCP/TLS integration | 4 passed, no skips |
+| Packaged H2 driver with no parent JDBC drivers | Query, aliased/composite primary and foreign keys, cache and disposal passed |
+| Driver/server/runtime matrix | 21 positive cases and expected Java 8 rejection; zero failures |
+| Production Swing previews | 124 light/dark captures; picker defaults and opaque source badges passed |
+| Full real-IDE H2 UI | Dark and light passed, including persisted edits/exports, cancellation recovery and rendered primary/foreign/combined key headers |
+| Tooling regressions | 128 tests; 119 passed, 9 platform-dependent skips |
+| Plugin archive | Build and driver/license/bytecode validation passed |
+| Plugin Verifier, IDEA 2025.1 | Compatible; 2 existing deprecated API and 1 experimental API notices |
+
+Reports for this merged run are under `build/h2-staging-validation/`; backend
+JUnit reports remain under `build/test-results/`. The local execution boundaries
+listed above still apply.

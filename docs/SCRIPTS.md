@@ -169,13 +169,13 @@ The root `gradlew` / `gradlew.bat` are the standard Gradle wrapper launchers. Pu
 
 | Event | Commit checks | Database + IDE compatibility | Release/sign/publish |
 | --- | --- | --- | --- |
-| Push to any branch | Linux, Windows, macOS; Linux live + UI suites | No | No |
-| PR targeting `staging` or `main` | Same checks on the merge commit | All three databases/Java 8 and IDEA 2025.1–2025.3 | No |
-| PR targeting another branch | Same checks on the merge commit | No | No |
-| Newly created `v*` tag, commit reachable from `main` | Release baseline/build/live/UI checks | No | Yes |
+| Push to any branch | Linux, Windows, macOS with H2 TCP/TLS; Linux live suites | No | No |
+| PR targeting `staging` or `main` | Baseline plus Swing and real-IDE UI on the merge commit | All four databases/Java 8 and IDEA 2025.1–2025.3 | No |
+| PR targeting another branch | Baseline checks on the merge commit | No | No |
+| Newly created `v*` tag, commit reachable from `main` | Release baseline/build/live checks including H2 TCP/TLS | No | Yes |
 | Tag outside `main`, changed/deleted tag, other tag | No release work (rejected or skipped) | No | No |
 
-Branch names are case-sensitive: `staging` and `main`. Tags are branch-independent Git refs; the release guard checks commit ancestry against `origin/main` before all downstream jobs. Manual CI dispatch runs baseline checks only; release dispatch and hidden Marketplace smoke uploads are disabled. Local compatibility and unsigned release dry runs remain available. Diagnostics retain the PostgreSQL UI evidence under `build/ui-review-postgres/` as well as the ordinary UI and test reports.
+Branch names are case-sensitive: `staging` and `main`. Tags are branch-independent Git refs; the release guard checks commit ancestry against `origin/main` before all downstream jobs. Manual CI dispatch runs baseline checks only; release dispatch and hidden Marketplace smoke uploads are disabled. Local compatibility and unsigned release dry runs remain available. Diagnostics retain the H2 UI evidence under `build/h2-validation/`, PostgreSQL UI evidence under `build/ui-review-postgres/` as well as the ordinary UI and test reports.
 
 ## H2 end-to-end validation
 
