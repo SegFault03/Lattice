@@ -127,6 +127,7 @@ public final class UiPreview {
             if (child instanceof JComponent input && (input instanceof JTextField || input instanceof JComboBox<?>
                     || input instanceof com.intellij.openapi.ui.TextFieldWithBrowseButton)) {
                 boolean embedded = SwingUtilities.getAncestorOfClass(JComboBox.class, input) != null
+                        || SwingUtilities.getAncestorOfClass(com.intellij.ui.SearchTextField.class, input) != null
                         || SwingUtilities.getAncestorOfClass(com.intellij.openapi.ui.TextFieldWithBrowseButton.class, input) != null
                         || SwingUtilities.getAncestorOfClass(CellRendererPane.class, input) != null;
                 if (!embedded) {
@@ -726,6 +727,12 @@ public final class UiPreview {
         render(ExplorerPreview.viewOnly(config(DatabaseType.MYSQL), false), theme + "-side-panel-view-only-mysql-340", 340, 620);
     }
 
+    static void renderExplorerSearch(String theme) throws Exception {
+        render(ExplorerPreview.search(config(DatabaseType.MYSQL), false), theme + "-explorer-search-all-340", 340, 700);
+        render(ExplorerPreview.search(config(DatabaseType.MYSQL), true), theme + "-explorer-search-focused-340", 340, 700);
+        render(ExplorerPreview.search(config(DatabaseType.MYSQL), true), theme + "-explorer-search-focused-1100", 1100, 620);
+    }
+
     private static void initializePreviewApplication() throws Exception {
         com.intellij.testFramework.common.TestApplicationKt.loadApp();
         com.intellij.openapi.extensions.PluginDescriptor descriptor = (com.intellij.openapi.extensions.PluginDescriptor)
@@ -768,7 +775,8 @@ public final class UiPreview {
             Files.createDirectories(output);
             String theme = args[1];
             boolean sourceFilterOnly = args.length >= 3 && args[2].equals("source-filter");
-            featuredOnly = !sourceFilterOnly && (args.length < 3 || !args[2].equals("all"));
+            boolean searchOnly = args.length >= 3 && args[2].equals("search");
+            featuredOnly = !sourceFilterOnly && !searchOnly && (args.length < 3 || !args[2].equals("all"));
             UIManager.setLookAndFeel(theme.equals("dark") ? new FlatDarculaLaf() : new FlatIntelliJLaf());
             Font font = new javax.swing.plaf.FontUIResource(previewFont());
             UIManager.put("defaultFont", font);
@@ -780,9 +788,9 @@ public final class UiPreview {
             com.intellij.ui.IconManager.Companion.activate(new com.intellij.ui.icons.CoreIconManager());
             IconLoader.activate();
             IconLoader.setUseDarkIcons(theme.equals("dark"));
-            if (sourceFilterOnly) {
+            if (sourceFilterOnly || searchOnly) {
                 SwingUtilities.invokeAndWait(() -> {
-                    try { renderSourceFilter(theme); }
+                    try { if (searchOnly) renderExplorerSearch(theme); else renderSourceFilter(theme); }
                     catch (Exception exception) { throw new RuntimeException(exception); }
                 });
                 Files.write(output.resolve(theme + "-manifest.txt"), snapshots);
@@ -804,6 +812,7 @@ public final class UiPreview {
                 render(welcome(true), theme + "-welcome-connected-900", 900, 680);
                 verifyWelcome();
                 renderSourceFilter(theme);
+                renderExplorerSearch(theme);
                 render(ExplorerPreview.create(config(DatabaseType.MYSQL), true), theme + "-side-panel-empty-340", 340, 620);
                 connectionMenuPreview(ExplorerPreview.create(config(DatabaseType.MYSQL), true),
                         "Add a connection…", theme + "-side-panel-connection-menu-340", 340, 620);

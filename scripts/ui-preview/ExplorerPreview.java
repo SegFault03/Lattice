@@ -13,9 +13,15 @@ public final class ExplorerPreview {
     public static JPanel create(ConnectionConfig config, boolean empty) {
         JPanel panel = new JPanel(new BorderLayout());
         DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(c -> {}, () -> {},
-                () -> {}, () -> {}, () -> {}, c -> {}, () -> {});
+                () -> {}, () -> {}, () -> {}, c -> {}, () -> {
+                    DatabaseExplorerSearchBar bar = (DatabaseExplorerSearchBar) panel.getClientProperty("lattice.preview.explorer.search");
+                    bar.setVisible(!bar.isVisible());
+                    panel.revalidate();
+                }, () -> {});
         panel.putClientProperty("lattice.preview.explorer.actions", toolbar);
-        panel.add(toolbar.createComponent(panel), BorderLayout.NORTH);
+        DatabaseExplorerSearchBar bar = new DatabaseExplorerSearchBar(query -> updateSearch(panel, query), () -> {}, () -> {}, () -> {});
+        panel.putClientProperty("lattice.preview.explorer.search", bar);
+        panel.add(new DatabaseExplorerHeader(toolbar.createComponent(panel), bar), BorderLayout.NORTH);
         if (empty) {
             panel.add(new EmptyConnectionPanel(c -> {}), BorderLayout.CENTER);
             return panel;
@@ -85,6 +91,50 @@ public final class ExplorerPreview {
         DatabaseExplorerHint hint = new DatabaseExplorerHint();
         hint.setSelection(selection);
         panel.add(hint, BorderLayout.SOUTH);
+        return panel;
+    }
+
+    private static void updateSearch(JPanel panel, DatabaseExplorerSearch query) {
+        JTree tree = (JTree) panel.getClientProperty("lattice.preview.explorer.tree");
+        if (tree == null) return;
+        var root = (DefaultMutableTreeNode) tree.getModel().getRoot();
+        java.util.Map<TreeNodeData, java.util.List<DatabaseExplorerSearch.Range>> matches = new java.util.IdentityHashMap<>();
+        var nodes = root.preorderEnumeration();
+        while (nodes.hasMoreElements()) {
+            var node = (DefaultMutableTreeNode) nodes.nextElement();
+            TreeNodeData data = (TreeNodeData) node.getUserObject();
+            if (query.matches(data)) {
+                matches.put(data, query.ranges(query.name(data)));
+                if (node.getParent() != null) tree.expandPath(new TreePath(((DefaultMutableTreeNode) node.getParent()).getPath()));
+            }
+        }
+        tree.putClientProperty(DatabaseExplorerSearch.MATCHES_PROPERTY, matches);
+        ((DatabaseExplorerSearchBar) panel.getClientProperty("lattice.preview.explorer.search")).setResults(matches.size(), false, null);
+        tree.repaint();
+    }
+
+    public static JComponent search(ConnectionConfig config, boolean focused) {
+        JPanel panel = create(config, false);
+        JTree tree = (JTree) panel.getClientProperty("lattice.preview.explorer.tree");
+        DefaultMutableTreeNode root = (DefaultMutableTreeNode) tree.getModel().getRoot();
+        var nodes = root.preorderEnumeration();
+        while (nodes.hasMoreElements()) {
+            var node = (DefaultMutableTreeNode) nodes.nextElement();
+            TreeNodeData data = (TreeNodeData) node.getUserObject();
+            if (data.getType() == TreeNodeData.NodeType.TABLE && data.getName().equals("orders")) {
+                DefaultMutableTreeNode columns = node(node, TreeNodeData.columnsFolder(config, "shop", data.getTableMetadata(), 2));
+                node(columns, TreeNodeData.column(config, "shop", data.getTableMetadata(),
+                        new ColumnMetadata("customer_id", "BIGINT", java.sql.Types.BIGINT, 0, 0, false, false, false, null).withForeignKey(true)));
+                break;
+            }
+        }
+        for (int row = tree.getRowCount() - 1; row >= 1; row--) tree.collapseRow(row);
+        tree.clearSelection();
+        DatabaseExplorerSearchBar bar = (DatabaseExplorerSearchBar) panel.getClientProperty("lattice.preview.explorer.search");
+        bar.setVisible(true);
+        if (focused) bar.setFilters(java.util.EnumSet.of(DatabaseExplorerSearch.Category.TABLE, DatabaseExplorerSearch.Category.KEY));
+        bar.setText("customer");
+        ((DatabaseExplorerToolbar) panel.getClientProperty("lattice.preview.explorer.actions")).setSearchVisible(true);
         return panel;
     }
 

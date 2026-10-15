@@ -66,6 +66,7 @@ class IntellijUiScreenshotTest {
         val review = System.getProperty("ui.review.enabled").toBoolean()
         val styleOnly = System.getProperty("ui.style.only").toBoolean()
         val sourceFilterOnly = System.getProperty("ui.sourceFilter.only").toBoolean()
+        val explorerSearchOnly = System.getProperty("ui.explorerSearch.only").toBoolean()
         val postgresPort = Integer.getInteger("ui.postgres.port", 0)
         val postgres = postgresPort > 0
         val postgresPassword = System.getProperty("ui.postgres.password", "lattice-test")
@@ -125,7 +126,7 @@ class IntellijUiScreenshotTest {
         // IDEA's own ProxySelector supersedes JVM proxy flags. Configure the real
         // HTTP Proxy settings in this isolated profile, preserving cloud routing.
         val proxyAddress = System.getenv("HTTPS_PROXY") ?: System.getenv("HTTP_PROXY")
-        val downloadFixture = if (!sourceFilterOnly && !postgres && !System.getProperty("ui.skip.remote.downloads", "false").toBoolean())
+        val downloadFixture = if (!sourceFilterOnly && !explorerSearchOnly && !postgres && !System.getProperty("ui.skip.remote.downloads", "false").toBoolean())
             DriverDownloadUiFixture(proxyAddress) else null
         try {
         val configuredProxy = downloadFixture?.let { "http://127.0.0.1:${it.port}" } ?: proxyAddress
@@ -248,6 +249,124 @@ class IntellijUiScreenshotTest {
                     val root = cast(frame.component, LiveFrame::class).getRootPane()
                     root.paintImmediately(0, 0, frame.component.width, frame.component.height)
                 }
+            }
+            if (explorerSearchOnly) {
+                openConnectionMenu(pluginRoot, frame, "HSQLDB…")
+                frame.x(DialogUiComponent::class.java) { byTitle("New connection") }.waitFound().also { dialog ->
+                    dialog.x(JComboBoxUiComponent::class.java) {
+                        and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"), byAccessibleName("Mode:"))
+                    }.waitFound().selectItem("In-Memory (mem)")
+                    for ((name, value) in listOf("Name:" to "Lattice search demo", "Database name:" to "lattice_search_demo", "User:" to "SA")) {
+                        dialog.x(JTextFieldUI::class.java) {
+                            and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName(name))
+                        }.waitFound().text = value
+                    }
+                    dialog.pressButton("Add connection")
+                }
+                ideFrame { waitForNoOpenedDialogs() }
+                openConnectionMenu(pluginRoot, frame, "MySQL…")
+                frame.x(DialogUiComponent::class.java) { byTitle("New connection") }.waitFound().also { dialog ->
+                    dialog.x(JTextFieldUI::class.java) {
+                        and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("Name:"))
+                    }.waitFound().text = "Analytics offline"
+                    dialog.pressButton("Add connection")
+                }
+                ideFrame { waitForNoOpenedDialogs() }
+                val tree = pluginRoot.x(JTreeUiComponent::class.java) { byJavaClass("com.intellij.ui.treeStructure.Tree") }.waitFound()
+                tree.fixture.expandRow(2)
+                val schema = arrayOf("Data Sources", "HSQLDB", "Lattice search demo", "PUBLIC")
+                waitUntil("search fixture schema connected") { tree.pathExists(*schema) }
+                tree.fixture.expandPath(schema.joinToString(tree.fixture.separator()))
+                waitUntil("search fixture tables loaded") { tree.pathExists(*(schema + "Tables (0)")) }
+                for (name in listOf("SEARCH_CUSTOMERS", "SEARCH_ORDERS")) {
+                    tree.fixture.rightClickPath(schema.joinToString(tree.fixture.separator()))
+                    frame.x { byVisibleText("Create table…") }.waitFound().click()
+                    frame.x(DialogUiComponent::class.java) { byTitle("Create table in PUBLIC") }.waitFound().also { dialog ->
+                        dialog.x(JTextFieldUI::class.java) { byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField") }.waitFound().text = name
+                        dialog.pressButton("Create table")
+                    }
+                    frame.x(DialogUiComponent::class.java) { byTitle("Table created") }.waitFound().pressButton("OK")
+                    ideFrame { waitForNoOpenedDialogs() }
+                    waitUntil("$name in the explorer") { tree.pathExists(*(schema + "Tables (${if (name == "SEARCH_CUSTOMERS") 1 else 2})")) }
+                }
+                val initialRows = withContext(OnDispatcher.EDT) { cast(tree.component, LiveTree::class).getRowCount() }
+                pluginRoot.x { byAccessibleName("Search explorer") }.waitFound().click()
+                val drawer = pluginRoot.x { byJavaClass("com.segfault03.ideadb.ui.DatabaseExplorerSearchBar") }.waitFound()
+                val search = drawer.x(JTextFieldUI::class.java) { byAccessibleName("Search explorer names") }.waitFound()
+                val counter = drawer.x { byAccessibleName("Explorer search results") }.waitFound()
+                fun waitForMatches(count: Int) = waitUntil("$count explorer search matches") {
+                    val icon = cast(counter.component, LiveLabel::class).getIcon()
+                    val loading = icon != null && cast(icon, LiveObject::class).getClass().getName().contains("AnimatedIcon")
+                    !loading && cast(tree.component, LiveTree::class).getClientProperty("lattice.explorer.search.matches")?.size() == count
+                }
+                fun openSearchFilters(): UiComponent {
+                    drawer.x { byAccessibleName("Search name filters") }.waitFound().click()
+                    return ui.x { byAccessibleName("Explorer search filters") }.waitFound()
+                }
+                fun choose(popup: UiComponent, name: String) = popup.x {
+                    and(byType("javax.swing.JCheckBox"), byAccessibleName(name))
+                }.waitFound().click()
+                search.text = "created_at"
+                waitForMatches(2) // Both column folders were still unexpanded when the search began.
+                captureScreen(screenshotsDirectory.resolve("explorer-search-all-narrow.png"))
+                var popup = openSearchFilters()
+                choose(popup, "Tables")
+                waitForMatches(0)
+                choose(popup, "Keys / columns")
+                waitForMatches(2)
+                captureScreen(screenshotsDirectory.resolve("explorer-search-multiple-filters.png"))
+                pressEscape()
+                search.text = "search_"
+                waitForMatches(2)
+                popup = openSearchFilters()
+                choose(popup, "All")
+                choose(popup, "Schemas")
+                pressEscape()
+                search.text = "PUBLIC"
+                waitForMatches(1)
+                popup = openSearchFilters()
+                choose(popup, "Data sources")
+                pressEscape()
+                search.text = "Analytics"
+                waitForMatches(0)
+                ideFrame { waitForNoOpenedDialogs() }
+                search.text = "Lattice"
+                waitForMatches(1)
+                popup = openSearchFilters()
+                choose(popup, "All")
+                pressEscape()
+                search.text = ""
+                waitForMatches(0)
+                check(withContext(OnDispatcher.EDT) { cast(tree.component, LiveTree::class).getRowCount() } == initialRows) {
+                    "Clearing search must restore the prior tree expansion"
+                }
+                search.text = "created_at"
+                waitForMatches(2)
+                withContext(OnDispatcher.EDT) { cast(frame.component, Window::class).setBounds(10, 40, wideWidth, normalHeight) }
+                Thread.sleep(400)
+                val origin = pluginRoot.component.getLocationOnScreen()
+                val dragX = origin.x - 2
+                val dragY = origin.y + pluginRoot.component.height / 2
+                val targetX = dragX - (1050 - pluginRoot.component.width)
+                robot.mouseMove(dragX, dragY)
+                robot.mousePress(InputEvent.BUTTON1_DOWN_MASK)
+                repeat(12) { step -> robot.mouseMove(dragX + (targetX - dragX) * (step + 1) / 12, dragY); Thread.sleep(25) }
+                robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
+                waitUntil("inline search drawer") {
+                    val toolbar = pluginRoot.x { byAccessibleName("Explorer actions") }.waitFound()
+                    drawer.component.getLocationOnScreen().y == toolbar.component.getLocationOnScreen().y
+                }
+                captureScreen(screenshotsDirectory.resolve("explorer-search-wide-inline.png"))
+                tree.fixture.rightClickPath(schema.joinToString(tree.fixture.separator()))
+                frame.x { byVisibleText("Refresh tables") }.waitFound().click()
+                Thread.sleep(400)
+                waitForMatches(2)
+                drawer.x { byAccessibleName("Close explorer search") }.waitFound().click()
+                waitUntil("search drawer closed") {
+                    pluginRoot.xx { byJavaClass("com.segfault03.ideadb.ui.DatabaseExplorerSearchBar") }.list().isEmpty()
+                }
+                println("Explorer search: connected sources only; unexpanded columns; all and multiple filters; all matches highlighted; expansion restored; narrow and inline layouts")
+                return@useDriverAndCloseIde
             }
             if (sourceFilterOnly) {
                 fun openPicker(): UiComponent {
@@ -2294,7 +2413,11 @@ interface LiveSwingComponent {
 interface LiveTree {
     fun expandRow(row: Int)
     fun getRowCount(): Int
+    fun getClientProperty(key: String): LiveSearchMatches?
 }
+
+@Remote("java.util.Map")
+interface LiveSearchMatches { fun size(): Int }
 
 @Remote("java.awt.FontMetrics")
 interface LiveFontMetrics { fun stringWidth(text: String): Int }

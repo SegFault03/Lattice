@@ -42,6 +42,9 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     private DefaultMutableTreeNode rootNode;
     private Tree databaseTree;
     private DatabaseExplorerToolbar toolbar;
+    private DatabaseExplorerSearchBar searchBar;
+    private DatabaseExplorerHeader explorerHeader;
+    private DatabaseExplorerSearchController searchController;
     private final JLabel operationStatus = new WrappingLabel("Ready");
     private final java.util.Map<TreeNodeData, String> loadingNodes = new java.util.LinkedHashMap<>();
     private boolean mutationRunning;
@@ -73,6 +76,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     public boolean isDisposed() { return disposed; }
 
     @Override public void dispose() {
+        if (searchController != null) searchController.close();
         disposed=true; tasks.cancelPending();
         ToolTipManager.sharedInstance().unregisterComponent(databaseTree);
         com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(tasks::close);
@@ -82,8 +86,13 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 this::editSelectedConnection, this::removeSelectedConnection,
                 this::refreshSelectedNode, this::openConsoleForSelected,
                 this::showSourceFilter,
+                this::toggleSearch,
                 () -> DatabaseEditorManager.getInstance(project).openWelcome());
-        add(toolbar.createComponent(this), BorderLayout.NORTH);
+        searchBar = new DatabaseExplorerSearchBar(query -> {
+            if (searchController != null) searchController.changed(query);
+        }, () -> setSearchVisible(false), () -> searchController.navigate(-1), () -> searchController.navigate(1));
+        explorerHeader = new DatabaseExplorerHeader(toolbar.createComponent(this), searchBar);
+        add(explorerHeader, BorderLayout.NORTH);
         setPreferredSize(JBUI.size(260, 400));
 
         // Database Tree
@@ -99,6 +108,13 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         databaseTree.setBorder(JBUI.Borders.empty(6, 8));
 
         setupTreeListeners();
+        searchController = new DatabaseExplorerSearchController(databaseTree, treeModel, searchBar);
+        String searchAction = "lattice.explorer.search";
+        getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_F,
+                com.intellij.openapi.util.SystemInfo.isMac ? java.awt.event.InputEvent.META_DOWN_MASK : java.awt.event.InputEvent.CTRL_DOWN_MASK), searchAction);
+        getActionMap().put(searchAction, new AbstractAction() {
+            @Override public void actionPerformed(java.awt.event.ActionEvent event) { setSearchVisible(true); }
+        });
 
         JBScrollPane treeScrollPane = new JBScrollPane(databaseTree);
         treeScrollPane.setBorder(JBUI.Borders.empty());
@@ -169,6 +185,22 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
             }
         }
         updateSelectionActions();
+        if (searchController != null) searchController.reset();
+    }
+
+    private void toggleSearch() { setSearchVisible(!searchBar.isVisible()); }
+
+    private void setSearchVisible(boolean visible) {
+        searchBar.setVisible(visible);
+        toolbar.setSearchVisible(visible);
+        if (visible) SwingUtilities.invokeLater(searchBar::focusInput);
+        else {
+            searchBar.setText("");
+            searchController.changed(searchBar.query());
+            databaseTree.requestFocusInWindow();
+        }
+        explorerHeader.revalidate();
+        explorerHeader.repaint();
     }
 
     private void showSourceFilter(Component anchor) {
@@ -266,6 +298,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     }
 
     private void handleNodeExpansion(DefaultMutableTreeNode node) {
+        if (searchController != null && searchController.isRevealing()) return;
         Object uo = node.getUserObject();
         if (!(uo instanceof TreeNodeData)) return;
         TreeNodeData data = (TreeNodeData) uo;

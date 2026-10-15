@@ -55,6 +55,21 @@ Dependency paths and cleanup are described in the [script reference](SCRIPTS.md#
 
 ## UI regression coverage
 
+Explorer search has focused Swing previews and real IntelliJ interaction tests:
+
+```bash
+python scripts/ui-preview.py --search-only --output build/ui-search-preview
+LATTICE_UI_EXPLORER_SEARCH_ONLY=true LATTICE_UI_REVIEW_OUTPUT=build/ui-review/explorer-search ./scripts/linux/review-intellij-ui.sh ExperimentalDark ExperimentalLight
+```
+
+The focused preview leaves the tracked README images untouched. The IDE test
+checks connected sources only, unexpanded column discovery, exclusive All and
+combined filters, highlighted matches, refresh, expansion restoration, and both
+narrow drawer and wide inline layouts. CI runs each theme independently and
+retains its screenshots, runtime evidence and JUnit result under
+`build/ui-review/explorer-search/<theme>`. Search matcher, metadata, controller,
+renderer and widget unit tests also run in the standard test task on every OS.
+
 The live IDE reviews verify the compact left-hand source picker, SVG sizes and
 provider-specific default ports. They create real foreign-key relationships
 through the SQL console, then check primary, foreign and combined key badges

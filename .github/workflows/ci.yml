@@ -66,6 +66,18 @@ jobs:
       - name: Run light IDE styling and key-header regression tests
         if: ${{ !cancelled() && matrix.os == 'ubuntu-24.04' && steps.ui_display.outcome == 'success' && steps.swing_previews.outcome == 'success' }}
         run: LATTICE_UI_STYLE_ONLY=true ./scripts/linux/review-intellij-ui.sh ExperimentalLight
+      - name: Run dark IDE explorer search regression tests
+        if: ${{ !cancelled() && matrix.os == 'ubuntu-24.04' && steps.ui_display.outcome == 'success' && steps.swing_previews.outcome == 'success' }}
+        env:
+          LATTICE_UI_EXPLORER_SEARCH_ONLY: 'true'
+          LATTICE_UI_REVIEW_OUTPUT: build/ui-review/explorer-search
+        run: ./scripts/linux/review-intellij-ui.sh ExperimentalDark
+      - name: Run light IDE explorer search regression tests
+        if: ${{ !cancelled() && matrix.os == 'ubuntu-24.04' && steps.ui_display.outcome == 'success' && steps.swing_previews.outcome == 'success' }}
+        env:
+          LATTICE_UI_EXPLORER_SEARCH_ONLY: 'true'
+          LATTICE_UI_REVIEW_OUTPUT: build/ui-review/explorer-search
+        run: ./scripts/linux/review-intellij-ui.sh ExperimentalLight
       - name: Run PostgreSQL real-IDE functional and regression UI tests
         if: ${{ !cancelled() && matrix.os == 'ubuntu-24.04' && steps.ui_display.outcome == 'success' && steps.swing_previews.outcome == 'success' }}
         run: |

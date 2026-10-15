@@ -45,6 +45,8 @@ class WorkflowPolicyTests(unittest.TestCase):
         baseline = job(CI, 'commit-checks')
         for name in ('Run dark IDE functional and regression UI tests',
                      'Run light IDE styling and key-header regression tests',
+                     'Run dark IDE explorer search regression tests',
+                     'Run light IDE explorer search regression tests',
                      'Run PostgreSQL real-IDE functional and regression UI tests'):
             step = baseline.split(f'      - name: {name}\n', 1)[1].split('      - name:', 1)[0]
             expression = re.search(r'^        if: (.+)$', step, re.M).group(1)
@@ -55,6 +57,15 @@ class WorkflowPolicyTests(unittest.TestCase):
             self.assertNotIn('continue-on-error', step)
         self.assertIn('out/ide-tests/tests/**/log/idea.log', baseline)
         self.assertIn('out/ide-tests/tests/**/log/screenshots/', baseline)
+
+    def test_search_runs_in_both_themes_with_separate_retained_evidence(self):
+        baseline = job(CI, 'commit-checks')
+        for label, theme in (('dark', 'ExperimentalDark'), ('light', 'ExperimentalLight')):
+            step = baseline.split(f'      - name: Run {label} IDE explorer search regression tests\n', 1)[1].split('      - name:', 1)[0]
+            self.assertIn("LATTICE_UI_EXPLORER_SEARCH_ONLY: 'true'", step)
+            self.assertIn('LATTICE_UI_REVIEW_OUTPUT: build/ui-review/explorer-search', step)
+            self.assertIn(f'review-intellij-ui.sh {theme}', step)
+        self.assertIn('build/ui-review/', baseline.split('      - name: Retain test reports', 1)[1])
 
     def test_compatibility_runs_only_for_prs_to_staging_or_main(self):
         for name in ('ide-compatibility', 'database-compatibility', 'compatibility'):

@@ -19,14 +19,14 @@ class DatabaseExplorerToolbarTest {
             AtomicInteger calls = new AtomicInteger();
             Runnable action = calls::incrementAndGet;
             DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(
-                    component -> action.run(), action, action, action, action, component -> action.run(), action);
+                    component -> action.run(), action, action, action, action, component -> action.run(), action, action);
             assertInstanceOf(javax.swing.border.EmptyBorder.class, toolbar.getBorder(),
                     "The explorer must leave the section boundary to the IDE tool-window header");
             List<JButton> buttons = new ArrayList<>();
             for (Component child : toolbar.getComponents()) {
                 if (child instanceof JButton button) buttons.add(button);
             }
-            assertEquals(7, buttons.size());
+            assertEquals(8, buttons.size());
             for (int i = 1; i <= 5; i++) {
                 assertTrue(buttons.get(i).isVisible());
                 assertFalse(buttons.get(i).isEnabled());
@@ -35,6 +35,7 @@ class DatabaseExplorerToolbarTest {
             assertEquals(0, calls.get(), "Disabled actions must not invoke their handlers");
             assertTrue(buttons.get(0).isEnabled());
             assertTrue(buttons.get(6).isEnabled());
+            assertTrue(buttons.get(7).isEnabled());
             toolbar.setHasConnections(true);
             ConnectionConfig config = new ConnectionConfig();
             toolbar.setSelection(TreeNodeData.connection(config, false));
@@ -64,7 +65,7 @@ class DatabaseExplorerToolbarTest {
     void actionAvailabilityFollowsTheSelectedNodeAndClearsAfterRemovingConnections() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             Runnable noop = () -> {};
-            DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(component -> {}, noop, noop, noop, noop, component -> {}, noop);
+            DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(component -> {}, noop, noop, noop, noop, component -> {}, noop, noop);
             List<JButton> buttons = buttons(toolbar);
             toolbar.setHasConnections(true);
             assertFalse(buttons.get(1).isEnabled());
@@ -103,7 +104,7 @@ class DatabaseExplorerToolbarTest {
                     UIManager.put("ActionButton.hoverBackground", palette[0]);
                     UIManager.put("ActionButton.pressedBackground", palette[1]);
                     Runnable noop = () -> {};
-                    DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(component -> {}, noop, noop, noop, noop, component -> {}, noop);
+                    DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(component -> {}, noop, noop, noop, noop, component -> {}, noop, noop);
                     JButton button = buttons(toolbar).get(3);
                     button.setIcon(new Icon() {
                         public int getIconWidth() { return JBUI.scale(8); }
@@ -141,7 +142,7 @@ class DatabaseExplorerToolbarTest {
     @Test void filterIndicatorAndOverflowStayActiveUntilAllSourcesAreRestored() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             Runnable noop = () -> {};
-            DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(component -> {}, noop, noop, noop, noop, component -> {}, noop);
+            DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(component -> {}, noop, noop, noop, noop, component -> {}, noop, noop);
             toolbar.setHasConnections(true);
             JButton eye = buttons(toolbar).stream()
                     .filter(button -> "View only…".equals(button.getAccessibleContext().getAccessibleName()))
