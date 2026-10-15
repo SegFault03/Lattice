@@ -103,15 +103,34 @@ public class H2RegressionTest {
     public static void cancellationFlow(ConnectionConfig config) throws Exception {
         var manager = new DatabaseConnectionManager(); var worker=Executors.newSingleThreadExecutor();
         try (var session=manager.createSession(config)) {
-            for(int i=0;i<3;i++) {
-                var execution=new QueryExecution();
-                var task=worker.submit(()->session.execute(c->DataService.getInstance().executeQuery(c,"PUBLIC","SELECT SUM(SIN(X)) FROM SYSTEM_RANGE(1,1000000000)",new DataService.QueryOptions(5,15,5),execution)));
-                long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(5);
-                while(!execution.isRunning() && !task.isDone() && System.nanoTime()<deadline) Thread.onSpinWait();
-                assertTrue(execution.isRunning()); execution.cancel(); assertTrue(task.get(5,TimeUnit.SECONDS).isCancelled());
-                var recovered=session.execute(c->DataService.getInstance().executeQuery(c,"PUBLIC","SELECT 1"));
-                assertFalse(recovered.hasError(),recovered.getError());
+            String longSql = "SELECT SUM(SIN(X)) FROM SYSTEM_RANGE(1,1000000000)";
+            var beforeStart = new QueryExecution();
+            beforeStart.requestCancellation();
+            assertTrue(session.executeQuery("PUBLIC", longSql, new DataService.QueryOptions(5,15,5), beforeStart).isCancelled());
+            assertFalse(beforeStart.hasStartedSql(), "An early cancellation must prevent SQL submission");
+
+            int sessionId = session.execute(c -> ((Number)scalar(c, "SELECT SESSION_ID()")).intValue());
+            var execution = new QueryExecution();
+            var task = worker.submit(() -> session.executeQuery("PUBLIC", longSql, new DataService.QueryOptions(5,15,5), execution));
+            // A client attachment is not evidence that an SSL server is executing SQL.
+            // Observe this session separately before measuring active cancellation.
+            try (var observer = manager.openConnection(config);
+                 var statement = observer.prepareStatement("SELECT EXECUTING_STATEMENT FROM INFORMATION_SCHEMA.SESSIONS WHERE SESSION_ID=?")) {
+                statement.setInt(1, sessionId);
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+                boolean running;
+                do {
+                    try (var rows = statement.executeQuery()) {
+                        running = rows.next() && longSql.equals(rows.getString(1));
+                    }
+                    if (!running) Thread.sleep(10);
+                } while (!running && !task.isDone() && System.nanoTime() < deadline);
+                assertTrue(running, "The fixture server must be executing the query before cancellation");
+                execution.cancel();
+                assertTrue(task.get(10, TimeUnit.SECONDS).isCancelled());
             }
+            var recovered = session.execute(c -> DataService.getInstance().executeQuery(c, "PUBLIC", "SELECT 1"));
+            assertFalse(recovered.hasError(), recovered.getError());
             var timeout=session.execute(c->DataService.getInstance().executeQuery(c,"PUBLIC","SELECT SUM(SIN(X)) FROM SYSTEM_RANGE(1,1000000000)",new DataService.QueryOptions(5,1,5),new QueryExecution()));
             assertTrue(timeout.hasError() || timeout.isCancelled(),"Long query must respect its one second timeout");
             assertFalse(session.execute(c->DataService.getInstance().executeQuery(c,"PUBLIC","SELECT 1")).hasError());

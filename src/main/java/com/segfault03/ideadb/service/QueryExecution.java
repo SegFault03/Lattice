@@ -33,13 +33,15 @@ public final class QueryExecution {
         synchronized (cancellationLock) {
             // JDBC drivers may ignore cancel() while a newly attached statement is still starting.
             // Retry the cancel request, never the SQL, until completion or the short startup window ends.
-            for (int attempt=0;attempt<10 && !finishing.get();attempt++) {
+            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(2);
+            do {
+                if (finishing.get()) break;
                 Statement active = statement.get();
                 if (active == null) break;
                 try { cancelOperation.cancel(); } catch (SQLException ignored) { }
                 if (finishing.get()) break;
-                try { Thread.sleep(10); } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); break; }
-            }
+                try { Thread.sleep(25); } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); break; }
+            } while (System.nanoTime() < deadline);
         }
     }
     public boolean isRunning() { return statement.get() != null; }
