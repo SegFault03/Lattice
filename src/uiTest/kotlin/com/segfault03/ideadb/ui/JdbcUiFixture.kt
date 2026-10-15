@@ -11,10 +11,12 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 /** Real JDBC fixtures; response gating makes transient UI states observable without mocking SQL. */
-internal class JdbcUiFixture(private val postgresPort: Int = 0, private val password: String = "lattice-test") : AutoCloseable {
+internal class JdbcUiFixture(private val postgresPort: Int = 0, private val password: String = "lattice-test", private val h2: Boolean = false) : AutoCloseable {
     private val address = InetAddress.getLoopbackAddress()
     private val serverPort = if (postgresPort > 0) postgresPort else ServerSocket(0, 50, address).use { it.localPort }
     private val server = Server()
+    private val h2Keeper = if (h2) java.sql.DriverManager.getConnection("jdbc:h2:mem:lattice_ui_review", "sa", "") else null
+    private val h2Server = if (h2) org.h2.tools.Server.createTcpServer("-tcpPort", serverPort.toString(), "-tcpDaemon") else null
     private val proxy = ServerSocket(0, 50, address)
     private val sockets = ConcurrentHashMap.newKeySet<Socket>()
     private val workers = Executors.newCachedThreadPool { runnable ->
@@ -24,10 +26,12 @@ internal class JdbcUiFixture(private val postgresPort: Int = 0, private val pass
     private var paused = false
     private var blockedResponse = CountDownLatch(1)
     @Volatile private var closed = false
-    val jdbcUrl = if (postgresPort > 0) "jdbc:postgresql://127.0.0.1:${proxy.localPort}/postgres?sslmode=disable&connectTimeout=5&loginTimeout=5" else "jdbc:hsqldb:hsql://127.0.0.1:${proxy.localPort}/lattice"
+    val jdbcUrl = if (h2) "jdbc:h2:tcp://127.0.0.1:${proxy.localPort}/mem:lattice_ui_review" else if (postgresPort > 0) "jdbc:postgresql://127.0.0.1:${proxy.localPort}/postgres?sslmode=disable&connectTimeout=5&loginTimeout=5" else "jdbc:hsqldb:hsql://127.0.0.1:${proxy.localPort}/lattice"
 
     init {
-        if (postgresPort > 0) {
+        if (h2) {
+            h2Server!!.start()
+        } else if (postgresPort > 0) {
             java.sql.DriverManager.getConnection("jdbc:postgresql://127.0.0.1:$postgresPort/postgres", "postgres", password).use { connection ->
                 connection.createStatement().use { statement ->
                     statement.execute("DROP SCHEMA IF EXISTS \"PUBLIC\" CASCADE")
@@ -109,7 +113,7 @@ internal class JdbcUiFixture(private val postgresPort: Int = 0, private val pass
         proxy.close()
         sockets.forEach { it.close() }
         workers.shutdownNow()
-        if (postgresPort == 0) server.stop()
+        if (h2) { h2Server?.stop(); h2Keeper?.close() } else if (postgresPort == 0) server.stop()
         workers.awaitTermination(2, TimeUnit.SECONDS)
     }
 }

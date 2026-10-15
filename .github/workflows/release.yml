@@ -109,6 +109,8 @@ jobs:
           python3 scripts/test.py --live --hsqldb --postgres --build
           --version "$RELEASE_VERSION"
           --notes-file build/release/patch-notes.html
+      - name: Run H2 TCP and TLS functional regression tests
+        run: ./gradlew h2IntegrationTest --no-daemon
       - name: Validate production Swing previews and action states
         run: python3 scripts/ui-preview.py --all-previews
       - name: Render dark and light production UI inside IntelliJ IDEA
@@ -120,6 +122,11 @@ jobs:
           sudo apt-get install -y xvfb xfwm4 x11-utils
           ./scripts/linux/review-intellij-ui.sh ExperimentalDark
           LATTICE_UI_STYLE_ONLY=true ./scripts/linux/review-intellij-ui.sh ExperimentalLight
+      - name: Run H2 real-IDE functional and regression UI tests
+        env:
+          LATTICE_UI_PLUGIN_VERSION: ${{ steps.metadata.outputs.version }}
+          LATTICE_UI_RELEASE_NOTES_FILE: build/release/patch-notes.html
+        run: python3 scripts/h2-test.py --ui-only --java-home "$JAVA_HOME"
       - name: Prepare corresponding source asset
         id: source
         run: python3 scripts/prepare-source-asset.py --github-output "$GITHUB_OUTPUT"

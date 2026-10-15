@@ -3,7 +3,7 @@ package com.segfault03.ideadb.model;
 public enum HsqlMode {
     MEM("In-Memory (mem)"),
     FILE("Embedded File (file)"),
-    SERVER("Remote Server (hsql://)");
+    SERVER("Remote Server");
 
     private final String displayName;
 

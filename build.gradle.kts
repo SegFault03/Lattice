@@ -149,6 +149,19 @@ tasks.register<JavaExec>("fallbackDriverTest") {
     args(layout.buildDirectory.dir("fallback-drivers").get().asFile.absolutePath)
 }
 
+tasks.register<JavaExec>("h2FallbackDriverTest") {
+    description = "Exercise packaged H2 fallback loading without JDBC drivers on the parent classpath"
+    group = "verification"
+    dependsOn(tasks.testClasses, fallbackDriverJars)
+    mainClass.set("com.segfault03.ideadb.H2FallbackDriverTest")
+    classpath = sourceSets["main"].output + sourceSets["test"].output +
+        sourceSets["main"].compileClasspath.filter {
+            !it.name.startsWith("h2-") && !it.name.startsWith("hsqldb-") &&
+                !it.name.startsWith("mysql-connector-") && !it.name.startsWith("postgresql-")
+        }
+    args(layout.buildDirectory.dir("fallback-drivers").get().asFile.absolutePath)
+}
+
 tasks.register<JavaExec>("databaseCompatibilityTest") {
     description = "Run the downloadable database driver and Java 8 compatibility matrix"
     group = "verification"
@@ -235,6 +248,7 @@ intellijPlatformTesting.testIdeUi.register("uiScreenshotTest") {
         systemProperty("ui.review.enabled", providers.gradleProperty("lattice.ui.review").orElse("false").get())
         systemProperty("ui.inputs.only", providers.gradleProperty("lattice.ui.inputsOnly").orElse("false").get())
         systemProperty("ui.skip.remote.downloads", providers.environmentVariable("LATTICE_UI_SKIP_REMOTE_DOWNLOADS").orElse("false").get())
+        systemProperty("ui.h2.enabled", providers.gradleProperty("lattice.ui.h2").orElse(providers.environmentVariable("LATTICE_UI_H2")).orElse("false").get())
         systemProperty("ui.postgres.port", providers.gradleProperty("lattice.ui.postgres.port").orElse(providers.environmentVariable("LATTICE_UI_POSTGRES_PORT")).orElse("0").get())
         systemProperty("ui.postgres.password", providers.environmentVariable("LATTICE_UI_POSTGRES_PASSWORD").orElse("lattice-test").get())
         systemProperty("ui.style.only", providers.gradleProperty("lattice.ui.styleOnly").orElse("false").get())

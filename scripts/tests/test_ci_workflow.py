@@ -40,6 +40,9 @@ class WorkflowPolicyTests(unittest.TestCase):
         self.assertIn('scripts/postgres-ui-review.py --java-home', baseline)
         self.assertIn('--ide-home "$(cat build/ui-ide-home.txt)" --cleanup', baseline)
         self.assertIn('build/ui-review-postgres/', baseline)
+        self.assertIn('scripts/h2-test.py --skip-ui --skip-compatibility', baseline)
+        self.assertIn('scripts/h2-test.py --ui-only', baseline)
+        self.assertIn('build/h2-validation/', baseline)
 
     def test_compatibility_runs_only_for_prs_to_staging_or_main(self):
         for name in ('ide-compatibility', 'database-compatibility', 'compatibility'):

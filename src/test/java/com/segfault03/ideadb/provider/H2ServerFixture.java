@@ -21,7 +21,7 @@ public final class H2ServerFixture implements AutoCloseable {
         var config = new ConnectionConfig(DatabaseType.H2, "owned server");
         config.setHsqlMode(HsqlMode.SERVER); config.setHost("127.0.0.1"); config.setPort(server.getPort());
         config.setDatabaseName("mem:" + name); config.setPassword("fixture-password");
-        config.setCustomUrl("jdbc:h2:" + server.getURL().replace("localhost", "127.0.0.1") + "/mem:" + name);
+        config.setCustomUrl("jdbc:h2:" + (server.getURL().startsWith("ssl:") ? "ssl" : "tcp") + "://127.0.0.1:" + server.getPort() + "/mem:" + name);
         return config;
     }
     public void close() throws SQLException { try { server.stop(); } finally { keeper.close(); } }

@@ -71,6 +71,13 @@ public class H2RegressionTest {
                 assertEquals(2L, ((Number)scalar(conn, "SELECT MAX(ID) FROM " + target)).longValue());
                 assertThrows(Exception.class, () -> data.insertRow(conn, config, schema, "records_%", Map.of("VALUE_TXT", "blocked")));
                 assertEquals(2, data.countRows(conn, config, schema, "records_%", null));
+                String view=DdlService.formatTable(config,schema,"view_%");
+                sql(conn,"CREATE VIEW "+view+" AS SELECT VALUE_TXT FROM "+target);
+                var viewMetadata=MetadataService.getInstance().getTables(conn,config,schema).stream().filter(t->t.getName().equals("view_%")).findFirst().orElseThrow();
+                assertTrue(viewMetadata.isView());
+                String viewDdl=ddl.getCreateTableStatement(conn,config,schema,viewMetadata);
+                sql(conn,"DROP VIEW "+view); sql(conn,viewDdl);
+                assertEquals(2,data.countRows(conn,config,schema,"view_%",null));
             } finally { Files.deleteIfExists(file); }
         });
     }

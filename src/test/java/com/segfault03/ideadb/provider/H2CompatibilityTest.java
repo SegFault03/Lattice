@@ -72,6 +72,8 @@ public final class H2CompatibilityTest {
                     }
                 } finally { process.destroy(); if(!process.waitFor(5,TimeUnit.SECONDS)) { process.destroyForcibly(); process.waitFor(5,TimeUnit.SECONDS); } }
             }
+        } catch(Throwable failure) {
+            failure.printStackTrace(); failures.add(failure);
         } finally {
             DatabaseConnectionManager.getInstance().closeAll(); DriverRegistry.getInstance().dispose();
             evidence.add("Failures: "+failures.size()); Files.write(output.resolve("results.txt"),evidence);

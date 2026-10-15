@@ -44,6 +44,8 @@ jobs:
       - name: Build and run unit tests
         if: matrix.os != 'ubuntu-24.04'
         run: python scripts/test.py --build
+      - name: Run H2 TCP and TLS functional regression tests
+        run: python scripts/h2-test.py --skip-ui --skip-compatibility
       - name: Validate packaged plugin, drivers, notices and bytecode
         shell: bash
         run: |
@@ -64,6 +66,9 @@ jobs:
         run: |
           ./gradlew writeUiIdeHome --no-daemon --no-configuration-cache
           python3 scripts/postgres-ui-review.py --java-home "$JAVA_HOME" --ide-home "$(cat build/ui-ide-home.txt)" --cleanup
+      - name: Run H2 real-IDE functional and regression UI tests
+        if: matrix.os == 'ubuntu-24.04'
+        run: python3 scripts/h2-test.py --ui-only --java-home "$JAVA_HOME"
       - name: Retain plugin for PR compatibility checks
         if: github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main') && matrix.os == 'ubuntu-24.04'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -84,6 +89,7 @@ jobs:
             build/ui-review/
             build/ui-preview/
             build/ui-review-postgres/
+            build/h2-validation/
           retention-days: 7
 
   ide-compatibility:
