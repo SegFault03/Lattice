@@ -13,6 +13,8 @@ class H2ProviderTest {
         config.setHsqlMode(HsqlMode.FILE);
         config.setDatabaseName("data/test");
         assertEquals("jdbc:h2:file:./data/test", config.buildJdbcUrl());
+        config.setDatabaseName("data/test.mv.db");
+        assertEquals("jdbc:h2:file:./data/test", config.buildJdbcUrl());
         config.setDatabaseName("C:\\data\\test");
         assertEquals("jdbc:h2:file:C:/data/test", config.buildJdbcUrl());
         config.setHsqlMode(HsqlMode.SERVER);

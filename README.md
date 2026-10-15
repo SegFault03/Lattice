@@ -7,7 +7,7 @@
 [![Rating](https://img.shields.io/jetbrains/plugin/r/rating/34772.svg)](https://plugins.jetbrains.com/plugin/34772)
 [![Get from JetBrains Marketplace](https://img.shields.io/badge/JetBrains%20Marketplace-Lattice-087CFA?logo=intellij-idea&logoColor=white)](https://plugins.jetbrains.com/plugin/34772)
 
-Lattice is a database management plugin for IntelliJ IDEA. Connect to MySQL, HSQLDB or PostgreSQL, browse schemas, run SQL, edit table data, design tables and export results from your IDE.
+Lattice is a database management plugin for IntelliJ IDEA. Connect to MySQL, HSQLDB, PostgreSQL or H2, browse schemas, run SQL, edit table data, design tables and export results from your IDE.
 
 Built with help from **Gemini 3.8**, **GPT-6 Luna** and **GPT-6.1 Sol**.
 
@@ -65,6 +65,7 @@ IntelliJ IDEA **2025.1 or later**, Community or Ultimate/unified editions, using
 |---|---|
 | MySQL | 5.5.62, 5.6.51, 5.7.44 and 8.4.2 |
 | HSQLDB | 2.2.9 through 2.7.4; file, memory and server modes |
+| H2 | 2.3.232; embedded memory/file workflows (TCP form available; server compatibility review pending) |
 | PostgreSQL | 8.4 through 18; select a Java 8 compatible pgJDBC (42.7.3 or 42.2.27 for servers older than 9.1) |
 
 Choose a JDBC driver compatible with your server. HSQLDB requires a matching server/file format; some releases offer a `-jdk8` classifier. Java 8 support applies to JDBC drivers and the HSQLDB server runtime; MySQL and PostgreSQL are native servers. The plugin requires Java 21. See the [compatibility report](docs/compatibility.md) for tested combinations and limits.
@@ -82,13 +83,15 @@ Choose a JDBC driver compatible with your server. HSQLDB requires a matching ser
 3. Select the ZIP and restart if prompted.
 4. Open the **Lattice** tool window and add a data source.
 
-Select MySQL, HSQLDB or PostgreSQL, enter connection details, and choose a driver:
+Select MySQL, HSQLDB, PostgreSQL or H2, enter connection details, and choose a driver:
 
-- **Bundled driver**: the plugin includes Connector/J 26.7.0, HSQLDB 2.7.4 and pgJDBC 42.7.14, plus every version you have downloaded. Pick one from the list to reuse it without downloading again.
+- **Bundled driver**: the plugin includes Connector/J 26.7.0, HSQLDB 2.7.4, pgJDBC 42.7.14 and H2 2.3.232, plus every version you have downloaded. Pick one from the list to reuse it without downloading again.
 - **Download a version**: choose or enter a version and click **Download**. Downloads are explicit and checksum-verified, and a release is fetched at most once. Afterwards it appears in the bundled list.
 - **Local JAR**: select an existing JDBC driver.
 
 **Test Connection** reports the server product/version after authentication and the driver's version. Failed authentication or negotiation can prevent detection. Downloaded drivers are kept in the IDE system cache and are reused across restarts.
+
+For H2, select Memory for a named database that lasts until its last connection closes, File for a persistent database path, or Server for TCP (default port 9092). File mode accepts the database base path or an existing `.mv.db` file. The bundled driver is H2 2.3.232; custom URLs preserve options such as `IFEXISTS` and SSL settings. H2 1.x file migration and compatibility modes have not been validated. H2 DDL can commit an open transaction, so finish console transactions before schema changes.
 
 Generated MySQL URLs currently disable TLS and use UTC for the driver/server session. For remote or TLS-required servers, use a custom JDBC URL with your required security options. Custom URLs retain your options.
 
@@ -177,7 +180,7 @@ See [CHANGELOG](docs/CHANGELOG.md), [RELEASING](docs/RELEASING.md), [Marketplace
 
 Planned work includes:
 
-1. Support for more relational databases, including H2.
+1. Broader database compatibility coverage and support for more relational databases.
 2. More SQL and schema actions, including generating POJOs, DTOs and JavaBeans from tables and query results.
 3. SQL syntax highlighting and inline suggestions informed by connected database schemas, subject to feasibility within the IntelliJ Platform.
 4. Relationship graphs and dependency trees to explore how tables connect through foreign keys.

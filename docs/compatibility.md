@@ -62,3 +62,11 @@ Downloaded drivers are never pruned automatically; clearing the IDE JDBC cache r
 Test Connection reads DatabaseMetaData after authenticated connection and reports server/driver versions and elapsed time. It cannot reliably infer versions when authentication or protocol negotiation fails, and does not replace the chosen driver automatically.
 
 Legacy HSQLDB schema/SCRIPT handling and MySQL column-rename syntax were exercised by the matrix. HSQLDB multi-statement DDL is not atomic. Full CREATE reconstruction may be unavailable on older engines and is labeled partial. See [CONTRIBUTING](CONTRIBUTING.md) for portable baseline tests.
+
+## H2 integration
+
+H2 2.3.232 is bundled. Ordinary unit checks exercise embedded memory and file
+connections, production service workflows, generated-column metadata, native
+DDL replay and isolated driver disposal. TCP URLs are available, but live TCP/SSL,
+compatibility modes, H2 1.x migration, the Java 8 matrix and real-IDE UI review
+are not yet validated. See [provider scope](DATABASE_PROVIDERS.md#h2-validation-scope).

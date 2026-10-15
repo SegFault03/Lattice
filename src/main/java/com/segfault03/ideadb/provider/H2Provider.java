@@ -30,7 +30,8 @@ final class H2Provider implements DatabaseProvider {
         return switch (config.getHsqlMode() == null ? HsqlMode.MEM : config.getHsqlMode()) {
             case MEM -> "jdbc:h2:mem:" + db;
             case FILE -> {
-                String path = db.replace('\\', '/');
+                String path = db.endsWith(".mv.db") ? db.substring(0, db.length() - ".mv.db".length()) : db;
+                path = path.replace('\\', '/');
                 if (!path.startsWith("/") && !path.startsWith("~") && !path.startsWith("./") && !path.startsWith("../") && !path.matches("^[A-Za-z]:/.*")) path = "./" + path;
                 yield "jdbc:h2:file:" + path;
             }
