@@ -153,12 +153,15 @@ tasks.register<JavaExec>("databaseCompatibilityTest") {
     description = "Run the downloadable database driver and Java 8 compatibility matrix"
     group = "verification"
     dependsOn(tasks.testClasses)
-    mainClass.set(if (providers.gradleProperty("lattice.compatibility.mode").orNull == "postgres")
-        "com.segfault03.ideadb.provider.PostgresCompatibilityTest" else "com.segfault03.ideadb.DatabaseCompatibilityTest")
+    mainClass.set(when (providers.gradleProperty("lattice.compatibility.mode").orNull) {
+        "postgres" -> "com.segfault03.ideadb.provider.PostgresCompatibilityTest"
+        "h2" -> "com.segfault03.ideadb.provider.H2CompatibilityTest"
+        else -> "com.segfault03.ideadb.DatabaseCompatibilityTest"
+    })
     classpath = sourceSets["test"].runtimeClasspath + sourceSets["main"].compileClasspath
     doFirst {
         val mode = providers.gradleProperty("lattice.compatibility.mode").orNull
-            ?: throw GradleException("Set -Plattice.compatibility.mode=mysql|hsqldb|postgres")
+            ?: throw GradleException("Set -Plattice.compatibility.mode=mysql|hsqldb|postgres|h2")
         val java8 = providers.gradleProperty("lattice.compatibility.java8").orNull
             ?: throw GradleException("Set -Plattice.compatibility.java8 to a Java 8 runtime")
         val probeClasses = providers.gradleProperty("lattice.compatibility.probe").orNull
@@ -176,7 +179,7 @@ tasks.register<JavaExec>("databaseCompatibilityTest") {
             "postgres" -> listOf(mode,
                 providers.gradleProperty("lattice.compatibility.port").get(),
                 providers.gradleProperty("lattice.compatibility.server").get(), java8, probeClasses)
-            "hsqldb" -> listOf(mode, java8, probeClasses)
+            "hsqldb", "h2" -> listOf(mode, java8, probeClasses)
             else -> throw GradleException("Unknown compatibility mode: $mode")
         })
         systemProperty("lattice.test.keepDependencies", !providers.gradleProperty("lattice.compatibility.cleanup").orElse("true").get().toBoolean())
