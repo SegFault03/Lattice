@@ -47,6 +47,7 @@ dependencies {
     }
 
     implementation("org.postgresql:postgresql:42.7.14") { exclude(group = "org.checkerframework", module = "checker-qual") }
+    implementation("com.h2database:h2:2.3.232")
     implementation("org.hsqldb:hsqldb:2.7.4")
     implementation("com.mysql:mysql-connector-j:26.7.0")
     constraints {
@@ -103,7 +104,7 @@ tasks.processResources {
 
 val fallbackDriverJars = tasks.register<Sync>("fallbackDriverJars") {
     from(configurations.runtimeClasspath.map { files ->
-        files.filter { it.name.startsWith("mysql-connector-") || it.name.startsWith("hsqldb-") || it.name.startsWith("postgresql-") }
+        files.filter { it.name.startsWith("mysql-connector-") || it.name.startsWith("hsqldb-") || it.name.startsWith("postgresql-") || it.name.startsWith("h2-") }
     })
     into(layout.buildDirectory.dir("fallback-drivers"))
 }
@@ -132,7 +133,7 @@ tasks.register<JavaExec>("fallbackDriverTest") {
     systemProperty("lattice.test.postgres.enabled", providers.environmentVariable("LATTICE_TEST_POSTGRES_ENABLED").orElse("false").get())
     classpath = sourceSets["main"].output + sourceSets["test"].output +
         sourceSets["main"].compileClasspath.filter {
-            !it.name.startsWith("mysql-connector-") && !it.name.startsWith("hsqldb-") && !it.name.startsWith("postgresql-")
+            !it.name.startsWith("mysql-connector-") && !it.name.startsWith("hsqldb-") && !it.name.startsWith("postgresql-") && !it.name.startsWith("h2-")
         }
     dependsOn(fallbackDriverJars)
     args(layout.buildDirectory.dir("fallback-drivers").get().asFile.absolutePath)

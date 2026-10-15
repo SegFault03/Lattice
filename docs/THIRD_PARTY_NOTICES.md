@@ -12,3 +12,5 @@ Lattice's own source is under the [MIT license](../LICENSE). Third-party compone
 The release workflow also attaches the checksum-pinned, unmodified MySQL Connector/J 26.7.0 source archive alongside the plugin ZIP. Retain that corresponding-source asset and these notices when redistributing releases. Distribute locally built ZIPs with the same source archive (see [RELEASING](RELEASING.md)).
 
 User-selected JDBC JARs and downloaded drivers have their own licensing terms. Test SDKs, database executables, Microsoft runtimes, JUnit and Plugin Verifier are stored outside the repository and are not shipped with the plugin.
+
+- **H2 Database Engine 2.3.232** (`com.h2database:h2`): dual licensed under MPL 2.0 or EPL 1.0. See [H2 license](../licenses/h2-LICENSE.txt).
