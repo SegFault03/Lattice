@@ -123,7 +123,7 @@ Set `LATTICE_UI_IDE_HOME` to an installed Linux IDEA directory to launch another
 
 For a faster review of connection-dialog spacing, explorer overflow, table editor/menu surfaces, auto-refresh sizing and active glyph colors, set `LATTICE_UI_STYLE_ONLY=true` (direct Gradle: `-Plattice.ui.styleOnly=true`). This still opens and edits the production UI inside the full IDE, then stops after those checks; omit it for the complete review.
 
-Linux commit CI runs the complete HSQLDB Dark-theme review, focused Light-theme review and the full PostgreSQL Dark-theme scenario on the pinned IDE. PostgreSQL CI reuses the Gradle SDK path written by `./gradlew writeUiIdeHome`, avoiding a second IDE download. Release CI retains the HSQLDB Dark/Light reviews. Java and script tests continue to run on Linux, Windows and macOS. The newer-IDE/theme override is available for local compatibility reviews.
+Main-targeted PRs run the grouped production Swing and real-IDE scenarios as independent matrix jobs. Only embedded functional checks and plugin packaging run on every push/PR. The SDK path written by `./gradlew writeUiIdeHome` is reused for UI fixtures. Release tags run functional/package checks before signing. The newer-IDE/theme override remains available for local reviews.
 
 ```bash
 LATTICE_UI_IDE_HOME=/path/to/idea-2026.2.3 ./scripts/linux/review-intellij-ui.sh ExperimentalLight ExperimentalLightWithLightHeader IntelliJ JetBrainsLightTheme "Islands Light" ExperimentalDark Darcula JetBrainsHighContrastTheme "Islands Dark" "Islands Darcula"
@@ -167,15 +167,19 @@ The root `gradlew` / `gradlew.bat` are the standard Gradle wrapper launchers. Pu
 
 ## GitHub Actions policy
 
-| Event | Commit checks | Database + IDE compatibility | Release/sign/publish |
-| --- | --- | --- | --- |
-| Push to any branch | Linux, Windows, macOS with H2 TCP/TLS; Linux live suites | No | No |
-| PR targeting `staging` or `main` | Baseline plus Swing and real-IDE UI on the merge commit | All four databases/Java 8 and IDEA 2025.1–2025.3 | No |
-| PR targeting another branch | Baseline checks on the merge commit | No | No |
-| Newly created `v*` tag, commit reachable from `main` | Release baseline/build/live checks including H2 TCP/TLS | No | Yes |
-| Tag outside `main`, changed/deleted tag, other tag | No release work (rejected or skipped) | No | No |
+| Event | Functional/build/archive | Regression/integration/UI/tooling | JDBC/Java/IDE | Release/sign/publish |
+| --- | --- | --- | --- | --- |
+| Push to any branch | Linux, Windows, macOS | No | No | No |
+| PR targeting `main` | Same checks on merge commit | Grouped main PR suites | All four databases and IDEA 2025.1–2025.3 | No |
+| PR targeting `staging` or any other branch | Same checks on merge commit | No | No | No |
+| Manual CI run | Linux, Windows, macOS | No | No | No |
+| New `v*` tag reachable from `main` | Release functional/build checks | No | No | Yes |
+| Tag outside `main`, changed/deleted tag, other tag | No publication | No | No | No |
 
-Branch names are case-sensitive: `staging` and `main`. Tags are branch-independent Git refs; the release guard checks commit ancestry against `origin/main` before all downstream jobs. Manual CI dispatch runs baseline checks only; release dispatch and hidden Marketplace smoke uploads are disabled. Local compatibility and unsigned release dry runs remain available. Diagnostics retain the H2 UI evidence under `build/h2-validation/`, PostgreSQL UI evidence under `build/ui-review-postgres/` as well as the ordinary UI and test reports.
+[CI test groups](CI_TESTING.md) lists every suite and command. Branch names are
+case-sensitive. The release ancestry guard runs before every downstream release
+job. Manual release dispatch is disabled. Main PR UI artifacts are named by
+scenario/theme and retain native IDE logs, screenshots and JUnit reports.
 
 ## H2 end-to-end validation
 

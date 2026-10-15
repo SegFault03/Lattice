@@ -75,9 +75,10 @@ Each theme saves full desktop screenshots, `runtime-evidence.txt` and its JUnit
 result under `build/h2-validation/ui/`. UI checks assert component state and
 persisted data; screenshots are supporting evidence.
 
-CI runs the TCP/TLS suites on all three host platforms. PRs targeting `staging`
-or `main` also run the complete UI on Linux and the H2 compatibility matrix.
-Release validation includes TCP/TLS checks before signing; UI checks run in PRs.
+H2 embedded functional checks and plugin packaging run on every branch. Only
+PRs targeting `main` run TCP/TLS suites on all three host platforms, complete UI
+on Linux and the H2 compatibility matrix. Tag releases run functional/build
+checks before signing. See [CI test groups](CI_TESTING.md).
 
 ## Local validation on 15 October 2026
 

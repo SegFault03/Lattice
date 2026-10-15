@@ -15,7 +15,8 @@ Patch notes are selected by the exact release version, including prerelease suff
 - Improve live loading indicators, driver-download UI synchronization and query-session recovery before SQL submission.
 - Make PostgreSQL UI-wrapper tests portable across Windows paths and wait for the real-IDE Revert reload before filtering; exercise the busy reload with a gated database response.
 
-- Run baseline build, functional, regression and integration checks on every branch, including packaged driver/license validation. Restrict Swing and real-IDE UI checks, database/Java 8 compatibility and IDE compatibility to PRs targeting staging or main.
+- Run only embedded functional and plugin build/archive checks on commits. Group tooling, regression/integration, UI and Java/JDBC/IDE compatibility under main-targeted PR validation; staging PRs use the commit tier. Parallelize UI scenarios and remove duplicate H2 integration/build work. Keep release signing/publishing gated on new version tags reachable from main.
+- Retry cancellation during slower remote statement startup and synchronize H2 TLS cancellation regressions with server execution. Validate Windows launcher inventories on every host.
 - Release only from newly created version tags reachable from main; gate all release jobs on ancestry and disable manual release/Marketplace smoke publishing.
 
 ## [0.0.2-alpha]

@@ -22,3 +22,5 @@ GitHub discovers contribution and security guidance here. Issue forms, the pull 
 Portable Python helpers live in `scripts/`; platform entry points live in `scripts/windows/` and `scripts/linux/`, and regression tests live in `scripts/tests/`. Keep SDKs, database binaries, private caches and generated reports outside tracked source; build artifacts are written under ignored `build/`. The five README screenshots are the only tracked generated artifacts.
 
 - [H2 validation](H2_TESTING.md): functional, regression, TLS, driver/runtime compatibility and full real-IDE checks.
+
+- [CI test groups and release gates](CI_TESTING.md)
