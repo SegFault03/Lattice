@@ -1,8 +1,10 @@
-"""Regression checks for workflow routing and the actual release ancestry guard."""
+"""Check CI event routing, suite boundaries, failure aggregation and release ancestry."""
+import json
 import os
 from pathlib import Path
 import re
 import shutil
+import sys
 import subprocess
 import tempfile
 import textwrap
@@ -11,6 +13,8 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 CI = (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')
 RELEASE = (ROOT / '.github/workflows/release.yml').read_text(encoding='utf-8')
+FULL_JOBS = ('tooling-tests', 'backend-tests', 'ui-tests', 'ide-compatibility',
+             'database-compatibility', 'full-validation')
 
 
 def job(workflow, name):
@@ -22,99 +26,89 @@ def condition(body):
 
 
 class WorkflowPolicyTests(unittest.TestCase):
-    def test_baseline_runs_on_all_branch_pushes_and_pr_merge_commits(self):
+    def test_every_commit_runs_only_functional_checks_and_packaging(self):
         events = CI.split('permissions:', 1)[0]
         self.assertIn("branches: ['**']", events)
         self.assertIn('  pull_request:\n', events)
         self.assertIn('types: [opened, synchronize, reopened, edited, ready_for_review]', events)
         self.assertNotIn('tags:', events)
-        baseline = job(CI, 'commit-checks')
+        baseline = job(CI, 'functional-build')
         self.assertIsNone(re.search(r'^    if:', baseline, re.M))
         self.assertIn('os: [ubuntu-24.04, windows-2025, macos-15]', baseline)
-        self.assertIn('scripts/test.py --live --mysql --hsqldb --postgres --build', baseline)
-        self.assertIn('scripts/test.py --build', baseline)
+        self.assertIn('scripts/test.py --functional-only --build', baseline)
         self.assertIn('scripts/check-release-archive.py', baseline)
-        self.assertIn('scripts/ui-preview.py --all-previews', baseline)
-        self.assertIn('review-intellij-ui.sh ExperimentalDark', baseline)
-        self.assertIn('review-intellij-ui.sh ExperimentalLight', baseline)
-        self.assertIn('scripts/postgres-ui-review.py --java-home', baseline)
-        self.assertIn('--ide-home "$(cat build/ui-ide-home.txt)" --cleanup', baseline)
-        self.assertIn('build/ui-review-postgres/', baseline)
-        self.assertIn('scripts/h2-test.py --skip-ui --skip-compatibility', baseline)
-        self.assertIn('scripts/h2-test.py --ui-only', baseline)
-        self.assertIn('build/h2-validation/', baseline)
+        for forbidden in ('unittest discover', '--live', 'regressionTest', 'h2IntegrationTest',
+                          'ui-preview.py', 'review-intellij-ui.sh', 'compatibility-only'):
+            self.assertNotIn(forbidden, baseline)
 
-    def test_ui_suites_remain_independent_and_fail_the_job_without_hiding_evidence(self):
-        baseline = job(CI, 'commit-checks')
-        for name in ('Run dark IDE functional and regression UI tests',
-                     'Run light IDE styling and key-header regression tests',
-                     'Run dark IDE explorer search regression tests',
-                     'Run light IDE explorer search regression tests',
-                     'Run PostgreSQL real-IDE functional and regression UI tests',
-                     'Run H2 real-IDE functional and regression UI tests'):
-            step = baseline.split(f'      - name: {name}\n', 1)[1].split('      - name:', 1)[0]
-            expression = re.search(r'^        if: (.+)$', step, re.M).group(1)
-            self.assertIn('!cancelled()', expression)
-            self.assertIn("matrix.os == 'ubuntu-24.04'", expression)
-            self.assertIn("steps.ui_display.outcome == 'success'", expression)
-            self.assertIn("steps.swing_previews.outcome == 'success'", expression)
-            self.assertNotIn('continue-on-error', step)
-        self.assertIn('out/ide-tests/tests/**/log/idea.log', baseline)
-        self.assertIn('out/ide-tests/tests/**/log/screenshots/', baseline)
-
-    def test_search_runs_in_both_themes_with_separate_retained_evidence(self):
-        baseline = job(CI, 'commit-checks')
-        for label, theme in (('dark', 'ExperimentalDark'), ('light', 'ExperimentalLight')):
-            step = baseline.split(f'      - name: Run {label} IDE explorer search regression tests\n', 1)[1].split('      - name:', 1)[0]
-            self.assertIn("LATTICE_UI_EXPLORER_SEARCH_ONLY: 'true'", step)
-            self.assertIn('LATTICE_UI_REVIEW_OUTPUT: build/ui-review/explorer-search', step)
-            self.assertIn(f'review-intellij-ui.sh {theme}', step)
-        self.assertIn('build/ui-review/', baseline.split('      - name: Retain test reports', 1)[1])
-
-    def test_ui_previews_display_and_ide_suites_only_run_for_staging_or_main_prs(self):
-        baseline = job(CI, 'commit-checks')
-        names = ('Validate production Swing previews and action states', 'Prepare the real IDE display',
-                 'Run dark IDE functional and regression UI tests',
-                 'Run light IDE styling and key-header regression tests',
-                 'Run dark IDE explorer search regression tests',
-                 'Run light IDE explorer search regression tests',
-                 'Run PostgreSQL real-IDE functional and regression UI tests',
-                 'Run H2 real-IDE functional and regression UI tests')
-        for name in names:
-            step = baseline.split(f'      - name: {name}\n', 1)[1].split('      - name:', 1)[0]
-            expression = re.search(r'^        if: (.+)$', step, re.M).group(1)
+    def test_all_other_suites_run_only_on_main_targeted_prs(self):
+        self.assertEqual({'functional-build', *FULL_JOBS}, set(re.findall(r'^  ([\w-]+):$', CI.split('jobs:\n', 1)[1], re.M)))
+        for name in FULL_JOBS:
+            expression = condition(job(CI, name)).replace('always() && ', '')
             for event in ('push', 'pull_request', 'workflow_dispatch'):
                 for base in ('', 'staging', 'main', 'feature/next'):
-                    for system in ('ubuntu-24.04', 'windows-2025', 'macos-15'):
-                        evaluated = expression.replace('${{', '').replace('}}', '').replace('!cancelled()', 'True')
-                        for variable, value in {'github.event_name': event, 'github.base_ref': base, 'matrix.os': system,
-                                                'steps.ui_display.outcome': 'success', 'steps.swing_previews.outcome': 'success'}.items():
-                            evaluated = evaluated.replace(variable, repr(value))
-                        with self.subTest(step=name, event=event, base=base, os=system):
-                            self.assertEqual(event == 'pull_request' and base in ('staging', 'main') and system == 'ubuntu-24.04',
-                                             eval(evaluated.replace('&&', 'and').replace('||', 'or'), {'__builtins__': {}}))
-        for command in ('scripts/ui-preview.py', 'review-intellij-ui.sh', 'uiScreenshotTest', 'postgres-ui-review.py'):
-            self.assertNotIn(command, RELEASE, 'Release tags must not launch UI suites')
-
-    def test_compatibility_runs_only_for_prs_to_staging_or_main(self):
-        for name in ('ide-compatibility', 'database-compatibility', 'compatibility'):
-            expression = condition(job(CI, name))
-            # Evaluate the actual event/base routing clause over the event matrix.
-            route = expression.replace('always() && ', '').split(" && needs.", 1)[0]
-            for event in ('push', 'pull_request', 'workflow_dispatch'):
-                for base in ('', 'feature/next', 'staging', 'main'):
-                    evaluated = route.replace('github.event_name', repr(event)).replace('github.base_ref', repr(base))
+                    evaluated = expression.replace('github.event_name', repr(event)).replace('github.base_ref', repr(base))
                     with self.subTest(job=name, event=event, base=base):
-                        self.assertEqual(event == 'pull_request' and base in ('staging', 'main'),
+                        self.assertEqual(event == 'pull_request' and base == 'main',
                                          eval(evaluated.replace('&&', 'and').replace('||', 'or'), {'__builtins__': {}}))
+
+    def test_suites_are_grouped_without_nested_full_builds(self):
+        tooling = job(CI, 'tooling-tests')
+        self.assertIn('unittest discover -s scripts/tests -v', tooling)
+        self.assertNotIn('buildPlugin', tooling)
+        backend = job(CI, 'backend-tests')
+        self.assertIn('regressionTest --no-daemon', backend)
+        self.assertIn('h2IntegrationTest h2FallbackDriverTest', backend)
+        self.assertIn('--integration-only --live --mysql --hsqldb --postgres', backend)
+        self.assertIn('h2FallbackDriverTest', backend)
+        self.assertNotIn('scripts/h2-test.py', backend)
+        self.assertNotIn('--build', backend)
+        jdbc = job(CI, 'database-compatibility')
+        self.assertIn('--database-compatibility-only', jdbc)
         self.assertIn("ide: ['2025.1', '2025.2', '2025.3']", job(CI, 'ide-compatibility'))
-        self.assertIn('--database-compatibility-only', job(CI, 'database-compatibility'))
         self.assertIn('plugin-under-test', job(CI, 'ide-compatibility'))
+        self.assertIn('needs: functional-build', job(CI, 'ide-compatibility'))
+
+    def test_ui_suites_have_independent_theme_jobs_and_retained_evidence(self):
+        ui = job(CI, 'ui-tests')
+        self.assertIn('fail-fast: false', ui)
+        for suite in ('previews', 'hsqldb', 'styling', 'search', 'postgres', 'h2'):
+            self.assertIn(f'- suite: {suite}', ui)
+        for suite in ('search', 'h2'):
+            themes = re.findall(rf'- suite: {suite}\n            theme: (.+)', ui)
+            self.assertEqual(['ExperimentalDark', 'ExperimentalLight'], themes)
+        self.assertIn('LATTICE_UI_EXPLORER_SEARCH_ONLY:', ui)
+        self.assertIn('LATTICE_UI_STYLE_ONLY:', ui)
+        self.assertIn('scripts/h2-test.py --ui-only', ui)
+        self.assertIn('scripts/postgres-ui-review.py', ui)
+        self.assertIn('scripts/ui-preview.py --all-previews', ui)
+        self.assertIn('if: always()', ui)
+        self.assertIn('out/ide-tests/tests/**/log/idea.log', ui)
+        self.assertIn('out/ide-tests/tests/**/log/screenshots/', ui)
+        self.assertIn('build/ui-review/', ui)
+        self.assertNotIn('continue-on-error', CI)
+
+    def test_main_pr_gate_requires_every_suite_even_if_skipped_or_cancelled(self):
+        gate = job(CI, 'full-validation')
+        needs = re.search(r'needs: \[(.+)\]', gate).group(1).split(', ')
+        self.assertEqual({'functional-build', *FULL_JOBS[:-1]}, set(needs))
+        self.assertTrue(condition(gate).startswith('always() && '))
+        script = textwrap.dedent(gate.split("          python3 - <<'PYCODE'\n", 1)[1].split('          PYCODE', 1)[0])
+        for failing_job in needs:
+            for state in ('success', 'failure', 'skipped', 'cancelled'):
+                results = {name: {'result': 'success'} for name in needs}
+                results[failing_job]['result'] = state
+                with self.subTest(job=failing_job, state=state):
+                    result = subprocess.run([sys.executable, '-c', script],
+                                            env=dict(os.environ, RESULTS=json.dumps(results)),
+                                            capture_output=True, text=True, timeout=10)
+                    self.assertEqual(state == 'success', result.returncode == 0, result.stderr)
 
     def test_releases_are_new_tags_only_and_every_job_depends_on_guard(self):
         self.assertIn("tags: ['v*']", RELEASE.split('permissions:', 1)[0])
         self.assertNotIn('workflow_dispatch', RELEASE)
-        for forbidden in ('database-compatibility:', 'scripts/verify-plugin.py', '--compatibility-only', '--database-compatibility-only'):
+        for forbidden in ('database-compatibility:', 'scripts/verify-plugin.py', '--compatibility-only', '--database-compatibility-only',
+                          'unittest discover', '--live', 'h2IntegrationTest', 'ui-preview.py', 'review-intellij-ui.sh'):
             self.assertNotIn(forbidden, RELEASE)
         guard = condition(job(RELEASE, 'release-ref'))
         self.assertIn("github.event_name == 'push'", guard)

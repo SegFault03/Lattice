@@ -80,15 +80,36 @@ tasks {
     }
 }
 
+// Functional checks are the commit tier; the remaining ordinary tests form the PR regression tier.
+tasks.register<Test>("functionalTest") {
+    description = "Run embedded provider workflows and connection/driver feature contracts"
+    group = "verification"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath + sourceSets["main"].compileClasspath
+    useJUnitPlatform { includeTags("functional"); excludeTags("integration") }
+    systemProperty("junit.jupiter.extensions.autodetection.enabled", "false")
+}
+
+intellijPlatformTesting.testIde.register("regressionTest") {
+    task {
+        description = "Run service, model and Swing regressions outside the functional tier"
+        testClassesDirs = sourceSets["test"].output.classesDirs
+        classpath = sourceSets["test"].runtimeClasspath + sourceSets["main"].compileClasspath
+        useJUnitPlatform { excludeTags("functional", "integration") }
+        systemProperty("junit.jupiter.extensions.autodetection.enabled", "false")
+    }
+}
+
 // Live fixtures are opt-in; these tasks contain discoverable JUnit methods rather than main-only programs.
 tasks.register<Test>("integrationTest") {
-    description = "Run MySQL and HSQLDB functional integration suites"
+    description = "Run MySQL, HSQLDB and PostgreSQL server integration suites"
     group = "verification"
     testClassesDirs = sourceSets["test"].output.classesDirs
     // These live JDBC suites run without an IDE sandbox, but need SDK types.
     classpath = sourceSets["test"].runtimeClasspath + sourceSets["main"].compileClasspath
     useJUnitPlatform {
         includeTags("integration")
+        excludeTags("h2integration") // Owned H2 transports run once in h2IntegrationTest.
         if (!providers.environmentVariable("LATTICE_TEST_POSTGRES_ENABLED").orElse(providers.environmentVariable("LATTICE_TEST_POSTGRES_PORT").map { "true" }.orElse("false")).get().toBoolean()) excludeTags("postgres")
     }
     systemProperty("junit.jupiter.extensions.autodetection.enabled", "false")

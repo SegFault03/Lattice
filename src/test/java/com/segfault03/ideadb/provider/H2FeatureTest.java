@@ -9,6 +9,7 @@ import java.sql.*;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
+@org.junit.jupiter.api.Tag("functional")
 class H2FeatureTest {
     @TempDir Path temporary;
 

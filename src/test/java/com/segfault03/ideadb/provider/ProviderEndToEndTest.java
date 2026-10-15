@@ -12,6 +12,7 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** The same production-service flow runs against embedded and real server providers. */
+@org.junit.jupiter.api.Tag("functional")
 public class ProviderEndToEndTest {
     @Test void embeddedH2Workflow() throws Exception {
         var config = new ConnectionConfig(DatabaseType.H2, "H2 embedded contract");

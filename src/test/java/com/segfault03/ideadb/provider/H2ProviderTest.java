@@ -4,6 +4,7 @@ import com.segfault03.ideadb.model.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
+@org.junit.jupiter.api.Tag("functional")
 class H2ProviderTest {
     @Test void modesBuildH2UrlsWithoutChangingCustomOptions() {
         var config = new ConnectionConfig(DatabaseType.H2, "h2");
