@@ -65,10 +65,10 @@ IntelliJ IDEA **2025.1 or later**, Community or Ultimate/unified editions, using
 |---|---|
 | MySQL | 5.5.62, 5.6.51, 5.7.44 and 8.4.2 |
 | HSQLDB | 2.2.9 through 2.7.4; file, memory and server modes |
-| H2 | 2.3.232; embedded memory/file workflows (TCP form available; server compatibility review pending) |
+| H2 | 2.1.214, 2.2.224 and 2.3.232; memory/file and TCP matrix, plus bundled-driver TLS workflows |
 | PostgreSQL | 8.4 through 18; select a Java 8 compatible pgJDBC (42.7.3 or 42.2.27 for servers older than 9.1) |
 
-Choose a JDBC driver compatible with your server. HSQLDB requires a matching server/file format; some releases offer a `-jdk8` classifier. Java 8 support applies to JDBC drivers and the HSQLDB server runtime; MySQL and PostgreSQL are native servers. The plugin requires Java 21. See the [compatibility report](docs/compatibility.md) for tested combinations and limits.
+Choose a JDBC driver compatible with your server. HSQLDB requires a matching server/file format; some releases offer a `-jdk8` classifier. Java 8 coverage applies to matrix-selected drivers and runtimes; H2 2.3 requires Java 11+. MySQL and PostgreSQL are native servers. The plugin requires Java 21. See the [compatibility report](docs/compatibility.md) for tested combinations and limits.
 
 ## Install and connect
 
@@ -91,7 +91,7 @@ Select MySQL, HSQLDB, PostgreSQL or H2, enter connection details, and choose a d
 
 **Test Connection** reports the server product/version after authentication and the driver's version. Failed authentication or negotiation can prevent detection. Downloaded drivers are kept in the IDE system cache and are reused across restarts.
 
-For H2, select Memory for a named database that lasts until its last connection closes, File for a persistent database path, or Server for TCP (default port 9092). File mode accepts the database base path or an existing `.mv.db` file. The bundled driver is H2 2.3.232; custom URLs preserve options such as `IFEXISTS` and SSL settings. H2 1.x file migration and compatibility modes have not been validated. H2 DDL can commit an open transaction, so finish console transactions before schema changes.
+For H2, select Memory for a named database that lasts until its last connection closes, File for a persistent database path, or Server for TCP (default port 9092). File mode accepts the database base path or an existing `.mv.db` file. The bundled driver is H2 2.3.232 (Java 11+ bytecode, tested on Java 21); H2 2.1.214 and 2.2.224 also pass Java 8 probes. Custom URLs preserve options such as `IFEXISTS` and SSL settings. Service workflows also run in H2 MySQL/PostgreSQL compatibility modes; this does not establish complete SQL emulation. H2 1.x file migration is not validated. H2 DDL can commit an open transaction, so finish console transactions before schema changes.
 
 Generated MySQL URLs currently disable TLS and use UTC for the driver/server session. For remote or TLS-required servers, use a custom JDBC URL with your required security options. Custom URLs retain your options.
 
@@ -153,6 +153,13 @@ The runner uses temporary Gradle, verifier and JDBC caches. It uses an installed
 Ports 3306 and 9001 are used by the base functional checks, 3306 by the database matrix, and 19020–19029 by Plugin Verifier. A failure exits nonzero, preserves command logs and a failure summary in `build/one-shot-test/`, and removes owned tools and caches by default. Use `--download-dir`, `--binaries-dir`, explicit binary paths and `--no-cleanup` for reusable local assets. Every Python CLI has a matching PowerShell launcher under `scripts/windows/`; see [Windows commands and options](docs/WINDOWS_SCRIPTS.md) and [dependency options](docs/SCRIPTS.md#binary-paths-downloads-and-cleanup).
 
 Use `--java-home` to select a full JDK 21 explicitly. For a shorter check against disposable MySQL 8.4/HSQLDB fixtures, see [the functional test guide](docs/CONTRIBUTING.md). The lower-level `scripts/test.py` runner remains available for focused build and fixture tests.
+
+### H2 end-to-end checks
+
+On Linux with JDK 21, Xvfb and a window manager, run `python scripts/h2-test.py` for
+functional/regression, owned TCP/TLS, packaging, driver/runtime compatibility and
+full dark/light real-IDE UI tests. See [H2 validation](docs/H2_TESTING.md) for
+focused commands, prerequisites and report paths.
 
 ## Project layout
 

@@ -582,3 +582,14 @@ Only the five README PNGs under screenshots/ are tracked generated artifacts. Ot
 The Windows validation passed 81 Python tooling tests, Gradle unit and live MySQL/HSQLDB tests, fallback-driver loading/disposal, plugin packaging and archive checks, all four trimmed MySQL initializers, the HSQLDB cancellation diagnostic, UI test compilation and 106 Swing gallery variants. Every Python PowerShell launcher was exercised from another directory with both the default interpreter and an explicit -Python. PowerShell parsing and Bash syntax checks passed. The five README images were preserved unchanged. Validation build/cache outputs were removed afterward.
 
 Real interactive IDE capture/review was not rerun during this cleanup. Those commands need the test IDE to stay in the foreground; the earlier attempt was interrupted by another foreground application.
+
+## H2 functional and compatibility checks
+
+```powershell
+.\scripts\windows\h2-test.ps1 --skip-ui --java-home C:\tools\jdk21
+.\scripts\windows\h2-compatibility.ps1 --java-home C:\tools\jdk21 --java8-home C:\tools\java8
+```
+
+The H2 backend flow owns its file/TCP/TLS fixtures and needs no Docker. The full
+real-IDE H2 scenario currently uses the Linux/X11 runner; `--skip-ui` states that
+omission explicitly. See [H2 validation](H2_TESTING.md) for matrix coverage.

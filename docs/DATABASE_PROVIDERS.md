@@ -121,6 +121,16 @@ precision, native DDL replay and isolated driver disposal. URL tests cover TCP,
 SSL custom URLs, Windows paths and existing `.mv.db` paths. Driver selection
 accepts H2 2.x; older 1.x databases require an external migration.
 
-TCP/SSL server execution, H2 compatibility modes, older 2.x drivers and real-IDE
-H2 UI review remain follow-up work. The JDBC/Java 8 matrix does not include H2 yet.
-H2 DDL implicitly commits; schema changes are not rollback-safe console operations.
+`h2IntegrationTest` runs owned TCP/TLS production workflows, failed-authentication
+and recovery checks. `H2RegressionTest` also covers typed export replay, native
+view DDL, identity state, failed batches/alterations, transaction ownership,
+cancellation races and timeouts. The compatibility matrix tests H2 2.1.214,
+2.2.224 and 2.3.232 across memory/file, all TCP driver/server pairs and MySQL/
+PostgreSQL compatibility-mode service workflows. Java 8 runs 2.1/2.2; 2.3 requires
+Java 11+ bytecode and is exercised on Java 21 with an expected Java 8 rejection.
+
+The real IntelliJ UI scenario supports an H2 TCP fixture with full dark/light
+functional checks. See [H2 validation](H2_TESTING.md) for suite boundaries,
+commands and evidence paths. H2 1.x migration, running on Java 11 itself and
+arbitrary compatibility-mode SQL remain outside this matrix. H2 DDL implicitly
+commits; schema changes are not rollback-safe console operations.

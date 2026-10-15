@@ -65,8 +65,15 @@ Legacy HSQLDB schema/SCRIPT handling and MySQL column-rename syntax were exercis
 
 ## H2 integration
 
-H2 2.3.232 is bundled. Ordinary unit checks exercise embedded memory and file
-connections, production service workflows, generated-column metadata, native
-DDL replay and isolated driver disposal. TCP URLs are available, but live TCP/SSL,
-compatibility modes, H2 1.x migration, the Java 8 matrix and real-IDE UI review
-are not yet validated. See [provider scope](DATABASE_PROVIDERS.md#h2-validation-scope).
+H2 2.3.232 is bundled. The H2 matrix tests drivers/servers 2.1.214, 2.2.224 and
+2.3.232: memory/file, all nine TCP driver/server pairs, and MySQL/PostgreSQL-mode
+service workflows. Drivers 2.1.214 and 2.2.224 also run real Java 8 probes and
+servers; 2.3.232 requires Java 11+ bytecode and runs on Java 21, with a negative
+Java 8 check. A dedicated bundled-driver TLS fixture verifies certificate trust,
+production services, authentication failure redaction and recovery. Native view
+DDL replay and typed exports are included in regression flows.
+
+The complete production UI scenario supports an H2 TCP fixture in both dark and
+light themes. See [H2 validation](H2_TESTING.md) for commands and evidence paths.
+H2 1.x migration, Java 11 execution itself and full SQL compatibility-mode
+emulation are not covered.

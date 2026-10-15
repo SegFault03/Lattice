@@ -176,3 +176,11 @@ The root `gradlew` / `gradlew.bat` are the standard Gradle wrapper launchers. Pu
 | Tag outside `main`, changed/deleted tag, other tag | No release work (rejected or skipped) | No | No |
 
 Branch names are case-sensitive: `staging` and `main`. Tags are branch-independent Git refs; the release guard checks commit ancestry against `origin/main` before all downstream jobs. Manual CI dispatch runs baseline checks only; release dispatch and hidden Marketplace smoke uploads are disabled. Local compatibility and unsigned release dry runs remain available. Diagnostics retain the PostgreSQL UI evidence under `build/ui-review-postgres/` as well as the ordinary UI and test reports.
+
+## H2 end-to-end validation
+
+`python scripts/h2-test.py` runs build/unit/regression, owned file/TCP/TLS,
+packaging, driver/runtime compatibility and full dark/light IntelliJ UI checks.
+Use `scripts/h2-compatibility.py` for just the version matrix and `--ui-only` for
+just the complete UI flow. See [H2 validation](H2_TESTING.md) for prerequisites,
+options, suite coverage and report paths.

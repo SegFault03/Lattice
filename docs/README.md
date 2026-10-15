@@ -20,3 +20,5 @@ All commands run from the repository root unless a guide says otherwise.
 GitHub discovers contribution and security guidance here. Issue forms, the pull request template and workflows live under `.github/`; agent instructions and Gradle wrapper launchers stay at the repository root.
 
 Portable Python helpers live in `scripts/`; platform entry points live in `scripts/windows/` and `scripts/linux/`, and regression tests live in `scripts/tests/`. Keep SDKs, database binaries, private caches and generated reports outside tracked source; build artifacts are written under ignored `build/`. The five README screenshots are the only tracked generated artifacts.
+
+- [H2 validation](H2_TESTING.md): functional, regression, TLS, driver/runtime compatibility and full real-IDE checks.

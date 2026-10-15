@@ -4,7 +4,7 @@ Patch notes are selected by the exact release version, including prerelease suff
 
 ## [Unreleased]
 
-- Add H2 2.x provider and bundled 2.3.232 driver, memory/file/TCP connection forms, schema/table operations, generated-column metadata and native table DDL exports. Validate embedded memory/file workflows and driver isolation; live TCP/SSL and real-IDE H2 review remain pending.
+- Add H2 2.x provider and bundled 2.3.232 driver, memory/file/TCP connection forms, schema/table operations, generated-column metadata and native table DDL exports. Add file/TCP/TLS functional and data regression suites, a driver/server/runtime compatibility matrix, and full dark/light real-IDE H2 scenarios. H2 2.3 requires Java 11+; H2 2.1/2.2 also pass real Java 8 probes.
 
 - Make PostgreSQL UI-wrapper tests portable across Windows paths and wait for the real-IDE Revert reload before filtering; exercise the busy reload with a gated database response.
 
