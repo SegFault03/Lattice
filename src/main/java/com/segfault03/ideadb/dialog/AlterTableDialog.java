@@ -1,415 +1,184 @@
 package com.segfault03.ideadb.dialog;
 
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.Messages;
-import com.intellij.ui.JBColor;
-import com.intellij.ui.components.JBCheckBox;
-import com.intellij.ui.components.JBLabel;
-import com.intellij.ui.components.JBScrollPane;
-import com.intellij.ui.components.JBTextField;
-import com.segfault03.ideadb.model.ColumnDefinition;
-import com.segfault03.ideadb.model.ColumnMetadata;
-import com.segfault03.ideadb.model.ConnectionConfig;
-import com.segfault03.ideadb.model.TableMetadata;
-import com.segfault03.ideadb.service.DatabaseConnectionManager;
-import com.segfault03.ideadb.service.DdlService;
-import com.segfault03.ideadb.service.MetadataService;
+import com.segfault03.ideadb.editor.TableRenameListener;
+import com.segfault03.ideadb.model.*;
+import com.segfault03.ideadb.service.*;
+import com.segfault03.ideadb.ui.DatabaseUi;
 import org.jetbrains.annotations.Nullable;
 
-import com.segfault03.ideadb.ui.DatabaseInputs;
-import com.intellij.util.ui.JBUI;
-
 import javax.swing.*;
-import java.awt.*;
 import java.sql.Connection;
 import java.util.List;
 
+/** Reviews a complete batch and applies it on an editor-owned background connection. */
 public class AlterTableDialog extends DialogWrapper {
     private final Project project;
     private final ConnectionConfig config;
     private final String databaseName;
     private final TableMetadata tableMetadata;
-
-    private final JLabel operationStatus = new com.segfault03.ideadb.ui.WrappingLabel("Ready");
-    private boolean busy;
-    private volatile Connection activeConnection;
-    private java.util.concurrent.Future<?> operationTask;
-    private JPanel centerPanel;
-    private final java.util.Map<Component,Boolean> enabledStates = new java.util.IdentityHashMap<>();
-
-    // Add column tab
-    private JBTextField addColNameField;
-    private JComboBox<String> addColTypeCombo;
-    private JBTextField addColSizeField;
-    private JBCheckBox addColNullableCheck;
-    private JBTextField addColDefaultField;
-
-    // Rename column tab
-    private JComboBox<String> renameColCombo;
-    private JBTextField renameColNewNameField;
-
-    // Modify column tab
-    private JComboBox<String> modifyColCombo;
-    private JComboBox<String> modifyColTypeCombo;
-    private JBTextField modifyColSizeField;
-    private JBCheckBox modifyColNullableCheck;
-    private JBTextField modifyColDefaultField;
-
-    // Drop column tab
-    private JComboBox<String> dropColCombo;
-
-    // Rename table tab
-    private JBTextField renameTableField;
-
-    private static final String[] DATA_TYPES = {
-            "VARCHAR", "INT", "BIGINT", "TEXT", "BOOLEAN", "DECIMAL", "DOUBLE", "DATE", "TIMESTAMP", "BLOB"
-    };
+    private AlterTablePanel editor;
+    private Timer previewDelay;
+    private DatabaseTaskScope previewScope, mutationScope;
+    private long revision;
+    private boolean applying, loading;
 
     public AlterTableDialog(@Nullable Project project, ConnectionConfig config, String databaseName, TableMetadata tableMetadata) {
         super(project, true);
-        this.project = project;
-        this.config = config;
-        this.databaseName = databaseName;
-        this.tableMetadata = tableMetadata;
-
-        setTitle("Alter table: " + tableMetadata.getName());
-        setResizable(true);
-        setCancelButtonText("Close");
+        this.project = project; this.config = config; this.databaseName = databaseName; this.tableMetadata = tableMetadata;
+        setTitle("Edit table: " + tableMetadata.getName()); setResizable(true); setCancelButtonText("Close");
         init();
-        if (tableMetadata.getColumns().isEmpty()) runAlter(conn -> {}, tableMetadata.getName(), null);
-    }
-
-    @Override
-    protected Action[] createActions() {
-        return new Action[]{getCancelAction()};
-    }
-
-    @Override
-    protected @Nullable String getDimensionServiceKey() {
-        return "Lattice.AlterTableDialog.v1";
-    }
-
-    @Override
-    protected @Nullable JComponent createCenterPanel() {
-        JPanel root = new JPanel(new BorderLayout(0, JBUI.scale(10)));
-        centerPanel = root;
-        root.setPreferredSize(JBUI.size(740, 420));
-        root.setMinimumSize(JBUI.size(680, 380));
-
-        String[] colNames = tableMetadata.getColumns().stream().map(ColumnMetadata::getName).toArray(String[]::new);
-
-        // Every card uses the same rendered label column and top-aligned rows.
-        ConnectionFormPanel addPanel = alterForm();
-        addColNameField = DatabaseInputs.textField();
-        addColTypeCombo = DatabaseInputs.comboBox(com.segfault03.ideadb.provider.DatabaseProviders.get(config.getType()).dataTypes().toArray(String[]::new));
-        addColTypeCombo.setEditable(com.segfault03.ideadb.provider.DatabaseProviders.get(config.getType()).supportsCustomTypes());
-        addColTypeCombo.setSelectedItem("VARCHAR");
-        addColSizeField = DatabaseInputs.textField("255");
-        addColNullableCheck = new JBCheckBox("Allow NULL values", true);
-        addColDefaultField = DatabaseInputs.textField();
-        addColDefaultField.setToolTipText("Use TEXT: for a literal, SQL: for an expression; blank removes the default.");
-        addPanel.addRow(0, "Column name:", addColNameField, true);
-        addPanel.addRow(1, "Type:", addColTypeCombo, true);
-        addPanel.addRow(2, "Size / length:", addColSizeField, true);
-        addPanel.addRow(3, "Nullable:", addColNullableCheck, false);
-        addPanel.addRow(4, "Default value:", addColDefaultField, true);
-        JButton executeAddBtn = new JButton("Add column");
-        executeAddBtn.addActionListener(e -> doAddColumn());
-        addPanel.addRow(5, "", executeAddBtn, false);
-
-        ConnectionFormPanel renameColPanel = alterForm();
-        renameColCombo = DatabaseInputs.comboBox(colNames);
-        renameColNewNameField = DatabaseInputs.textField(colNames.length > 0 ? colNames[0] : "");
-        renameColPanel.addRow(0, "Column:", renameColCombo, true);
-        renameColPanel.addRow(1, "New column name:", renameColNewNameField, true);
-        renameColCombo.addActionListener(e -> {
-            String selected = (String) renameColCombo.getSelectedItem();
-            if (selected != null) renameColNewNameField.setText(selected);
+        previewDelay = new Timer(300, event -> preparePreview()); previewDelay.setRepeats(false);
+        editor.onChange(this::queuePreview);
+        editor.applyButton().addActionListener(event -> apply());
+        editor.closeButton().addActionListener(event -> doCancelAction());
+        editor.refreshButton().addActionListener(event -> {
+            if (!editor.dirty() || confirmDiscard()) loadColumns();
         });
-        JButton executeRenameColBtn = new JButton("Rename column");
-        executeRenameColBtn.addActionListener(e -> doRenameColumn());
-        renameColPanel.addRow(2, "", executeRenameColBtn, false);
-
-        ConnectionFormPanel modifyColPanel = alterForm();
-        modifyColCombo = DatabaseInputs.comboBox(colNames);
-        modifyColTypeCombo = DatabaseInputs.comboBox(com.segfault03.ideadb.provider.DatabaseProviders.get(config.getType()).dataTypes().toArray(String[]::new));
-        modifyColTypeCombo.setEditable(com.segfault03.ideadb.provider.DatabaseProviders.get(config.getType()).supportsCustomTypes());
-        modifyColTypeCombo.setEditable(true);
-        modifyColSizeField = DatabaseInputs.textField("255");
-        modifyColNullableCheck = new JBCheckBox("Allow NULL values", true);
-        modifyColDefaultField = DatabaseInputs.textField();
-        modifyColDefaultField.setToolTipText("Use TEXT: for a literal, SQL: for an expression; blank removes the default.");
-        modifyColPanel.addRow(0, "Column:", modifyColCombo, true);
-        modifyColPanel.addRow(1, "Type:", modifyColTypeCombo, true);
-        modifyColPanel.addRow(2, "Size / length:", modifyColSizeField, true);
-        modifyColPanel.addRow(3, "Nullable:", modifyColNullableCheck, false);
-        modifyColPanel.addRow(4, "Default value:", modifyColDefaultField, true);
-        modifyColCombo.addActionListener(e -> {
-            String selected = (String) modifyColCombo.getSelectedItem();
-            if (selected != null) populateModifyFields(selected);
+        if (getRootPane() != null) getRootPane().setDefaultButton(editor.applyButton());
+        if (tableMetadata.getColumns().isEmpty()) loadColumns();
+    }
+    @Override protected Action[] createActions() { return new Action[0]; }
+    @Override protected @Nullable JComponent createSouthPanel() { return null; }
+    @Override protected @Nullable String getDimensionServiceKey() { return "Lattice.AlterTableDialog.v2"; }
+    @Override public @Nullable JComponent getPreferredFocusedComponent() { return editor.columnList(); }
+    @Override protected JComponent createCenterPanel() {
+        editor = new AlterTablePanel(config, databaseName, tableMetadata.getName(), tableMetadata.getColumns());
+        return editor;
+    }
+    private boolean confirmDiscard() {
+        return Messages.showYesNoDialog(project, "Discard all pending table changes?", "Discard changes",
+                "Discard", "Keep editing", Messages.getQuestionIcon()) == Messages.YES;
+    }
+    @Override public void doCancelAction() {
+        if (applying || loading || editor.dirty() && !confirmDiscard()) return;
+        super.doCancelAction();
+    }
+    private void cancelPreview() {
+        revision++;
+        if (previewDelay != null) previewDelay.stop();
+        DatabaseTaskScope old = previewScope; previewScope = null;
+        if (old != null) {
+            old.cancelPending();
+            ApplicationManager.getApplication().executeOnPooledThread(old::close);
+        }
+    }
+    private void queuePreview() {
+        cancelPreview();
+        if (!applying && !loading && !isDisposed() && editor.needsPreview()) previewDelay.restart();
+    }
+    private void preparePreview() {
+        if (isDisposed() || !editor.needsPreview()) return;
+        TableAlterationBatch request = editor.batch(); long token = revision;
+        DatabaseTaskScope scope = DatabaseTaskService.getInstance().newScope(); previewScope = scope;
+        scope.submit(() -> {
+            try (var read = scope.openRead(config)) {
+                List<String> statements = DdlService.getInstance().previewAlterBatch(read.connection(), config, databaseName, request);
+                SwingUtilities.invokeLater(() -> {
+                    if (!isDisposed() && token == revision) editor.showPreview(request, statements);
+                });
+            } catch (Exception error) {
+                SwingUtilities.invokeLater(() -> {
+                    if (!isDisposed() && token == revision) editor.previewFailed(request, "Preview failed · " + message(error));
+                });
+            }
         });
-        if (colNames.length > 0) populateModifyFields(colNames[0]);
-        JButton executeModifyColBtn = new JButton("Apply column changes");
-        executeModifyColBtn.addActionListener(e -> doModifyColumn());
-        modifyColPanel.addRow(5, "", executeModifyColBtn, false);
-
-        ConnectionFormPanel dropPanel = alterForm();
-        dropColCombo = DatabaseInputs.comboBox(colNames);
-        dropPanel.addRow(0, "Column to drop:", dropColCombo, true);
-        JButton executeDropBtn = new JButton("Drop column", com.intellij.icons.AllIcons.General.Warning);
-        executeDropBtn.addActionListener(e -> doDropColumn());
-        dropPanel.addRow(1, "", executeDropBtn, false);
-        JBLabel warning = new JBLabel("<html>Dropping a column permanently deletes its values.<br>You will be asked to confirm.</html>");
-        warning.setForeground(JBColor.namedColor("Label.infoForeground", JBColor.GRAY));
-        dropPanel.addRow(2, "", warning, true);
-
-        ConnectionFormPanel renamePanel = alterForm();
-        renameTableField = DatabaseInputs.textField(tableMetadata.getName());
-        renamePanel.addRow(0, "New table name:", renameTableField, true);
-        JButton executeRenameBtn = new JButton("Rename table");
-        executeRenameBtn.addActionListener(e -> doRenameTable());
-        renamePanel.addRow(1, "", executeRenameBtn, false);
-
-        // Content Cards
-        CardLayout cardLayout = new CardLayout();
-        JPanel contentCards = new JPanel(cardLayout);
-        contentCards.setBorder(JBUI.Borders.empty(8));
-
-        contentCards.add(addPanel, "ADD");
-        contentCards.add(renameColPanel, "RENAME_COL");
-        contentCards.add(modifyColPanel, "MODIFY_COL");
-        contentCards.add(dropPanel, "DROP_COL");
-        contentCards.add(renamePanel, "RENAME_TABLE");
-
-        // Custom Horizontal Tab Bar with Scrollbar
-        JPanel tabBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-        tabBar.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
-
-        JBScrollPane tabScrollPane = new JBScrollPane(tabBar);
-        tabScrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-        tabScrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER);
-        tabScrollPane.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new JBColor(new Color(210, 210, 210), new Color(60, 63, 65))));
-        tabScrollPane.getHorizontalScrollBar().setPreferredSize(new Dimension(0, 6));
-
-        String[] tabLabels = {"Add column", "Rename column", "Modify column", "Drop column", "Rename table"};
-        String[] tabKeys = {"ADD", "RENAME_COL", "MODIFY_COL", "DROP_COL", "RENAME_TABLE"};
-        JButton[] tabButtons = new JButton[tabLabels.length];
-
-        JBColor activeFg = new JBColor(new Color(53, 116, 240), new Color(92, 155, 255));
-        JBColor normalFg = new JBColor(new Color(70, 70, 70), new Color(185, 185, 185));
-        JBColor activeBorder = new JBColor(new Color(53, 116, 240), new Color(92, 155, 255));
-
-        for (int i = 0; i < tabLabels.length; i++) {
-            final int tabIdx = i;
-            final String key = tabKeys[i];
-            JButton btn = new JButton(tabLabels[i]);
-            btn.setFocusable(false);
-            btn.setContentAreaFilled(false);
-            btn.setOpaque(false);
-            btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            btn.setFont(btn.getFont().deriveFont(i == 0 ? Font.BOLD : Font.PLAIN, 12.5f));
-            btn.setForeground(i == 0 ? activeFg : normalFg);
-            btn.setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createMatteBorder(0, 0, i == 0 ? 3 : 0, 0, activeBorder),
-                    BorderFactory.createEmptyBorder(6, 12, i == 0 ? 4 : 7, 12)
-            ));
-
-            btn.addActionListener(e -> {
-                cardLayout.show(contentCards, key);
-                for (int j = 0; j < tabButtons.length; j++) {
-                    boolean isSel = (j == tabIdx);
-                    tabButtons[j].setFont(tabButtons[j].getFont().deriveFont(isSel ? Font.BOLD : Font.PLAIN, 12.5f));
-                    tabButtons[j].setForeground(isSel ? activeFg : normalFg);
-                    tabButtons[j].setBorder(BorderFactory.createCompoundBorder(
-                            BorderFactory.createMatteBorder(0, 0, isSel ? 3 : 0, 0, activeBorder),
-                            BorderFactory.createEmptyBorder(6, 12, isSel ? 4 : 7, 12)
-                    ));
-                }
-            });
-
-            tabButtons[i] = btn;
-            tabBar.add(btn);
-        }
-
-        root.add(tabScrollPane, BorderLayout.NORTH);
-        root.add(contentCards, BorderLayout.CENTER);
-        operationStatus.getAccessibleContext().setAccessibleName("Alter table status");
-        root.add(operationStatus, BorderLayout.SOUTH);
-        return root;
     }
-
-    private static ConnectionFormPanel alterForm() {
-        return new ConnectionFormPanel("Column name:", "Type:", "Size / length:", "Nullable:",
-                "Default value:", "Column:", "New column name:", "Column to drop:", "New table name:");
-    }
-
-    private void populateModifyFields(String colName) {
-        if (colName == null) return;
-        ColumnMetadata cm = tableMetadata.getColumn(colName);
-        if (cm != null) {
-            String typeName = cm.getTypeName();
-            if (typeName != null) {
-                modifyColTypeCombo.setSelectedItem(typeName);
+    private void loadColumns() {
+        if (applying || loading || isDisposed()) return;
+        cancelPreview(); loading = true; editor.setBusy(true);
+        editor.status("Loading columns…", DatabaseUi.Tone.BUSY);
+        DatabaseTaskScope scope = DatabaseTaskService.getInstance().newScope(); previewScope = scope;
+        scope.submit(() -> {
+            try (var read = scope.openRead(config)) {
+                List<ColumnMetadata> columns = MetadataService.getInstance().getColumns(read.connection(), config, databaseName, tableMetadata.getName());
+                SwingUtilities.invokeLater(() -> {
+                    if (isDisposed()) return;
+                    tableMetadata.setColumns(columns); loading = false; editor.setBusy(false); editor.replaceColumns(columns, null);
+                });
+            } catch (Exception error) {
+                SwingUtilities.invokeLater(() -> {
+                    if (isDisposed()) return;
+                    loading = false; editor.setBusy(false);
+                    editor.status("Could not load columns · " + message(error), DatabaseUi.Tone.ERROR);
+                });
             }
-            modifyColSizeField.setText(cm.getColumnSize() > 0 ? String.valueOf(cm.getColumnSize()) : "255");
-            modifyColNullableCheck.setSelected(cm.isNullable());
-            modifyColDefaultField.setText(cm.getDefaultValue() != null ? cm.getDefaultValue() : "");
-        }
+        });
     }
-
-    private void refreshDropdowns() {
-        String[] colNames = tableMetadata.getColumns().stream().map(ColumnMetadata::getName).toArray(String[]::new);
-        if (renameColCombo != null) {
-            renameColCombo.setModel(new DefaultComboBoxModel<>(colNames));
-            if (colNames.length > 0) {
-                renameColCombo.setSelectedIndex(0);
-                renameColNewNameField.setText(colNames[0]);
-            }
-        }
-        if (modifyColCombo != null) {
-            modifyColCombo.setModel(new DefaultComboBoxModel<>(colNames));
-            if (colNames.length > 0) {
-                modifyColCombo.setSelectedIndex(0);
-                populateModifyFields(colNames[0]);
-            }
-        }
-        if (dropColCombo != null) {
-            dropColCombo.setModel(new DefaultComboBoxModel<>(colNames));
-        }
-    }
-
-    @FunctionalInterface private interface AlterOperation { void execute(Connection connection) throws Exception; }
-    private void setBusy(boolean value) {
-        busy=value; setOKActionEnabled(!value);
-        if (value) disableControls(centerPanel);
-        else { enabledStates.forEach(Component::setEnabled); enabledStates.clear(); }
-    }
-    private void disableControls(Component component) {
-        if (component == operationStatus) return;
-        enabledStates.put(component,component.isEnabled()); component.setEnabled(false);
-        if (component instanceof Container container) for(Component child:container.getComponents()) disableControls(child);
-    }
-    private void runAlter(AlterOperation operation, String metadataName, String success) {
-        if (busy || isDisposed()) return;
-        setBusy(true);
-        com.segfault03.ideadb.ui.DatabaseUi.status(operationStatus,
-                success == null ? "Loading columns…" : "Updating table…", com.segfault03.ideadb.ui.DatabaseUi.Tone.BUSY);
-        operationTask = com.segfault03.ideadb.service.DatabaseTaskService.getInstance().submit(() -> {
-            if (isDisposed()) return;
+    private void apply() {
+        AlterTablePanel.Prepared prepared = editor.prepared();
+        if (applying || loading || prepared == null || isDisposed()) return;
+        TableAlterationBatch request = prepared.batch();
+        List<String> drops = request.changes().stream().filter(c -> c.kind() == TableAlteration.Kind.DROP)
+                .map(c -> c.original().getName()).toList();
+        if (!drops.isEmpty() && !DatabaseUi.confirmDestructive(project, drops.size() == 1 ? "Drop column" : "Drop columns",
+                "Apply " + request.changes().size() + " pending change(s) to '" + tableMetadata.getName() + "'?\n\n"
+                        + "Drop: " + String.join(", ", drops) + "\nThese columns and all their values will be permanently deleted.",
+                request.changes().size() == 1 ? "Drop column" : "Apply all changes")) return;
+        cancelPreview(); applying = true; editor.setBusy(true); editor.status("Updating table…", DatabaseUi.Tone.BUSY);
+        mutationScope = DatabaseTaskService.getInstance().newScope();
+        mutationScope.submitMutation(() -> {
             try (Connection conn = DatabaseConnectionManager.getInstance().openConnection(config)) {
-                activeConnection=conn;
-                if (isDisposed()) return;
-                operation.execute(conn);
-                List<ColumnMetadata> columns = MetadataService.getInstance().getColumns(conn,config,databaseName,metadataName);
+                DdlService.getInstance().applyAlterBatch(conn, config, databaseName, request, prepared.statements());
+                String name = request.targetTableName();
+                List<ColumnMetadata> columns;
+                try { columns = MetadataService.getInstance().getColumns(conn, config, databaseName, name); }
+                catch (Exception refresh) { columns = List.of(); }
+                finish(name, columns);
+            } catch (Exception error) {
+                // H2/HSQLDB/MySQL can commit DDL incrementally. Never replay completed steps blindly.
+                List<TableAlteration> completed = error instanceof DdlService.BatchFailure failure ? failure.completed() : List.of();
+                List<ColumnMetadata> columns = null;
+                try (Connection conn = DatabaseConnectionManager.getInstance().openConnection(config)) {
+                    if (!request.targetTableName().equals(request.tableName())) {
+                        List<TableMetadata> tables = MetadataService.getInstance().getTables(conn, config, databaseName);
+                        boolean oldExists = tables.stream().anyMatch(t -> t.getName().equals(request.tableName()));
+                        boolean renamedExists = tables.stream().anyMatch(t -> t.getName().equals(request.targetTableName()));
+                        if (!oldExists && renamedExists) {
+                            finish(request.targetTableName(), MetadataService.getInstance().getColumns(conn, config, databaseName, request.targetTableName()));
+                            return;
+                        }
+                    }
+                    columns = MetadataService.getInstance().getColumns(conn, config, databaseName, tableMetadata.getName());
+                } catch (Exception refresh) { error.addSuppressed(refresh); }
+                List<ColumnMetadata> loaded = columns;
                 SwingUtilities.invokeLater(() -> {
                     if (isDisposed()) return;
-                    tableMetadata.setColumns(columns); setBusy(false); refreshDropdowns();
-                    com.segfault03.ideadb.ui.DatabaseUi.status(operationStatus, "Table metadata loaded", com.segfault03.ideadb.ui.DatabaseUi.Tone.NORMAL);
-                    if (success != null) { Messages.showInfoMessage(project,success,"Table updated"); close(OK_EXIT_CODE); }
+                    applying = false; editor.setBusy(false);
+                    if (loaded != null) {
+                        tableMetadata.setColumns(loaded);
+                        editor.recoverBatch(loaded, completed, request.tableName());
+                    } else editor.requireReload();
+                    editor.status("Batch stopped · Review remaining changes", DatabaseUi.Tone.ERROR);
+                    Messages.showErrorDialog(project, message(error) + "\n\n"
+                            + (loaded == null ? "Metadata could not be refreshed. Reload columns before retrying."
+                            : "The current schema has been refreshed. Completed changes are no longer pending. Review the remaining batch before retrying."), "Database Operation Failed");
                 });
-            } catch(Exception error) {
-                SwingUtilities.invokeLater(() -> {
-                    if (isDisposed()) return;
-                    setBusy(false);
-                    com.segfault03.ideadb.ui.DatabaseUi.status(operationStatus, "Table operation failed · See error details", com.segfault03.ideadb.ui.DatabaseUi.Tone.ERROR);
-                    Messages.showErrorDialog(project,error.getMessage(),"Database Operation Failed");
-                });
-            } finally { activeConnection=null; }
+            }
         });
     }
-    @Override protected void dispose() {
-        if (operationTask != null) operationTask.cancel(true);
-        Connection connection=activeConnection;
-        if (connection != null) com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(() -> {
-            try { connection.close(); } catch(java.sql.SQLException ignored) { }
+    private void finish(String name, List<ColumnMetadata> loaded) {
+        SwingUtilities.invokeLater(() -> {
+            if (isDisposed()) return;
+            tableMetadata.setColumns(loaded);
+            if (!name.equals(tableMetadata.getName()) && project != null && !project.isDisposed()) {
+                TableMetadata renamed = new TableMetadata(tableMetadata.getCatalog(), tableMetadata.getSchema(), name, tableMetadata.getType());
+                renamed.setColumns(loaded);
+                project.getMessageBus().syncPublisher(TableRenameListener.TOPIC).tableRenamed(config, databaseName, tableMetadata.getName(), renamed);
+            }
+            close(OK_EXIT_CODE);
         });
+    }
+    private static String message(Exception error) { return error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage(); }
+    @Override protected void dispose() {
+        cancelPreview();
+        if (mutationScope != null) {
+            DatabaseTaskScope old = mutationScope; old.cancelPending();
+            ApplicationManager.getApplication().executeOnPooledThread(old::close);
+        }
         super.dispose();
     }
-
-    private void doAddColumn() {
-        if (busy || isDisposed()) return;
-        String colName = addColNameField.getText().trim();
-        if (colName.isEmpty()) {
-            Messages.showErrorDialog(project, "Column name cannot be empty", "Validation Error");
-            return;
-        }
-
-        int size = 0;
-        try {
-            size = Integer.parseInt(addColSizeField.getText().trim());
-        } catch (Exception ignored) {
-        }
-
-        ColumnDefinition col = new ColumnDefinition(colName, (String) addColTypeCombo.getSelectedItem(), size,
-                addColNullableCheck.isSelected(), false, false, addColDefaultField.getText().trim());
-
-        runAlter(conn -> DdlService.getInstance().alterTableAddColumn(conn, config, databaseName, tableMetadata.getName(), col), tableMetadata.getName(), "Column '" + colName + "' added successfully.");
-    }
-
-    private void doRenameColumn() {
-        if (busy || isDisposed()) return;
-        String oldCol = (String) renameColCombo.getSelectedItem();
-        String newCol = renameColNewNameField.getText().trim();
-        if (oldCol == null || newCol.isEmpty()) {
-            Messages.showErrorDialog(project, "Please enter a valid new column name.", "Validation Error");
-            return;
-        }
-        if (oldCol.equals(newCol)) {
-            Messages.showWarningDialog(project, "New column name is identical to the current column name.", "No Change");
-            return;
-        }
-
-        runAlter(conn -> DdlService.getInstance().alterTableRenameColumn(conn, config, databaseName, tableMetadata.getName(), oldCol, newCol), tableMetadata.getName(), "Column '" + oldCol + "' renamed to '" + newCol + "' successfully.");
-    }
-
-    private void doModifyColumn() {
-        if (busy || isDisposed()) return;
-        String colName = (String) modifyColCombo.getSelectedItem();
-        if (colName == null) return;
-
-        int size = 0;
-        try {
-            size = Integer.parseInt(modifyColSizeField.getText().trim());
-        } catch (Exception ignored) {
-        }
-
-        ColumnDefinition col = new ColumnDefinition(colName, (String) modifyColTypeCombo.getSelectedItem(), size,
-                modifyColNullableCheck.isSelected(), false, false, modifyColDefaultField.getText().trim());
-        ColumnMetadata original = tableMetadata.getColumn(colName);
-        if (original != null) {
-            col.setAutoIncrement(original.isAutoIncrement());
-            col.setDecimalDigits(original.getDecimalDigits());
-        }
-
-        runAlter(conn -> DdlService.getInstance().alterTableModifyColumn(conn, config, databaseName, tableMetadata.getName(), col), tableMetadata.getName(), "Column '" + colName + "' definition updated successfully.");
-    }
-
-    private void doDropColumn() {
-        if (busy || isDisposed()) return;
-        String colName = (String) dropColCombo.getSelectedItem();
-        if (colName == null) return;
-
-        if (!com.segfault03.ideadb.ui.DatabaseUi.confirmDestructive(project, "Drop column",
-                "Drop column '" + colName + "' from '" + tableMetadata.getName() + "'?\nThe column and all its values will be permanently deleted.", "Drop column")) return;
-
-        runAlter(conn -> DdlService.getInstance().alterTableDropColumn(conn, config, databaseName, tableMetadata.getName(), colName), tableMetadata.getName(), "Column '" + colName + "' dropped successfully.");
-    }
-
-    private void doRenameTable() {
-        if (busy || isDisposed()) return;
-        String newName = renameTableField.getText().trim();
-        if (newName.isEmpty() || newName.equals(tableMetadata.getName())) {
-            Messages.showErrorDialog(project, "Please enter a new table name", "Validation Error");
-            return;
-        }
-
-        runAlter(conn -> {
-            TableMetadata renamed=DdlService.getInstance().alterTableRename(conn,config,databaseName,tableMetadata.getName(),newName);
-            SwingUtilities.invokeLater(() -> {
-                if(project!=null && !project.isDisposed()) project.getMessageBus().syncPublisher(com.segfault03.ideadb.editor.TableRenameListener.TOPIC).tableRenamed(config,databaseName,tableMetadata.getName(),renamed);
-            });
-        }, newName, "Table renamed to '" + newName + "' successfully.");
-    }
-
 }

@@ -128,6 +128,14 @@ Set `LATTICE_UI_IDE_HOME` to an installed Linux IDEA directory to launch another
 
 For a faster review of connection-dialog spacing, explorer overflow, table editor/menu surfaces, auto-refresh sizing and active glyph colors, set `LATTICE_UI_STYLE_ONLY=true` (direct Gradle: `-Plattice.ui.styleOnly=true`). This still opens and edits the production UI inside the full IDE, then stops after those checks; omit it for the complete review.
 
+For the focused Column Inspector scenario, set `LATTICE_UI_ALTER_TABLE_ONLY=true`
+when calling the Linux review wrapper. Direct capture users pass
+`-Plattice.ui.review=true -Plattice.ui.alterTableOnly=true`. It owns an HSQLDB
+fixture and verifies add/modify/rename/drop/table-rename operations, SQL previews,
+validation, discard/confirmation decisions and failure recovery. Full IDE captures,
+a crop of the live dialog and runtime evidence are retained per theme. See
+[Column Inspector validation](UI_PREVIEW.md#column-inspector).
+
 Main-targeted PRs run the grouped production Swing and real-IDE scenarios as independent matrix jobs. Only embedded functional checks and plugin packaging run on every push/PR. The SDK path written by `./gradlew writeUiIdeHome` is reused for UI fixtures. Release tags run functional/package checks before signing. The newer-IDE/theme override remains available for local reviews.
 
 ```bash

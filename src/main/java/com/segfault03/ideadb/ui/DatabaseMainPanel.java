@@ -431,8 +431,9 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                     alterItem.addActionListener(e -> {
                         AlterTableDialog dlg = new AlterTableDialog(project, cfg, dbName, tm);
                         if (dlg.showAndGet()) {
-                            if(node.getParent() instanceof DefaultMutableTreeNode parent && parent.getUserObject() instanceof TreeNodeData parentData) {
-                                parentData.setLoaded(false); loadTablesForDatabaseNode(parent,parentData);
+                            DefaultMutableTreeNode databaseNode = databaseAncestor(node);
+                            if (databaseNode != null && databaseNode.getUserObject() instanceof TreeNodeData databaseData) {
+                                databaseData.setLoaded(false); loadTablesForDatabaseNode(databaseNode, databaseData);
                             }
                         }
                     });
@@ -542,6 +543,12 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 });
             }
         });
+    }
+
+    static DefaultMutableTreeNode databaseAncestor(DefaultMutableTreeNode node) {
+        for (DefaultMutableTreeNode current = node; current != null; current = (DefaultMutableTreeNode)current.getParent())
+            if (current.getUserObject() instanceof TreeNodeData data && data.getType() == TreeNodeData.NodeType.DATABASE) return current;
+        return null;
     }
 
     private void loadTablesForDatabaseNode(DefaultMutableTreeNode dbNode, TreeNodeData data) {

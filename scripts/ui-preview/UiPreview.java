@@ -193,8 +193,12 @@ public final class UiPreview {
         render(createPanel, theme + "-schema-create-table-740", 740, createPanel.getPreferredSize().height);
         TableMetadata metadata = (TableMetadata)field(table(false), "tableMetadata");
         AlterTableDialog alter = new AlterTableDialog(null, config(DatabaseType.MYSQL), "shop", metadata);
+        com.segfault03.ideadb.dialog.AlterTablePanel inspector = (com.segfault03.ideadb.dialog.AlterTablePanel)field(alter, "editor");
+        inspector.columnList().setSelectedIndex(2);
         render(alter.previewPanel(), theme + "-schema-alter-table-800", 800, alter.previewPanel().getPreferredSize().height);
-        findButton(alter.previewPanel(), "Drop column").doClick(0);
+        findButton(alter.previewPanel(), "Drop…").doClick(0);
+        inspector.showPreview(inspector.batch(), com.segfault03.ideadb.service.DdlService.getInstance()
+                .previewAlterBatch(null, config(DatabaseType.MYSQL), "shop", inspector.batch()));
         render(alter.previewPanel(), theme + "-schema-drop-column-800", 800, alter.previewPanel().getPreferredSize().height);
     }
     static void connection(String theme, String variant, int width) throws Exception {

@@ -33,19 +33,17 @@ final class HsqlDialect extends AbstractSqlDialect {
     }
 
     public void alterTableAddColumn(Connection conn, ConnectionConfig config, String dbName, String tableName, ColumnDefinition col) throws Exception {
-        StringBuilder sb = new StringBuilder();
-        sb.append("ALTER TABLE ").append(formatTable(config, dbName, tableName)).append(" ADD COLUMN ");
-        appendColumn(sb, col);
-        sb.append(";");
+        executeSql(conn, buildAddColumnSql(config, dbName, tableName, col));
+    }
 
-        executeSql(conn, sb.toString());
+    public String buildRenameColumnSql(Connection conn, ConnectionConfig config, String dbName, String tableName,
+                                       String oldColName, String newColName) throws Exception {
+        return "ALTER TABLE " + formatTable(config, dbName, tableName) + " ALTER COLUMN " + quoteIdentifier(oldColName) + " RENAME TO " + quoteIdentifier(newColName) + ";";
     }
 
     public void alterTableRenameColumn(Connection conn, ConnectionConfig config, String dbName, String tableName,
                                        String oldColName, String newColName) throws Exception {
-        String sql = "ALTER TABLE " + formatTable(config,dbName,tableName) + " ALTER COLUMN "
-                + quoteIdentifier(config,oldColName) + " RENAME TO " + quoteIdentifier(config,newColName) + ";";
-        executeSql(conn, sql);
+        executeSql(conn, buildRenameColumnSql(conn, config, dbName, tableName, oldColName, newColName));
     }
 
     public void alterTableModifyColumn(Connection conn, ConnectionConfig config, String dbName, String tableName,
@@ -55,7 +53,7 @@ final class HsqlDialect extends AbstractSqlDialect {
     }
 
     public TableMetadata alterTableRename(Connection conn, ConnectionConfig config, String dbName, String oldName, String newName) throws Exception {
-        String sql = "ALTER TABLE " + formatTable(config,dbName,oldName) + " RENAME TO " + quoteIdentifier(config,newName) + ";";
+        String sql = buildRenameTableSql(config, dbName, oldName, newName);
         executeSql(conn, sql);
         TableMetadata renamed=MetadataService.getInstance().getTables(conn,config,dbName).stream()
                 .filter(table -> table.getName().equals(newName)).findFirst().orElseThrow(() -> new java.sql.SQLException("Renamed table metadata unavailable"));
@@ -90,6 +88,36 @@ final class HsqlDialect extends AbstractSqlDialect {
         return "-- Referenced tables, sequences and user-defined types must already exist.\n" + String.join("\n",statements);
     }
 
+    public List<String> buildModifyColumnSql(Connection conn, ConnectionConfig config, String db, String table, ColumnDefinition requested) throws Exception {
+        ColumnMetadata original = MetadataService.getInstance().getColumns(conn, config, db, table).stream()
+                .filter(c -> c.getName().equals(requested.getName())).findFirst().orElseThrow();
+        return modifyStatements(config, db, table, requested, original, hsqlType(requested, original), defaultValue(requested, original));
+    }
+
+    private String defaultValue(ColumnDefinition requested, ColumnMetadata original) {
+        if (requested.getDefaultValue().isBlank()) return null;
+        return Objects.equals(requested.getDefaultValue(), original.getDefaultValue()) ? original.getDefaultValue() : formatDefault(requested);
+    }
+    private String hsqlType(ColumnDefinition requested, ColumnMetadata original) {
+        String type = requested.getType();
+        if (requested.getSize() > 0 && needsSize(type) && !type.contains("(")) type += "(" + requested.getSize() + ")";
+        if ((type.equalsIgnoreCase("DECIMAL") || type.equalsIgnoreCase("NUMERIC")) && requested.getSize() > 0)
+            type += "(" + requested.getSize() + "," + (requested.getDecimalDigits() < 0 ? original.getDecimalDigits() : requested.getDecimalDigits()) + ")";
+        return type;
+    }
+    private List<String> modifyStatements(ConnectionConfig config, String db, String table, ColumnDefinition requested,
+                                           ColumnMetadata original, String type, String defaultValue) {
+        if (original.isGenerated()) throw new IllegalArgumentException("Change a generated expression in the SQL console");
+        if (requested.isNullable() && original.isPrimaryKey()) throw new IllegalArgumentException("A primary-key column cannot allow NULL");
+        if (original.isAutoIncrement() && defaultValue != null) throw new IllegalArgumentException("An identity column cannot have a default expression");
+        String prefix = "ALTER TABLE " + formatTable(config, db, table) + " ALTER COLUMN " + quoteIdentifier(requested.getName());
+        List<String> statements = new ArrayList<>();
+        statements.add(prefix + " SET DATA TYPE " + type + ";");
+        if (!original.isAutoIncrement()) statements.add(prefix + (defaultValue == null ? " DROP DEFAULT;" : " SET DEFAULT " + defaultValue + ";"));
+        if (requested.isNullable() != original.isNullable()) statements.add(prefix + (requested.isNullable() ? " SET NULL;" : " SET NOT NULL;"));
+        return List.copyOf(statements);
+    }
+
     private void modifyHsqlColumn(Connection conn, ConnectionConfig config, String db, String table, ColumnDefinition requested) throws Exception {
         ColumnMetadata original=MetadataService.getInstance().getColumns(conn,config,db,table).stream().filter(c -> c.getName().equals(requested.getName())).findFirst().orElseThrow();
         String target=formatTable(config,db,table), column=quoteIdentifier(config,requested.getName());
@@ -99,11 +127,9 @@ final class HsqlDialect extends AbstractSqlDialect {
             }
         }
         if (requested.isNullable() && original.isPrimaryKey()) throw new java.sql.SQLException("A primary-key column cannot allow NULL");
-        String defaultValue=requested.getDefaultValue().isBlank() ? null : formatDefault(requested);
-        if (original.isAutoIncrement() && defaultValue!=null) throw new java.sql.SQLException("An identity column cannot have a default expression");
-        String type=requested.getType();
-        if (requested.getSize()>0 && needsSize(type) && !type.contains("(")) type += "(" + requested.getSize() + ")";
-        if ((type.equalsIgnoreCase("DECIMAL") || type.equalsIgnoreCase("NUMERIC")) && requested.getSize()>0) type += "(" + requested.getSize() + "," + (requested.getDecimalDigits()<0 ? original.getDecimalDigits() : requested.getDecimalDigits()) + ")";
+        String defaultValue = defaultValue(requested, original);
+        String type = hsqlType(requested, original);
+        List<String> statements = modifyStatements(config, db, table, requested, original, type, defaultValue);
         // Validate the target type and default without touching the persistent table.
         String validation="SESSION." + quoteIdentifier(config,"LATTICE_VALIDATE_" + java.util.UUID.randomUUID().toString().replace("-",""));
         executeSql(conn,"DECLARE LOCAL TEMPORARY TABLE " + validation + " (VALUE " + type + (defaultValue==null ? "" : " DEFAULT " + defaultValue) + ") ON COMMIT PRESERVE ROWS");
@@ -113,11 +139,8 @@ final class HsqlDialect extends AbstractSqlDialect {
             try(Statement statement=conn.createStatement(); ResultSet result=statement.executeQuery("SELECT * FROM " + validation)) { expectedType=result.getMetaData().getColumnType(1); }
         }
         finally { executeSql(conn,"DROP TABLE " + validation); }
-        String prefix="ALTER TABLE " + target + " ALTER COLUMN " + column;
         try {
-            executeSql(conn,prefix + " SET DATA TYPE " + type);
-            if(!original.isAutoIncrement()) executeSql(conn,prefix + (defaultValue==null ? " DROP DEFAULT" : " SET DEFAULT " + defaultValue));
-            if(requested.isNullable()!=original.isNullable()) executeSql(conn,prefix + (requested.isNullable() ? " SET NULL" : " SET NOT NULL"));
+            for (String sql : statements) executeSql(conn, sql);
             ColumnMetadata actual=MetadataService.getInstance().getColumns(conn,config,db,table).stream().filter(c -> c.getName().equals(requested.getName())).findFirst().orElseThrow();
             boolean defaultMatches = original.isAutoIncrement() || java.util.Objects.equals(defaultValue,actual.getDefaultValue())
                     || (defaultValue!=null && !defaultValue.startsWith("'") && defaultValue.equalsIgnoreCase(actual.getDefaultValue()));
@@ -138,9 +161,11 @@ final class HsqlDialect extends AbstractSqlDialect {
             sb.append(col.getType()).append(" GENERATED BY DEFAULT AS IDENTITY");
         } else {
             sb.append(col.getType());
-            if (col.getSize() > 0 && needsSize(col.getType())) {
+            if (col.getSize() > 0 && needsSize(col.getType()) && !col.getType().contains("(")) {
                 sb.append("(").append(col.getSize()).append(")");
             }
+            if (col.getSize() > 0 && (col.getType().equalsIgnoreCase("DECIMAL") || col.getType().equalsIgnoreCase("NUMERIC")))
+                sb.append("(").append(col.getSize()).append(",").append(Math.max(0, col.getDecimalDigits())).append(")");
             if (col.getDefaultValue() != null && !col.getDefaultValue().trim().isEmpty()) {
                 sb.append(" DEFAULT ").append(formatDefault(col));
             }

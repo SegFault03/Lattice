@@ -21,18 +21,27 @@ final class H2Dialect extends AbstractSqlDialect {
         executeSql(conn, "TRUNCATE TABLE " + formatTable(config, schema, table));
     }
     public void alterTableAddColumn(Connection conn, ConnectionConfig config, String schema, String table, ColumnDefinition column) throws Exception {
-        var sql = new StringBuilder("ALTER TABLE " + formatTable(config, schema, table) + " ADD COLUMN ");
-        appendColumn(sql, column); executeSql(conn, sql.toString());
+        executeSql(conn, buildAddColumnSql(config, schema, table, column));
     }
+
+    public String buildRenameColumnSql(Connection conn, ConnectionConfig config, String schema, String table, String oldName, String newName) throws Exception {
+        return "ALTER TABLE " + formatTable(config, schema, table) + " ALTER COLUMN " + quoteIdentifier(oldName) + " RENAME TO " + quoteIdentifier(newName) + ";";
+    }
+
     public void alterTableRenameColumn(Connection conn, ConnectionConfig config, String schema, String table, String oldName, String newName) throws Exception {
-        executeSql(conn, "ALTER TABLE " + formatTable(config, schema, table) + " ALTER COLUMN " + quoteIdentifier(oldName) + " RENAME TO " + quoteIdentifier(newName));
+        executeSql(conn, buildRenameColumnSql(conn, config, schema, table, oldName, newName));
+    }
+
+    public List<String> buildModifyColumnSql(Connection conn, ConnectionConfig config, String schema, String table, ColumnDefinition column) throws Exception {
+        var sql = new StringBuilder("ALTER TABLE " + formatTable(config, schema, table) + " ALTER COLUMN ");
+        appendColumn(sql, column); return List.of(sql + ";");
     }
     public void alterTableModifyColumn(Connection conn, ConnectionConfig config, String schema, String table, ColumnDefinition column) throws Exception {
-        var sql = new StringBuilder("ALTER TABLE " + formatTable(config, schema, table) + " ALTER COLUMN ");
-        appendColumn(sql, column); executeSql(conn, sql.toString());
+        for (String sql : buildModifyColumnSql(conn, config, schema, table, column)) executeSql(conn, sql);
     }
+
     public TableMetadata alterTableRename(Connection conn, ConnectionConfig config, String schema, String oldName, String newName) throws Exception {
-        executeSql(conn, "ALTER TABLE " + formatTable(config, schema, oldName) + " RENAME TO " + quoteIdentifier(newName));
+        executeSql(conn, buildRenameTableSql(config, schema, oldName, newName));
         var renamed = MetadataService.getInstance().getTables(conn, config, schema).stream().filter(t -> t.getName().equals(newName)).findFirst().orElseThrow();
         renamed.setColumns(MetadataService.getInstance().getColumns(conn, config, schema, newName));
         return renamed;

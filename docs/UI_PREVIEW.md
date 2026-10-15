@@ -55,6 +55,53 @@ Dependency paths and cleanup are described in the [script reference](SCRIPTS.md#
 
 ## UI regression coverage
 
+### Column Inspector
+
+The edit table dialog stages a batch across its column navigator and property
+inspector. Users can add several columns, change properties and names together,
+drop columns and rename the table before applying. Navigation and filtering retain
+all drafts, including invalid input. New and dropped rows remain visible; Revert
+resets a column, Restore cancels a pending drop, and removing a new draft never
+issues DDL. Closing or reloading a dirty dialog requires a discard decision.
+
+Apply is enabled only after every draft is valid and the complete batch has a SQL
+preview. Duplicate final names are checked across all drafts. Drops free names
+first, property changes precede column renames, rename chains run from their free
+end, additions follow, and table rename runs last. Rename cycles require an
+intermediate name in a separate Apply. Preview work only reads metadata off the
+EDT; the same dialect builders supply execution SQL, including preserved MySQL
+attributes and combined modify/rename definitions on MySQL 5.
+
+Before writing, Apply verifies the entire schema snapshot and reviewed SQL.
+PostgreSQL executes the batch in one transaction. MySQL, HSQLDB and H2 can commit
+DDL incrementally: execution stops at the first failure, reloads actual metadata,
+and rebases remaining drafts so successful additions, renames and drops are not
+replayed. A failed metadata refresh blocks Apply until an explicit reload.
+
+The focused real-IDE scenario uses an owned, disposable HSQLDB server. One Apply
+combines a same-column rename and modification, another column's type change,
+two additions, a drop and table rename. It verifies JDBC metadata and retained
+data, hidden invalid drafts, filtering, close/discard handling, destructive
+cancellation and animated busy feedback. A second batch deliberately fails after
+several committed operations, then fixes and retries the retained remainder.
+
+```bash
+LATTICE_UI_ALTER_TABLE_ONLY=true LATTICE_UI_REVIEW_OUTPUT=build/ui-review/alter-table ./scripts/linux/review-intellij-ui.sh ExperimentalDark ExperimentalLight
+```
+
+Direct capture/Gradle users can pass `-Plattice.ui.review=true` and
+`-Plattice.ui.alterTableOnly=true`; the capture requires the documented Maven
+fixtures. Results include `alter-inspector-full-ide.png`, the live modal crop
+`alter-inspector-dialog.png`, busy/error evidence and `runtime-evidence.txt`.
+These are actual IntelliJ desktop captures, with no replacement look and feel.
+The standalone Swing gallery also includes the inspector's normal and drop
+states. Unit tests cover editor state and invalid/stale previews; embedded
+database tests verify that preview is read-only and execution uses its statements.
+
+If the host restricts home-directory writes, point the Java preferences and
+runtime caches to writable directories using JVM `java.util.prefs.userRoot`,
+`java.util.prefs.systemRoot`, and the platform's cache settings before running.
+
 Table tab source badges are included in the full light/dark preview gallery used
 by CI. Rendering checks the standard 16 × 16 icon size, bottom-left placement and
 opaque brand colors that hide the table grid. Provider unit tests cover every

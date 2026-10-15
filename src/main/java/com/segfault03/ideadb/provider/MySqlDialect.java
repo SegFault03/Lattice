@@ -38,15 +38,10 @@ final class MySqlDialect extends AbstractSqlDialect {
     }
 
     public void alterTableAddColumn(Connection conn, ConnectionConfig config, String dbName, String tableName, ColumnDefinition col) throws Exception {
-        StringBuilder sb = new StringBuilder();
-        sb.append("ALTER TABLE ").append(formatTable(config,dbName,tableName)).append(" ADD COLUMN ");
-        appendColumn(sb, col);
-        sb.append(";");
-
-        executeSql(conn, sb.toString());
+        executeSql(conn, buildAddColumnSql(config, dbName, tableName, col));
     }
 
-    public void alterTableRenameColumn(Connection conn, ConnectionConfig config, String dbName, String tableName,
+    public String buildRenameColumnSql(Connection conn, ConnectionConfig config, String dbName, String tableName,
                                        String oldColName, String newColName) throws Exception {
         String sql;
         if (conn.getMetaData().getDatabaseMajorVersion() < 8) {
@@ -58,21 +53,45 @@ final class MySqlDialect extends AbstractSqlDialect {
             sql = "ALTER TABLE " + formatTable(config,dbName,tableName) + " RENAME COLUMN "
                     + quoteIdentifier(config,oldColName) + " TO " + quoteIdentifier(config,newColName) + ";";
         }
-        executeSql(conn, sql);
+        return sql;
     }
 
-    public void alterTableModifyColumn(Connection conn, ConnectionConfig config, String dbName, String tableName,
+    public String buildRenameColumnSql(Connection conn, ConnectionConfig config, String dbName, String tableName,
+                                       String oldName, String newName, ColumnDefinition modified) throws Exception {
+        if (modified == null || conn.getMetaData().getDatabaseMajorVersion() >= 8)
+            return buildRenameColumnSql(conn, config, dbName, tableName, oldName, newName);
+        StringBuilder definition = new StringBuilder();
+        appendModifiedMysqlColumn(conn, config, dbName, tableName, definition, modified);
+        return "ALTER TABLE " + formatTable(config, dbName, tableName) + " CHANGE COLUMN " + quoteIdentifier(oldName)
+                + " " + quoteIdentifier(newName) + definition.substring(quoteIdentifier(oldName).length()) + ";";
+    }
+
+    public void alterTableRenameColumn(Connection conn, ConnectionConfig config, String dbName, String tableName,
+                                       String oldColName, String newColName) throws Exception {
+        executeSql(conn, buildRenameColumnSql(conn, config, dbName, tableName, oldColName, newColName));
+    }
+
+    public List<String> buildModifyColumnSql(Connection conn, ConnectionConfig config, String dbName, String tableName,
                                        ColumnDefinition col) throws Exception {
         StringBuilder sb = new StringBuilder();
         sb.append("ALTER TABLE ").append(formatTable(config,dbName,tableName)).append(" MODIFY COLUMN ");
         appendModifiedMysqlColumn(conn, config, dbName, tableName, sb, col);
         sb.append(";");
 
-        executeSql(conn, sb.toString());
+        return List.of(sb.toString());
+    }
+
+    public void alterTableModifyColumn(Connection conn, ConnectionConfig config, String dbName, String tableName,
+                                       ColumnDefinition col) throws Exception {
+        for (String sql : buildModifyColumnSql(conn, config, dbName, tableName, col)) executeSql(conn, sql);
+    }
+
+    public String buildRenameTableSql(ConnectionConfig config, String dbName, String oldName, String newName) {
+        return "RENAME TABLE " + formatTable(config, dbName, oldName) + " TO " + formatTable(config, dbName, newName) + ";";
     }
 
     public TableMetadata alterTableRename(Connection conn, ConnectionConfig config, String dbName, String oldName, String newName) throws Exception {
-        String sql = "RENAME TABLE " + formatTable(config,dbName,oldName) + " TO " + formatTable(config,dbName,newName) + ";";
+        String sql = buildRenameTableSql(config, dbName, oldName, newName);
         executeSql(conn, sql);
         TableMetadata renamed=MetadataService.getInstance().getTables(conn,config,dbName).stream()
                 .filter(table -> table.getName().equalsIgnoreCase(newName)).findFirst().orElseThrow(() -> new java.sql.SQLException("Renamed table metadata unavailable"));
@@ -199,9 +218,11 @@ final class MySqlDialect extends AbstractSqlDialect {
 
     protected void appendColumn(StringBuilder sb, ColumnDefinition col) {
         sb.append(quoteIdentifier(col.getName())).append(" ").append(col.getType());
-        if (col.getSize() > 0 && needsSize(col.getType())) {
+        if (col.getSize() > 0 && needsSize(col.getType()) && !col.getType().contains("(")) {
             sb.append("(").append(col.getSize()).append(")");
         }
+        if (col.getSize() > 0 && (col.getType().equalsIgnoreCase("DECIMAL") || col.getType().equalsIgnoreCase("NUMERIC")))
+            sb.append("(").append(col.getSize()).append(",").append(Math.max(0, col.getDecimalDigits())).append(")");
         if (!col.isNullable()) {
             sb.append(" NOT NULL");
         }

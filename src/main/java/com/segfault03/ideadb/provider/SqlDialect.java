@@ -17,6 +17,15 @@ public interface SqlDialect {
     void alterTableModifyColumn(Connection conn, ConnectionConfig config, String dbName, String tableName,
                                        ColumnDefinition col) throws Exception;
     TableMetadata alterTableRename(Connection conn, ConnectionConfig config, String dbName, String oldName, String newName) throws Exception;
+    String buildAddColumnSql(ConnectionConfig config, String dbName, String table, ColumnDefinition column);
+    String buildDropColumnSql(ConnectionConfig config, String dbName, String table, String column);
+    String buildRenameColumnSql(Connection conn, ConnectionConfig config, String dbName, String table, String oldName, String newName) throws Exception;
+    default String buildRenameColumnSql(Connection conn, ConnectionConfig config, String dbName, String table,
+                                       String oldName, String newName, ColumnDefinition modified) throws Exception {
+        return buildRenameColumnSql(conn, config, dbName, table, oldName, newName);
+    }
+    List<String> buildModifyColumnSql(Connection conn, ConnectionConfig config, String dbName, String table, ColumnDefinition column) throws Exception;
+    String buildRenameTableSql(ConnectionConfig config, String dbName, String oldName, String newName);
     String buildCreateTableSql(ConnectionConfig config, String dbName, String tableName, List<ColumnDefinition> columns);
     String buildSelectSql(ConnectionConfig config, String dbName, String tableName, List<String> columns);
     String buildInsertSql(ConnectionConfig config, String dbName, String tableName, List<String> columns);

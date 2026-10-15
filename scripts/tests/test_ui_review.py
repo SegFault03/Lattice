@@ -13,6 +13,12 @@ ROOT = Path(__file__).resolve().parents[2]
 @unittest.skipUnless(shutil.which('bash') and os.name != 'nt', 'POSIX Bash required')
 class UiReviewTests(unittest.TestCase):
     def test_search_mode_routes_both_themes_and_preserves_each_report(self):
+        self.check_mode('LATTICE_UI_EXPLORER_SEARCH_ONLY', '-Plattice.ui.explorerSearchOnly=true', 'explorer-search')
+
+    def test_inspector_mode_routes_both_themes_and_preserves_each_report(self):
+        self.check_mode('LATTICE_UI_ALTER_TABLE_ONLY', '-Plattice.ui.alterTableOnly=true', 'alter-table')
+
+    def check_mode(self, variable, argument, folder):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             scripts = root / 'scripts/linux'
@@ -39,13 +45,13 @@ printf '<testsuite/>\\n' > build/test-results/uiScreenshotTest/TEST-com.segfault
             capture.chmod(0o755)
             result = subprocess.run(['bash', str(runner), 'ExperimentalDark', 'ExperimentalLight'], cwd=root,
                                     env=dict(os.environ, LATTICE_REVIEW_SUPERVISED='1',
-                                             LATTICE_UI_EXPLORER_SEARCH_ONLY='true',
-                                             LATTICE_UI_REVIEW_OUTPUT='build/ui-review/explorer-search'),
+                                             **{variable: 'true'},
+                                             LATTICE_UI_REVIEW_OUTPUT=f'build/ui-review/{folder}'),
                                     capture_output=True, text=True)
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
             args = (root / 'build/capture-args.txt').read_text().splitlines()
-            self.assertEqual(2, args.count('-Plattice.ui.explorerSearchOnly=true'))
-            output = root / 'build/ui-review/explorer-search'
+            self.assertEqual(2, args.count(argument))
+            output = root / f'build/ui-review/{folder}'
             for theme in ('ExperimentalDark', 'ExperimentalLight'):
                 self.assertIn(f'-Plattice.ui.theme={theme}', args)
                 self.assertIn(f'-Plattice.ui.output={output / theme}', args)
