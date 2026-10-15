@@ -500,7 +500,14 @@ public class ConnectionDialog extends DialogWrapper {
                     if (user.isEmpty() || user.equals(previous.defaultUser())) mysqlUserField.setText(provider.defaultUser());
                 } else {
                     String port = hsqlServerPortField.getText().trim();
-                    if (port.isEmpty() || port.equals(String.valueOf(previous.defaultPort()))) hsqlServerPortField.setText(String.valueOf(provider.defaultPort()));
+                    boolean changedForm = previous.connectionForm() != provider.connectionForm();
+                    if (changedForm || port.isEmpty() || port.equals(String.valueOf(previous.defaultPort()))) hsqlServerPortField.setText(String.valueOf(provider.defaultPort()));
+                    String user = hsqlUserField.getText().trim();
+                    if (user.isEmpty() || user.equals(previous.defaultUser()) || changedForm) hsqlUserField.setText(provider.defaultUser());
+                    if (changedForm) {
+                        var defaults = new ConnectionConfig(type, "defaults");
+                        hsqlModeCombo.setSelectedItem(defaults.getHsqlMode());
+                    }
                 }
                 displayedFormType = type;
                 rememberDriverSelection();

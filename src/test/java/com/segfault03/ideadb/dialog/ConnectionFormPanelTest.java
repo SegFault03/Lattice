@@ -39,7 +39,7 @@ class ConnectionFormPanelTest {
         root.add(header, BorderLayout.NORTH);
 
         ConnectionFormPanel hsql = new ConnectionFormPanel();
-        JComboBox<String> mode = ConnectionFormPanel.width(DatabaseInputs.comboBox(new String[]{"Remote Server (hsql://)"}), 220);
+        JComboBox<String> mode = ConnectionFormPanel.width(DatabaseInputs.comboBox(new String[]{"Remote Server"}), 220);
         hsql.addRow(0, "Mode:", mode, false);
         CardLayout cards = new CardLayout();
         JPanel subforms = new VisibleCardPanel(cards);

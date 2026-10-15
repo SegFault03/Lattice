@@ -33,9 +33,18 @@ The Java 8/legacy-driver matrix is documented in [compatibility](compatibility.m
 
 ## Validation and changes
 
-Run pure tests for every change. Run live suites for database behavior; check the release ZIP and Plugin Verifier for platform/dependency changes. Describe the trigger, changed behavior, validation and remaining limits in pull requests. Every branch push builds/tests on Windows, Linux and macOS; Linux also runs live functional, regression and integration suites for all three databases, Swing assertions, HSQLDB Dark/Light real-IDE reviews and the PostgreSQL real-IDE scenario. PR merge commits receive the same baseline. Only PRs targeting `staging` or `main` run database/Java 8 and three-IDE compatibility matrices. Releases require a newly created version tag whose commit is reachable from `main`.
+Run pure tests for every change. Run live suites for database behavior; check the release ZIP and Plugin Verifier for platform/dependency changes. Describe the trigger, changed behavior, validation and remaining limits in pull requests. Every branch push and PR runs functional/build/archive checks on Linux, Windows and macOS. Only PRs targeting `main` run tooling, regression/integration, UI and Java/JDBC/IDE compatibility suites. PRs to `staging` use the commit tier. Releases require a newly created version tag whose commit is reachable from `main`. See [CI test groups](CI_TESTING.md).
 
-Use `python scripts/ui-preview.py` for fast Swing previews. Linux CI and release validation run `python3 scripts/ui-preview.py --all-previews`, including the harness's action-state assertions, and retain the preview gallery. For real-IDE layout and action flows, use `./scripts/linux/review-intellij-ui.sh` on Linux/X11 or `.\scripts\windows\review-intellij-ui.ps1` on Windows; static compatibility does not establish those behaviors. Dynamic unload and project-close testing remain separate checks. Never commit passwords, connection state, user databases, generated outputs, local SDKs or native test binaries.
+Use `python scripts/ui-preview.py` for fast Swing previews. Main-targeted PR validation runs `python3 scripts/ui-preview.py --all-previews`, including the harness's action-state assertions, and retains the preview gallery. For real-IDE layout and action flows, use `./scripts/linux/review-intellij-ui.sh` on Linux/X11 or `.\scripts\windows\review-intellij-ui.ps1` on Windows; static compatibility does not establish those behaviors. Dynamic unload and project-close testing remain separate checks. Never commit passwords, connection state, user databases, generated outputs, local SDKs or native test binaries.
+
+## CI and test-automation changes
+
+Before touching a workflow or its test tasks/runners, read the
+[required CI reading and conventions](CI_TESTING.md#before-changing-ci), then the
+guides for the affected area. Follow [repository agent instructions](../AGENTS.md)
+when using an assistant. Update policy tests and affected documentation alongside
+behavior changes; report the focused validation in the PR. Do not use historical
+workflow runs as a substitute for the current documented policy.
 
 ## Dependencies and packaging
 

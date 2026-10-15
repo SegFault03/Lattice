@@ -7,7 +7,7 @@
 [![Rating](https://img.shields.io/jetbrains/plugin/r/rating/34772.svg)](https://plugins.jetbrains.com/plugin/34772)
 [![Get from JetBrains Marketplace](https://img.shields.io/badge/JetBrains%20Marketplace-Lattice-087CFA?logo=intellij-idea&logoColor=white)](https://plugins.jetbrains.com/plugin/34772)
 
-Lattice is a database management plugin for IntelliJ IDEA. Connect to MySQL, HSQLDB or PostgreSQL, browse schemas, run SQL, edit table data, design tables and export results from your IDE.
+Lattice is a database management plugin for IntelliJ IDEA. Connect to MySQL, HSQLDB, PostgreSQL or H2, browse schemas, run SQL, edit table data, design tables and export results from your IDE.
 
 Built with help from **Gemini 3.8**, **GPT-6 Luna** and **GPT-6.1 Sol**.
 
@@ -65,9 +65,10 @@ IntelliJ IDEA **2025.1 or later**, Community or Ultimate/unified editions, using
 |---|---|
 | MySQL | 5.5.62, 5.6.51, 5.7.44 and 8.4.2 |
 | HSQLDB | 2.2.9 through 2.7.4; file, memory and server modes |
+| H2 | 2.1.214, 2.2.224 and 2.3.232; memory/file and TCP matrix, plus bundled-driver TLS workflows |
 | PostgreSQL | 8.4 through 18; select a Java 8 compatible pgJDBC (42.7.3 or 42.2.27 for servers older than 9.1) |
 
-Choose a JDBC driver compatible with your server. HSQLDB requires a matching server/file format; some releases offer a `-jdk8` classifier. Java 8 support applies to JDBC drivers and the HSQLDB server runtime; MySQL and PostgreSQL are native servers. The plugin requires Java 21. See the [compatibility report](docs/compatibility.md) for tested combinations and limits.
+Choose a JDBC driver compatible with your server. HSQLDB requires a matching server/file format; some releases offer a `-jdk8` classifier. Java 8 coverage applies to matrix-selected drivers and runtimes; H2 2.3 requires Java 11+. MySQL and PostgreSQL are native servers. The plugin requires Java 21. See the [compatibility report](docs/compatibility.md) for tested combinations and limits.
 
 ## Install and connect
 
@@ -82,13 +83,15 @@ Choose a JDBC driver compatible with your server. HSQLDB requires a matching ser
 3. Select the ZIP and restart if prompted.
 4. Open the **Lattice** tool window and add a data source.
 
-Select MySQL, HSQLDB or PostgreSQL, enter connection details, and choose a driver:
+Select MySQL, HSQLDB, PostgreSQL or H2, enter connection details, and choose a driver:
 
-- **Bundled driver**: the plugin includes Connector/J 26.7.0, HSQLDB 2.7.4 and pgJDBC 42.7.14, plus every version you have downloaded. Pick one from the list to reuse it without downloading again.
+- **Bundled driver**: the plugin includes Connector/J 26.7.0, HSQLDB 2.7.4, pgJDBC 42.7.14 and H2 2.3.232, plus every version you have downloaded. Pick one from the list to reuse it without downloading again.
 - **Download a version**: choose or enter a version and click **Download**. Downloads are explicit and checksum-verified, and a release is fetched at most once. Afterwards it appears in the bundled list.
 - **Local JAR**: select an existing JDBC driver.
 
 **Test Connection** reports the server product/version after authentication and the driver's version. Failed authentication or negotiation can prevent detection. Downloaded drivers are kept in the IDE system cache and are reused across restarts.
+
+For H2, select Memory for a named database that lasts until its last connection closes, File for a persistent database path, or Server for TCP (default port 9092). File mode accepts the database base path or an existing `.mv.db` file. The bundled driver is H2 2.3.232 (Java 11+ bytecode, tested on Java 21); H2 2.1.214 and 2.2.224 also pass Java 8 probes. Custom URLs preserve options such as `IFEXISTS` and SSL settings. Service workflows also run in H2 MySQL/PostgreSQL compatibility modes; this does not establish complete SQL emulation. H2 1.x file migration is not validated. H2 DDL can commit an open transaction, so finish console transactions before schema changes.
 
 Generated MySQL URLs currently disable TLS and use UTC for the driver/server session. For remote or TLS-required servers, use a custom JDBC URL with your required security options. Custom URLs retain your options.
 
@@ -143,13 +146,20 @@ python scripts/one-shot-test.py
 
 The default run builds and tests the plugin, checks the ZIP, runs live database functional tests (including PostgreSQL on Linux), verifies IntelliJ 2025.1–2025.3, and exercises the complete JDBC/Java 8 matrix. It does not render screenshots; use `python scripts/ui-preview.py` for standalone Swing previews or `./scripts/linux/review-intellij-ui.sh` on Linux/X11 and `.\scripts\windows\review-intellij-ui.ps1` on Windows for real-IDE UI flows.
 
-Use `--skip-compatibility` for the build and live functional checks, `--compatibility-only` for the IDE and JDBC matrices, or `--database-compatibility-only` for just the JDBC matrix when Plugin Verifier runs separately. Actions uses the isolated compatibility modes only for PRs targeting `staging` or `main`; routine checks use the Gradle cache.
+Use `--skip-compatibility` for the build and live functional checks, `--compatibility-only` for the IDE and JDBC matrices, or `--database-compatibility-only` for just the JDBC matrix when Plugin Verifier runs separately. Actions uses the isolated compatibility modes only for PRs targeting `main`; routine checks use the Gradle cache.
 
 The runner uses temporary Gradle, verifier and JDBC caches. It uses an installed JDK 21 or downloads one, and downloads a temporary Java 8 runtime when needed. Network access for missing dependencies and at least 10 GiB of download space are required; Linux fixtures also require Docker.
 
 Ports 3306 and 9001 are used by the base functional checks, 3306 by the database matrix, and 19020–19029 by Plugin Verifier. A failure exits nonzero, preserves command logs and a failure summary in `build/one-shot-test/`, and removes owned tools and caches by default. Use `--download-dir`, `--binaries-dir`, explicit binary paths and `--no-cleanup` for reusable local assets. Every Python CLI has a matching PowerShell launcher under `scripts/windows/`; see [Windows commands and options](docs/WINDOWS_SCRIPTS.md) and [dependency options](docs/SCRIPTS.md#binary-paths-downloads-and-cleanup).
 
 Use `--java-home` to select a full JDK 21 explicitly. For a shorter check against disposable MySQL 8.4/HSQLDB fixtures, see [the functional test guide](docs/CONTRIBUTING.md). The lower-level `scripts/test.py` runner remains available for focused build and fixture tests.
+
+### H2 end-to-end checks
+
+On Linux with JDK 21, Xvfb and a window manager, run `python scripts/h2-test.py` for
+functional/regression, owned TCP/TLS, packaging, driver/runtime compatibility and
+full dark/light real-IDE UI tests. See [H2 validation](docs/H2_TESTING.md) for
+focused commands, prerequisites and report paths.
 
 ## Project layout
 
@@ -167,9 +177,9 @@ Legacy workstation helpers are preserved outside the repository; private notes r
 
 ## Releases and support
 
-Every branch push runs cross-platform build/unit checks and Linux live functional, regression, integration and real-IDE UI checks (HSQLDB and PostgreSQL). PR merge commits receive these checks too. Database/Java 8 and IntelliJ 2025.1–2025.3 compatibility matrices run only for PRs targeting `staging` or `main`.
+Every branch push and PR runs embedded functional checks and plugin build/archive validation on Linux, Windows and macOS. PRs targeting `main` additionally run grouped tooling, regression/integration, production Swing and real-IDE UI, JDBC/Java and IntelliJ 2025.1–2025.3 compatibility checks. PRs targeting `staging` run the commit tier. See [CI test groups](docs/CI_TESTING.md) for scope and commands.
 
-A new tag such as `v0.0.2-alpha` triggers the [release workflow](.github/workflows/release.yml) only after its commit is verified as reachable from `main`. Tags have no branch of their own; a tag on an unmerged feature commit is rejected before any build, signing or publication job. The tag pipeline runs release build/live/UI checks, ZIP validation, signing and signature verification, then publishes a GitHub Release and submits the same signed ZIP to JetBrains Marketplace. Compatibility matrices are confined to PRs. GitHub Releases include patch notes, commit history, checksums and corresponding MySQL sources. Prereleases are not designated latest; Marketplace submissions use the public Stable channel and become available after JetBrains approval. There is no manual release trigger; use the local dry-run commands in [Releasing](docs/RELEASING.md).
+A new tag such as `v0.0.2-alpha` triggers the [release workflow](.github/workflows/release.yml) only after its commit is verified as reachable from `main`. Tags have no branch of their own; a tag on an unmerged feature commit is rejected before any build, signing or publication job. The tag pipeline runs release functional/build checks, ZIP validation, signing and signature verification, then publishes a GitHub Release and submits the same signed ZIP to JetBrains Marketplace. Compatibility matrices are confined to PRs. GitHub Releases include patch notes, commit history, checksums and corresponding MySQL sources. Prereleases are not designated latest; Marketplace submissions use the public Stable channel and become available after JetBrains approval. There is no manual release trigger; use the local dry-run commands in [Releasing](docs/RELEASING.md).
 
 See [CHANGELOG](docs/CHANGELOG.md), [RELEASING](docs/RELEASING.md), [Marketplace publishing](docs/MARKETPLACE.md), [issue reporting](docs/ISSUE.md) and [security reporting](docs/SECURITY.md).
 
@@ -177,7 +187,7 @@ See [CHANGELOG](docs/CHANGELOG.md), [RELEASING](docs/RELEASING.md), [Marketplace
 
 Planned work includes:
 
-1. Support for more relational databases, including H2.
+1. Broader database compatibility coverage and support for more relational databases.
 2. More SQL and schema actions, including generating POJOs, DTOs and JavaBeans from tables and query results.
 3. SQL syntax highlighting and inline suggestions informed by connected database schemas, subject to feasibility within the IntelliJ Platform.
 4. Relationship graphs and dependency trees to explore how tables connect through foreign keys.

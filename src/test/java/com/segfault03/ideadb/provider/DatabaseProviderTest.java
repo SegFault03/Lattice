@@ -13,6 +13,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@org.junit.jupiter.api.Tag("functional")
 class DatabaseProviderTest {
     @Test void everyPersistedTypeHasAnIndependentCompleteProvider() {
         for (DatabaseType type : DatabaseType.values()) {

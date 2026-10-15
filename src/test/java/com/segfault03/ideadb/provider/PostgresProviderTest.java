@@ -7,6 +7,7 @@ import java.sql.Types;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
+@org.junit.jupiter.api.Tag("functional")
 class PostgresProviderTest {
     private final DatabaseProvider provider = DatabaseProviders.get(DatabaseType.POSTGRESQL);
     public interface BaseColumnMetadata extends java.sql.ResultSetMetaData {

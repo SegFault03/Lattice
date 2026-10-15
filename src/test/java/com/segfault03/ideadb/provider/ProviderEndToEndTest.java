@@ -12,7 +12,13 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** The same production-service flow runs against embedded and real server providers. */
+@org.junit.jupiter.api.Tag("functional")
 public class ProviderEndToEndTest {
+    @Test void embeddedH2Workflow() throws Exception {
+        var config = new ConnectionConfig(DatabaseType.H2, "H2 embedded contract");
+        config.setDatabaseName("provider_" + UUID.randomUUID());
+        workflow(config);
+    }
     @Test void embeddedHsqlWorkflow() throws Exception {
         var config = new ConnectionConfig(DatabaseType.HSQLDB, "embedded contract");
         config.setCustomUrl("jdbc:hsqldb:mem:provider_" + UUID.randomUUID() + ";shutdown=true");
@@ -36,7 +42,7 @@ public class ProviderEndToEndTest {
         workflow(config);
     }
 
-    /** The same contract runs against embedded/server HSQLDB, MySQL and PostgreSQL. */
+    /** The same contract runs against embedded/server H2, HSQLDB, MySQL and PostgreSQL. */
     public static void verifyKeyMetadata(Connection connection, ConnectionConfig config, String namespace) throws Exception {
         var provider = DatabaseProviders.get(config.getType());
         provider.selectNamespace(connection, namespace);
@@ -73,12 +79,26 @@ public class ProviderEndToEndTest {
                                     + tenant + " AND C." + parentId + " = P." + id);
                     assertFalse(result.hasError(), result.getError());
                     assertEquals(1, result.getRows().size());
-                    assertEquals(Set.of(0, 2, 3), result.getPrimaryKeyColumns());
-                    assertEquals(Set.of(0, 1), result.getForeignKeyColumns());
+                    // H2 deliberately reports aliases as column names and no table name in
+                    // PostgreSQL mode. Unknown origins must never invent a key badge.
+                    boolean hiddenAliasOrigins = false;
+                    if (config.getType() == DatabaseType.H2) {
+                        try (var settings = connection.createStatement(); var mode = settings.executeQuery(
+                                "SELECT SETTING_VALUE FROM INFORMATION_SCHEMA.SETTINGS WHERE SETTING_NAME='MODE'")) {
+                            hiddenAliasOrigins = mode.next() && mode.getString(1).equalsIgnoreCase("PostgreSQL");
+                        }
+                    }
+                    assertEquals(hiddenAliasOrigins ? Set.of() : Set.of(0, 2, 3), result.getPrimaryKeyColumns());
+                    assertEquals(hiddenAliasOrigins ? Set.of() : Set.of(0, 1), result.getForeignKeyColumns());
                     var model = new ReadOnlyResultModel();
                     model.setResult(result);
-                    assertTrue(model.isPrimaryKeyColumn(0) && model.isForeignKeyColumn(0));
-                    assertTrue(model.isForeignKeyColumn(1));
+                    assertEquals(!hiddenAliasOrigins, model.isPrimaryKeyColumn(0) && model.isForeignKeyColumn(0));
+                    assertEquals(!hiddenAliasOrigins, model.isForeignKeyColumn(1));
+                    var unaliased = DataService.getInstance().executeQuery(connection, namespace,
+                            "SELECT " + tenant + ", " + parentId + ", " + detail + " FROM " + child);
+                    assertFalse(unaliased.hasError(), unaliased.getError());
+                    assertEquals(Set.of(0, 2), unaliased.getPrimaryKeyColumns());
+                    assertEquals(Set.of(0, 1), unaliased.getForeignKeyColumns());
                     assertFalse(model.isForeignKeyColumn(3), "The parent's primary key is not an imported key");
                     var plain = DataService.getInstance().executeQuery(connection, namespace,
                             "SELECT " + parentId + " + 1 AS " + dialect.quoteIdentifier("calculated") + " FROM " + child);

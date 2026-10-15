@@ -1,5 +1,11 @@
 # Signing and Marketplace publishing
 
+Before changing signing or publication automation, read the
+[CI maintenance conventions](CI_TESTING.md#before-changing-ci),
+[Releasing](RELEASING.md) and the relevant sections below. Keep workflow guards,
+credential handling, artifact validation and their tests consistent with those
+guides.
+
 ## Signing setup
 
 Tagged GitHub releases require author signing. Ordinary local builds and local dry runs remain unsigned and need no secrets. The build signs the ZIP with the pinned Marketplace ZIP Signer 0.1.24, verifies its signature, then checks its contents and computes checksums. Publication consumes that exact signed ZIP; PR compatibility jobs check the unsigned PR build before merge. Missing signing secrets or a failed signature check block publication.
@@ -44,6 +50,6 @@ Screenshots are maintained separately in Marketplace's Media section. Change not
 
 ## Public releases
 
-Create and push an annotated release tag only when the release is approved by the maintainer. A tag such as `v0.0.2-alpha` runs the full validation and signing flow, publishes GitHub assets and notes, then submits the exact same ZIP to Marketplace's public Stable channel (`channel` empty, `isHidden=false`). Alpha/RC versions remain GitHub prereleases but are deliberately available to ordinary Marketplace users after JetBrains approval. No tag or release is created by pushing preparation commits to main.
+Create and push an annotated release tag only when the release is approved by the maintainer. A tag such as `v0.0.2-alpha` runs functional/package checks and signing, publishes GitHub assets and notes, then submits the exact same ZIP to Marketplace's public Stable channel (`channel` empty, `isHidden=false`). The remaining validation suites run on the preceding main-targeted PR, as defined in [CI policy](CI_TESTING.md). Alpha/RC versions remain GitHub prereleases but are deliberately available to ordinary Marketplace users after JetBrains approval. No tag or release is created by pushing preparation commits to main.
 
 The Marketplace job requires successful GitHub publication for tag runs. A failed upload leaves the GitHub Release available and can be retried independently after checking for an existing Marketplace version. Never rerun an upload that Marketplace already accepted. Only new version tags whose commits are reachable from `main` can publish; branch pushes and manual CI checks publish nothing. See [Releasing](RELEASING.md).

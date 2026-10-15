@@ -8,15 +8,16 @@ import java.util.concurrent.CancellationException;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ExplorerMetadataSnapshotTest {
-    @Test void metadataSearchDiscoversUnexpandedSchemasTablesAndOrdinaryColumnNamesAndCanBeCancelled() throws Exception {
-        ConnectionConfig config = new ConnectionConfig(DatabaseType.HSQLDB, "Search snapshot");
-        var properties = new java.util.Properties();
-        properties.setProperty("user", "SA");
-        properties.setProperty("password", "");
-        try (var connection = new org.hsqldb.jdbc.JDBCDriver().connect(
-                "jdbc:hsqldb:mem:search_snapshot_" + System.nanoTime() + ";shutdown=true", properties)) {
+    @Test void hsqlSearchDiscoversUnexpandedMetadataAndCanBeCancelled() throws Exception { verifySnapshot(DatabaseType.HSQLDB); }
+    @Test void h2SearchDiscoversUnexpandedMetadataAndCanBeCancelled() throws Exception { verifySnapshot(DatabaseType.H2); }
+    private void verifySnapshot(DatabaseType type) throws Exception {
+        ConnectionConfig config = new ConnectionConfig(type, "Search snapshot");
+        config.setHsqlMode(com.segfault03.ideadb.model.HsqlMode.MEM);
+        config.setDatabaseName("search_snapshot_" + System.nanoTime());
+        var manager = new com.segfault03.ideadb.service.DatabaseConnectionManager();
+        try (var connection = manager.getConnection(config)) {
             try (var statement = connection.createStatement()) {
-                statement.execute("CREATE SCHEMA SEARCH_DEMO AUTHORIZATION DBA");
+                statement.execute(type == DatabaseType.H2 ? "CREATE SCHEMA SEARCH_DEMO" : "CREATE SCHEMA SEARCH_DEMO AUTHORIZATION DBA");
                 statement.execute("CREATE TABLE SEARCH_DEMO.CUSTOMERS (ID INTEGER PRIMARY KEY, CUSTOMER_NAME VARCHAR(100))");
             }
             var schemas = ExplorerMetadataSnapshot.read(connection, config, 1, () -> false);
@@ -32,6 +33,6 @@ class ExplorerMetadataSnapshotTest {
             assertTrue(columns.columnsLoaded());
             assertTrue(columns.columns().stream().anyMatch(column -> column.getName().equals("CUSTOMER_NAME") && !column.isPrimaryKey()));
             assertThrows(CancellationException.class, () -> ExplorerMetadataSnapshot.read(connection, config, 3, () -> true));
-        }
+        } finally { manager.dispose(); }
     }
 }

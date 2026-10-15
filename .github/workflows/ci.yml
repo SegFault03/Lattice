@@ -1,30 +1,31 @@
-name: Build and compatibility checks
+# Before editing, read AGENTS.md and docs/CI_TESTING.md#before-changing-ci.
+# Keep policy, suite selection, workflow tests and related guides aligned.
+name: Build and validation
 
 on:
   push:
     branches: ['**']
   pull_request:
-    # Retargeting a PR must also rerun the gates for its new base branch.
+    # Check the prospective merge, including PRs retargeted to main.
     types: [opened, synchronize, reopened, edited, ready_for_review]
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# Keep push and PR groups separate: a head push must not cancel validation of its merge commit.
 concurrency:
   group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  commit-checks:
-    # PR checkout tests the merge commit, including integration with the current base branch.
+  # Tier 1: embedded functional contracts and plugin packaging on every commit.
+  functional-build:
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, windows-2025, macos-15]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -36,81 +37,176 @@ jobs:
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
         with:
           cache-provider: enhanced
-      - name: Test development tools
-        run: python -m unittest discover -s scripts/tests -v
-      - name: Build and run unit, functional, regression and integration tests
-        if: matrix.os == 'ubuntu-24.04'
-        run: python3 scripts/test.py --live --mysql --hsqldb --postgres --build
-      - name: Build and run unit tests
-        if: matrix.os != 'ubuntu-24.04'
-        run: python scripts/test.py --build
-      - name: Validate packaged plugin, drivers, notices and bytecode
+      - name: Run functional tests and build plugin
+        run: python scripts/test.py --functional-only --build
+      - name: Validate plugin archive
         shell: bash
         run: |
           version="$(sed -n 's/^pluginVersion=//p' gradle.properties | tr -d '\r')"
           python scripts/check-release-archive.py "build/distributions/Lattice-$version.zip" --version "$version"
-      - name: Validate production Swing previews and action states
-        id: swing_previews
-        if: github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main') && matrix.os == 'ubuntu-24.04'
-        run: python3 scripts/ui-preview.py --all-previews
-      - name: Prepare the real IDE display
-        id: ui_display
-        if: github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main') && matrix.os == 'ubuntu-24.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb xfwm4 x11-utils
-      # Each UI suite still fails the job, but one failure must not suppress the other suites' evidence.
-      - name: Run dark IDE functional and regression UI tests
-        if: ${{ !cancelled() && github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main') && matrix.os == 'ubuntu-24.04' && steps.ui_display.outcome == 'success' && steps.swing_previews.outcome == 'success' }}
-        run: ./scripts/linux/review-intellij-ui.sh ExperimentalDark
-      - name: Run light IDE styling and key-header regression tests
-        if: ${{ !cancelled() && github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main') && matrix.os == 'ubuntu-24.04' && steps.ui_display.outcome == 'success' && steps.swing_previews.outcome == 'success' }}
-        run: LATTICE_UI_STYLE_ONLY=true ./scripts/linux/review-intellij-ui.sh ExperimentalLight
-      - name: Run dark IDE explorer search regression tests
-        if: ${{ !cancelled() && github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main') && matrix.os == 'ubuntu-24.04' && steps.ui_display.outcome == 'success' && steps.swing_previews.outcome == 'success' }}
-        env:
-          LATTICE_UI_EXPLORER_SEARCH_ONLY: 'true'
-          LATTICE_UI_REVIEW_OUTPUT: build/ui-review/explorer-search
-        run: ./scripts/linux/review-intellij-ui.sh ExperimentalDark
-      - name: Run light IDE explorer search regression tests
-        if: ${{ !cancelled() && github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main') && matrix.os == 'ubuntu-24.04' && steps.ui_display.outcome == 'success' && steps.swing_previews.outcome == 'success' }}
-        env:
-          LATTICE_UI_EXPLORER_SEARCH_ONLY: 'true'
-          LATTICE_UI_REVIEW_OUTPUT: build/ui-review/explorer-search
-        run: ./scripts/linux/review-intellij-ui.sh ExperimentalLight
-      - name: Run PostgreSQL real-IDE functional and regression UI tests
-        if: ${{ !cancelled() && github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main') && matrix.os == 'ubuntu-24.04' && steps.ui_display.outcome == 'success' && steps.swing_previews.outcome == 'success' }}
-        run: |
-          ./gradlew writeUiIdeHome --no-daemon --no-configuration-cache
-          python3 scripts/postgres-ui-review.py --java-home "$JAVA_HOME" --ide-home "$(cat build/ui-ide-home.txt)" --cleanup
-      - name: Retain plugin for PR compatibility checks
-        if: github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main') && matrix.os == 'ubuntu-24.04'
+      - name: Retain exact plugin for main PR verification
+        if: github.event_name == 'pull_request' && github.base_ref == 'main' && matrix.os == 'ubuntu-24.04'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: plugin-under-test
           path: build/distributions/*.zip
           if-no-files-found: error
           retention-days: 1
-      - name: Retain test reports
+      - name: Retain functional reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: tests-${{ matrix.os }}
+          name: functional-${{ matrix.os }}
+          path: |
+            build/reports/tests/functionalTest/
+            build/test-results/functionalTest/
+          retention-days: 7
+
+  # Tier 2: the rest of validation runs only on PRs targeting main.
+  tooling-tests:
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run tooling and workflow regressions
+        run: python -m unittest discover -s scripts/tests -v
+
+  backend-tests:
+    needs: functional-build
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-provider: enhanced
+      - name: Run service model and Swing regressions
+        shell: bash
+        run: ./gradlew regressionTest --no-daemon
+      - name: Run H2 transports and packaged driver checks
+        if: matrix.os != 'ubuntu-24.04'
+        shell: bash
+        run: ./gradlew h2IntegrationTest h2FallbackDriverTest --no-daemon
+      - name: Run live database integration and all packaged drivers
+        if: matrix.os == 'ubuntu-24.04'
+        run: python3 scripts/test.py --integration-only --live --mysql --hsqldb --postgres
+      - name: Retain backend diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: backend-${{ matrix.os }}
           path: |
             build/reports/tests/
             build/test-results/
             build/fixtures/
+          retention-days: 7
+
+  ui-tests:
+    needs: functional-build
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    strategy:
+      fail-fast: false
+      # Separate jobs keep one UI failure from suppressing another suite's evidence.
+      matrix:
+        include:
+          - suite: previews
+            theme: both
+          - suite: hsqldb
+            theme: ExperimentalDark
+          - suite: styling
+            theme: ExperimentalLight
+          - suite: search
+            theme: ExperimentalDark
+          - suite: search
+            theme: ExperimentalLight
+          - suite: postgres
+            theme: ExperimentalDark
+          - suite: h2
+            theme: ExperimentalDark
+          - suite: h2
+            theme: ExperimentalLight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      LATTICE_UI_REVIEW_OUTPUT: build/ui-review/${{ matrix.suite }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-provider: enhanced
+      - name: Prepare IDE SDK
+        run: ./gradlew writeUiIdeHome --no-daemon
+      - name: Prepare real IDE display
+        if: matrix.suite != 'previews'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xfwm4 x11-utils
+      - name: Run production Swing previews and painted badge checks
+        if: matrix.suite == 'previews'
+        run: python3 scripts/ui-preview.py --all-previews --ide-home "$(cat build/ui-ide-home.txt)"
+      - name: Run HSQLDB functional UI or focused styling and search
+        if: matrix.suite == 'hsqldb' || matrix.suite == 'styling' || matrix.suite == 'search'
+        env:
+          LATTICE_UI_STYLE_ONLY: ${{ matrix.suite == 'styling' }}
+          LATTICE_UI_EXPLORER_SEARCH_ONLY: ${{ matrix.suite == 'search' }}
+          UI_THEME: ${{ matrix.theme }}
+        run: ./scripts/linux/review-intellij-ui.sh "$UI_THEME"
+      - name: Run PostgreSQL functional UI
+        if: matrix.suite == 'postgres'
+        env:
+          UI_THEME: ${{ matrix.theme }}
+        run: >-
+          python3 scripts/postgres-ui-review.py --java-home "$JAVA_HOME"
+          --ide-home "$(cat build/ui-ide-home.txt)" --output build/ui-review/postgres
+          --themes "$UI_THEME" --cleanup
+      - name: Run H2 functional UI
+        if: matrix.suite == 'h2'
+        env:
+          UI_THEME: ${{ matrix.theme }}
+        run: >-
+          python3 scripts/h2-test.py --ui-only --java-home "$JAVA_HOME"
+          --ide-home "$(cat build/ui-ide-home.txt)" --output build/ui-review/h2 --themes "$UI_THEME"
+      - name: Retain UI evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ui-${{ matrix.suite }}-${{ matrix.theme }}
+          path: |
+            build/test-results/uiScreenshotTest/
             build/ui-review/
             build/ui-preview/
-            build/ui-review-postgres/
             out/ide-tests/tests/**/log/idea.log
             out/ide-tests/tests/**/log/monitoring-thread-dumps-ide/
             out/ide-tests/tests/**/log/screenshots/
           retention-days: 7
 
   ide-compatibility:
-    needs: commit-checks
-    if: github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main') && needs.commit-checks.result == 'success'
+    needs: functional-build
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
     strategy:
       fail-fast: false
       matrix:
@@ -129,26 +225,25 @@ jobs:
         with:
           name: plugin-under-test
           path: build/distributions
-      - name: Verify the exact tested plugin
+      - name: Verify exact functional-tested plugin
         env:
           IDE_VERSION: ${{ matrix.ide }}
         run: |
           archives=(build/distributions/*.zip)
           [[ ${#archives[@]} -eq 1 && -f "${archives[0]}" ]]
-          python3 scripts/verify-plugin.py "${archives[0]}" --ide-version "$IDE_VERSION" \
-            --java-home "$JAVA_HOME" --cache "$RUNNER_TEMP/lattice-test-binaries"
-      - name: Retain verifier reports
+          python3 scripts/verify-plugin.py "${archives[0]}" --ide-version "$IDE_VERSION"             --java-home "$JAVA_HOME" --cache "$RUNNER_TEMP/lattice-test-binaries"
+      - name: Retain IDE compatibility reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: compatibility-pr-${{ matrix.ide }}
+          name: compatibility-ide-${{ matrix.ide }}
           if-no-files-found: ignore
           path: build/compatibility/verifier-ci/
           retention-days: 7
 
   database-compatibility:
-    needs: commit-checks
-    if: github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main') && needs.commit-checks.result == 'success'
+    needs: functional-build
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     steps:
@@ -159,29 +254,36 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Run JDBC and Java 8 compatibility matrices
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-provider: enhanced
+      - name: Run JDBC server and Java runtime matrices
         run: python3 scripts/one-shot-test.py --database-compatibility-only
-      - name: Retain JDBC compatibility reports
+      - name: Retain JDBC and Java reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: compatibility-pr-jdbc
+          name: compatibility-jdbc-java
           if-no-files-found: ignore
           path: |
             build/compatibility/
             build/one-shot-test/
           retention-days: 7
 
-  compatibility:
-    needs: [commit-checks, ide-compatibility, database-compatibility]
-    if: always() && github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main')
+  full-validation:
+    needs: [functional-build, tooling-tests, backend-tests, ui-tests, ide-compatibility, database-compatibility]
+    if: always() && github.event_name == 'pull_request' && github.base_ref == 'main'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Require all compatibility gates to pass
+      - name: Require every main PR suite to pass
         env:
-          BASELINE_RESULT: ${{ needs.commit-checks.result }}
-          IDE_RESULT: ${{ needs.ide-compatibility.result }}
-          JDBC_RESULT: ${{ needs.database-compatibility.result }}
+          RESULTS: ${{ toJSON(needs) }}
         run: |
-          [[ "$BASELINE_RESULT" == success && "$IDE_RESULT" == success && "$JDBC_RESULT" == success ]]
+          python3 - <<'PYCODE'
+          import json, os
+          results = json.loads(os.environ['RESULTS'])
+          failed = {name: job['result'] for name, job in results.items() if job['result'] != 'success'}
+          if failed:
+              raise SystemExit(f"Required validation did not pass: {failed}")
+          PYCODE

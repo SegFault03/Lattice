@@ -17,7 +17,7 @@ repository interfaces.
 | `DatabaseFeature` | Explicitly supported optional operations; providers advertise none by default |
 | `DatabaseNamespace` | Independent catalog and schema identifiers |
 
-MySQL, HSQLDB and PostgreSQL have separate providers, dialects and metadata adapters. Common
+MySQL, HSQLDB, PostgreSQL and H2 have separate providers, dialects and metadata adapters. Common
 SQL construction lives in `AbstractSqlDialect`; common JDBC metadata reading
 lives in `JdbcMetadataAdapter`. Engine-specific DDL, compatibility workarounds,
 metadata enrichment, streaming rules and SQL literal encoding stay in their
@@ -30,7 +30,7 @@ a mismatch before loading a driver; provider type is part of cached connection
 identity so a type change retires existing sessions; the connection dialog infers the selection
 from recognized URL prefixes.
 
-The built-in connection form choices are a generic server form and HSQLDB's
+The built-in connection form choices are a generic server form and HSQLDB/H2's
 server/file/memory form. A new server provider can use the generic form and its own
 defaults. A provider with different connection inputs needs an additional form.
 The legacy field names in the Swing dialog and HSQLDB fields in persisted settings
@@ -59,7 +59,7 @@ selection into a catalog for MySQL or schema for HSQLDB/PostgreSQL. `DatabaseNam
 both identifiers distinct when qualifying names, but an engine requiring an
 interactive catalog-and-schema hierarchy also needs corresponding explorer and
 service API changes. PostgreSQL connects to one physical database and presents
-its schemas at this namespace level. H2 is not implemented.
+its schemas at this namespace level. H2 also connects to one physical database and presents schemas at this level. Its dedicated provider supplies memory/file/TCP URLs, H2 DDL, native SCRIPT table exports and generated-column metadata. The existing persisted `hsqlMode` selector is shared by HSQLDB and H2; it does not select the SQL dialect.
 
 PostgreSQL's provider binds inferred target types for JSON/UUID/arrays, detaches
 server-specific and temporal values before connections close, opens cursor exports
@@ -96,7 +96,7 @@ introduced here.
 `DatabaseProviderTest` checks provider completeness, feature opt-in, URL validation,
 namespace quoting, driver rules, values and concurrent browser serialization.
 `ProviderEndToEndTest` runs the same production-service workflow against embedded
-HSQLDB and live MySQL/HSQLDB/PostgreSQL servers: create/browse metadata, insert/update/delete,
+HSQLDB/H2 and live MySQL/HSQLDB/PostgreSQL servers: create/browse metadata, insert/update/delete,
 rollback, pagination, SQL export/reimport, console namespace selection, table
 alterations and cleanup.
 
@@ -110,3 +110,27 @@ checks, isolated driver lifecycle checks and real IntelliJ UI review also apply.
 See [Contributing](CONTRIBUTING.md) and [UI previews](UI_PREVIEW.md) for fixture and
 IDE setup. Cross-database transactions, automatic retries after uncertain commits,
 and support for non-JDBC sources are outside the provider contract.
+
+## H2 validation scope
+
+The bundled H2 2.3.232 runs in ordinary `test`: the shared end-to-end service
+workflow covers schema/table DDL, browsing, grid mutations and rollback,
+pagination, export/reimport, console namespace selection and table alterations.
+`H2FeatureTest` covers file persistence, generated columns, identity and timestamp
+precision, native DDL replay and isolated driver disposal. URL tests cover TCP,
+SSL custom URLs, Windows paths and existing `.mv.db` paths. Driver selection
+accepts H2 2.x; older 1.x databases require an external migration.
+
+`h2IntegrationTest` runs owned TCP/TLS production workflows, failed-authentication
+and recovery checks. `H2RegressionTest` also covers typed export replay, native
+view DDL, identity state, failed batches/alterations, transaction ownership,
+cancellation races and timeouts. The compatibility matrix tests H2 2.1.214,
+2.2.224 and 2.3.232 across memory/file, all TCP driver/server pairs and MySQL/
+PostgreSQL compatibility-mode service workflows. Java 8 runs 2.1/2.2; 2.3 requires
+Java 11+ bytecode and is exercised on Java 21 with an expected Java 8 rejection.
+
+The real IntelliJ UI scenario supports an H2 TCP fixture with full dark/light
+functional checks. See [H2 validation](H2_TESTING.md) for suite boundaries,
+commands and evidence paths. H2 1.x migration, running on Java 11 itself and
+arbitrary compatibility-mode SQL remain outside this matrix. H2 DDL implicitly
+commits; schema changes are not rollback-safe console operations.

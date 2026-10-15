@@ -69,8 +69,10 @@ class IntellijUiScreenshotTest {
         val explorerSearchOnly = System.getProperty("ui.explorerSearch.only").toBoolean()
         val postgresPort = Integer.getInteger("ui.postgres.port", 0)
         val postgres = postgresPort > 0
+        val h2 = System.getProperty("ui.h2.enabled", "false").toBoolean()
+        check(!h2 || !postgres) { "Choose only one database fixture" }
         val postgresPassword = System.getProperty("ui.postgres.password", "lattice-test")
-        val peopleSql = if (postgres) "\"public\".\"LATTICE_PEOPLE\"" else "PUBLIC.LATTICE_PEOPLE"
+        val peopleSql = if (postgres) "\"public\".\"LATTICE_PEOPLE\"" else if (h2) "\"PUBLIC\".\"LATTICE_PEOPLE\"" else "PUBLIC.LATTICE_PEOPLE"
         val themeId = System.getProperty("ui.theme.id", "ExperimentalDark")
         var downloadedButtonEnabledAfterModeSwitch: Boolean? = null
         screenshotsDirectory.toFile().deleteRecursively()
@@ -162,7 +164,7 @@ class IntellijUiScreenshotTest {
         val mediumHeight = minOf(900, displayBounds.height - 80)
         val wideWidth = minOf(1900, displayBounds.width - 20)
         val wideHeight = minOf(1000, displayBounds.height - 80)
-        val jdbcFixture = if (review && !styleOnly) JdbcUiFixture(postgresPort, postgresPassword) else null
+        val jdbcFixture = if (review && !styleOnly) JdbcUiFixture(postgresPort, postgresPassword, h2) else null
         try {
         testContext.apply {
             PluginConfigurator(this).installPluginFromPath(
@@ -484,7 +486,7 @@ class IntellijUiScreenshotTest {
                 mysqlAvailableDriverCombo.selectItem("8.4.0 · DISCOVERED")
             }
 
-            if (!postgres && !System.getProperty("ui.skip.remote.downloads", "false").toBoolean()) {
+            if (!postgres && !h2 && !System.getProperty("ui.skip.remote.downloads", "false").toBoolean()) {
                 val mysqlDriverSourceCombo = mysqlDialog.x(JComboBoxUiComponent::class.java) {
                     and(
                         byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"),
@@ -603,7 +605,7 @@ class IntellijUiScreenshotTest {
             if (review) {
                 modeCombo.selectItem("Embedded File (file)")
                 captureScreen(screenshotsDirectory.resolve("hsql-file.png"))
-                modeCombo.selectItem("Remote Server (hsql://)")
+                modeCombo.selectItem("Remote Server")
                 captureScreen(screenshotsDirectory.resolve("hsql-server.png"))
             }
             modeCombo.selectItem("In-Memory (mem)")
@@ -725,6 +727,29 @@ class IntellijUiScreenshotTest {
             availableDriverCombo.selectItem("2.7.3-jdk8 · DOWNLOADED")
             assertDriverSummary(connectionDialog, "2.7.3-jdk8 · DOWNLOADED")
 
+            if (h2) {
+                connectionDialog.x { byAccessibleName("H2") }.waitFound().click()
+                availableDriverCombo.selectItem("2.3.232 · BUNDLED")
+                assertDriverSummary(connectionDialog, "2.3.232 · BUNDLED")
+                val mode = connectionDialog.x(JComboBoxUiComponent::class.java) { and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"), byAccessibleName("Mode:")) }.waitFound()
+                mode.selectItem("In-Memory (mem)")
+                val h2MemoryName = connectionDialog.x(JTextFieldUI::class.java) { and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("Database name:")) }.waitFound()
+                h2MemoryName.text = ""
+                check(!connectionDialog.x { byVisibleText("Test connection") }.waitFound().component.isEnabled()) { "H2 memory mode requires a database name" }
+                h2MemoryName.text = "lattice_h2_ui"
+                check(connectionDialog.x { byVisibleText("Test connection") }.waitFound().component.isEnabled())
+                captureScreen(screenshotsDirectory.resolve("h2-memory-form.png"))
+                mode.selectItem("Embedded File (file)")
+                captureScreen(screenshotsDirectory.resolve("h2-file-form.png"))
+                mode.selectItem("Remote Server")
+                val h2Port = connectionDialog.x(JTextFieldUI::class.java) { and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("Port:")) }.waitFound()
+                check(h2Port.text == "9092") { "H2 must use its own default TCP port, got ${h2Port.text}" }
+                h2Port.text = "0"
+                check(!connectionDialog.x { byVisibleText("Test connection") }.waitFound().component.isEnabled())
+                h2Port.text = "9092"
+                captureScreen(screenshotsDirectory.resolve("h2-server-form.png"))
+                captureScreen(screenshotsDirectory.resolve("h2-driver-selection.png"))
+            }
             if (postgres) {
                 connectionDialog.x { byAccessibleName("PostgreSQL") }.waitFound().click()
                 availableDriverCombo.selectItem("42.7.14 · BUNDLED")
@@ -739,7 +764,7 @@ class IntellijUiScreenshotTest {
                 }.waitFound().text = jdbcFixture.jdbcUrl
                 connectionDialog.x(JTextFieldUI::class.java) {
                     and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("User:"))
-                }.waitFound().text = if (postgres) "postgres" else "SA"
+                }.waitFound().text = if (h2) "sa" else if (postgres) "postgres" else "SA"
                 if (postgres) connectionDialog.x(JTextFieldUI::class.java) {
                     and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputPasswordField"), byAccessibleName("Password:"))
                 }.waitFound().text = postgresPassword
@@ -748,7 +773,7 @@ class IntellijUiScreenshotTest {
                 }
             } else connectionDialog.x { byVisibleText("Test connection") }.waitFound().click()
             waitUntil("successful database connection test") {
-                connectionDialog.hasSubtext(if (postgres) "Connected · PostgreSQL" else "Connected · HSQL Database Engine")
+                connectionDialog.hasSubtext(if (h2) "Connected · H2" else if (postgres) "Connected · PostgreSQL" else "Connected · HSQL Database Engine")
             }
             Thread.sleep(500)
             captureScreen(screenshotsDirectory.resolve("connection-tested.png"))
@@ -779,7 +804,7 @@ class IntellijUiScreenshotTest {
                 check(requireNotNull(overlay).isDisposed()) { "IDE notification overlay must be dismissed before capturing the spinner" }
                 println("Native notification overlay dismissed; explorer spinner still animates naturally")
             } else databaseTree.fixture.expandRow(2)
-            val connectionPath = arrayOf("Data Sources", if (postgres) "PostgreSQL" else "HSQLDB", "Lattice UI demo")
+            val connectionPath = arrayOf("Data Sources", if (h2) "H2" else if (postgres) "PostgreSQL" else "HSQLDB", "Lattice UI demo")
             val schemaName = if (postgres) "public" else "PUBLIC"
             val publicSchemaPath = connectionPath + schemaName
             waitUntil("connected schema in the explorer") {
@@ -800,7 +825,7 @@ class IntellijUiScreenshotTest {
             waitUntil("MySQL section alongside the live HSQLDB section") {
                 databaseTree.pathExists("Data Sources", "MySQL")
             }
-            databaseTree.fixture.expandRow(if (postgres) 4 else 2)
+            databaseTree.fixture.expandPath(connectionPath.joinToString(databaseTree.fixture.separator()))
             waitUntil("HSQLDB connection restored after adding the second source type") {
                 databaseTree.pathExists(*publicSchemaPath)
             }
@@ -810,12 +835,12 @@ class IntellijUiScreenshotTest {
                 captureScreen(screenshotsDirectory.resolve("connection-context-menu.png"))
                 frame.x { byVisibleText("Edit connection…") }.waitFound().click()
                 frame.x(DialogUiComponent::class.java) { byTitle("Edit connection") }.waitFound().also {
-                    assertDriverSummary(it, if (postgres) "42.7.14 · BUNDLED" else "2.7.3-jdk8 · DOWNLOADED")
+                    assertDriverSummary(it, if (h2) "2.3.232 · BUNDLED" else if (postgres) "42.7.14 · BUNDLED" else "2.7.3-jdk8 · DOWNLOADED")
                     captureScreen(screenshotsDirectory.resolve("edit-connection.png"))
                     it.pressButton("Cancel")
                 }
                 // The HSQL scenario exercises removal of a retained explicit driver.
-                if (!postgres) {
+                if (!postgres && !h2) {
                     val missingDriverFiles = listOf(retainedHsqlFixture,
                         mavenRepository.resolve("org/hsqldb/hsqldb/2.7.3/hsqldb-2.7.3-jdk8.jar"))
                     val backups = mutableListOf<Pair<Path, Path>>()
@@ -1288,7 +1313,7 @@ class IntellijUiScreenshotTest {
                 frame.x(DialogUiComponent::class.java) { byTitle("Export Complete") }.waitFound().pressButton("OK")
                 check(Files.readString(exportFile).contains("Ada Lovelace")) { "Real persisted-row export must contain the saved database value" }
                 captureScreen(screenshotsDirectory.resolve("table-export-complete.png"))
-                if (postgres) for (format in listOf("JSON", "SQL")) {
+                if (postgres || h2) for (format in listOf("JSON", "SQL")) {
                     tableEditor.x { byAccessibleName("Export data") }.waitFound().click()
                     frame.x { byVisibleText("All persisted rows (current filter)") }.waitFound().click()
                     fun visibleFormat(label: String) = frame.xx { byVisibleText("$label…") }.list().first {
@@ -1316,9 +1341,9 @@ class IntellijUiScreenshotTest {
                     frame.x(DialogUiComponent::class.java) { byTitle("Export Complete") }.waitFound().pressButton("OK")
                     val text = Files.readString(exported)
                     check(text.contains("Ada Lovelace")) { "$format persisted export lost its saved value" }
-                    if (format == "SQL") check(text.contains("INSERT INTO $peopleSql"))
+                    if (format == "SQL") check(text.contains("INSERT INTO $peopleSql")) { "SQL export used an unexpected target: $text" }
                     if (format == "JSON") check(text.trimStart().startsWith("["))
-                    captureScreen(screenshotsDirectory.resolve("postgresql-export-${format.lowercase()}.png"))
+                    captureScreen(screenshotsDirectory.resolve("${if (h2) "h2" else "postgresql"}-export-${format.lowercase()}.png"))
                 }
                 tableEditor.x { byAccessibleName("Export data") }.waitFound().click()
                 captureBusyState(jdbcFixture, tableEditor, "Loading CREATE TABLE statement…", "table-loading-ddl.png", screenshotsDirectory) {
@@ -1426,7 +1451,7 @@ class IntellijUiScreenshotTest {
                 check(!console.x { byAccessibleName("Clear query text") }.waitFound().component.isEnabled())
                 // Bounded real HSQLDB work also exercises cancellation with no prior results.
                 val tenValues = "(VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9))"
-                val cancellationSql = if (postgres) "SELECT pg_sleep(20)" else "SELECT COUNT(*) FROM INFORMATION_SCHEMA.SYSTEM_COLUMNS A CROSS JOIN INFORMATION_SCHEMA.SYSTEM_COLUMNS B CROSS JOIN $tenValues C(n) CROSS JOIN $tenValues D(n)"
+                val cancellationSql = if (h2) "SELECT SUM(SIN(X)) FROM SYSTEM_RANGE(1,1000000000)" else if (postgres) "SELECT pg_sleep(20)" else "SELECT COUNT(*) FROM INFORMATION_SCHEMA.SYSTEM_COLUMNS A CROSS JOIN INFORMATION_SCHEMA.SYSTEM_COLUMNS B CROSS JOIN $tenValues C(n) CROSS JOIN $tenValues D(n)"
                 withContext(OnDispatcher.EDT) { queryText.setText(cancellationSql) }
                 runQuery.click()
                 waitUntil("first SQL query running") { stopQuery.component.isEnabled() }
@@ -1478,14 +1503,14 @@ class IntellijUiScreenshotTest {
                 assertAnimatedBusy(console.x { byAccessibleName("SQL query status") }.waitFound())
                 captureScreen(screenshotsDirectory.resolve("sql-console-running.png"), settleMillis = 0)
                 val cancellationStart = System.nanoTime()
-                if (postgres) jdbcFixture.pauseResponses()
+                if (postgres || h2) jdbcFixture.pauseResponses()
                 stopQuery.click()
                 waitUntil("immediate cancellation feedback", timeoutMillis = 2000) { console.hasSubtext("Cancelling query…") }
                 println("P2 cancellation feedback after ${(System.nanoTime() - cancellationStart) / 1_000_000} ms")
                 check(!runQuery.component.isEnabled() && !stopQuery.component.isEnabled()) { "A cancelling query must block Run and repeated Stop" }
                 assertAnimatedBusy(console.x { byAccessibleName("SQL query status") }.waitFound())
                 captureScreen(screenshotsDirectory.resolve("sql-console-cancelling.png"), settleMillis = 0)
-                if (postgres) jdbcFixture.resumeResponses()
+                if (postgres || h2) jdbcFixture.resumeResponses()
                 waitUntil("SQL cancellation completes") { runQuery.component.isEnabled() }
                 assertQueryOutcome(console, cancelled = true)
                 captureScreen(screenshotsDirectory.resolve("sql-console-cancelled.png"))
@@ -1569,8 +1594,12 @@ class IntellijUiScreenshotTest {
                 appendLine("Project POM default drivers: MySQL 8.4.0, HSQLDB 2.7.2")
                 appendLine("Discovered MySQL Connector/J releases: 9.0.0, 8.4.0, 8.0.33")
                 appendLine("Discovered HSQLDB releases: 2.7.2, 2.6.1-jdk8, 2.4.1")
-                if (!postgres && !System.getProperty("ui.skip.remote.downloads", "false").toBoolean())
+                if (!postgres && !h2 && !System.getProperty("ui.skip.remote.downloads", "false").toBoolean())
                     appendLine("Driver download flow: MySQL 5.1.49 downloaded from Maven Central; progress bar displayed and download controls were disabled during transfer")
+                if (h2) {
+                    appendLine("H2 driver selection: 2.3.232 · BUNDLED; memory/file/server forms inspected")
+                    appendLine("H2 TCP fixture: production connection test, schema/table DDL, grid validation/commit/revert, CSV/JSON/SQL exports, query cancellation and session recovery verified")
+                }
                 if (postgres) {
                     appendLine("PostgreSQL driver selection: 42.7.14 · BUNDLED in the production connection dialog")
                     appendLine("Persisted exports: CSV, JSON and SQL files saved and inspected for the committed value")
@@ -1584,7 +1613,7 @@ class IntellijUiScreenshotTest {
                 appendLine("JetBrains ActionLink child bounds on Welcome screen: $jetBrainsActionLinkBounds")
                 appendLine("IDE JBR release: ${Files.readString(ideHome.resolve("jbr/release")).lineSequence().filter { it.startsWith("JAVA_VERSION=") || it.startsWith("IMPLEMENTOR=") }.joinToString(", ")}")
                 appendLine("Test worker JVM: ${System.getProperty("java.version")} (${System.getProperty("java.vendor")})")
-                appendLine("Connection flow: ${if (postgres) "PostgreSQL server $postgresPort / pgJDBC 42.7.14" else "HSQLDB in-memory server"}; live test connection succeeded")
+                appendLine("Connection flow: ${if (h2) "H2 TCP server / H2 2.3.232" else if (postgres) "PostgreSQL server $postgresPort / pgJDBC 42.7.14" else "HSQLDB in-memory server"}; live test connection succeeded")
                 appendLine("Table insert validation: empty row displayed its auto ID and nullable timestamp defaults, marked its missing required name invalid, and kept Commit disabled until the name was supplied")
                 appendLine("Table edit validation: unchanged integer stayed clean; invalid integer was highlighted and blocked Commit; restoring the original stayed clean; a valid changed integer committed and reloaded")
                 appendLine("Table flow: created LATTICE_PEOPLE through the production dialog, inserted Ada Lovelace, and edited its ID through the production data grid")
@@ -1609,17 +1638,20 @@ class IntellijUiScreenshotTest {
         check(picker.component.getLocationOnScreen().x + picker.component.width < name.component.getLocationOnScreen().x) {
             "The source picker must appear to the left of the connection form"
         }
-        for ((source, port) in listOf("PostgreSQL" to "5432", "HSQLDB" to "9001", "MySQL" to "3306")) {
+        for ((source, port) in listOf("PostgreSQL" to "5432", "H2" to "9092", "HSQLDB" to "9001", "MySQL" to "3306")) {
             val choice = dialog.x { byAccessibleName(source) }.waitFound()
             check(requireNotNull(dialog.driver.cast(choice.component, LiveSourceChoice::class).getIcon()).getIconWidth() == 24)
             choice.click()
             check(dialog.driver.cast(choice.component, LiveSourceChoice::class).isSelected())
+            if (source == "H2") dialog.x(JComboBoxUiComponent::class.java) {
+                and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"), byAccessibleName("Mode:"))
+            }.waitFound().selectItem("Remote Server")
             val field = dialog.x(JTextFieldUI::class.java) {
                 and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("Port:"))
             }.waitFound()
             check(field.text == port) { "$source must select its default port $port" }
         }
-        println("Compact left source picker: SVGs, source switching, and MySQL/HSQLDB/PostgreSQL ports verified")
+        println("Compact left source picker: SVGs, source switching, and MySQL/HSQLDB/PostgreSQL/H2 ports verified")
     }
 
     private fun verifyKeyHeaderFlow(frame: IdeaFrameUI, tree: JTreeUiComponent, peoplePath: Array<String>,

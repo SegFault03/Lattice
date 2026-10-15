@@ -15,7 +15,7 @@ class ArchiveTests(unittest.TestCase):
         memory = io.BytesIO()
         with zipfile.ZipFile(memory, "w") as plugin:
             plugin.writestr("META-INF/plugin.xml", '<idea-plugin><version>1.0.1</version><idea-version since-build="251"/></idea-plugin>')
-            for name in ("LICENSE", "THIRD_PARTY_NOTICES.md", "licenses/mysql-connector-j-26.7.0-LICENSE.txt", "licenses/hsqldb-LICENSE.txt", "licenses/postgresql-LICENSE.txt", "licenses/protobuf-LICENSE.txt"):
+            for name in ("LICENSE", "THIRD_PARTY_NOTICES.md", "licenses/mysql-connector-j-26.7.0-LICENSE.txt", "licenses/hsqldb-LICENSE.txt", "licenses/postgresql-LICENSE.txt", "licenses/h2-LICENSE.txt", "licenses/protobuf-LICENSE.txt"):
                 plugin.writestr(name, "notice")
             plugin.writestr("sample.class", b"\xca\xfe\xba\xbe\x00\x00" + major.to_bytes(2, "big"))
         with zipfile.ZipFile(path, "w") as outer:
@@ -23,6 +23,7 @@ class ArchiveTests(unittest.TestCase):
             outer.writestr("Lattice/lib/mysql-connector-j-26.7.0.jar", "driver")
             outer.writestr("Lattice/lib/hsqldb-2.7.4.jar", "driver")
             outer.writestr("Lattice/lib/postgresql-42.7.14.jar", "driver")
+            outer.writestr("Lattice/lib/h2-2.3.232.jar", "driver")
             outer.writestr("Lattice/lib/protobuf-java-4.36.2.jar", "runtime")
             if extra:
                 outer.writestr(extra, "unwanted")

@@ -13,9 +13,9 @@ The build-tool baseline is Gradle 9.8.0 through the checksum-pinned wrapper and 
 | 2025.3 Unified/Ultimate | 253.28294.334 | Compatible |
 | 2026.2.3 Ultimate | 262.10968.63 | Compatible in earlier compatibility validation |
 
-Only PRs targeting `staging` or `main` run the IntelliJ and JDBC compatibility matrices. IDE jobs verify the exact ZIP produced by the PR merge build against each of the three 2025 SDKs; the database job uses `python scripts/one-shot-test.py --database-compatibility-only` for MySQL, HSQLDB and PostgreSQL, including Java 8 probes. Branch pushes and tag releases do not run compatibility matrices. Run `python scripts/one-shot-test.py` on Linux to reproduce the complete validation locally; `--compatibility-only` runs both matrices. Ordinary builds use the checksum-pinned Gradle wrapper and downloaded Maven/IntelliJ dependencies. See the [script reference](SCRIPTS.md).
+Only PRs targeting `main` run the IntelliJ and JDBC compatibility matrices. IDE jobs verify the exact ZIP produced by the PR merge build against each of the three 2025 SDKs; the database job uses `python scripts/one-shot-test.py --database-compatibility-only` for MySQL, HSQLDB, PostgreSQL and H2, including Java 8/21 probes. Branch pushes and tag releases do not run compatibility matrices. Run `python scripts/one-shot-test.py` on Linux to reproduce the complete validation locally; `--compatibility-only` runs both matrices. Ordinary builds use the checksum-pinned Gradle wrapper and downloaded Maven/IntelliJ dependencies. See the [script reference](SCRIPTS.md).
 
-These results establish binary/API compatibility for the named builds. They do not establish every patch/future IDE release, interactive UI behavior, project-close behavior or dynamic unload. The Windows build/test path has been executed locally; hosted Linux/macOS builds are configured but await their first GitHub run.
+These results establish binary/API compatibility for the named builds. They do not establish every patch/future IDE release, interactive UI behavior, project-close behavior or dynamic unload. The Windows build/test path has been executed locally. Hosted results are reported by the workflow checks on each PR; local results do not imply that every hosted suite has run.
 
 ## Database and Java 8 matrix
 
@@ -62,3 +62,18 @@ Downloaded drivers are never pruned automatically; clearing the IDE JDBC cache r
 Test Connection reads DatabaseMetaData after authenticated connection and reports server/driver versions and elapsed time. It cannot reliably infer versions when authentication or protocol negotiation fails, and does not replace the chosen driver automatically.
 
 Legacy HSQLDB schema/SCRIPT handling and MySQL column-rename syntax were exercised by the matrix. HSQLDB multi-statement DDL is not atomic. Full CREATE reconstruction may be unavailable on older engines and is labeled partial. See [CONTRIBUTING](CONTRIBUTING.md) for portable baseline tests.
+
+## H2 integration
+
+H2 2.3.232 is bundled. The H2 matrix tests drivers/servers 2.1.214, 2.2.224 and
+2.3.232: memory/file, all nine TCP driver/server pairs, and MySQL/PostgreSQL-mode
+service workflows. Drivers 2.1.214 and 2.2.224 also run real Java 8 probes and
+servers; 2.3.232 requires Java 11+ bytecode and runs on Java 21, with a negative
+Java 8 check. A dedicated bundled-driver TLS fixture verifies certificate trust,
+production services, authentication failure redaction and recovery. Native view
+DDL replay and typed exports are included in regression flows.
+
+The complete production UI scenario supports an H2 TCP fixture in both dark and
+light themes. See [H2 validation](H2_TESTING.md) for commands and evidence paths.
+H2 1.x migration, Java 11 execution itself and full SQL compatibility-mode
+emulation are not covered.

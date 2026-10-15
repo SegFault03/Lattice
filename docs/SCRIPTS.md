@@ -4,6 +4,11 @@ Install Python 3.11+ for Python entry points; use `python3` where appropriate. P
 
 See [Running Windows scripts locally](WINDOWS_SCRIPTS.md) for every Windows command, complete options, examples and defaults.
 
+Before changing a runner used by CI, read the
+[CI maintenance conventions](CI_TESTING.md#before-changing-ci) and the relevant
+platform, command and cleanup sections of this guide. Keep runner options,
+workflow invocations, portability tests and documentation aligned.
+
 ## Binary paths, downloads and cleanup
 
 Every dependency-using Python CLI supports `--download-dir PATH`, `--cleanup` / `--no-cleanup`, `--binaries-dir PATH` and `--gradle-user-home PATH`. Supply individual paths to avoid downloads; invalid explicit paths fail with an error. Omitted dependencies are discovered in the environment/PATH or the supplied asset collection, then downloaded when needed. Python 3.11+ and PowerShell on Windows are entry-point prerequisites. The build always uses the committed Gradle wrapper, whose distribution and Maven dependencies go to the selected Gradle cache.
@@ -82,7 +87,7 @@ Owned fixtures choose free loopback ports automatically, so an existing MySQL on
 
 ## Linux and Windows one-shot validation
 
-Run `python scripts/one-shot-test.py` (or `powershell -File scripts/windows/one-shot-test.ps1`) for eight steps on Windows and nine on Linux: tooling tests, Gradle unit tests/package validation, live database and fallback-driver tests, IntelliJ 2025.1–2025.3 verification, thirteen Connector/J/server combinations across MySQL 5.5.62/5.6.51/5.7.44/8.4.2, ten HSQLDB/Java 8 combinations, and thirty-four PostgreSQL/Java 8 cases on Linux. This runner does not open an IDE; use the separate UI review entry point.
+Run `python scripts/one-shot-test.py` (or `powershell -File scripts/windows/one-shot-test.ps1`) for tooling tests, Gradle unit tests/package validation, live database and fallback-driver tests, IntelliJ 2025.1–2025.3 verification, thirteen Connector/J/server combinations across MySQL 5.5.62/5.6.51/5.7.44/8.4.2, ten HSQLDB/Java 8 combinations, the H2 driver/server/runtime matrix, and thirty-four PostgreSQL/Java 8 cases on Linux. The runner prints its step count for the selected mode and host. It does not open an IDE; use the separate UI review entry point.
 
 Windows uses portable native MySQL servers, initialized with fresh data under the run's workspace. Existing installation data and `fixture-data` are never used. Missing Windows servers come from Oracle's ZIP archives with published MD5 checksums; missing Microsoft CRT files are extracted from signature-verified redistributables into a private PATH, with a checksum-pinned portable 7-Zip extractor. No server service or system runtime is installed. Linux uses Docker; a running Docker daemon is a prerequisite. `--docker PATH` selects an explicit CLI and also opts Windows into Docker. Containers/processes owned by the run are always stopped, even with `--no-cleanup`. Downloaded Docker images are retained with `--no-cleanup`; existing images are always retained. Docker's image storage is controlled by its daemon, independently of `--download-dir`.
 
@@ -123,7 +128,7 @@ Set `LATTICE_UI_IDE_HOME` to an installed Linux IDEA directory to launch another
 
 For a faster review of connection-dialog spacing, explorer overflow, table editor/menu surfaces, auto-refresh sizing and active glyph colors, set `LATTICE_UI_STYLE_ONLY=true` (direct Gradle: `-Plattice.ui.styleOnly=true`). This still opens and edits the production UI inside the full IDE, then stops after those checks; omit it for the complete review.
 
-Linux commit CI runs the complete HSQLDB Dark-theme review, focused Light-theme review and the full PostgreSQL Dark-theme scenario on the pinned IDE. PostgreSQL CI reuses the Gradle SDK path written by `./gradlew writeUiIdeHome`, avoiding a second IDE download. Release CI retains the HSQLDB Dark/Light reviews. Java and script tests continue to run on Linux, Windows and macOS. The newer-IDE/theme override is available for local compatibility reviews.
+Main-targeted PRs run the grouped production Swing and real-IDE scenarios as independent matrix jobs. Only embedded functional checks and plugin packaging run on every push/PR. The SDK path written by `./gradlew writeUiIdeHome` is reused for UI fixtures. Release tags run functional/package checks before signing. The newer-IDE/theme override remains available for local reviews.
 
 ```bash
 LATTICE_UI_IDE_HOME=/path/to/idea-2026.2.3 ./scripts/linux/review-intellij-ui.sh ExperimentalLight ExperimentalLightWithLightHeader IntelliJ JetBrainsLightTheme "Islands Light" ExperimentalDark Darcula JetBrainsHighContrastTheme "Islands Dark" "Islands Darcula"
@@ -167,12 +172,24 @@ The root `gradlew` / `gradlew.bat` are the standard Gradle wrapper launchers. Pu
 
 ## GitHub Actions policy
 
-| Event | Commit checks | Database + IDE compatibility | Release/sign/publish |
-| --- | --- | --- | --- |
-| Push to any branch | Linux, Windows, macOS; Linux live + UI suites | No | No |
-| PR targeting `staging` or `main` | Same checks on the merge commit | All three databases/Java 8 and IDEA 2025.1–2025.3 | No |
-| PR targeting another branch | Same checks on the merge commit | No | No |
-| Newly created `v*` tag, commit reachable from `main` | Release baseline/build/live/UI checks | No | Yes |
-| Tag outside `main`, changed/deleted tag, other tag | No release work (rejected or skipped) | No | No |
+| Event | Functional/build/archive | Regression/integration/UI/tooling | JDBC/Java/IDE | Release/sign/publish |
+| --- | --- | --- | --- | --- |
+| Push to any branch | Linux, Windows, macOS | No | No | No |
+| PR targeting `main` | Same checks on merge commit | Grouped main PR suites | All four databases and IDEA 2025.1–2025.3 | No |
+| PR targeting `staging` or any other branch | Same checks on merge commit | No | No | No |
+| Manual CI run | Linux, Windows, macOS | No | No | No |
+| New `v*` tag reachable from `main` | Release functional/build checks | No | No | Yes |
+| Tag outside `main`, changed/deleted tag, other tag | No publication | No | No | No |
 
-Branch names are case-sensitive: `staging` and `main`. Tags are branch-independent Git refs; the release guard checks commit ancestry against `origin/main` before all downstream jobs. Manual CI dispatch runs baseline checks only; release dispatch and hidden Marketplace smoke uploads are disabled. Local compatibility and unsigned release dry runs remain available. Diagnostics retain the PostgreSQL UI evidence under `build/ui-review-postgres/` as well as the ordinary UI and test reports.
+[CI test groups](CI_TESTING.md) lists every suite and command. Branch names are
+case-sensitive. The release ancestry guard runs before every downstream release
+job. Manual release dispatch is disabled. Main PR UI artifacts are named by
+scenario/theme and retain native IDE logs, screenshots and JUnit reports.
+
+## H2 end-to-end validation
+
+`python scripts/h2-test.py` runs build/unit/regression, owned file/TCP/TLS,
+packaging, driver/runtime compatibility and full dark/light IntelliJ UI checks.
+Use `scripts/h2-compatibility.py` for just the version matrix and `--ui-only` for
+just the complete UI flow. See [H2 validation](H2_TESTING.md) for prerequisites,
+options, suite coverage and report paths.

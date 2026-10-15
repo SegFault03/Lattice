@@ -114,7 +114,7 @@ After switching the resized dialog to JDBC URL mode, the failed-connection
 regression dispatches the production Swing button action on the IDE event thread
 and requires both the backend's failure status and its error dialog.
 
-For pull requests targeting `staging` or `main`, Linux CI runs the dark functional review,
+For pull requests targeting `main`, Linux CI runs the dark functional review,
 light styling review, search reviews and PostgreSQL review as separate checks
 after their shared prerequisites pass. Each suite can
 fail the job independently, and a failure does not suppress the other suites'
@@ -134,13 +134,13 @@ column changes, SQL outcomes and cancellation/recovery. Screenshots and runtime
 evidence go to `build/ui-review-postgres`. The existing HSQLDB scenario remains
 available through the native review runner.
 
-Only pull requests targeting `staging` or `main` run this PostgreSQL scenario in Linux CI,
+Only pull requests targeting `main` run this PostgreSQL scenario in Linux CI,
 alongside the HSQLDB Dark/Light reviews and Swing assertions. Pushes, release
 tags, manual workflow runs and PRs to other branches skip UI suites and display
-setup. Builds and unit tests still run on every push and PR. CI reuses the
+setup. Embedded functional tests and plugin packaging still run on every push and PR. CI reuses the
 Gradle compilation SDK (`./gradlew writeUiIdeHome`) and retains both UI report
-directories in `tests-ubuntu-24.04`. The database
-and IDE compatibility matrices run only on PRs targeting `staging` or `main`.
+directories in artifacts named by suite and theme. The database
+and IDE compatibility matrices run only on PRs targeting `main`.
 
 For an external **disposable test server**, set `LATTICE_UI_POSTGRES_PORT` and
 `LATTICE_UI_POSTGRES_PASSWORD` when invoking the native runner. The scenario

@@ -165,9 +165,9 @@ def command(args):
     if os.name == "nt" and any(character in str(ROOT) for character in '\"&|<>^%!\r\n'):
         raise ValueError("Windows checkout paths must not contain shell metacharacters")
     integration_only = getattr(args, "integration_only", False)
-    tasks = [] if integration_only else ["test"]
+    tasks = [] if integration_only else ["functionalTest" if getattr(args, "functional_only", False) else "test"]
     if args.live:
-        tasks += ["integrationTest", "fallbackDriverTest"]
+        tasks += ["integrationTest", "h2IntegrationTest", "fallbackDriverTest"]
     if args.build:
         tasks += ["buildPlugin"]
     if not tasks:
@@ -193,6 +193,8 @@ def main():
     parser.add_argument("--postgres-port", type=port_number, help="PostgreSQL fixture port; default: automatic when owned, otherwise 5432")
     parser.add_argument("--mysql", action="store_true", help="Own a MySQL fixture (native 8.4.2 on Windows; Docker 8.4 on Linux/macOS)")
     parser.add_argument("--build", action="store_true", help="Also package the plugin ZIP")
+    parser.add_argument("--functional-only", action="store_true",
+                        help="Run only embedded provider functional checks, without regression, UI or server suites")
     parser.add_argument("--integration-only", action="store_true",
                         help="With --live, run only the integration and fallback-driver suites")
     parser.add_argument("--ide-home", type=Path, help="Optional local IntelliJ 2025.1 SDK; otherwise Gradle downloads it")
@@ -208,6 +210,8 @@ def main():
     parser.add_argument('--hsqldb-port', type=port_number, help='Owned fixture port (default: automatic); without --hsqldb use external port 9001')
     add_dependency_options(parser, cleanup=True)
     args = parser.parse_args()
+    if args.functional_only and (args.live or args.integration_only):
+        parser.error("--functional-only cannot be combined with --live or --integration-only")
     if (args.hsqldb or args.mysql or args.postgres) and not args.live:
         parser.error("Fixture options require --live")
     if args.integration_only and not args.live:

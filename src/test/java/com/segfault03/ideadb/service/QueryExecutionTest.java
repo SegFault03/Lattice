@@ -76,6 +76,21 @@ class QueryExecutionTest {
         execution.cancel(); assertEquals(2,calls.get(),"A completed statement must never be cancelled again");
     }
 
+    @Test void cancellationSurvivesASlowRemoteStatementStartup() throws Exception {
+        QueryExecution execution = new QueryExecution();
+        CountDownLatch serverExecuting = new CountDownLatch(1);
+        var server = Executors.newSingleThreadScheduledExecutor();
+        execution.attach(statement(() -> {
+            if (serverExecuting.getCount() == 0) execution.detach();
+        }));
+        try {
+            server.schedule(serverExecuting::countDown, 300, TimeUnit.MILLISECONDS);
+            execution.cancel();
+            assertTrue(execution.isCancellationRequested());
+            assertFalse(execution.isRunning(), "Cancellation must reach a remote statement after startup");
+        } finally { server.shutdownNow(); execution.detach(); }
+    }
+
     private static Statement statement(Runnable cancel) {
         return (Statement) Proxy.newProxyInstance(Statement.class.getClassLoader(), new Class[]{Statement.class},
                 (proxy, method, arguments) -> {

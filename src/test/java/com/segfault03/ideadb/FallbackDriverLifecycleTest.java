@@ -16,7 +16,7 @@ public final class FallbackDriverLifecycleTest {
                 var driver=registry.getDriver(type); ClassLoader owner=driver.getClass().getClassLoader();
                 if(owner==DriverRegistry.class.getClassLoader()) throw new AssertionError("Fallback classloader was not exercised");
                 var properties=new Properties(); properties.setProperty("user",type.getDefaultUser()); properties.setProperty("password",type==DatabaseType.POSTGRESQL ? System.getProperty("lattice.test.postgres.password","lattice-test") : "");
-                String url=type==DatabaseType.POSTGRESQL ? "jdbc:postgresql://localhost:"+Integer.getInteger("lattice.test.postgres.port",5432)+"/postgres" : type==DatabaseType.MYSQL ? "jdbc:mysql://localhost:"+Integer.getInteger("lattice.test.mysql.port",3306)+"/shop_db" : "jdbc:hsqldb:hsql://localhost:"+Integer.getInteger("lattice.test.hsqldb.port",9001)+"/testdb";
+                String url=type==DatabaseType.H2 ? "jdbc:h2:mem:fallback_lifecycle" : type==DatabaseType.POSTGRESQL ? "jdbc:postgresql://localhost:"+Integer.getInteger("lattice.test.postgres.port",5432)+"/postgres" : type==DatabaseType.MYSQL ? "jdbc:mysql://localhost:"+Integer.getInteger("lattice.test.mysql.port",3306)+"/shop_db" : "jdbc:hsqldb:hsql://localhost:"+Integer.getInteger("lattice.test.hsqldb.port",9001)+"/testdb";
                 if(type!=DatabaseType.POSTGRESQL || Boolean.getBoolean("lattice.test.postgres.enabled")) try(var connection=driver.connect(url,properties)) {
                     if(connection==null || connection.isClosed()) throw new AssertionError("Fallback connection failed");
                     String namespace = "FALLBACK_KEYS_" + UUID.randomUUID().toString().replace("-", "").toUpperCase(Locale.ROOT);

@@ -28,18 +28,37 @@ class PortabilityTests(unittest.TestCase):
         args = argparse.Namespace(live=True, build=True, version="1.2.3", ide_home=Path("sdk with spaces"), notes_file=None)
         command = runner.command(args)
         self.assertIn("integrationTest", command)
+        self.assertIn("h2IntegrationTest", command)
         self.assertIn("fallbackDriverTest", command)
         self.assertIn("buildPlugin", command)
         self.assertIn("-Plattice.ide.home=" + str(args.ide_home.resolve()), command)
         args.integration_only = True
         integration_command = runner.command(args)
         self.assertIn("integrationTest", integration_command)
+        self.assertIn("h2IntegrationTest", integration_command)
         self.assertIn("fallbackDriverTest", integration_command)
         self.assertNotIn("test", integration_command)
         args.integration_only = False
         args.version = "1.0.0&echo injected"
         with self.assertRaises(ValueError):
             runner.command(args)
+
+    def test_functional_commit_mode_excludes_ordinary_and_server_suites(self):
+        args = argparse.Namespace(live=False, build=True, functional_only=True, version=None,
+                                  ide_home=None, notes_file=None)
+        command = runner.command(args)
+        self.assertIn("functionalTest", command)
+        self.assertIn("buildPlugin", command)
+        self.assertNotIn("test", command)
+        self.assertNotIn("integrationTest", command)
+        self.assertNotIn("regressionTest", command)
+
+    def test_functional_mode_rejects_live_and_integration_before_provisioning(self):
+        for conflicting in ('--live', '--integration-only'):
+            with self.subTest(flag=conflicting), patch.object(sys, 'argv', ['test.py', '--functional-only', conflicting]), \
+                 patch.object(runner, 'Dependencies') as dependencies:
+                with self.assertRaises(SystemExit): runner.main()
+                dependencies.assert_not_called()
 
     def test_java_home_selects_java_21_for_gradle_and_rejects_other_versions(self):
         with tempfile.TemporaryDirectory() as directory:

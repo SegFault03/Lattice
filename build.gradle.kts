@@ -47,6 +47,7 @@ dependencies {
     }
 
     implementation("org.postgresql:postgresql:42.7.14") { exclude(group = "org.checkerframework", module = "checker-qual") }
+    implementation("com.h2database:h2:2.3.232")
     implementation("org.hsqldb:hsqldb:2.7.4")
     implementation("com.mysql:mysql-connector-j:26.7.0")
     constraints {
@@ -79,17 +80,48 @@ tasks {
     }
 }
 
+// Functional checks are the commit tier; the remaining ordinary tests form the PR regression tier.
+tasks.register<Test>("functionalTest") {
+    description = "Run embedded provider workflows and connection/driver feature contracts"
+    group = "verification"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath + sourceSets["main"].compileClasspath
+    useJUnitPlatform { includeTags("functional"); excludeTags("integration") }
+    systemProperty("junit.jupiter.extensions.autodetection.enabled", "false")
+}
+
+intellijPlatformTesting.testIde.register("regressionTest") {
+    task {
+        description = "Run service, model and Swing regressions outside the functional tier"
+        testClassesDirs = sourceSets["test"].output.classesDirs
+        classpath = sourceSets["test"].runtimeClasspath + sourceSets["main"].compileClasspath
+        useJUnitPlatform { excludeTags("functional", "integration") }
+        systemProperty("junit.jupiter.extensions.autodetection.enabled", "false")
+    }
+}
+
 // Live fixtures are opt-in; these tasks contain discoverable JUnit methods rather than main-only programs.
 tasks.register<Test>("integrationTest") {
-    description = "Run MySQL and HSQLDB functional integration suites"
+    description = "Run MySQL, HSQLDB and PostgreSQL server integration suites"
     group = "verification"
     testClassesDirs = sourceSets["test"].output.classesDirs
     // These live JDBC suites run without an IDE sandbox, but need SDK types.
     classpath = sourceSets["test"].runtimeClasspath + sourceSets["main"].compileClasspath
     useJUnitPlatform {
         includeTags("integration")
+        excludeTags("h2integration") // Owned H2 transports run once in h2IntegrationTest.
         if (!providers.environmentVariable("LATTICE_TEST_POSTGRES_ENABLED").orElse(providers.environmentVariable("LATTICE_TEST_POSTGRES_PORT").map { "true" }.orElse("false")).get().toBoolean()) excludeTags("postgres")
     }
+    systemProperty("junit.jupiter.extensions.autodetection.enabled", "false")
+    shouldRunAfter(tasks.test)
+}
+
+tasks.register<Test>("h2IntegrationTest") {
+    description = "Run owned H2 TCP/SSL functional and regression suites"
+    group = "verification"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath + sourceSets["main"].compileClasspath
+    useJUnitPlatform { includeTags("h2integration") }
     systemProperty("junit.jupiter.extensions.autodetection.enabled", "false")
     shouldRunAfter(tasks.test)
 }
@@ -103,7 +135,7 @@ tasks.processResources {
 
 val fallbackDriverJars = tasks.register<Sync>("fallbackDriverJars") {
     from(configurations.runtimeClasspath.map { files ->
-        files.filter { it.name.startsWith("mysql-connector-") || it.name.startsWith("hsqldb-") || it.name.startsWith("postgresql-") }
+        files.filter { it.name.startsWith("mysql-connector-") || it.name.startsWith("hsqldb-") || it.name.startsWith("postgresql-") || it.name.startsWith("h2-") }
     })
     into(layout.buildDirectory.dir("fallback-drivers"))
 }
@@ -145,7 +177,7 @@ tasks.register<JavaExec>("fallbackDriverTest") {
     systemProperty("lattice.test.postgres.enabled", providers.environmentVariable("LATTICE_TEST_POSTGRES_ENABLED").orElse("false").get())
     classpath = sourceSets["main"].output + sourceSets["test"].output +
         sourceSets["main"].compileClasspath.filter {
-            !it.name.startsWith("mysql-connector-") && !it.name.startsWith("hsqldb-") && !it.name.startsWith("postgresql-")
+            !it.name.startsWith("mysql-connector-") && !it.name.startsWith("hsqldb-") && !it.name.startsWith("postgresql-") && !it.name.startsWith("h2-")
         }
     // Reuse the live metadata assertions without putting JDBC drivers on the parent classpath.
     classpath += sourceSets["test"].runtimeClasspath.filter {
@@ -156,16 +188,36 @@ tasks.register<JavaExec>("fallbackDriverTest") {
     args(layout.buildDirectory.dir("fallback-drivers").get().asFile.absolutePath)
 }
 
+tasks.register<JavaExec>("h2FallbackDriverTest") {
+    description = "Exercise packaged H2 fallback loading without JDBC drivers on the parent classpath"
+    group = "verification"
+    dependsOn(tasks.testClasses, fallbackDriverJars)
+    mainClass.set("com.segfault03.ideadb.H2FallbackDriverTest")
+    classpath = sourceSets["main"].output + sourceSets["test"].output +
+        sourceSets["main"].compileClasspath.filter {
+            !it.name.startsWith("h2-") && !it.name.startsWith("hsqldb-") &&
+                !it.name.startsWith("mysql-connector-") && !it.name.startsWith("postgresql-")
+        }
+    classpath += sourceSets["test"].runtimeClasspath.filter {
+        it.name.startsWith("junit-jupiter-api-") || it.name.startsWith("junit-platform-commons-") ||
+            it.name.startsWith("opentest4j-") || it.name.startsWith("apiguardian-api-")
+    }
+    args(layout.buildDirectory.dir("fallback-drivers").get().asFile.absolutePath)
+}
+
 tasks.register<JavaExec>("databaseCompatibilityTest") {
     description = "Run the downloadable database driver and Java 8 compatibility matrix"
     group = "verification"
     dependsOn(tasks.testClasses)
-    mainClass.set(if (providers.gradleProperty("lattice.compatibility.mode").orNull == "postgres")
-        "com.segfault03.ideadb.provider.PostgresCompatibilityTest" else "com.segfault03.ideadb.DatabaseCompatibilityTest")
+    mainClass.set(when (providers.gradleProperty("lattice.compatibility.mode").orNull) {
+        "postgres" -> "com.segfault03.ideadb.provider.PostgresCompatibilityTest"
+        "h2" -> "com.segfault03.ideadb.provider.H2CompatibilityTest"
+        else -> "com.segfault03.ideadb.DatabaseCompatibilityTest"
+    })
     classpath = sourceSets["test"].runtimeClasspath + sourceSets["main"].compileClasspath
     doFirst {
         val mode = providers.gradleProperty("lattice.compatibility.mode").orNull
-            ?: throw GradleException("Set -Plattice.compatibility.mode=mysql|hsqldb|postgres")
+            ?: throw GradleException("Set -Plattice.compatibility.mode=mysql|hsqldb|postgres|h2")
         val java8 = providers.gradleProperty("lattice.compatibility.java8").orNull
             ?: throw GradleException("Set -Plattice.compatibility.java8 to a Java 8 runtime")
         val probeClasses = providers.gradleProperty("lattice.compatibility.probe").orNull
@@ -183,7 +235,7 @@ tasks.register<JavaExec>("databaseCompatibilityTest") {
             "postgres" -> listOf(mode,
                 providers.gradleProperty("lattice.compatibility.port").get(),
                 providers.gradleProperty("lattice.compatibility.server").get(), java8, probeClasses)
-            "hsqldb" -> listOf(mode, java8, probeClasses)
+            "hsqldb", "h2" -> listOf(mode, java8, probeClasses)
             else -> throw GradleException("Unknown compatibility mode: $mode")
         })
         systemProperty("lattice.test.keepDependencies", !providers.gradleProperty("lattice.compatibility.cleanup").orElse("true").get().toBoolean())
@@ -241,6 +293,7 @@ intellijPlatformTesting.testIdeUi.register("uiScreenshotTest") {
         systemProperty("ui.sourceFilter.only", providers.gradleProperty("lattice.ui.sourceFilterOnly").orElse("false").get())
         systemProperty("ui.explorerSearch.only", providers.gradleProperty("lattice.ui.explorerSearchOnly").orElse("false").get())
         systemProperty("ui.skip.remote.downloads", providers.environmentVariable("LATTICE_UI_SKIP_REMOTE_DOWNLOADS").orElse("false").get())
+        systemProperty("ui.h2.enabled", providers.gradleProperty("lattice.ui.h2").orElse(providers.environmentVariable("LATTICE_UI_H2")).orElse("false").get())
         systemProperty("ui.postgres.port", providers.gradleProperty("lattice.ui.postgres.port").orElse(providers.environmentVariable("LATTICE_UI_POSTGRES_PORT")).orElse("0").get())
         systemProperty("ui.postgres.password", providers.environmentVariable("LATTICE_UI_POSTGRES_PASSWORD").orElse("lattice-test").get())
         systemProperty("ui.style.only", providers.gradleProperty("lattice.ui.styleOnly").orElse("false").get())

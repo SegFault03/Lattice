@@ -18,16 +18,16 @@ class OneShotTests(unittest.TestCase):
     def test_modes_split_routine_checks_from_compatibility_work(self):
         self.assertEqual(one_shot.validation_plan(Namespace(
             skip_compatibility=False, compatibility_only=False, database_compatibility_only=False)),
-            (True, True, True, 8 + int(sys.platform == "linux")))
+            (True, True, True, 9 + int(sys.platform == "linux")))
         self.assertEqual(one_shot.validation_plan(Namespace(
             skip_compatibility=True, compatibility_only=False, database_compatibility_only=False)),
             (True, False, False, 5))
         self.assertEqual(one_shot.validation_plan(Namespace(
             skip_compatibility=False, compatibility_only=True, database_compatibility_only=False)),
-            (False, True, True, 6 + int(sys.platform == "linux")))
+            (False, True, True, 7 + int(sys.platform == "linux")))
         self.assertEqual(one_shot.validation_plan(Namespace(
             skip_compatibility=False, compatibility_only=False, database_compatibility_only=True)),
-            (False, False, True, 4 + int(sys.platform == "linux")))
+            (False, False, True, 5 + int(sys.platform == "linux")))
 
     def test_declared_matrix_covers_four_mysql_servers_and_ten_hsqldb_drivers(self):
         self.assertEqual(tuple(server for server, _ in one_shot.MYSQL_MATRIX),

@@ -365,7 +365,7 @@ def validation_plan(args: argparse.Namespace) -> tuple[bool, bool, bool, int]:
     if run_ide_compatibility:
         step_count += 1
     if run_database_compatibility:
-        step_count += 2 + int(sys.platform == "linux")
+        step_count += 3 + int(sys.platform == "linux")
     return run_base, run_ide_compatibility, run_database_compatibility, step_count
 
 
@@ -395,7 +395,7 @@ def main() -> int:
     parser.add_argument('--ide-sdk', action='append', default=[], metavar='VERSION=PATH', help='Repeat for each verification SDK')
     parser.add_argument('--mysql-home', action='append', default=[], metavar='VERSION=PATH', help='Repeat for each native MySQL server')
     parser.add_argument('--verifier-jar', type=Path)
-    parser.add_argument('--jdbc-dir', type=Path, help='Existing mysql/ and hsqldb/ driver folders (copied into disposable cache)')
+    parser.add_argument('--jdbc-dir', type=Path, help='Existing provider driver folders (copied into disposable cache)')
     parser.add_argument('--runtime-dir', type=Path)
     parser.add_argument('--sevenzip', type=Path)
     parser.add_argument('--docker', help='Docker CLI; selects Docker on Windows (daemon must already be running)')
@@ -473,7 +473,7 @@ def main() -> int:
                     seed = args.jdbc_dir or (args.binaries_dir / 'jdbc' if args.binaries_dir else None)
                     if seed:
                         if not seed.is_dir():
-                            raise RunnerError('--jdbc-dir must contain mysql/ and hsqldb/ folders')
+                            raise RunnerError('--jdbc-dir must be a directory of cached drivers')
                         shutil.copytree(seed, jdbc_cache, dirs_exist_ok=True)
                     prepare_java8_probe(source, java_home, probe_classes, runner, progress_runner_env)
                     print(f"  JDK 21: {java_home}\n  Java 8 runtime: {java8_home}", flush=True)
@@ -581,6 +581,15 @@ def main() -> int:
                     run_gradle(runner, source, "databaseCompatibilityTest", properties=properties,
                                name=f"hsqldb-matrix-{len(HSQL_VERSIONS)}-versions", timeout=1800)
 
+
+                with progress.step("Run H2 driver/server and Java runtime compatibility matrix"):
+                    properties = ["-Plattice.compatibility.mode=h2",
+                        f"-Plattice.compatibility.java8={executable(java8_home, 'java')}",
+                        f"-Plattice.compatibility.probe={probe_classes}",
+                        f"-Plattice.compatibility.cache={jdbc_cache}",
+                        f"-Plattice.compatibility.output={source / 'build/compatibility/h2'}"]
+                    run_gradle(runner, source, "databaseCompatibilityTest", properties=properties,
+                               name="h2-matrix", timeout=900)
 
                 if sys.platform == "linux":
                     from postgres import POSTGRES_VERSIONS, matrix_fixture

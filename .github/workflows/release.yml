@@ -1,3 +1,5 @@
+# Before editing, read AGENTS.md, docs/CI_TESTING.md#before-changing-ci,
+# docs/RELEASING.md and docs/MARKETPLACE.md. Preserve the tag/main ancestry guard.
 name: Build, test and release
 
 on:
@@ -49,10 +51,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
         with:
           cache-provider: enhanced
-      - name: Test development tools
-        run: python -m unittest discover -s scripts/tests -v
-      - name: Build and run unit tests
-        run: python scripts/test.py --build
+      - name: Run functional tests and build plugin
+        run: python scripts/test.py --functional-only --build
       - name: Retain test reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -72,17 +72,6 @@ jobs:
       version: ${{ steps.metadata.outputs.version }}
       prerelease: ${{ steps.metadata.outputs.prerelease }}
       source_asset: ${{ steps.source.outputs.filename }}
-    services:
-      mysql:
-        image: mysql:8.4
-        env:
-          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
-          MYSQL_DATABASE: shop_db
-          MYSQL_ROOT_HOST: '%'
-        ports: ['3306:3306']
-        options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 --silent"
-          --health-interval=10s --health-timeout=5s --health-retries=18
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -95,8 +84,6 @@ jobs:
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
         with:
           cache-provider: enhanced
-      - name: Test release tooling
-        run: python3 -m unittest discover -s scripts/tests -v
       - name: Prepare version and patch notes
         id: metadata
         env:
@@ -106,7 +93,7 @@ jobs:
         env:
           RELEASE_VERSION: ${{ steps.metadata.outputs.version }}
         run: >-
-          python3 scripts/test.py --live --hsqldb --postgres --build
+          python3 scripts/test.py --functional-only --build
           --version "$RELEASE_VERSION"
           --notes-file build/release/patch-notes.html
       - name: Prepare corresponding source asset

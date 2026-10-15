@@ -4,6 +4,9 @@ Patch notes are selected by the exact release version, including prerelease suff
 
 ## [Unreleased]
 
+- Integrate H2 with the staging source picker, explorer grouping/search/filter and table-tab badges; cover aliased/composite primary and foreign keys with packaged and selected drivers.
+- Add H2 2.x provider and bundled 2.3.232 driver, memory/file/TCP connection forms, schema/table operations, generated-column metadata and native table DDL exports. Add file/TCP/TLS functional and data regression suites, a driver/server/runtime compatibility matrix, and full dark/light real-IDE H2 scenarios. H2 2.3 requires Java 11+; H2 2.1/2.2 also pass real Java 8 probes.
+
 - Redesign the connection dialog with a scrollable data source picker and provider-specific defaults.
 - Group explorer connections by database type with SVG labels and a View only picker for selecting one or more types.
 - Search connected sources by data source, schema, table and all column names, combine focused filters, and highlight every match with responsive drawer and inline layouts.
@@ -12,7 +15,8 @@ Patch notes are selected by the exact release version, including prerelease suff
 - Improve live loading indicators, driver-download UI synchronization and query-session recovery before SQL submission.
 - Make PostgreSQL UI-wrapper tests portable across Windows paths and wait for the real-IDE Revert reload before filtering; exercise the busy reload with a gated database response.
 
-- Run baseline build, functional, regression and integration checks on every branch, including packaged driver/license validation. Restrict Swing and real-IDE UI checks, database/Java 8 compatibility and IDE compatibility to PRs targeting staging or main.
+- Run only embedded functional and plugin build/archive checks on commits. Group tooling, regression/integration, UI and Java/JDBC/IDE compatibility under main-targeted PR validation; staging PRs use the commit tier. Parallelize UI scenarios and remove duplicate H2 integration/build work. Keep release signing/publishing gated on new version tags reachable from main.
+- Retry cancellation during slower remote statement startup and synchronize H2 TLS cancellation regressions with server execution. Validate Windows launcher inventories on every host.
 - Release only from newly created version tags reachable from main; gate all release jobs on ancestry and disable manual release/Marketplace smoke publishing.
 
 ## [0.0.2-alpha]
