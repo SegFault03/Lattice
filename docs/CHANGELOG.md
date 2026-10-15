@@ -6,9 +6,15 @@ Patch notes are selected by the exact release version, including prerelease suff
 
 - Add H2 2.x provider and bundled 2.3.232 driver, memory/file/TCP connection forms, schema/table operations, generated-column metadata and native table DDL exports. Add file/TCP/TLS functional and data regression suites, a driver/server/runtime compatibility matrix, and full dark/light real-IDE H2 scenarios. H2 2.3 requires Java 11+; H2 2.1/2.2 also pass real Java 8 probes.
 
+- Redesign the connection dialog with a scrollable data source picker and provider-specific defaults.
+- Group explorer connections by database type with SVG labels and a View only picker for selecting one or more types.
+- Search connected sources by data source, schema, table and all column names, combine focused filters, and highlight every match with responsive drawer and inline layouts.
+- Overlay solid data source badges on the bottom-left of table tab icons.
+- Highlight primary, foreign and combined key headers in table editors and SQL results; preserve source-column identity for aliased queries and clear stale badges.
+- Improve live loading indicators, driver-download UI synchronization and query-session recovery before SQL submission.
 - Make PostgreSQL UI-wrapper tests portable across Windows paths and wait for the real-IDE Revert reload before filtering; exercise the busy reload with a gated database response.
 
-- Run baseline build, functional, regression, integration and UI checks on every branch, including PostgreSQL real-IDE workflows and packaged driver/license validation. Restrict database/Java 8 and IDE compatibility to PRs targeting staging or main.
+- Run baseline build, functional, regression and integration checks on every branch, including packaged driver/license validation. Restrict Swing and real-IDE UI checks, database/Java 8 compatibility and IDE compatibility to PRs targeting staging or main.
 - Release only from newly created version tags reachable from main; gate all release jobs on ancestry and disable manual release/Marketplace smoke publishing.
 
 ## [0.0.2-alpha]

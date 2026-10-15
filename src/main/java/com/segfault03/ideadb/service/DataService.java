@@ -246,6 +246,8 @@ public class DataService {
             execution.checkCancelled();
             var provider = DatabaseProviders.forConnection(conn);
             provider.beforeQuery(conn, dbName, sql);
+            List<ResultColumn> origins = new ArrayList<>();
+            QueryResult result;
             try (Statement stmt = conn.createStatement()) {
                 stmt.setQueryTimeout(options.timeoutSeconds());
                 stmt.setMaxRows(options.maxRows() + 1);
@@ -253,6 +255,7 @@ public class DataService {
                 stmt.setFetchSize(provider.fetchSize(options.fetchSize()));
                 execution.attach(stmt,()->provider.cancelStatement(stmt));
                 execution.checkCancelled();
+                execution.markSqlStarted();
                 boolean hasResultSet = stmt.execute(sql);
                 execution.checkCancelled();
                 if (!hasResultSet) return QueryResult.forUpdate(stmt.getUpdateCount(), elapsed(start));
@@ -260,7 +263,11 @@ public class DataService {
                     ResultSetMetaData md = rs.getMetaData();
                     int colCount = md.getColumnCount();
                     List<String> cols = new ArrayList<>(), types = new ArrayList<>();
-                    for (int i=1;i<=colCount;i++) { cols.add(md.getColumnLabel(i)); types.add(md.getColumnTypeName(i)); }
+                    for (int i=1;i<=colCount;i++) {
+                        cols.add(md.getColumnLabel(i)); types.add(md.getColumnTypeName(i));
+                        try { origins.add(new ResultColumn(md.getCatalogName(i), provider.sourceSchemaName(md, i), md.getTableName(i), provider.sourceColumnName(md, i))); }
+                        catch (SQLException unsupported) { origins.add(new ResultColumn(null, null, null, null)); }
+                    }
                     List<List<Object>> rows = new ArrayList<>();
                     long bytes = 0;
                     boolean truncated = false;
@@ -275,15 +282,56 @@ public class DataService {
                         if (bytes > 16L * 1024 * 1024) { truncated=true; break; }
                         rows.add(row);
                     }
-                    return QueryResult.forResultSet(cols,types,rows,elapsed(start),truncated).withInsertPolicy(java.util.Set.of(),provider.insertOverride(conn));
+                    result = QueryResult.forResultSet(cols,types,rows,elapsed(start),truncated).withInsertPolicy(java.util.Set.of(),provider.insertOverride(conn));
                 }
             }
+            // Close streaming result sets before metadata queries on the same connection.
+            execution.checkCancelled();
+            result = result.withPrimaryKeyColumns(primaryKeyColumns(conn, origins))
+                    .withForeignKeyColumns(foreignKeyColumns(conn, origins));
+            execution.checkCancelled();
+            return result;
         } catch (Exception error) {
             if (execution.isCancellationRequested()) return QueryResult.forCancellation(elapsed(start));
             String message = error.getMessage();
             return QueryResult.forError(message == null || message.isEmpty() ? error.toString() : message, elapsed(start));
         } finally { execution.detach(); }
     }
+    record ResultColumn(String catalog, String schema, String table, String name) {}
+    private record ResultTable(String catalog, String schema, String name) {}
+
+    static java.util.Set<Integer> primaryKeyColumns(Connection connection, List<ResultColumn> columns) {
+        return keyColumns(connection, columns, false);
+    }
+    static java.util.Set<Integer> foreignKeyColumns(Connection connection, List<ResultColumn> columns) {
+        return keyColumns(connection, columns, true);
+    }
+    private static java.util.Set<Integer> keyColumns(Connection connection, List<ResultColumn> columns, boolean foreign) {
+        Map<ResultTable, java.util.Set<String>> keysByTable = new java.util.HashMap<>();
+        java.util.Set<Integer> indices = new java.util.HashSet<>();
+        for (int index = 0; index < columns.size(); index++) {
+            ResultColumn column = columns.get(index);
+            if (column.table() == null || column.table().isBlank() || column.name() == null) continue;
+            // An empty source catalog means the driver did not report one; it must not filter
+            // key metadata to a nonexistent empty database (notably with pgJDBC).
+            String catalog = column.catalog() == null || column.catalog().isEmpty() ? null : column.catalog();
+            ResultTable table = new ResultTable(catalog, column.schema(), column.table());
+            java.util.Set<String> keys = keysByTable.get(table);
+            if (keys == null) {
+                keys = new java.util.HashSet<>();
+                // Metadata is optional: permissions or unsupported drivers must not fail a successful query.
+                try (ResultSet metadata = foreign
+                        ? connection.getMetaData().getImportedKeys(table.catalog(), table.schema(), table.name())
+                        : connection.getMetaData().getPrimaryKeys(table.catalog(), table.schema(), table.name())) {
+                    if (metadata != null) while (metadata.next()) keys.add(metadata.getString(foreign ? "FKCOLUMN_NAME" : "COLUMN_NAME"));
+                } catch (SQLException unavailable) { }
+                keysByTable.put(table, keys);
+            }
+            if (keys.contains(column.name())) indices.add(index);
+        }
+        return java.util.Set.copyOf(indices);
+    }
+
     private static long elapsed(long start) { return (System.nanoTime()-start)/1_000_000; }
 
     /** LOBs must remain usable after the ResultSet and Statement have been closed. */

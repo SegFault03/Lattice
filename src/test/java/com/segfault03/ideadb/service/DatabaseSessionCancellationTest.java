@@ -13,6 +13,19 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class DatabaseSessionCancellationTest {
     @Test void anInvalidServerSessionAfterCancellationIsDiscardedBeforeTheNextQuery() throws Exception {
+        assertInvalidServerSessionRecovers(false, false);
+    }
+
+    @Test void aLegacyDriverSessionIsDiscardedAfterServerDisconnect() throws Exception {
+        assertInvalidServerSessionRecovers(true, false);
+    }
+
+    @Test void aQueryRecoversWhenTheServerClosesItsSessionBeforeSqlIsSubmitted() throws Exception {
+        assertInvalidServerSessionRecovers(false, true);
+        assertInvalidServerSessionRecovers(true, true);
+    }
+
+    private void assertInvalidServerSessionRecovers(boolean legacy, boolean automatic) throws Exception {
         Server server = new Server();
         int port;
         try (ServerSocket reservation = new ServerSocket(0)) { port = reservation.getLocalPort(); }
@@ -29,8 +42,16 @@ class DatabaseSessionCancellationTest {
         DatabaseConnectionManager manager = new DatabaseConnectionManager();
         ConnectionConfig config = new ConnectionConfig(DatabaseType.HSQLDB, "Cancellation recovery");
         config.setCustomUrl("jdbc:hsqldb:hsql://127.0.0.1:" + port + "/cancel_recovery");
+        if (legacy) {
+            config.setDriverSource(com.segfault03.ideadb.model.DriverSource.LOCAL_JAR);
+            config.setDriverJarPath(System.getProperty("lattice.test.cancellation.driver"));
+        }
         try (DatabaseSession session = manager.createSession(config)) {
             Connection original = session.execute(connection -> {
+                if (legacy) assertTrue(connection.getMetaData().getDriverVersion().startsWith("2.7.3"));
+                // Exercise metadata reads and cancellation with both actual driver versions.
+                connection.getMetaData().getDatabaseProductName();
+                connection.getMetaData().getDatabaseMajorVersion();
                 try (var statement = connection.createStatement()) {
                     statement.execute("VALUES(1)");
                     statement.cancel();
@@ -42,7 +63,14 @@ class DatabaseSessionCancellationTest {
             // branch deterministically; the server stays online for the reconnect assertion.
             server.signalCloseAllServerConnections();
             assertFalse(original.isClosed(), "isClosed alone misses this server-side disconnect");
-            assertTrue(session.discardInvalidConnection());
+            if (automatic) {
+                var execution = new QueryExecution();
+                var recovered = session.executeQuery("PUBLIC", "VALUES(7)", DataService.QueryOptions.defaults(), execution);
+                assertFalse(recovered.hasError(), recovered.getError());
+                assertEquals(7, ((Number) recovered.getRows().get(0).get(0)).intValue());
+                assertTrue(execution.hasStartedSql());
+                assertTrue(execution.wasConnectionDiscarded());
+            } else assertTrue(session.discardInvalidConnection());
             assertTrue(original.isClosed());
             session.execute(connection -> {
                 assertNotSame(original, connection);
@@ -69,6 +97,12 @@ class DatabaseSessionCancellationTest {
                 return connection;
             });
             assertFalse(session.discardInvalidConnection());
+            var invalidSql = new QueryExecution();
+            var failed = session.executeQuery("PUBLIC", "INSERT INTO TABLE_THAT_DOES_NOT_EXIST VALUES(1)",
+                    DataService.QueryOptions.defaults(), invalidSql);
+            assertTrue(failed.hasError());
+            assertTrue(invalidSql.hasStartedSql(), "SQL errors after submission must not trigger preparation recovery");
+            assertFalse(invalidSql.wasConnectionDiscarded());
             session.execute(connection -> {
                 assertSame(original, connection);
                 try (var statement = connection.createStatement(); var rows = statement.executeQuery("SELECT ID FROM CANCEL_RECOVERY")) {

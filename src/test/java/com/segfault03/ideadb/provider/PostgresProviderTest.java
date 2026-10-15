@@ -9,6 +9,30 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class PostgresProviderTest {
     private final DatabaseProvider provider = DatabaseProviders.get(DatabaseType.POSTGRESQL);
+    public interface BaseColumnMetadata extends java.sql.ResultSetMetaData {
+        String getBaseColumnName(int column) throws java.sql.SQLException;
+        String getBaseSchemaName(int column) throws java.sql.SQLException;
+    }
+
+    @Test void aliasedColumnsUseTheDriverExtensionWithoutDependingOnPgJdbcTypes() throws Exception {
+        var metadata = (BaseColumnMetadata) java.lang.reflect.Proxy.newProxyInstance(
+                BaseColumnMetadata.class.getClassLoader(), new Class<?>[]{BaseColumnMetadata.class},
+                (proxy, method, arguments) -> switch (method.getName()) {
+                    case "getColumnName", "getColumnLabel" -> "display_alias";
+                    case "getBaseColumnName" -> "original_id";
+                    case "getSchemaName" -> "";
+                    case "getBaseSchemaName" -> "original_schema";
+                    default -> throw new java.sql.SQLFeatureNotSupportedException();
+                });
+        assertEquals("display_alias", metadata.getColumnName(1));
+        assertEquals("original_id", provider.sourceColumnName(metadata, 1));
+        assertEquals("original_schema", provider.sourceSchemaName(metadata, 1));
+        var unavailable = (java.sql.ResultSetMetaData) java.lang.reflect.Proxy.newProxyInstance(
+                java.sql.ResultSetMetaData.class.getClassLoader(), new Class<?>[]{java.sql.ResultSetMetaData.class},
+                (proxy, method, arguments) -> "display_alias");
+        assertThrows(java.sql.SQLFeatureNotSupportedException.class, () -> provider.sourceColumnName(unavailable, 1));
+    }
+
     @Test void connectionAndDriverDefaultsAreRegisteredAndJava8Compatible() throws Exception {
         var config = new ConnectionConfig(DatabaseType.POSTGRESQL,"postgres");
         assertEquals(5432,config.getPort()); assertEquals("postgres",config.getUser()); assertEquals("postgres",config.getDatabaseName());

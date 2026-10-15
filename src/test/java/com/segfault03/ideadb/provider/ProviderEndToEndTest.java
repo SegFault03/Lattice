@@ -41,6 +41,61 @@ public class ProviderEndToEndTest {
         workflow(config);
     }
 
+    /** The same contract runs against embedded/server HSQLDB, MySQL and PostgreSQL. */
+    public static void verifyKeyMetadata(Connection connection, ConnectionConfig config, String namespace) throws Exception {
+        var provider = DatabaseProviders.get(config.getType());
+        provider.selectNamespace(connection, namespace);
+        var dialect = provider.dialect();
+        String parent = DdlService.formatTable(config, namespace, "KEY_PARENT");
+        String child = DdlService.formatTable(config, namespace, "KEY_CHILD");
+        String tenant = dialect.quoteIdentifier("TENANT"), id = dialect.quoteIdentifier("ID");
+        String parentId = dialect.quoteIdentifier("PARENT_ID"), detail = dialect.quoteIdentifier("DETAIL");
+        try (var statement = connection.createStatement()) {
+            statement.execute("CREATE TABLE " + parent + " (" + tenant + " INTEGER, " + id
+                    + " INTEGER, PRIMARY KEY (" + tenant + ", " + id + "))");
+            try {
+                statement.execute("CREATE TABLE " + child + " (" + tenant + " INTEGER, " + parentId
+                        + " INTEGER, " + detail + " INTEGER, PRIMARY KEY (" + tenant + ", " + detail
+                        + "), FOREIGN KEY (" + tenant + ", " + parentId + ") REFERENCES " + parent
+                        + " (" + tenant + ", " + id + "))");
+                try {
+                    statement.execute("INSERT INTO " + parent + " VALUES (1, 7)");
+                    statement.execute("INSERT INTO " + child + " VALUES (1, 7, 3)");
+                    assertThrows(java.sql.SQLException.class,
+                            () -> statement.execute("INSERT INTO " + child + " VALUES (1, 999, 4)"),
+                            "The fixture must enforce the foreign-key constraint");
+                    var columns = MetadataService.getInstance().getColumns(connection, config, namespace, "KEY_CHILD");
+                    assertEquals(Set.of("TENANT", "DETAIL"), columns.stream().filter(ColumnMetadata::isPrimaryKey)
+                            .map(ColumnMetadata::getName).collect(java.util.stream.Collectors.toSet()));
+                    assertEquals(Set.of("TENANT", "PARENT_ID"), columns.stream().filter(ColumnMetadata::isForeignKey)
+                            .map(ColumnMetadata::getName).collect(java.util.stream.Collectors.toSet()));
+                    String alias = dialect.quoteIdentifier("shown");
+                    var result = DataService.getInstance().executeQuery(connection, namespace,
+                            "SELECT C." + tenant + " AS " + alias + ", C." + parentId + " AS " + alias
+                                    + ", C." + detail + " AS " + alias + ", P." + id + " AS " + alias
+                                    + ", C." + parentId + " + 1 AS " + dialect.quoteIdentifier("calculated")
+                                    + " FROM " + child + " C JOIN " + parent + " P ON C." + tenant + " = P."
+                                    + tenant + " AND C." + parentId + " = P." + id);
+                    assertFalse(result.hasError(), result.getError());
+                    assertEquals(1, result.getRows().size());
+                    assertEquals(Set.of(0, 2, 3), result.getPrimaryKeyColumns());
+                    assertEquals(Set.of(0, 1), result.getForeignKeyColumns());
+                    var model = new ReadOnlyResultModel();
+                    model.setResult(result);
+                    assertTrue(model.isPrimaryKeyColumn(0) && model.isForeignKeyColumn(0));
+                    assertTrue(model.isForeignKeyColumn(1));
+                    assertFalse(model.isForeignKeyColumn(3), "The parent's primary key is not an imported key");
+                    var plain = DataService.getInstance().executeQuery(connection, namespace,
+                            "SELECT " + parentId + " + 1 AS " + dialect.quoteIdentifier("calculated") + " FROM " + child);
+                    assertFalse(plain.hasError(), plain.getError());
+                    model.setResult(plain);
+                    assertFalse(model.isPrimaryKeyColumn(0));
+                    assertFalse(model.isForeignKeyColumn(0));
+                } finally { statement.execute("DROP TABLE " + child); }
+            } finally { statement.execute("DROP TABLE " + parent); }
+        }
+    }
+
     public static void workflow(ConnectionConfig config) throws Exception {
         var manager = new DatabaseConnectionManager();
         var ddl = DdlService.getInstance(); var data = DataService.getInstance();
@@ -59,6 +114,7 @@ public class ProviderEndToEndTest {
                 assertEquals(provider.namespace(namespace).catalog(), table.getCatalog());
                 assertEquals(provider.namespace(namespace).schema(), table.getSchema());
                 assertEquals(2, MetadataService.getInstance().getColumns(browser, config, namespace, "ITEMS").size());
+                verifyKeyMetadata(browser, config, namespace);
                 try (Connection mutation = manager.openConnection(config)) {
                     data.commitChanges(mutation, config, namespace, "ITEMS", List.of(Map.of("ID", 1, "PAYLOAD", "O'Brien\\path"), Map.of("ID", 2, "PAYLOAD", "second")), List.of());
                     assertThrows(Exception.class, () -> data.commitChanges(mutation, config, namespace, "ITEMS", List.of(Map.of("ID", 3, "PAYLOAD", "rollback"), Map.of("ID", 1, "PAYLOAD", "duplicate")), List.of()));

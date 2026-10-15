@@ -20,7 +20,7 @@ class UiPreviewTests(unittest.TestCase):
     def test_readme_images_meet_marketplace_resolution_with_original_display_widths(self):
         root = SCRIPTS.parent
         readme = (root / 'README.md').read_text(encoding='utf-8')
-        widths = {'side-panel.png': 340, 'connection-dialog.png': 600,
+        widths = {'side-panel.png': 340, 'connection-dialog.png': 740,
                   'table-view.png': 1100, 'table-editing.png': 1100, 'sql-console.png': 1100}
         for name, display_width in widths.items():
             with self.subTest(name=name):
@@ -97,6 +97,27 @@ class UiPreviewTests(unittest.TestCase):
             (output / 'dark-manifest.txt').write_text('dark-table-760.png\n')
             with self.assertRaisesRegex(ValueError, 'snapshot sets differ'):
                 preview.render_gallery(output)
+
+    def test_search_gallery_keeps_both_themes_and_drawer_widths(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            names = []
+            for theme in ('light', 'dark'):
+                images = [f'{theme}-explorer-search-{variant}.png'
+                          for variant in ('all-340', 'focused-340', 'focused-1100')]
+                (output / f'{theme}-manifest.txt').write_text('\n'.join(images))
+                for name in images:
+                    (output / name).write_bytes(b'search preview')
+                names.extend(images)
+            preview.render_gallery(output)
+            page = (output / 'index.html').read_text()
+            for name in names:
+                if name.startswith('light-'):
+                    self.assertIn(name, page)
+            self.assertIn('<option value="dark">dark</option>', page)
+            self.assertIn('data-screen="side-panel"', page)
+            with zipfile.ZipFile(output / 'lattice-ui-previews.zip') as archive:
+                self.assertTrue(set(names).issubset(archive.namelist()))
 
     def test_featured_gallery_supports_light_only_output(self):
         with tempfile.TemporaryDirectory() as temporary:

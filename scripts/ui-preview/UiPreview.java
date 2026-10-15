@@ -27,7 +27,7 @@ public final class UiPreview {
     static Path output;
     static final List<String> snapshots = new ArrayList<>();
     static final Set<String> FEATURED_PREVIEWS = Set.of(
-            "side-panel-340", "connection-mysql-600", "table-1100", "table-new-row-1100", "sql-console-1100");
+            "side-panel-340", "connection-mysql-740", "table-1100", "table-new-row-1100", "sql-console-1100");
     static boolean featuredOnly;
     private static Font previewFont() {
         Set<String> available = Set.of(GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames());
@@ -98,9 +98,9 @@ public final class UiPreview {
     static ConnectionConfig config(DatabaseType type) {
         ConnectionConfig config = new ConnectionConfig(type, type == DatabaseType.MYSQL ? "Local development" : "Scratch database");
         config.setHost("localhost");
-        config.setPort(type == DatabaseType.MYSQL ? 3306 : 9001);
+        config.setPort(type.getDefaultPort());
         config.setDatabaseName("shop");
-        config.setUser(type == DatabaseType.MYSQL ? "developer" : "SA");
+        config.setUser(type == DatabaseType.MYSQL ? "developer" : type.getDefaultUser());
         return config;
     }
     static ConnectionDialog connectionDialog(ConnectionConfig config, boolean newConnection) throws Exception {
@@ -127,6 +127,7 @@ public final class UiPreview {
             if (child instanceof JComponent input && (input instanceof JTextField || input instanceof JComboBox<?>
                     || input instanceof com.intellij.openapi.ui.TextFieldWithBrowseButton)) {
                 boolean embedded = SwingUtilities.getAncestorOfClass(JComboBox.class, input) != null
+                        || SwingUtilities.getAncestorOfClass(com.intellij.ui.SearchTextField.class, input) != null
                         || SwingUtilities.getAncestorOfClass(com.intellij.openapi.ui.TextFieldWithBrowseButton.class, input) != null
                         || SwingUtilities.getAncestorOfClass(CellRendererPane.class, input) != null;
                 if (!embedded) {
@@ -197,7 +198,7 @@ public final class UiPreview {
         render(alter.previewPanel(), theme + "-schema-drop-column-800", 800, alter.previewPanel().getPreferredSize().height);
     }
     static void connection(String theme, String variant, int width) throws Exception {
-        ConnectionConfig config = config(variant.contains("hsql") ? DatabaseType.HSQLDB : DatabaseType.MYSQL);
+        ConnectionConfig config = config(variant.contains("hsql") ? DatabaseType.HSQLDB : variant.equals("postgresql") ? DatabaseType.POSTGRESQL : DatabaseType.MYSQL);
         if (variant.startsWith("hsql-memory")) { config.setHsqlMode(HsqlMode.MEM); config.setDatabaseName("scratch"); }
         if (variant.startsWith("hsql-file")) { config.setHsqlMode(HsqlMode.FILE); config.setDatabaseName("/home/developer/data/shop"); }
         if (variant.equals("jdbc-url")) config.setCustomUrl("jdbc:mysql://localhost:3306/shop?useSSL=true");
@@ -221,7 +222,7 @@ public final class UiPreview {
         if (variant.equals("driver-local")) { config.setDriverSource(DriverSource.LOCAL_JAR); config.setDriverJarPath("/home/developer/drivers/mysql-connector-j.jar"); }
         if (variant.equals("mysql-incomplete")) config.setUser("");
         if (variant.equals("hsql-incomplete")) config.setDatabaseName("");
-        ConnectionDialog dialog = connectionDialog(config, variant.equals("new"));
+        ConnectionDialog dialog = connectionDialog(config, (variant.equals("new") || variant.equals("postgresql")));
         if (variant.endsWith("bundled-expanded") || variant.equals("mysql-collapsed-after-expansion")) {
             JPanel root = (JPanel)field(dialog, "rootPanel");
             int collapsed = root.getPreferredSize().height;
@@ -267,6 +268,31 @@ public final class UiPreview {
                     variant.equals("success") ? com.segfault03.ideadb.ui.DatabaseUi.Tone.SUCCESS : com.segfault03.ideadb.ui.DatabaseUi.Tone.ERROR);
         }
         JPanel panel = dialog.previewPanel();
+        if (variant.equals("new")) {
+            JComponent picker = (JComponent) field(dialog, "sourcePanel");
+            @SuppressWarnings("unchecked") Map<DatabaseType, JToggleButton> choices =
+                    (Map<DatabaseType, JToggleButton>) field(picker, "choices");
+            JComboBox<?> selection = (JComboBox<?>) field(dialog, "typeCombo");
+            for (DatabaseType type : DatabaseType.values()) {
+                choices.get(type).doClick(0);
+                if (selection.getSelectedItem() != type || !choices.get(type).isSelected())
+                    throw new AssertionError("Source picker did not select " + type);
+                if (type != DatabaseType.HSQLDB && !((JTextField) field(dialog, "mysqlPortField"))
+                        .getText().equals(String.valueOf(type.getDefaultPort())))
+                    throw new AssertionError("Source picker did not update the port for " + type);
+            }
+            choices.get(DatabaseType.MYSQL).doClick(0);
+            // A short viewport proves the source list scrolls independently of the form.
+            picker.setSize(208, 150);
+            for (int pass = 0; pass < 4; pass++) layout(picker);
+            JScrollPane sourceScroll = (JScrollPane) ((BorderLayout) picker.getLayout())
+                    .getLayoutComponent(BorderLayout.CENTER);
+            if (!sourceScroll.getVerticalScrollBar().isVisible())
+                throw new AssertionError("Source picker must scroll when its rows exceed the viewport");
+            sourceScroll.getVerticalScrollBar().setValue(sourceScroll.getVerticalScrollBar().getMaximum());
+            render(picker, theme + "-source-picker-scrolled-208", 208, 150);
+            System.out.println("Source selection, provider ports, and independent vertical scrolling verified");
+        }
         if (variant.endsWith("bundled-expanded") || variant.equals("driver-local")) {
             // Mirror the dialog's queued scroll-to-options after expansion, before painting.
             panel.setSize(width, panel.getPreferredSize().height);
@@ -292,7 +318,7 @@ public final class UiPreview {
             int userTop = SwingUtilities.convertPoint(user, 0, 0, root).y;
             if (userTop - bottom > 70) throw new AssertionError("Empty HSQL server rows before credentials");
         }
-        if (!variant.equals("new") && !variant.equals("jdbc-url-incomplete")
+        if (!(variant.equals("new") || variant.equals("postgresql")) && !variant.equals("jdbc-url-incomplete")
                 && !((JLabel)field(dialog, "urlPreviewLabel")).getText().equals(config.buildJdbcUrl()))
             throw new AssertionError("Resolved URL must retain the full value");
         // Editing settings here is safe: dialog network/test actions are never invoked.
@@ -350,7 +376,7 @@ public final class UiPreview {
         meta.addColumn(new ColumnMetadata("id", "BIGINT", java.sql.Types.BIGINT, 0, 0, false, true, true, null));
         meta.addColumn(new ColumnMetadata("name", "VARCHAR", java.sql.Types.VARCHAR, 120, 0, false, false, false, null));
         meta.addColumn(new ColumnMetadata("email", "VARCHAR", java.sql.Types.VARCHAR, 180, 0, true, false, false, null));
-        meta.addColumn(new ColumnMetadata("status", "VARCHAR", java.sql.Types.VARCHAR, 20, 0, false, false, false, "'active'"));
+        meta.addColumn(new ColumnMetadata("status", "VARCHAR", java.sql.Types.VARCHAR, 20, 0, false, false, false, "'active'").withForeignKey(true));
         meta.addColumn(new ColumnMetadata("balance", "DECIMAL", java.sql.Types.DECIMAL, 10, 2, false, false, false, "0"));
         TableDataEditorPanel panel = new TableDataEditorPanel(null, config(DatabaseType.MYSQL), "shop", meta);
         Object model = field(panel, "tableModel");
@@ -363,7 +389,7 @@ public final class UiPreview {
         invoke(panel, "setReadRunning", new Class<?>[]{boolean.class}, false);
         JTable table = (JTable) field(panel, "dataTable");
         ((JScrollPane)table.getParent().getParent()).setColumnHeaderView(table.getTableHeader());
-        int[] widths = {110, 190, 280, 150, 150};
+        int[] widths = {148, 190, 280, 150, 150};
         for (int i = 0; i < widths.length; i++) table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
         ((JButton) field(panel, "nextPageBtn")).setEnabled(false);
         ((JLabel) field(panel, "statusLabel")).setText("12 rows · 18 ms · Total: not counted");
@@ -371,17 +397,23 @@ public final class UiPreview {
     }
     static SqlQueryConsolePanel console() throws Exception {
         SqlQueryConsolePanel panel = new SqlQueryConsolePanel(null, config(DatabaseType.MYSQL), "shop", List.of("shop", "analytics"));
-        panel.setSqlText("-- Active customers with an outstanding balance\nSELECT id, name, email, balance\nFROM customers\nWHERE status = 'active' AND balance > 0\nORDER BY balance DESC;\n");
-        DefaultTableModel model = (DefaultTableModel)field(panel, "resultsModel");
+        panel.setSqlText("-- Active customers with an outstanding balance\nSELECT id, name, email, balance, status\nFROM customers\nWHERE status = 'active' AND balance > 0\nORDER BY balance DESC;\n");
+        com.segfault03.ideadb.model.ReadOnlyResultModel model = (com.segfault03.ideadb.model.ReadOnlyResultModel)field(panel, "resultsModel");
         model.setDataVector(new Object[][]{
-                {1001L, "Amelia Brooks", "amelia@example.com", new java.math.BigDecimal("240.50")},
-                {1004L, "Noah Williams", null, new java.math.BigDecimal("240.50")},
-                {1007L, "Isabella Rossi", "isabella@example.com", new java.math.BigDecimal("240.50")},
-                {1010L, "Aiden Davis", "aiden@example.com", new java.math.BigDecimal("240.50")}
-        }, new Object[]{"id", "name", "email", "balance"});
+                {1001L, "Amelia Brooks", "amelia@example.com", new java.math.BigDecimal("240.50"), "active"},
+                {1004L, "Noah Williams", null, new java.math.BigDecimal("240.50"), "active"},
+                {1007L, "Isabella Rossi", "isabella@example.com", new java.math.BigDecimal("240.50"), "active"},
+                {1010L, "Aiden Davis", "aiden@example.com", new java.math.BigDecimal("240.50"), "active"}
+        }, new Object[]{"id", "name", "email", "balance", "status"});
+        model.setResult(QueryResult.forResultSet(List.of("id", "name", "email", "balance", "status"),
+                List.of("BIGINT", "VARCHAR", "VARCHAR", "DECIMAL", "VARCHAR"),
+                java.util.stream.IntStream.range(0, model.getRowCount())
+                        .mapToObj(row -> java.util.stream.IntStream.range(0, model.getColumnCount())
+                                .mapToObj(column -> model.getValueAt(row, column)).toList()).toList(), 18)
+                .withPrimaryKeyColumns(Set.of(0)).withForeignKeyColumns(Set.of(4)));
         JTable table = (JTable)field(panel, "resultsTable");
         ((JScrollPane)table.getParent().getParent()).setColumnHeaderView(table.getTableHeader());
-        int[] widths = {110, 220, 320, 150};
+        int[] widths = {110, 220, 320, 150, 150};
         for (int i = 0; i < widths.length; i++) table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
         com.segfault03.ideadb.ui.DatabaseUi.status((JLabel)field(panel, "statusLabel"), "4 rows · 18 ms", com.segfault03.ideadb.ui.DatabaseUi.Tone.SUCCESS);
         ((JTabbedPane)field(panel, "resultsTabs")).setTitleAt(0, "Results (4)");
@@ -643,9 +675,37 @@ public final class UiPreview {
         }
     }
 
+    static void connectionMenuPreview(JComponent content, String buttonText, String name, int width, int height) throws Exception {
+        content.setBounds(0, 0, width, height);
+        layout(content);
+        JButton invoker = findButton(content, buttonText);
+        JPopupMenu choices = com.segfault03.ideadb.ui.DatabaseUi.connectionMenu(type -> {});
+        for (Component component : choices.getComponents()) {
+            if (component instanceof JMenuItem item && (item.getIcon() == null || item.getIcon().getIconWidth() <= 0))
+                throw new AssertionError("Connection menu needs a source icon: " + item.getText());
+        }
+        Point anchor = SwingUtilities.convertPoint(invoker, 0, invoker.getHeight(), content);
+        choices.setBounds(anchor.x, anchor.y, choices.getPreferredSize().width, choices.getPreferredSize().height);
+        layout(choices);
+        JComponent popupPreview = new JComponent() {
+            @Override protected void paintComponent(Graphics graphics) {
+                // Native popup windows supply their own surface; supply it for an offscreen capture too.
+                Color surface = UIManager.getColor("PopupMenu.background");
+                graphics.setColor(surface == null ? UIManager.getColor("Panel.background") : surface);
+                graphics.fillRect(0, 0, getWidth(), getHeight());
+                choices.paint(graphics);
+            }
+        };
+        popupPreview.setBounds(choices.getBounds());
+        JLayeredPane menuPreview = new JLayeredPane();
+        menuPreview.add(content, JLayeredPane.DEFAULT_LAYER);
+        menuPreview.add(popupPreview, JLayeredPane.POPUP_LAYER);
+        render(menuPreview, name, width, height);
+    }
+
     static void renderFeatured(String theme) throws Exception {
         render(ExplorerPreview.create(config(DatabaseType.MYSQL), false), theme + "-side-panel-340", 340, 620);
-        connection(theme, "mysql", 600);
+        connection(theme, "mysql", 740);
         render(console(), theme + "-sql-console-1100", 1100, 620);
         TableDataEditorPanel editor = table(false);
         render(editor, theme + "-table-1100", 1100, 620);
@@ -659,6 +719,79 @@ public final class UiPreview {
         if (!((JButton)field(editor, "saveBtn")).isEnabled())
             throw new AssertionError("Featured new-row preview must be valid: " + field(model, "validationErrors"));
         render(editor, theme + "-table-new-row-1100", 1100, 620);
+    }
+
+    static void renderSourceFilter(String theme) throws Exception {
+        render(ExplorerPreview.create(config(DatabaseType.MYSQL), false), theme + "-side-panel-340", 340, 620);
+        render(ExplorerPreview.viewOnly(config(DatabaseType.MYSQL), true), theme + "-side-panel-view-only-picker-340", 340, 620);
+        render(ExplorerPreview.viewOnly(config(DatabaseType.MYSQL), false), theme + "-side-panel-view-only-mysql-340", 340, 620);
+    }
+
+    static void renderExplorerSearch(String theme) throws Exception {
+        render(ExplorerPreview.search(config(DatabaseType.MYSQL), false), theme + "-explorer-search-all-340", 340, 700);
+        render(ExplorerPreview.search(config(DatabaseType.MYSQL), true), theme + "-explorer-search-focused-340", 340, 700);
+        render(ExplorerPreview.search(config(DatabaseType.MYSQL), true), theme + "-explorer-search-focused-1100", 1100, 620);
+    }
+
+    static void renderTableTabIcons(String theme) throws Exception {
+        JPanel preview = new JPanel(new BorderLayout(0, 18));
+        preview.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        JTabbedPane tabs = new JTabbedPane();
+        for (DatabaseType type : DatabaseType.values()) {
+            var config = config(type);
+            var file = new com.segfault03.ideadb.editor.TableDataVirtualFile(config, "shop",
+                    new TableMetadata("shop", "public", "customers", "TABLE"));
+            Icon icon = new com.segfault03.ideadb.editor.DatabaseTableIconProvider().getIcon(file, 0, null);
+            verifyTableTabBadge(type, icon);
+            JPanel content = new JPanel(new BorderLayout());
+            content.setBorder(BorderFactory.createEmptyBorder(20, 16, 16, 16));
+            content.add(new JLabel("customers — " + type.getDisplayName()), BorderLayout.NORTH);
+            tabs.addTab("customers [" + type.getDisplayName() + "]", icon, content);
+        }
+        preview.add(tabs, BorderLayout.CENTER);
+        JPanel detail = new JPanel(new GridLayout(1, DatabaseType.values().length, 20, 0));
+        for (DatabaseType type : DatabaseType.values()) {
+            Icon icon = com.segfault03.ideadb.ui.Icons.tableWithDataSource(type);
+            JPanel item = new JPanel(new BorderLayout(0, 10));
+            item.add(new JLabel(type.getDisplayName(), SwingConstants.CENTER), BorderLayout.NORTH);
+            Icon enlarged = new Icon() {
+                public int getIconWidth() { return icon.getIconWidth() * 4; }
+                public int getIconHeight() { return icon.getIconHeight() * 4; }
+                public void paintIcon(Component component, Graphics graphics, int x, int y) {
+                    Graphics2D copy = (Graphics2D) graphics.create();
+                    copy.translate(x, y);
+                    copy.scale(4, 4);
+                    icon.paintIcon(component, copy, 0, 0);
+                    copy.dispose();
+                }
+            };
+            item.add(new JLabel(enlarged, SwingConstants.CENTER), BorderLayout.CENTER);
+            detail.add(item);
+        }
+        preview.add(detail, BorderLayout.SOUTH);
+        render(preview, theme + "-table-tab-icons-760", 760, 300);
+    }
+
+    static void verifyTableTabBadge(DatabaseType type, Icon icon) {
+        if (icon.getIconWidth() != 16 || icon.getIconHeight() != 16)
+            throw new AssertionError("Table tab icon must remain 16 x 16: " + type);
+        BufferedImage pixels = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = pixels.createGraphics();
+        icon.paintIcon(new JLabel(), graphics, 0, 0);
+        graphics.dispose();
+        int expected = switch (type) {
+            case MYSQL -> 0x00758F;
+            case HSQLDB -> 0x7256A8;
+            case POSTGRESQL -> 0x4169E1;
+        };
+        int filled = 0;
+        for (int y = 6; y < 16; y++) for (int x = 0; x < 10; x++) {
+            int argb = pixels.getRGB(x, y);
+            if (x >= 2 && x < 8 && y >= 8 && y < 14 && (argb >>> 24) != 255)
+                throw new AssertionError("Source badge must hide the grid at " + x + "," + y + ": " + type);
+            if ((argb & 0xffffff) == expected) filled++;
+        }
+        if (filled < 10) throw new AssertionError("Missing solid bottom-left source badge: " + type);
     }
 
     private static void initializePreviewApplication() throws Exception {
@@ -702,7 +835,10 @@ public final class UiPreview {
             output = Path.of(args[0]);
             Files.createDirectories(output);
             String theme = args[1];
-            featuredOnly = args.length < 3 || !args[2].equals("all");
+            boolean sourceFilterOnly = args.length >= 3 && args[2].equals("source-filter");
+            boolean searchOnly = args.length >= 3 && args[2].equals("search");
+            boolean tabIconsOnly = args.length >= 3 && args[2].equals("tab-icons");
+            featuredOnly = !sourceFilterOnly && !searchOnly && !tabIconsOnly && (args.length < 3 || !args[2].equals("all"));
             UIManager.setLookAndFeel(theme.equals("dark") ? new FlatDarculaLaf() : new FlatIntelliJLaf());
             Font font = new javax.swing.plaf.FontUIResource(previewFont());
             UIManager.put("defaultFont", font);
@@ -714,6 +850,14 @@ public final class UiPreview {
             com.intellij.ui.IconManager.Companion.activate(new com.intellij.ui.icons.CoreIconManager());
             IconLoader.activate();
             IconLoader.setUseDarkIcons(theme.equals("dark"));
+            if (sourceFilterOnly || searchOnly || tabIconsOnly) {
+                SwingUtilities.invokeAndWait(() -> {
+                    try { if (tabIconsOnly) renderTableTabIcons(theme); else if (searchOnly) renderExplorerSearch(theme); else renderSourceFilter(theme); }
+                    catch (Exception exception) { throw new RuntimeException(exception); }
+                });
+                Files.write(output.resolve(theme + "-manifest.txt"), snapshots);
+                return;
+            }
             if (featuredOnly) {
                 SwingUtilities.invokeAndWait(() -> {
                     try { renderFeatured(theme); }
@@ -729,25 +873,14 @@ public final class UiPreview {
                 render(welcome(false), theme + "-welcome-520", 520, 680);
                 render(welcome(true), theme + "-welcome-connected-900", 900, 680);
                 verifyWelcome();
-                render(ExplorerPreview.create(config(DatabaseType.MYSQL), false), theme + "-side-panel-340", 340, 620);
+                renderSourceFilter(theme);
+                renderExplorerSearch(theme);
+                renderTableTabIcons(theme);
                 render(ExplorerPreview.create(config(DatabaseType.MYSQL), true), theme + "-side-panel-empty-340", 340, 620);
-                JPanel empty = ExplorerPreview.create(config(DatabaseType.MYSQL), true);
-                empty.setBounds(0, 0, 340, 620);
-                layout(empty);
-                JButton addConnection = findButton(empty, "Add a connection…");
-                JPopupMenu choices = com.segfault03.ideadb.ui.DatabaseUi.connectionMenu(type -> {});
-                Point anchor = SwingUtilities.convertPoint(addConnection, 0, addConnection.getHeight(), empty);
-                choices.setBounds(anchor.x, anchor.y, choices.getPreferredSize().width, choices.getPreferredSize().height);
-                layout(choices);
-                // Paint the production popup directly without opening an OS popup window.
-                JComponent popupPreview = new JComponent() {
-                    @Override protected void paintComponent(Graphics graphics) { choices.paint(graphics); }
-                };
-                popupPreview.setBounds(choices.getBounds());
-                JLayeredPane menuPreview = new JLayeredPane();
-                menuPreview.add(empty, JLayeredPane.DEFAULT_LAYER);
-                menuPreview.add(popupPreview, JLayeredPane.POPUP_LAYER);
-                render(menuPreview, theme + "-side-panel-connection-menu-340", 340, 620);
+                connectionMenuPreview(ExplorerPreview.create(config(DatabaseType.MYSQL), true),
+                        "Add a connection…", theme + "-side-panel-connection-menu-340", 340, 620);
+                connectionMenuPreview(welcome(false), "Add connection…",
+                        theme + "-welcome-connection-menu-900", 900, 680);
                 render(ExplorerPreview.error(config(DatabaseType.MYSQL)), theme + "-side-panel-error-340", 340, 620);
                 SqlQueryConsolePanel console = console();
                 render(console, theme + "-sql-console-1100", 1100, 620);
@@ -785,7 +918,7 @@ public final class UiPreview {
                 verifyControls((Container)((BorderLayout)nativeTable.getLayout()).getLayoutComponent(BorderLayout.NORTH));
                 autoEditing(theme);
                 verifyConnectionReadiness();
-                for (String variant : List.of("mysql", "new", "success", "failed", "hsql-server", "hsql-memory", "hsql-file", "jdbc-url", "driver-download", "driver-retained", "driver-retained-hsqldb", "driver-local", "mysql-bundled-expanded", "hsql-bundled-expanded", "hsql-memory-bundled-expanded", "hsql-file-bundled-expanded", "mysql-collapsed-after-expansion", "mysql-incomplete", "hsql-incomplete", "jdbc-url-incomplete")) connection(theme, variant, 600);
+                for (String variant : List.of("mysql", "new", "postgresql", "success", "failed", "hsql-server", "hsql-memory", "hsql-file", "jdbc-url", "driver-download", "driver-retained", "driver-retained-hsqldb", "driver-local", "mysql-bundled-expanded", "hsql-bundled-expanded", "hsql-memory-bundled-expanded", "hsql-file-bundled-expanded", "mysql-collapsed-after-expansion", "mysql-incomplete", "hsql-incomplete", "jdbc-url-incomplete")) connection(theme, variant, 740);
                 connection(theme, "mysql", 800);
                 TableDataEditorPanel editor = table(false);
                 render(editor, theme + "-table-1100", 1100, 620);

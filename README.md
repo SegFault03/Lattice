@@ -43,7 +43,7 @@ Previews use sample data. These five screens are the featured UI previews.
 
 ### Connection dialog
 
-<img src="screenshots/connection-dialog.png" alt="Connection dialog with grouped connection, authentication and driver settings" width="600">
+<img src="screenshots/connection-dialog.png" alt="Connection dialog with a scrollable data source picker and grouped connection settings" width="740">
 
 ### Table view
 

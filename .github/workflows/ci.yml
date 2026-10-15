@@ -52,22 +52,41 @@ jobs:
           version="$(sed -n 's/^pluginVersion=//p' gradle.properties | tr -d '\r')"
           python scripts/check-release-archive.py "build/distributions/Lattice-$version.zip" --version "$version"
       - name: Validate production Swing previews and action states
-        if: matrix.os == 'ubuntu-24.04'
+        id: swing_previews
+        if: github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main') && matrix.os == 'ubuntu-24.04'
         run: python3 scripts/ui-preview.py --all-previews
-      - name: Render dark and light UI inside IntelliJ IDEA
-        if: matrix.os == 'ubuntu-24.04'
+      - name: Prepare the real IDE display
+        id: ui_display
+        if: github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main') && matrix.os == 'ubuntu-24.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb xfwm4 x11-utils
-          ./scripts/linux/review-intellij-ui.sh ExperimentalDark
-          LATTICE_UI_STYLE_ONLY=true ./scripts/linux/review-intellij-ui.sh ExperimentalLight
+      # Each UI suite still fails the job, but one failure must not suppress the other suites' evidence.
+      - name: Run dark IDE functional and regression UI tests
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main') && matrix.os == 'ubuntu-24.04' && steps.ui_display.outcome == 'success' && steps.swing_previews.outcome == 'success' }}
+        run: ./scripts/linux/review-intellij-ui.sh ExperimentalDark
+      - name: Run light IDE styling and key-header regression tests
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main') && matrix.os == 'ubuntu-24.04' && steps.ui_display.outcome == 'success' && steps.swing_previews.outcome == 'success' }}
+        run: LATTICE_UI_STYLE_ONLY=true ./scripts/linux/review-intellij-ui.sh ExperimentalLight
+      - name: Run dark IDE explorer search regression tests
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main') && matrix.os == 'ubuntu-24.04' && steps.ui_display.outcome == 'success' && steps.swing_previews.outcome == 'success' }}
+        env:
+          LATTICE_UI_EXPLORER_SEARCH_ONLY: 'true'
+          LATTICE_UI_REVIEW_OUTPUT: build/ui-review/explorer-search
+        run: ./scripts/linux/review-intellij-ui.sh ExperimentalDark
+      - name: Run light IDE explorer search regression tests
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main') && matrix.os == 'ubuntu-24.04' && steps.ui_display.outcome == 'success' && steps.swing_previews.outcome == 'success' }}
+        env:
+          LATTICE_UI_EXPLORER_SEARCH_ONLY: 'true'
+          LATTICE_UI_REVIEW_OUTPUT: build/ui-review/explorer-search
+        run: ./scripts/linux/review-intellij-ui.sh ExperimentalLight
       - name: Run PostgreSQL real-IDE functional and regression UI tests
-        if: matrix.os == 'ubuntu-24.04'
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main') && matrix.os == 'ubuntu-24.04' && steps.ui_display.outcome == 'success' && steps.swing_previews.outcome == 'success' }}
         run: |
           ./gradlew writeUiIdeHome --no-daemon --no-configuration-cache
           python3 scripts/postgres-ui-review.py --java-home "$JAVA_HOME" --ide-home "$(cat build/ui-ide-home.txt)" --cleanup
       - name: Run H2 real-IDE functional and regression UI tests
-        if: matrix.os == 'ubuntu-24.04'
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main') && matrix.os == 'ubuntu-24.04' && steps.ui_display.outcome == 'success' && steps.swing_previews.outcome == 'success' }}
         run: python3 scripts/h2-test.py --ui-only --java-home "$JAVA_HOME"
       - name: Retain plugin for PR compatibility checks
         if: github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main') && matrix.os == 'ubuntu-24.04'
@@ -90,6 +109,9 @@ jobs:
             build/ui-preview/
             build/ui-review-postgres/
             build/h2-validation/
+            out/ide-tests/tests/**/log/idea.log
+            out/ide-tests/tests/**/log/monitoring-thread-dumps-ide/
+            out/ide-tests/tests/**/log/screenshots/
           retention-days: 7
 
   ide-compatibility:
