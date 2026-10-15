@@ -25,6 +25,10 @@ class DatabaseTableIconProviderTest {
         var provider = new DatabaseTableIconProvider();
         var icons = new HashSet<Icon>();
         for (DatabaseType type : DatabaseType.values()) {
+            String name = type.name().toLowerCase(java.util.Locale.ROOT);
+            assertNotNull(Icons.class.getResource("/icons/source-" + name + ".svg"), "Source artwork must not silently fall back to the generic database icon");
+            String badge = type == DatabaseType.HSQLDB ? name : name + "-badge";
+            assertNotNull(Icons.class.getResource("/icons/source-" + badge + ".svg"), "Table badges need solid source artwork");
             var config = new ConnectionConfig(type, "Source");
             for (String kind : List.of("TABLE", "VIEW")) {
                 var file = new TableDataVirtualFile(config, "shop",

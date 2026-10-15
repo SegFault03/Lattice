@@ -50,7 +50,8 @@ class WorkflowPolicyTests(unittest.TestCase):
                      'Run light IDE styling and key-header regression tests',
                      'Run dark IDE explorer search regression tests',
                      'Run light IDE explorer search regression tests',
-                     'Run PostgreSQL real-IDE functional and regression UI tests'):
+                     'Run PostgreSQL real-IDE functional and regression UI tests',
+                     'Run H2 real-IDE functional and regression UI tests'):
             step = baseline.split(f'      - name: {name}\n', 1)[1].split('      - name:', 1)[0]
             expression = re.search(r'^        if: (.+)$', step, re.M).group(1)
             self.assertIn('!cancelled()', expression)
@@ -77,7 +78,8 @@ class WorkflowPolicyTests(unittest.TestCase):
                  'Run light IDE styling and key-header regression tests',
                  'Run dark IDE explorer search regression tests',
                  'Run light IDE explorer search regression tests',
-                 'Run PostgreSQL real-IDE functional and regression UI tests')
+                 'Run PostgreSQL real-IDE functional and regression UI tests',
+                 'Run H2 real-IDE functional and regression UI tests')
         for name in names:
             step = baseline.split(f'      - name: {name}\n', 1)[1].split('      - name:', 1)[0]
             expression = re.search(r'^        if: (.+)$', step, re.M).group(1)

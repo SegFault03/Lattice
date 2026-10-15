@@ -52,6 +52,7 @@ def main():
             environment.update(LATTICE_UI_H2='true', LATTICE_UI_POSTGRES_PORT='0',
                 LATTICE_UI_BUILD_IDE_HOME=str(ide), LATTICE_UI_IDE_HOME=str(ide),
                 LATTICE_UI_STYLE_ONLY='false', LATTICE_UI_INPUTS_ONLY='false',
+                LATTICE_UI_EXPLORER_SEARCH_ONLY='false',
                 LATTICE_UI_REVIEW_OUTPUT=str(args.output.resolve() / 'ui'))
             subprocess.run(['bash', str(ROOT / 'scripts/linux/review-intellij-ui.sh'), *args.themes],
                            cwd=ROOT, env=environment, check=True)

@@ -1,6 +1,7 @@
 package com.segfault03.ideadb;
 
 import com.segfault03.ideadb.model.DatabaseType;
+import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.service.*;
 import java.io.File;
 import java.util.Properties;
@@ -25,6 +26,12 @@ public final class H2FallbackDriverTest {
             try (var connection = driver.connect("jdbc:h2:mem:fallback_h2", properties);
                  var statement = connection.createStatement(); var rows = statement.executeQuery("SELECT 42")) {
                 if (!rows.next() || rows.getInt(1) != 42) throw new AssertionError("Fallback query failed");
+                rows.close();
+                var config = new ConnectionConfig(DatabaseType.H2, "Isolated H2 keys");
+                DdlService.getInstance().createDatabase(connection, config, "FALLBACK_KEYS");
+                try {
+                    com.segfault03.ideadb.provider.ProviderEndToEndTest.verifyKeyMetadata(connection, config, "FALLBACK_KEYS");
+                } finally { DdlService.getInstance().dropDatabase(connection, config, "FALLBACK_KEYS"); }
             }
             cleanup = Class.forName(JdbcDriverCleanup.class.getName(), true, owner);
         } finally { registry.dispose(); }
@@ -32,6 +39,6 @@ public final class H2FallbackDriverTest {
             throw new AssertionError("Fallback driver registration leaked");
         try { registry.getDriver(DatabaseType.H2); throw new AssertionError("Disposed registry accepted work"); }
         catch (IllegalStateException expected) { }
-        System.out.println("PASS H2 packaged fallback, isolated query, cache, deregistration and disposal");
+        System.out.println("PASS H2 packaged fallback, isolated query and aliased/composite key metadata, cache, deregistration and disposal");
     }
 }

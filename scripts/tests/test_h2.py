@@ -45,6 +45,7 @@ class H2RunnerTests(unittest.TestCase):
             self.assertEqual(kwargs['env']['LATTICE_UI_POSTGRES_PORT'], '0')
             self.assertEqual(kwargs['env']['LATTICE_UI_STYLE_ONLY'], 'false')
             self.assertEqual(kwargs['env']['LATTICE_UI_INPUTS_ONLY'], 'false')
+            self.assertEqual(kwargs['env']['LATTICE_UI_EXPLORER_SEARCH_ONLY'], 'false')
             self.assertEqual(kwargs['env']['KEEP'], 'inherited')
             self.assertTrue((root / 'results/completed.txt').is_file())
 

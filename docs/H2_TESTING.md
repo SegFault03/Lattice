@@ -98,3 +98,18 @@ Validated the implementation at `5ded52c` on Linux using JDK 21.0.12.1, Java
 The backend and UI phases were executed separately using the focused commands
 above. No hosted CI run, Windows/macOS execution, IDEA 2025.2/2025.3 verification,
 Java 11 execution or H2 1.x migration is claimed by this local run.
+
+### Integration with staging PR #9
+
+H2 uses the source picker, grouped explorer, source filter, metadata search and
+solid table-tab badge. The shared provider contract checks composite primary and
+foreign keys, repeated SQL aliases, calculated columns and clearing stale badges
+across embedded/file/TCP/TLS and the driver/server matrix. The isolated packaged
+driver runs the same key contract. Search snapshot and connected-source visibility
+checks run against both H2 and HSQLDB. Full dark/light IDE scenarios exercise H2
+picker defaults, explorer paths and live table/SQL key header rendering.
+
+H2's `MODE=PostgreSQL` intentionally reports column aliases as source names and
+omits the source table for aliased columns. Lattice leaves their optional key
+badges empty rather than guessing. Unaliased SQL columns and table-editor columns
+retain key metadata in this mode; the compatibility matrix checks both cases.

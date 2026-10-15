@@ -728,9 +728,7 @@ class IntellijUiScreenshotTest {
             assertDriverSummary(connectionDialog, "2.7.3-jdk8 · DOWNLOADED")
 
             if (h2) {
-                connectionDialog.x(JComboBoxUiComponent::class.java) {
-                    and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"), byAccessibleName("Database type:"))
-                }.waitFound().selectItem("H2")
+                connectionDialog.x { byAccessibleName("H2") }.waitFound().click()
                 availableDriverCombo.selectItem("2.3.232 · BUNDLED")
                 assertDriverSummary(connectionDialog, "2.3.232 · BUNDLED")
                 val mode = connectionDialog.x(JComboBoxUiComponent::class.java) { and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"), byAccessibleName("Mode:")) }.waitFound()
@@ -806,7 +804,7 @@ class IntellijUiScreenshotTest {
                 check(requireNotNull(overlay).isDisposed()) { "IDE notification overlay must be dismissed before capturing the spinner" }
                 println("Native notification overlay dismissed; explorer spinner still animates naturally")
             } else databaseTree.fixture.expandRow(2)
-            val connectionPath = arrayOf("Data Sources", if (postgres) "PostgreSQL" else "HSQLDB", "Lattice UI demo")
+            val connectionPath = arrayOf("Data Sources", if (h2) "H2" else if (postgres) "PostgreSQL" else "HSQLDB", "Lattice UI demo")
             val schemaName = if (postgres) "public" else "PUBLIC"
             val publicSchemaPath = connectionPath + schemaName
             waitUntil("connected schema in the explorer") {
@@ -827,7 +825,7 @@ class IntellijUiScreenshotTest {
             waitUntil("MySQL section alongside the live HSQLDB section") {
                 databaseTree.pathExists("Data Sources", "MySQL")
             }
-            databaseTree.fixture.expandRow(if (postgres) 4 else 2)
+            databaseTree.fixture.expandPath(connectionPath.joinToString(databaseTree.fixture.separator()))
             waitUntil("HSQLDB connection restored after adding the second source type") {
                 databaseTree.pathExists(*publicSchemaPath)
             }
@@ -1640,17 +1638,20 @@ class IntellijUiScreenshotTest {
         check(picker.component.getLocationOnScreen().x + picker.component.width < name.component.getLocationOnScreen().x) {
             "The source picker must appear to the left of the connection form"
         }
-        for ((source, port) in listOf("PostgreSQL" to "5432", "HSQLDB" to "9001", "MySQL" to "3306")) {
+        for ((source, port) in listOf("PostgreSQL" to "5432", "H2" to "9092", "HSQLDB" to "9001", "MySQL" to "3306")) {
             val choice = dialog.x { byAccessibleName(source) }.waitFound()
             check(requireNotNull(dialog.driver.cast(choice.component, LiveSourceChoice::class).getIcon()).getIconWidth() == 24)
             choice.click()
             check(dialog.driver.cast(choice.component, LiveSourceChoice::class).isSelected())
+            if (source == "H2") dialog.x(JComboBoxUiComponent::class.java) {
+                and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"), byAccessibleName("Mode:"))
+            }.waitFound().selectItem("Remote Server")
             val field = dialog.x(JTextFieldUI::class.java) {
                 and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("Port:"))
             }.waitFound()
             check(field.text == port) { "$source must select its default port $port" }
         }
-        println("Compact left source picker: SVGs, source switching, and MySQL/HSQLDB/PostgreSQL ports verified")
+        println("Compact left source picker: SVGs, source switching, and MySQL/HSQLDB/PostgreSQL/H2 ports verified")
     }
 
     private fun verifyKeyHeaderFlow(frame: IdeaFrameUI, tree: JTreeUiComponent, peoplePath: Array<String>,

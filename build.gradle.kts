@@ -177,6 +177,10 @@ tasks.register<JavaExec>("h2FallbackDriverTest") {
             !it.name.startsWith("h2-") && !it.name.startsWith("hsqldb-") &&
                 !it.name.startsWith("mysql-connector-") && !it.name.startsWith("postgresql-")
         }
+    classpath += sourceSets["test"].runtimeClasspath.filter {
+        it.name.startsWith("junit-jupiter-api-") || it.name.startsWith("junit-platform-commons-") ||
+            it.name.startsWith("opentest4j-") || it.name.startsWith("apiguardian-api-")
+    }
     args(layout.buildDirectory.dir("fallback-drivers").get().asFile.absolutePath)
 }
 

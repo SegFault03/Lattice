@@ -4,6 +4,7 @@ Patch notes are selected by the exact release version, including prerelease suff
 
 ## [Unreleased]
 
+- Integrate H2 with the staging source picker, explorer grouping/search/filter and table-tab badges; cover aliased/composite primary and foreign keys with packaged and selected drivers.
 - Add H2 2.x provider and bundled 2.3.232 driver, memory/file/TCP connection forms, schema/table operations, generated-column metadata and native table DDL exports. Add file/TCP/TLS functional and data regression suites, a driver/server/runtime compatibility matrix, and full dark/light real-IDE H2 scenarios. H2 2.3 requires Java 11+; H2 2.1/2.2 also pass real Java 8 probes.
 
 - Redesign the connection dialog with a scrollable data source picker and provider-specific defaults.

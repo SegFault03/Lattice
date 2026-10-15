@@ -11,17 +11,19 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DatabaseExplorerSearchControllerTest {
-    @Test void onlyConnectedSourcesInTheCurrentViewAreMatchedAndClosingRestoresExpansion() throws Exception {
-        ConnectionConfig connected = new ConnectionConfig(DatabaseType.HSQLDB, "Search connected");
+    @Test void hsqlSearchRespectsConnectionVisibilityAndRestoresExpansion() throws Exception { verifySearch(DatabaseType.HSQLDB); }
+    @Test void h2SearchRespectsConnectionVisibilityAndRestoresExpansion() throws Exception { verifySearch(DatabaseType.H2); }
+    private void verifySearch(DatabaseType type) throws Exception {
+        ConnectionConfig connected = new ConnectionConfig(type, "Search connected");
         connected.setDatabaseName("search_controller_" + System.nanoTime());
-        connected.setCustomUrl("jdbc:hsqldb:mem:" + connected.getDatabaseName() + ";shutdown=true");
+        connected.setHsqlMode(com.segfault03.ideadb.model.HsqlMode.MEM);
         ConnectionConfig disconnected = new ConnectionConfig(DatabaseType.MYSQL, "Search disconnected");
         var manager = DatabaseConnectionManager.getInstance();
         manager.getConnection(connected);
         try {
             SwingUtilities.invokeAndWait(() -> {
                 DefaultMutableTreeNode root = new DefaultMutableTreeNode(TreeNodeData.root());
-                DefaultMutableTreeNode hsql = new DefaultMutableTreeNode(TreeNodeData.sourceType(DatabaseType.HSQLDB));
+                DefaultMutableTreeNode hsql = new DefaultMutableTreeNode(TreeNodeData.sourceType(type));
                 DefaultMutableTreeNode mysql = new DefaultMutableTreeNode(TreeNodeData.sourceType(DatabaseType.MYSQL));
                 root.add(hsql); root.add(mysql);
                 TreeNodeData online = TreeNodeData.connection(connected, true), offline = TreeNodeData.connection(disconnected, false);
