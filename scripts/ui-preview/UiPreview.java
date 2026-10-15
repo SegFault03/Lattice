@@ -277,8 +277,9 @@ public final class UiPreview {
                 choices.get(type).doClick(0);
                 if (selection.getSelectedItem() != type || !choices.get(type).isSelected())
                     throw new AssertionError("Source picker did not select " + type);
-                if (type != DatabaseType.HSQLDB && !((JTextField) field(dialog, "mysqlPortField"))
-                        .getText().equals(String.valueOf(type.getDefaultPort())))
+                if (!((JTextField) field(dialog, com.segfault03.ideadb.provider.DatabaseProviders.get(type).connectionForm()
+                        == com.segfault03.ideadb.provider.DatabaseProvider.ConnectionForm.SERVER
+                        ? "mysqlPortField" : "hsqlServerPortField")).getText().equals(String.valueOf(type.getDefaultPort())))
                     throw new AssertionError("Source picker did not update the port for " + type);
             }
             choices.get(DatabaseType.MYSQL).doClick(0);
@@ -783,6 +784,7 @@ public final class UiPreview {
             case MYSQL -> 0x00758F;
             case HSQLDB -> 0x7256A8;
             case POSTGRESQL -> 0x4169E1;
+            case H2 -> 0x2471A3;
         };
         int filled = 0;
         for (int y = 6; y < 16; y++) for (int x = 0; x < 10; x++) {
