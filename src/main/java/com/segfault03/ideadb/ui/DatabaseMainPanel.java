@@ -24,7 +24,6 @@ import javax.swing.*;
 import javax.swing.event.TreeExpansionEvent;
 import javax.swing.event.TreeExpansionListener;
 import javax.swing.tree.DefaultMutableTreeNode;
-import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 import java.awt.*;
@@ -39,10 +38,13 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     private volatile boolean disposed;
     private final Project project;
 
-    private DefaultTreeModel treeModel;
+    private DatabaseSourceTreeModel treeModel;
     private DefaultMutableTreeNode rootNode;
     private Tree databaseTree;
     private DatabaseExplorerToolbar toolbar;
+    private DatabaseExplorerSearchBar searchBar;
+    private DatabaseExplorerHeader explorerHeader;
+    private DatabaseExplorerSearchController searchController;
     private final JLabel operationStatus = new WrappingLabel("Ready");
     private final java.util.Map<TreeNodeData, String> loadingNodes = new java.util.LinkedHashMap<>();
     private boolean mutationRunning;
@@ -74,6 +76,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     public boolean isDisposed() { return disposed; }
 
     @Override public void dispose() {
+        if (searchController != null) searchController.close();
         disposed=true; tasks.cancelPending();
         ToolTipManager.sharedInstance().unregisterComponent(databaseTree);
         com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(tasks::close);
@@ -82,13 +85,19 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         toolbar = new DatabaseExplorerToolbar(this::showAddConnectionMenu,
                 this::editSelectedConnection, this::removeSelectedConnection,
                 this::refreshSelectedNode, this::openConsoleForSelected,
+                this::showSourceFilter,
+                this::toggleSearch,
                 () -> DatabaseEditorManager.getInstance(project).openWelcome());
-        add(toolbar.createComponent(this), BorderLayout.NORTH);
+        searchBar = new DatabaseExplorerSearchBar(query -> {
+            if (searchController != null) searchController.changed(query);
+        }, () -> setSearchVisible(false), () -> searchController.navigate(-1), () -> searchController.navigate(1));
+        explorerHeader = new DatabaseExplorerHeader(toolbar.createComponent(this), searchBar);
+        add(explorerHeader, BorderLayout.NORTH);
         setPreferredSize(JBUI.size(260, 400));
 
         // Database Tree
         rootNode = new DefaultMutableTreeNode(TreeNodeData.root());
-        treeModel = new DefaultTreeModel(rootNode);
+        treeModel = new DatabaseSourceTreeModel(rootNode);
         databaseTree = new Tree(treeModel);
         databaseTree.setCellRenderer(new DatabaseTreeCellRenderer());
         databaseTree.putClientProperty(com.intellij.ui.AnimatedIcon.ANIMATION_IN_RENDERER_ALLOWED, Boolean.TRUE);
@@ -99,11 +108,29 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         databaseTree.setBorder(JBUI.Borders.empty(6, 8));
 
         setupTreeListeners();
+        searchController = new DatabaseExplorerSearchController(databaseTree, treeModel, searchBar);
+        String searchAction = "lattice.explorer.search";
+        getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_F,
+                com.intellij.openapi.util.SystemInfo.isMac ? java.awt.event.InputEvent.META_DOWN_MASK : java.awt.event.InputEvent.CTRL_DOWN_MASK), searchAction);
+        getActionMap().put(searchAction, new AbstractAction() {
+            @Override public void actionPerformed(java.awt.event.ActionEvent event) { setSearchVisible(true); }
+        });
 
         JBScrollPane treeScrollPane = new JBScrollPane(databaseTree);
         treeScrollPane.setBorder(JBUI.Borders.empty());
         explorerCards.add(treeScrollPane, "tree");
         explorerCards.add(new EmptyConnectionPanel(this::showAddConnectionMenu), "empty");
+        JPanel filteredEmpty = new JPanel(new GridBagLayout());
+        GridBagConstraints prompt = new GridBagConstraints();
+        prompt.gridx = 0;
+        prompt.gridy = 0;
+        filteredEmpty.add(new com.intellij.ui.components.JBLabel("No connections match this view"), prompt);
+        prompt.gridy = 1;
+        prompt.insets = JBUI.insetsTop(8);
+        com.intellij.ui.components.ActionLink showAll = new com.intellij.ui.components.ActionLink("Show all data sources");
+        showAll.addActionListener(event -> applySourceFilter(java.util.EnumSet.allOf(DatabaseType.class)));
+        filteredEmpty.add(showAll, prompt);
+        explorerCards.add(filteredEmpty, "filtered-empty");
         add(explorerCards, BorderLayout.CENTER);
 
         JPanel footer = new JPanel(new BorderLayout(0, JBUI.scale(4)));
@@ -115,21 +142,109 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     }
 
     public void loadConnectionsFromState() {
+        java.util.Set<DatabaseType> collapsedTypes = java.util.EnumSet.noneOf(DatabaseType.class);
+        var oldChildren = rootNode.children();
+        while (oldChildren.hasMoreElements()) {
+            DefaultMutableTreeNode child = (DefaultMutableTreeNode) oldChildren.nextElement();
+            if (child.getUserObject() instanceof TreeNodeData data
+                    && data.getType() == TreeNodeData.NodeType.SOURCE_TYPE
+                    && data.getDatabaseType() != null
+                    && !databaseTree.isExpanded(new TreePath(child.getPath()))) {
+                collapsedTypes.add(data.getDatabaseType());
+            }
+        }
         rootNode.removeAllChildren();
         List<ConnectionConfig> configs = DatabaseSettingsState.getInstance().getConnections();
         toolbar.setHasConnections(!configs.isEmpty());
-        explorerLayout.show(explorerCards, configs.isEmpty() ? "empty" : "tree");
         if (!configs.isEmpty()) {
+            java.util.Map<DatabaseType, List<ConnectionConfig>> byType = new java.util.EnumMap<>(DatabaseType.class);
             for (ConnectionConfig cfg : configs) {
-                boolean connected = DatabaseConnectionManager.getInstance().isConnected(cfg.getId());
-                DefaultMutableTreeNode connNode = new DefaultMutableTreeNode(TreeNodeData.connection(cfg, connected));
-                connNode.add(new DefaultMutableTreeNode(TreeNodeData.placeholder("Expand to load databases...")));
-                rootNode.add(connNode);
+                byType.computeIfAbsent(cfg.getType(), ignored -> new ArrayList<>()).add(cfg);
+            }
+            List<DatabaseType> types = new ArrayList<>(byType.keySet());
+            types.sort(java.util.Comparator.comparing(DatabaseType::getDisplayName, String.CASE_INSENSITIVE_ORDER));
+            for (DatabaseType type : types) {
+                DefaultMutableTreeNode typeNode = new DefaultMutableTreeNode(TreeNodeData.sourceType(type));
+                for (ConnectionConfig cfg : byType.get(type)) {
+                    boolean connected = DatabaseConnectionManager.getInstance().isConnected(cfg.getId());
+                    DefaultMutableTreeNode connNode = new DefaultMutableTreeNode(TreeNodeData.connection(cfg, connected));
+                    connNode.add(new DefaultMutableTreeNode(TreeNodeData.placeholder("")));
+                    typeNode.add(connNode);
+                }
+                rootNode.add(typeNode);
             }
         }
         treeModel.reload();
+        updateSourceFilterAction();
         databaseTree.expandPath(new TreePath(rootNode.getPath()));
+        for (int i = 0; i < treeModel.getChildCount(rootNode); i++) {
+            DefaultMutableTreeNode typeNode = (DefaultMutableTreeNode) treeModel.getChild(rootNode, i);
+            TreeNodeData data = (TreeNodeData) typeNode.getUserObject();
+            if (!collapsedTypes.contains(data.getDatabaseType())) {
+                databaseTree.expandPath(new TreePath(typeNode.getPath()));
+            }
+        }
         updateSelectionActions();
+        if (searchController != null) searchController.reset();
+    }
+
+    private void toggleSearch() { setSearchVisible(!searchBar.isVisible()); }
+
+    private void setSearchVisible(boolean visible) {
+        searchBar.setVisible(visible);
+        toolbar.setSearchVisible(visible);
+        if (visible) SwingUtilities.invokeLater(searchBar::focusInput);
+        else {
+            searchBar.setText("");
+            searchController.changed(searchBar.query());
+            databaseTree.requestFocusInWindow();
+        }
+        explorerHeader.revalidate();
+        explorerHeader.repaint();
+    }
+
+    private void showSourceFilter(Component anchor) {
+        List<DatabaseType> available = new ArrayList<>(java.util.Arrays.asList(DatabaseType.values()));
+        available.sort(java.util.Comparator.comparing(DatabaseType::getDisplayName, String.CASE_INSENSITIVE_ORDER));
+        DatabaseSourceFilterPopup.show(anchor, available, treeModel.getVisibleTypes(), this::applySourceFilter, this);
+    }
+
+    private void applySourceFilter(java.util.Set<DatabaseType> types) {
+        if (disposed || project.isDisposed()) return;
+        TreePath rootPath = new TreePath(rootNode.getPath());
+        var expanded = databaseTree.getExpandedDescendants(rootPath);
+        List<TreePath> expandedPaths = expanded == null ? List.of() : java.util.Collections.list(expanded);
+        TreePath selected = databaseTree.getSelectionPath();
+        java.util.Set<DatabaseType> previousTypes = treeModel.getVisibleTypes();
+        treeModel.setVisibleTypes(types);
+        databaseTree.expandPath(rootPath);
+        for (TreePath path : expandedPaths) {
+            if (isVisibleSourcePath(path)) databaseTree.expandPath(path);
+        }
+        for (int i = 0; i < treeModel.getChildCount(rootNode); i++) {
+            DefaultMutableTreeNode group = (DefaultMutableTreeNode) treeModel.getChild(rootNode, i);
+            TreeNodeData data = (TreeNodeData) group.getUserObject();
+            if (!previousTypes.contains(data.getDatabaseType())) databaseTree.expandPath(new TreePath(group.getPath()));
+        }
+        if (selected != null && isVisibleSourcePath(selected)) databaseTree.setSelectionPath(selected);
+        updateSourceFilterAction();
+        updateSelectionActions();
+    }
+
+    private boolean isVisibleSourcePath(TreePath path) {
+        if (path.getPathCount() < 2) return true;
+        TreeNodeData source = (TreeNodeData) ((DefaultMutableTreeNode) path.getPathComponent(1)).getUserObject();
+        return treeModel.getVisibleTypes().contains(source.getDatabaseType());
+    }
+
+    private void updateSourceFilterAction() {
+        java.util.Set<DatabaseType> types = treeModel.getVisibleTypes();
+        boolean all = types.size() == DatabaseType.values().length;
+        String summary = all ? "All data sources" : types.stream().map(DatabaseType::getDisplayName)
+                .sorted(String.CASE_INSENSITIVE_ORDER).collect(java.util.stream.Collectors.joining(", "));
+        toolbar.setSourceFilter(summary, !all);
+        explorerLayout.show(explorerCards, rootNode.getChildCount() == 0 ? "empty"
+                : treeModel.getChildCount(rootNode) == 0 ? "filtered-empty" : "tree");
     }
 
     private void setupTreeListeners() {
@@ -183,6 +298,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     }
 
     private void handleNodeExpansion(DefaultMutableTreeNode node) {
+        if (searchController != null && searchController.isRevealing()) return;
         Object uo = node.getUserObject();
         if (!(uo instanceof TreeNodeData)) return;
         TreeNodeData data = (TreeNodeData) uo;
@@ -234,7 +350,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                     data.setConnected(false);
                     data.setLoaded(false);
                     node.removeAllChildren();
-                    node.add(new DefaultMutableTreeNode(TreeNodeData.placeholder("Expand to load databases...")));
+                    node.add(new DefaultMutableTreeNode(TreeNodeData.placeholder("")));
                     treeModel.nodeStructureChanged(node);
                 });
                 menu.add(disconnectItem);

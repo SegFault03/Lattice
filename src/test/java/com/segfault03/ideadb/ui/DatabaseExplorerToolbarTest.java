@@ -19,30 +19,31 @@ class DatabaseExplorerToolbarTest {
             AtomicInteger calls = new AtomicInteger();
             Runnable action = calls::incrementAndGet;
             DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(
-                    component -> action.run(), action, action, action, action, action);
+                    component -> action.run(), action, action, action, action, component -> action.run(), action, action);
             assertInstanceOf(javax.swing.border.EmptyBorder.class, toolbar.getBorder(),
                     "The explorer must leave the section boundary to the IDE tool-window header");
             List<JButton> buttons = new ArrayList<>();
             for (Component child : toolbar.getComponents()) {
                 if (child instanceof JButton button) buttons.add(button);
             }
-            assertEquals(6, buttons.size());
-            for (int i = 1; i <= 4; i++) {
+            assertEquals(8, buttons.size());
+            for (int i = 1; i <= 5; i++) {
                 assertTrue(buttons.get(i).isVisible());
                 assertFalse(buttons.get(i).isEnabled());
                 buttons.get(i).doClick(0);
             }
             assertEquals(0, calls.get(), "Disabled actions must not invoke their handlers");
             assertTrue(buttons.get(0).isEnabled());
-            assertTrue(buttons.get(5).isEnabled());
+            assertTrue(buttons.get(6).isEnabled());
+            assertTrue(buttons.get(7).isEnabled());
             toolbar.setHasConnections(true);
             ConnectionConfig config = new ConnectionConfig();
             toolbar.setSelection(TreeNodeData.connection(config, false));
-            for (int i = 1; i <= 4; i++) {
+            for (int i = 1; i <= 5; i++) {
                 assertTrue(buttons.get(i).isEnabled());
                 buttons.get(i).doClick(0);
             }
-            assertEquals(4, calls.get());
+            assertEquals(5, calls.get());
             toolbar.setHasConnections(false);
             assertFalse(buttons.get(1).isEnabled());
             for (int width : new int[]{260, 420, 600}) {
@@ -64,7 +65,7 @@ class DatabaseExplorerToolbarTest {
     void actionAvailabilityFollowsTheSelectedNodeAndClearsAfterRemovingConnections() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             Runnable noop = () -> {};
-            DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(component -> {}, noop, noop, noop, noop, noop);
+            DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(component -> {}, noop, noop, noop, noop, component -> {}, noop, noop);
             List<JButton> buttons = buttons(toolbar);
             toolbar.setHasConnections(true);
             assertFalse(buttons.get(1).isEnabled());
@@ -86,32 +87,84 @@ class DatabaseExplorerToolbarTest {
             assertFalse(buttons.get(1).isEnabled());
             assertTrue(buttons.get(3).isEnabled());
             toolbar.setHasConnections(false);
-            for (int i = 1; i <= 4; i++) assertFalse(buttons.get(i).isEnabled());
+            for (int i = 1; i <= 5; i++) assertFalse(buttons.get(i).isEnabled());
         });
     }
 
     @Test
-    void hoverAndPressHaveDistinctBackgroundsAndDisabledButtonsDoNotHighlight() throws Exception {
+    void hoverAndPressUseNativeThemeColorsWithoutRecoloringGlyphs() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            Object previousHover = UIManager.get("ActionButton.hoverBackground");
+            Object previousPressed = UIManager.get("ActionButton.pressedBackground");
+            Color glyph = new Color(0x2878A0);
+            try {
+                for (Color[] palette : new Color[][]{
+                        {new Color(0xD6D6D6), new Color(0xC0C0C0)},
+                        {new Color(0x44464A), new Color(0x53565B)}}) {
+                    UIManager.put("ActionButton.hoverBackground", palette[0]);
+                    UIManager.put("ActionButton.pressedBackground", palette[1]);
+                    Runnable noop = () -> {};
+                    DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(component -> {}, noop, noop, noop, noop, component -> {}, noop, noop);
+                    JButton button = buttons(toolbar).get(3);
+                    button.setIcon(new Icon() {
+                        public int getIconWidth() { return JBUI.scale(8); }
+                        public int getIconHeight() { return JBUI.scale(8); }
+                        public void paintIcon(Component component, Graphics graphics, int x, int y) {
+                            graphics.setColor(glyph);
+                            graphics.fillRect(x, y, getIconWidth(), getIconHeight());
+                        }
+                    });
+                    toolbar.setHasConnections(true);
+                    button.setSize(button.getPreferredSize());
+                    int normal = pixel(button);
+                    int centerX = button.getWidth() / 2, centerY = button.getHeight() / 2;
+                    assertEquals(glyph.getRGB(), pixel(button, centerX, centerY));
+                    button.getModel().setRollover(true);
+                    assertEquals(palette[0].getRGB(), pixel(button), "Hover follows the IDE theme's action background");
+                    assertEquals(glyph.getRGB(), pixel(button, centerX, centerY), "Hover keeps the icon's original colors");
+                    button.getModel().setArmed(true);
+                    button.getModel().setPressed(true);
+                    assertEquals(palette[1].getRGB(), pixel(button));
+                    assertEquals(glyph.getRGB(), pixel(button, centerX, centerY));
+                    button.getModel().setPressed(false);
+                    button.getModel().setArmed(false);
+                    button.setEnabled(false);
+                    button.getModel().setRollover(true);
+                    assertEquals(normal, pixel(button), "Unavailable actions have no hover or pressed background");
+                }
+            } finally {
+                UIManager.put("ActionButton.hoverBackground", previousHover);
+                UIManager.put("ActionButton.pressedBackground", previousPressed);
+            }
+        });
+    }
+
+    @Test void filterIndicatorAndOverflowStayActiveUntilAllSourcesAreRestored() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             Runnable noop = () -> {};
-            DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(component -> {}, noop, noop, noop, noop, noop);
-            JButton button = buttons(toolbar).get(3);
+            DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(component -> {}, noop, noop, noop, noop, component -> {}, noop, noop);
             toolbar.setHasConnections(true);
-            button.setSize(button.getPreferredSize());
-            int normal = pixel(button);
-            button.getModel().setRollover(true);
-            int hover = pixel(button);
-            assertNotEquals(normal, hover);
-            button.getModel().setArmed(true);
-            button.getModel().setPressed(true);
-            int pressed = pixel(button);
-            assertNotEquals(normal, pressed);
-            assertNotEquals(hover, pressed);
-            button.getModel().setPressed(false);
-            button.getModel().setArmed(false);
-            button.setEnabled(false);
-            button.getModel().setRollover(true);
-            assertEquals(normal, pixel(button), "Unavailable actions have no hover or pressed background");
+            JButton eye = buttons(toolbar).stream()
+                    .filter(button -> "View only…".equals(button.getAccessibleContext().getAccessibleName()))
+                    .findFirst().orElseThrow();
+            JButton overflow = DatabaseUi.mirrorAction(eye);
+            overflow.addNotify();
+            try {
+                toolbar.setSourceFilter("MySQL", true);
+                assertTrue(eye.isSelected());
+                assertTrue(overflow.isSelected());
+                assertEquals("View only: MySQL", overflow.getToolTipText());
+                toolbar.setBusy(true);
+                assertFalse(eye.isEnabled());
+                assertFalse(overflow.isEnabled());
+                toolbar.setBusy(false);
+                assertTrue(eye.isEnabled());
+                assertTrue(overflow.isSelected(), "Finishing work preserves the applied filter indicator");
+                toolbar.setSourceFilter("All data sources", false);
+                assertFalse(eye.isSelected());
+                assertFalse(overflow.isSelected());
+                assertEquals("View only: All data sources", overflow.getToolTipText());
+            } finally { overflow.removeNotify(); }
         });
     }
 
@@ -122,10 +175,14 @@ class DatabaseExplorerToolbarTest {
     }
 
     private static int pixel(JButton button) {
+        return pixel(button, JBUI.scale(3), JBUI.scale(3));
+    }
+
+    private static int pixel(JButton button, int x, int y) {
         BufferedImage image = new BufferedImage(button.getWidth(), button.getHeight(), BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = image.createGraphics();
         try { button.paint(graphics); }
         finally { graphics.dispose(); }
-        return image.getRGB(JBUI.scale(3), JBUI.scale(3));
+        return image.getRGB(x, y);
     }
 }

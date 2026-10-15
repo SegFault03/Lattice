@@ -24,6 +24,19 @@ public final class DatabaseSession implements AutoCloseable {
         return operation.run(manager.getConnection(config, sessionId));
     }
 
+    public synchronized com.segfault03.ideadb.model.QueryResult executeQuery(String namespace, String sql,
+            DataService.QueryOptions options, QueryExecution execution) throws Exception {
+        var result = execute(connection -> DataService.getInstance().executeQuery(connection, namespace, sql, options, execution));
+        // A driver can lose its session after a successful post-cancel health check.
+        // Retry preparation once on a new connection, only if no user SQL was sent.
+        if (result.hasError() && !execution.hasStartedSql() && discardInvalidConnection()) {
+            execution.markConnectionDiscarded();
+            if (execution.prepareRetryBeforeSql())
+                result = execute(connection -> DataService.getInstance().executeQuery(connection, namespace, sql, options, execution));
+        }
+        return result;
+    }
+
     /** Validate only after cancellation; preserve healthy connections and their transactions. */
     public synchronized boolean discardInvalidConnection() {
         return !closed && manager.discardInvalidSession(config.getId(), sessionId);

@@ -11,6 +11,7 @@ public class ColumnMetadata {
     private final boolean autoIncrement;
     private final String defaultValue;
     private final boolean generated;
+    private final boolean foreignKey;
 
     public ColumnMetadata(String name, String typeName, int dataType, int columnSize, int decimalDigits,
                           boolean nullable, boolean primaryKey, boolean autoIncrement, String defaultValue) {
@@ -18,6 +19,12 @@ public class ColumnMetadata {
     }
     public ColumnMetadata(String name, String typeName, int dataType, int columnSize, int decimalDigits,
                           boolean nullable, boolean primaryKey, boolean autoIncrement, String defaultValue, boolean generated) {
+        this(name, typeName, dataType, columnSize, decimalDigits, nullable, primaryKey, autoIncrement, defaultValue, generated, false);
+    }
+    private ColumnMetadata(String name, String typeName, int dataType, int columnSize, int decimalDigits,
+                           boolean nullable, boolean primaryKey, boolean autoIncrement, String defaultValue,
+                           boolean generated, boolean foreignKey) {
+        this.foreignKey = foreignKey;
         this.generated = generated;
         this.name = name;
         this.typeName = typeName;
@@ -28,6 +35,12 @@ public class ColumnMetadata {
         this.primaryKey = primaryKey;
         this.autoIncrement = autoIncrement;
         this.defaultValue = defaultValue;
+    }
+
+    public boolean isForeignKey() { return foreignKey; }
+    public ColumnMetadata withForeignKey(boolean foreignKey) {
+        return new ColumnMetadata(name, typeName, dataType, columnSize, decimalDigits, nullable,
+                primaryKey, autoIncrement, defaultValue, generated, foreignKey);
     }
 
     public boolean isGenerated() { return generated; }

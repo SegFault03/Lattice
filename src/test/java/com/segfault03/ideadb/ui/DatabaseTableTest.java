@@ -10,6 +10,78 @@ import java.awt.image.BufferedImage;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DatabaseTableTest {
+    @Test void primaryKeyHeadersHaveDistinctPaintedColorsAndFollowModelColumnIndices() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            var model = new com.segfault03.ideadb.model.ReadOnlyResultModel();
+            model.setResult(com.segfault03.ideadb.model.QueryResult.forResultSet(
+                    java.util.List.of("tenant", "id", "name"), java.util.List.of("INT", "INT", "VARCHAR"),
+                    java.util.List.of(), 0).withPrimaryKeyColumns(java.util.Set.of(0, 1)));
+            DatabaseTable table = new DatabaseTable(model);
+            for (Color surface : new Color[]{Color.WHITE, new Color(0x2B2D30)}) {
+                table.setBackground(surface);
+                table.setForeground(surface.equals(Color.WHITE) ? Color.BLACK : Color.WHITE);
+                var header = table.getTableHeader();
+                header.setUI(new com.intellij.ide.ui.laf.darcula.DarculaTableHeaderUI());
+                for (var column : java.util.Collections.list(table.getColumnModel().getColumns())) column.setWidth(100);
+                header.setSize(300, header.getPreferredSize().height);
+                BufferedImage image = new BufferedImage(300, header.getHeight(), BufferedImage.TYPE_INT_RGB);
+                Graphics graphics = image.createGraphics();
+                graphics.setClip(0, 0, 300, header.getHeight());
+                header.paint(graphics);
+                graphics.dispose();
+                assertEquals(image.getRGB(5, 3), image.getRGB(105, 3), "Both composite-key headers use the accent");
+                assertNotEquals(image.getRGB(5, 3), image.getRGB(205, 3), "Keys differ visibly from ordinary headers");
+                var renderer = header.getDefaultRenderer();
+                JLabel label = (JLabel) renderer.getTableCellRendererComponent(table, "name", false, false, -1, 2);
+                assertNull(label.getIcon(), "A recycled renderer must clear the key icon");
+                assertEquals(header.getBackground(), label.getBackground());
+            }
+            table.getColumnModel().moveColumn(2, 0);
+            JLabel label = (JLabel) table.getTableHeader().getDefaultRenderer()
+                    .getTableCellRendererComponent(table, "name", false, false, -1, 0);
+            assertNull(label.getIcon(), "Highlighting follows model indices when columns move");
+        });
+    }
+
+    @Test void foreignKeyHeadersHaveDistinctColorsAndDualKeysKeepBothBadges() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            var model = new com.segfault03.ideadb.model.ReadOnlyResultModel();
+            model.setResult(com.segfault03.ideadb.model.QueryResult.forResultSet(
+                    java.util.List.of("id", "tenant", "parent_tenant", "parent_id", "name"),
+                    java.util.List.of("INT", "INT", "INT", "INT", "VARCHAR"), java.util.List.of(), 0)
+                    .withPrimaryKeyColumns(java.util.Set.of(0, 1)).withForeignKeyColumns(java.util.Set.of(1, 2, 3)));
+            DatabaseTable table = new DatabaseTable(model);
+            for (Color surface : new Color[]{Color.WHITE, new Color(0x2B2D30)}) {
+                table.setBackground(surface);
+                table.setForeground(surface.equals(Color.WHITE) ? Color.BLACK : Color.WHITE);
+                var header = table.getTableHeader();
+                header.setUI(new com.intellij.ide.ui.laf.darcula.DarculaTableHeaderUI());
+                for (var column : java.util.Collections.list(table.getColumnModel().getColumns())) column.setWidth(100);
+                header.setSize(500, header.getPreferredSize().height);
+                BufferedImage image = new BufferedImage(500, header.getHeight(), BufferedImage.TYPE_INT_RGB);
+                Graphics graphics = image.createGraphics();
+                graphics.setClip(0, 0, 500, header.getHeight());
+                header.paint(graphics);
+                graphics.dispose();
+                assertEquals(image.getRGB(5, 3), image.getRGB(105, 3), "Dual keys retain the gold primary-key tint");
+                assertEquals(image.getRGB(205, 3), image.getRGB(305, 3), "Every composite foreign-key column has the tint");
+                assertNotEquals(image.getRGB(5, 3), image.getRGB(205, 3), "Foreign and primary keys differ");
+                assertNotEquals(image.getRGB(205, 3), image.getRGB(405, 3), "Foreign keys differ from ordinary columns");
+                var renderer = header.getDefaultRenderer();
+                JLabel dual = (JLabel) renderer.getTableCellRendererComponent(table, "tenant", false, false, -1, 1);
+                assertEquals("Primary and foreign key column", dual.getAccessibleContext().getAccessibleDescription());
+                assertTrue(dual.getIcon().getIconWidth() > Icons.KEY.getIconWidth(), "Both role badges are present");
+                JLabel ordinary = (JLabel) renderer.getTableCellRendererComponent(table, "name", false, false, -1, 4);
+                assertNull(ordinary.getIcon());
+                assertNull(ordinary.getAccessibleContext().getAccessibleDescription());
+            }
+            table.getColumnModel().moveColumn(2, 0);
+            JLabel moved = (JLabel) table.getTableHeader().getDefaultRenderer()
+                    .getTableCellRendererComponent(table, "parent_tenant", false, false, -1, 0);
+            assertEquals("Foreign key column", moved.getAccessibleContext().getAccessibleDescription());
+        });
+    }
+
     @Test void columnWidthsUseRenderedContentAndCapLongValues() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             DatabaseTable table = new DatabaseTable(new DefaultTableModel(

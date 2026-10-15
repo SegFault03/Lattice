@@ -8,6 +8,26 @@ import java.util.concurrent.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class QueryExecutionTest {
+    @Test void preparationRecoveryKeepsTheSameCancellationHandle() throws Exception {
+        QueryExecution execution = new QueryExecution();
+        execution.detach();
+        assertTrue(execution.prepareRetryBeforeSql());
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        execution.attach(statement(() -> { calls.incrementAndGet(); execution.detach(); }));
+        execution.cancel();
+        assertEquals(1, calls.get());
+        assertTrue(execution.isCancellationRequested());
+        assertFalse(execution.prepareRetryBeforeSql(), "A cancellation request must prevent reconnecting and submitting SQL");
+    }
+
+    @Test void submittedSqlCanNeverBeRetriedAfterAnError() {
+        QueryExecution execution = new QueryExecution();
+        execution.markSqlStarted();
+        execution.detach();
+        assertTrue(execution.hasStartedSql());
+        assertFalse(execution.prepareRetryBeforeSql(), "A submitted write must never be repeated after an ambiguous failure");
+    }
+
     @Test void aRequestBeforeAttachmentStopsExecutionAndIsIdempotent() {
         QueryExecution execution = new QueryExecution();
         assertTrue(execution.requestCancellation());

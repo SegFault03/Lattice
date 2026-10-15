@@ -102,7 +102,20 @@ public final class DatabaseTable extends JBTable {
         @Override public Component getTableCellRendererComponent(JTable table, Object value, boolean selected,
                                                                  boolean focus, int row, int column) {
             super.getTableCellRendererComponent(table, value, selected, focus, row, column);
-            setBackground(table.getTableHeader().getBackground());
+            boolean primaryKey = table.getModel() instanceof com.segfault03.ideadb.model.KeyTableModel keys
+                    && keys.isPrimaryKeyColumn(table.convertColumnIndexToModel(column));
+            boolean foreignKey = table.getModel() instanceof com.segfault03.ideadb.model.KeyTableModel keys
+                    && keys.isForeignKeyColumn(table.convertColumnIndexToModel(column));
+            Color normal = table.getTableHeader().getBackground();
+            boolean light = normal.getRed() + normal.getGreen() + normal.getBlue() > 384;
+            setBackground(primaryKey ? new Color(light ? 0xFFF0C2 : 0x544525)
+                    : foreignKey ? new Color(light ? 0xEDE3FA : 0x463453) : normal);
+            setIcon(primaryKey ? foreignKey ? Icons.PRIMARY_FOREIGN_KEY : Icons.KEY
+                    : foreignKey ? Icons.FOREIGN_KEY : null);
+            setIconTextGap(JBUI.scale(6));
+            getAccessibleContext().setAccessibleDescription(primaryKey
+                    ? foreignKey ? "Primary and foreign key column" : "Primary key column"
+                    : foreignKey ? "Foreign key column" : null);
             setForeground(table.getForeground());
             setFont(table.getFont().deriveFont(Font.BOLD));
             setHorizontalAlignment(SwingConstants.LEFT);

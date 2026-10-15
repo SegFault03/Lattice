@@ -47,6 +47,12 @@ public interface DatabaseProvider {
     default Object boundValue(Object value) { return value; }
     default void bind(PreparedStatement statement, int index, Object value) throws SQLException { statement.setObject(index, boundValue(value)); }
     default Optional<Object> convertSpecialValue(ColumnMetadata column, Object value) { return Optional.empty(); }
+    default String sourceSchemaName(ResultSetMetaData metadata, int index) throws SQLException {
+        return metadata.getSchemaName(index);
+    }
+    default String sourceColumnName(ResultSetMetaData metadata, int index) throws SQLException {
+        return metadata.getColumnName(index);
+    }
     default Object readValue(ResultSet result, ResultSetMetaData meta, int index) throws SQLException { return result.getObject(index); }
     default String insertOverride(Connection connection) throws SQLException { return ""; }
     default AutoCloseable readScope(Connection connection) throws SQLException { return () -> {}; }

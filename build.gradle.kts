@@ -108,8 +108,21 @@ val fallbackDriverJars = tasks.register<Sync>("fallbackDriverJars") {
     into(layout.buildDirectory.dir("fallback-drivers"))
 }
 
+// Keep the legacy cancellation fixture outside the application/driver classpath.
+val cancellationDriver = configurations.create("cancellationDriver") {
+    isCanBeConsumed = false
+    isTransitive = false
+}
+dependencies { add(cancellationDriver.name, "org.hsqldb:hsqldb:2.7.3:jdk8") }
+val cancellationDriverJar = tasks.register<Sync>("cancellationDriverJar") {
+    from(cancellationDriver)
+    into(layout.buildDirectory.dir("cancellation-driver"))
+}
+
 tasks.withType<Test>().configureEach {
     dependsOn(fallbackDriverJars)
+    dependsOn(cancellationDriverJar)
+    systemProperty("lattice.test.cancellation.driver", layout.buildDirectory.file("cancellation-driver/hsqldb-2.7.3-jdk8.jar").get().asFile.absolutePath)
     systemProperty("lattice.test.drivers", layout.buildDirectory.dir("fallback-drivers").get().asFile.absolutePath)
     systemProperty("lattice.test.mysql.port", providers.environmentVariable("LATTICE_TEST_MYSQL_PORT").orElse("3306").get())
     systemProperty("lattice.test.hsqldb.port", providers.environmentVariable("LATTICE_TEST_HSQLDB_PORT").orElse("9001").get())
@@ -134,6 +147,11 @@ tasks.register<JavaExec>("fallbackDriverTest") {
         sourceSets["main"].compileClasspath.filter {
             !it.name.startsWith("mysql-connector-") && !it.name.startsWith("hsqldb-") && !it.name.startsWith("postgresql-")
         }
+    // Reuse the live metadata assertions without putting JDBC drivers on the parent classpath.
+    classpath += sourceSets["test"].runtimeClasspath.filter {
+        it.name.startsWith("junit-jupiter-api-") || it.name.startsWith("junit-platform-commons-") ||
+            it.name.startsWith("opentest4j-") || it.name.startsWith("apiguardian-api-")
+    }
     dependsOn(fallbackDriverJars)
     args(layout.buildDirectory.dir("fallback-drivers").get().asFile.absolutePath)
 }
@@ -220,6 +238,8 @@ intellijPlatformTesting.testIdeUi.register("uiScreenshotTest") {
         systemProperty("ui.theme.id", providers.gradleProperty("lattice.ui.theme").orElse("ExperimentalDark").get())
         systemProperty("ui.review.enabled", providers.gradleProperty("lattice.ui.review").orElse("false").get())
         systemProperty("ui.inputs.only", providers.gradleProperty("lattice.ui.inputsOnly").orElse("false").get())
+        systemProperty("ui.sourceFilter.only", providers.gradleProperty("lattice.ui.sourceFilterOnly").orElse("false").get())
+        systemProperty("ui.explorerSearch.only", providers.gradleProperty("lattice.ui.explorerSearchOnly").orElse("false").get())
         systemProperty("ui.skip.remote.downloads", providers.environmentVariable("LATTICE_UI_SKIP_REMOTE_DOWNLOADS").orElse("false").get())
         systemProperty("ui.postgres.port", providers.gradleProperty("lattice.ui.postgres.port").orElse(providers.environmentVariable("LATTICE_UI_POSTGRES_PORT")).orElse("0").get())
         systemProperty("ui.postgres.password", providers.environmentVariable("LATTICE_UI_POSTGRES_PASSWORD").orElse("lattice-test").get())
@@ -244,6 +264,7 @@ intellijPlatformTesting.testIdeUi.register("uiScreenshotTest") {
         testLogging {
             events("passed", "skipped", "failed")
             showStandardStreams = true
+            exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
         }
     }
 }

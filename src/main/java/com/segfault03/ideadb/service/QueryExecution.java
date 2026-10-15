@@ -11,10 +11,23 @@ public final class QueryExecution {
     private final AtomicReference<Statement> statement = new AtomicReference<>();
     private final AtomicBoolean cancelled = new AtomicBoolean();
     private final AtomicBoolean finishing = new AtomicBoolean();
+    private final AtomicBoolean sqlStarted = new AtomicBoolean();
+    private final AtomicBoolean connectionDiscarded = new AtomicBoolean();
     private final Object cancellationLock = new Object();
     /** Marks the request immediately; JDBC cancellation itself can run off the EDT. */
     public boolean requestCancellation() { return cancelled.compareAndSet(false, true); }
     public boolean isCancellationRequested() { return cancelled.get(); }
+    public boolean hasStartedSql() { return sqlStarted.get(); }
+    public boolean wasConnectionDiscarded() { return connectionDiscarded.get(); }
+    void markConnectionDiscarded() { connectionDiscarded.set(true); }
+    void markSqlStarted() { sqlStarted.set(true); }
+    boolean prepareRetryBeforeSql() {
+        synchronized (cancellationLock) {
+            if (cancelled.get() || sqlStarted.get() || statement.get() != null) return false;
+            finishing.set(false);
+            return true;
+        }
+    }
     public void cancel() {
         requestCancellation();
         synchronized (cancellationLock) {

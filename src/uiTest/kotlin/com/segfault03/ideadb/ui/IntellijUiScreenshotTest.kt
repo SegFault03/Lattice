@@ -65,6 +65,8 @@ class IntellijUiScreenshotTest {
         val screenshotsDirectory = Path.of(requireNotNull(System.getProperty("ui.screenshot.dir")))
         val review = System.getProperty("ui.review.enabled").toBoolean()
         val styleOnly = System.getProperty("ui.style.only").toBoolean()
+        val sourceFilterOnly = System.getProperty("ui.sourceFilter.only").toBoolean()
+        val explorerSearchOnly = System.getProperty("ui.explorerSearch.only").toBoolean()
         val postgresPort = Integer.getInteger("ui.postgres.port", 0)
         val postgres = postgresPort > 0
         val postgresPassword = System.getProperty("ui.postgres.password", "lattice-test")
@@ -124,8 +126,12 @@ class IntellijUiScreenshotTest {
         // IDEA's own ProxySelector supersedes JVM proxy flags. Configure the real
         // HTTP Proxy settings in this isolated profile, preserving cloud routing.
         val proxyAddress = System.getenv("HTTPS_PROXY") ?: System.getenv("HTTP_PROXY")
-        if (!proxyAddress.isNullOrBlank()) {
-            val proxy = java.net.URI.create(proxyAddress)
+        val downloadFixture = if (!sourceFilterOnly && !explorerSearchOnly && !postgres && !System.getProperty("ui.skip.remote.downloads", "false").toBoolean())
+            DriverDownloadUiFixture(proxyAddress) else null
+        try {
+        val configuredProxy = downloadFixture?.let { "http://127.0.0.1:${it.port}" } ?: proxyAddress
+        if (!configuredProxy.isNullOrBlank()) {
+            val proxy = java.net.URI.create(configuredProxy)
             testContext.paths.configDir.resolve("options/proxy.settings.xml").writeText("""
                 <application><component name="HttpConfigurable">
                   <option name="USE_HTTP_PROXY" value="true"/>
@@ -134,6 +140,12 @@ class IntellijUiScreenshotTest {
                   <option name="PROXY_EXCEPTIONS" value="localhost,127.0.0.1"/>
                 </component></application>
             """.trimIndent())
+        } else Files.deleteIfExists(testContext.paths.configDir.resolve("options/proxy.settings.xml"))
+        if (downloadFixture != null) testContext.applyVMOptionsPatch {
+            addSystemProperty("https.proxyHost", "127.0.0.1")
+            addSystemProperty("https.proxyPort", downloadFixture.port.toString())
+            addSystemProperty("http.proxyHost", "127.0.0.1")
+            addSystemProperty("http.proxyPort", downloadFixture.port.toString())
         }
         testContext.paths.configDir.resolve("options/laf.xml").writeText(
             """<application><component name="LafManager" autodetect="false"><laf themeId="$themeId"/></component></application>""",
@@ -231,9 +243,195 @@ class IntellijUiScreenshotTest {
             // in legacy/high-contrast themes. Paint the live root before desktop capture.
             repaintIdeBeforeCapture = {
                 withContext(OnDispatcher.EDT) {
+                    // Environment notices arrive asynchronously and can cover the
+                    // footer. Dismiss their balloons, not production status/dialogs.
+                    cast(frame.component, LiveIdeFrame::class).getBalloonLayout()?.closeAll()
                     val root = cast(frame.component, LiveFrame::class).getRootPane()
                     root.paintImmediately(0, 0, frame.component.width, frame.component.height)
                 }
+            }
+            if (explorerSearchOnly) {
+                openConnectionMenu(pluginRoot, frame, "HSQLDB…")
+                frame.x(DialogUiComponent::class.java) { byTitle("New connection") }.waitFound().also { dialog ->
+                    dialog.x(JComboBoxUiComponent::class.java) {
+                        and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"), byAccessibleName("Mode:"))
+                    }.waitFound().selectItem("In-Memory (mem)")
+                    for ((name, value) in listOf("Name:" to "Lattice search demo", "Database name:" to "lattice_search_demo", "User:" to "SA")) {
+                        dialog.x(JTextFieldUI::class.java) {
+                            and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName(name))
+                        }.waitFound().text = value
+                    }
+                    dialog.pressButton("Add connection")
+                }
+                ideFrame { waitForNoOpenedDialogs() }
+                openConnectionMenu(pluginRoot, frame, "MySQL…")
+                frame.x(DialogUiComponent::class.java) { byTitle("New connection") }.waitFound().also { dialog ->
+                    dialog.x(JTextFieldUI::class.java) {
+                        and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("Name:"))
+                    }.waitFound().text = "Analytics offline"
+                    dialog.pressButton("Add connection")
+                }
+                ideFrame { waitForNoOpenedDialogs() }
+                val tree = pluginRoot.x(JTreeUiComponent::class.java) { byJavaClass("com.intellij.ui.treeStructure.Tree") }.waitFound()
+                tree.fixture.expandRow(2)
+                val schema = arrayOf("Data Sources", "HSQLDB", "Lattice search demo", "PUBLIC")
+                waitUntil("search fixture schema connected") { tree.pathExists(*schema) }
+                tree.fixture.expandPath(schema.joinToString(tree.fixture.separator()))
+                waitUntil("search fixture tables loaded") { tree.pathExists(*(schema + "Tables (0)")) }
+                for (name in listOf("SEARCH_CUSTOMERS", "SEARCH_ORDERS")) {
+                    tree.fixture.rightClickPath(schema.joinToString(tree.fixture.separator()))
+                    frame.x { byVisibleText("Create table…") }.waitFound().click()
+                    frame.x(DialogUiComponent::class.java) { byTitle("Create table in PUBLIC") }.waitFound().also { dialog ->
+                        dialog.x(JTextFieldUI::class.java) { byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField") }.waitFound().text = name
+                        dialog.pressButton("Create table")
+                    }
+                    frame.x(DialogUiComponent::class.java) { byTitle("Table created") }.waitFound().pressButton("OK")
+                    ideFrame { waitForNoOpenedDialogs() }
+                    waitUntil("$name in the explorer") { tree.pathExists(*(schema + "Tables (${if (name == "SEARCH_CUSTOMERS") 1 else 2})")) }
+                }
+                val initialRows = withContext(OnDispatcher.EDT) { cast(tree.component, LiveTree::class).getRowCount() }
+                pluginRoot.x { byAccessibleName("Search explorer") }.waitFound().click()
+                val drawer = pluginRoot.x { byJavaClass("com.segfault03.ideadb.ui.DatabaseExplorerSearchBar") }.waitFound()
+                val search = drawer.x(JTextFieldUI::class.java) { byAccessibleName("Search explorer names") }.waitFound()
+                val counter = drawer.x { byAccessibleName("Explorer search results") }.waitFound()
+                fun waitForMatches(count: Int) = waitUntil("$count explorer search matches") {
+                    val icon = cast(counter.component, LiveLabel::class).getIcon()
+                    val loading = icon != null && cast(icon, LiveObject::class).getClass().getName().contains("AnimatedIcon")
+                    !loading && cast(tree.component, LiveTree::class).getClientProperty("lattice.explorer.search.matches")?.size() == count
+                }
+                fun openSearchFilters(): UiComponent {
+                    drawer.x { byAccessibleName("Search name filters") }.waitFound().click()
+                    return ui.x { byAccessibleName("Explorer search filters") }.waitFound()
+                }
+                fun choose(popup: UiComponent, name: String) = popup.x {
+                    and(byType("javax.swing.JCheckBox"), byAccessibleName(name))
+                }.waitFound().click()
+                search.text = "created_at"
+                waitForMatches(2) // Both column folders were still unexpanded when the search began.
+                captureScreen(screenshotsDirectory.resolve("explorer-search-all-narrow.png"))
+                var popup = openSearchFilters()
+                choose(popup, "Tables")
+                waitForMatches(0)
+                choose(popup, "Keys / columns")
+                waitForMatches(2)
+                captureScreen(screenshotsDirectory.resolve("explorer-search-multiple-filters.png"))
+                pressEscape()
+                search.text = "search_"
+                waitForMatches(2)
+                popup = openSearchFilters()
+                choose(popup, "All")
+                choose(popup, "Schemas")
+                pressEscape()
+                search.text = "PUBLIC"
+                waitForMatches(1)
+                popup = openSearchFilters()
+                choose(popup, "Data sources")
+                pressEscape()
+                search.text = "Analytics"
+                waitForMatches(0)
+                ideFrame { waitForNoOpenedDialogs() }
+                search.text = "Lattice"
+                waitForMatches(1)
+                popup = openSearchFilters()
+                choose(popup, "All")
+                pressEscape()
+                search.text = ""
+                waitForMatches(0)
+                check(withContext(OnDispatcher.EDT) { cast(tree.component, LiveTree::class).getRowCount() } == initialRows) {
+                    "Clearing search must restore the prior tree expansion"
+                }
+                search.text = "created_at"
+                waitForMatches(2)
+                withContext(OnDispatcher.EDT) { cast(frame.component, Window::class).setBounds(10, 40, wideWidth, normalHeight) }
+                Thread.sleep(400)
+                val origin = pluginRoot.component.getLocationOnScreen()
+                val dragX = origin.x - 2
+                val dragY = origin.y + pluginRoot.component.height / 2
+                val targetX = dragX - (1050 - pluginRoot.component.width)
+                robot.mouseMove(dragX, dragY)
+                robot.mousePress(InputEvent.BUTTON1_DOWN_MASK)
+                repeat(12) { step -> robot.mouseMove(dragX + (targetX - dragX) * (step + 1) / 12, dragY); Thread.sleep(25) }
+                robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
+                waitUntil("inline search drawer") {
+                    val toolbar = pluginRoot.x { byAccessibleName("Explorer actions") }.waitFound()
+                    drawer.component.getLocationOnScreen().y == toolbar.component.getLocationOnScreen().y
+                }
+                captureScreen(screenshotsDirectory.resolve("explorer-search-wide-inline.png"))
+                tree.fixture.rightClickPath(schema.joinToString(tree.fixture.separator()))
+                frame.x { byVisibleText("Refresh tables") }.waitFound().click()
+                Thread.sleep(400)
+                waitForMatches(2)
+                drawer.x { byAccessibleName("Close explorer search") }.waitFound().click()
+                waitUntil("search drawer closed") {
+                    pluginRoot.xx { byJavaClass("com.segfault03.ideadb.ui.DatabaseExplorerSearchBar") }.list().isEmpty()
+                }
+                println("Explorer search: connected sources only; unexpanded columns; all and multiple filters; all matches highlighted; expansion restored; narrow and inline layouts")
+                return@useDriverAndCloseIde
+            }
+            if (sourceFilterOnly) {
+                fun openPicker(): UiComponent {
+                    pluginRoot.x { byAccessibleName("View only…") }.waitFound().click()
+                    return ui.x { byJavaClass("com.segfault03.ideadb.ui.DatabaseSourceFilterPopup") }.waitFound()
+                }
+                fun checkbox(picker: UiComponent, name: String) = picker.x {
+                    and(byType("javax.swing.JCheckBox"), byAccessibleName(name))
+                }.waitFound()
+                for ((type, name) in listOf("HSQLDB" to "Scratch database", "MySQL" to "Analytics server", "PostgreSQL" to "Reporting cluster")) {
+                    openConnectionMenu(pluginRoot, frame, "$type…")
+                    frame.x(DialogUiComponent::class.java) { byTitle("New connection") }.waitFound().also { dialog ->
+                        dialog.x(JTextFieldUI::class.java) {
+                            and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("Name:"))
+                        }.waitFound().text = name
+                        dialog.pressButton("Add connection")
+                    }
+                    ideFrame { waitForNoOpenedDialogs() }
+                    if (type == "MySQL") {
+                        val emptyPicker = openPicker()
+                        checkbox(emptyPicker, "All data sources").click()
+                        checkbox(emptyPicker, "PostgreSQL").click()
+                        emptyPicker.x { byVisibleText("Apply") }.waitFound().click()
+                        pluginRoot.x { byVisibleText("No connections match this view") }.waitFound()
+                        captureScreen(screenshotsDirectory.resolve("view-only-empty.png"))
+                        pluginRoot.x { byVisibleText("Show all data sources") }.waitFound().click()
+                    }
+                }
+                val tree = pluginRoot.x(JTreeUiComponent::class.java) {
+                    byJavaClass("com.intellij.ui.treeStructure.Tree")
+                }.waitFound()
+                fun waitForRows(count: Int) = waitUntil("filtered explorer has $count rows") {
+                    withContext(OnDispatcher.EDT) { cast(tree.component, LiveTree::class).getRowCount() == count }
+                }
+                waitForRows(7)
+                captureScreen(screenshotsDirectory.resolve("view-only-all.png"))
+                var picker = openPicker()
+                check(cast(checkbox(picker, "All data sources").component, LiveSourceChoice::class).isSelected())
+                captureScreen(screenshotsDirectory.resolve("view-only-picker.png"))
+                checkbox(picker, "All data sources").click()
+                check(!picker.x { byVisibleText("Apply") }.waitFound().component.isEnabled())
+                checkbox(picker, "MySQL").click()
+                captureScreen(screenshotsDirectory.resolve("view-only-picker-mysql.png"))
+                picker.x { byVisibleText("Apply") }.waitFound().click()
+                waitForRows(3)
+                check(tree.pathExists("Data Sources", "MySQL"))
+                captureScreen(screenshotsDirectory.resolve("view-only-mysql.png"))
+                picker = openPicker()
+                checkbox(picker, "HSQLDB").click()
+                picker.x { byVisibleText("Apply") }.waitFound().click()
+                waitForRows(5)
+                check(tree.pathExists("Data Sources", "HSQLDB") && tree.pathExists("Data Sources", "MySQL"))
+                captureScreen(screenshotsDirectory.resolve("view-only-multiple.png"))
+                picker = openPicker()
+                checkbox(picker, "All data sources").click()
+                picker.x { byVisibleText("Cancel") }.waitFound().click()
+                waitForRows(5)
+                picker = openPicker()
+                checkbox(picker, "All data sources").click()
+                picker.x { byVisibleText("Apply") }.waitFound().click()
+                waitForRows(7)
+                check(tree.pathExists("Data Sources", "PostgreSQL"))
+                captureScreen(screenshotsDirectory.resolve("view-only-all-restored.png"))
+                println("Source filter: no-match recovery, new source included by All, empty draft disabled, one type, multiple types, Cancel and All restored")
+                return@useDriverAndCloseIde
             }
             openConnectionMenu(pluginRoot, frame, "MySQL…")
 
@@ -266,18 +464,16 @@ class IntellijUiScreenshotTest {
             ))) { "Expected bundled and Maven-discovered MySQL releases: $mysqlAvailableDriverLabels" }
             captureScreen(screenshotsDirectory.resolve("mysql-connection-dialog-available-driver-list.png"))
             pressEscape()
-            val mysqlTypeCombo = mysqlDialog.x(JComboBoxUiComponent::class.java) {
-                and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"), byAccessibleName("Database type:"))
-            }.waitFound()
-            mysqlTypeCombo.selectItem("HSQLDB")
+            assertDataSourcePicker(mysqlDialog)
+            mysqlDialog.x { byAccessibleName("HSQLDB") }.waitFound().click()
             assertDriverSummary(mysqlDialog, "2.7.2 · DISCOVERED")
             captureScreen(screenshotsDirectory.resolve("driver-type-switch-hsql-project-default.png"))
-            mysqlTypeCombo.selectItem("MySQL")
+            mysqlDialog.x { byAccessibleName("MySQL") }.waitFound().click()
             assertDriverSummary(mysqlDialog, "8.4.0 · DISCOVERED")
             mysqlAvailableDriverCombo.selectItem("26.7.0 · BUNDLED")
-            mysqlTypeCombo.selectItem("HSQLDB")
+            mysqlDialog.x { byAccessibleName("HSQLDB") }.waitFound().click()
             assertDriverSummary(mysqlDialog, "2.7.2 · DISCOVERED")
-            mysqlTypeCombo.selectItem("MySQL")
+            mysqlDialog.x { byAccessibleName("MySQL") }.waitFound().click()
             assertDriverSummary(mysqlDialog, "26.7.0 · BUNDLED")
             captureScreen(screenshotsDirectory.resolve("driver-type-switch-mysql-manual-choice.png"))
             mysqlAvailableDriverCombo.selectItem("8.4.0 · DISCOVERED")
@@ -324,18 +520,23 @@ class IntellijUiScreenshotTest {
                 waitUntil("MySQL version $mysqlProgressVersion can be downloaded") {
                     mysqlDownloadButton.component.isEnabled()
                 }
-                mysqlDownloadButton.click()
-                val mysqlProgressBar = mysqlDialog.x(UiComponent::class.java) {
-                    byAccessibleName("Driver download progress")
-                }.waitFound()
-                assertTrue(mysqlProgressBar.component.isVisible(), "The progress bar should appear during a driver download")
-                assertTrue(!mysqlDownloadButton.component.isEnabled(), "Download should be disabled during the transfer")
-                assertTrue(!mysqlDriverVersionCombo.component.isEnabled(), "The version selector should be disabled during the transfer")
-                assertTrue(
-                    mysqlProgressBar.component.width == mysqlDriverVersionCombo.component.width,
-                    "The progress bar should match the driver version selector width",
-                )
-                captureScreen(screenshotsDirectory.resolve("mysql-driver-download-progress.png"), settleMillis = 0)
+                val downloadGate = requireNotNull(downloadFixture)
+                downloadGate.pauseResponses()
+                try {
+                    mysqlDownloadButton.click()
+                    downloadGate.awaitBlockedResponse()
+                    val mysqlProgressBar = mysqlDialog.x(UiComponent::class.java) {
+                        byAccessibleName("Driver download progress")
+                    }.waitFound()
+                    assertTrue(mysqlProgressBar.component.isVisible(), "The progress bar should appear during a driver download")
+                    assertTrue(!mysqlDownloadButton.component.isEnabled(), "Download should be disabled during the transfer")
+                    assertTrue(!mysqlDriverVersionCombo.component.isEnabled(), "The version selector should be disabled during the transfer")
+                    assertTrue(
+                        mysqlProgressBar.component.width == mysqlDriverVersionCombo.component.width,
+                        "The progress bar should match the driver version selector width",
+                    )
+                    captureScreen(screenshotsDirectory.resolve("mysql-driver-download-progress.png"), settleMillis = 0)
+                } finally { downloadGate.resumeResponses() }
                 waitUntil("MySQL driver download and verification") {
                     mysqlDialog.hasSubtext("Downloaded and ready")
                 }
@@ -355,7 +556,15 @@ class IntellijUiScreenshotTest {
                         and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("JDBC URL:"))
                     }.waitFound().text =
                         "jdbc:mysql://127.0.0.1:1/ui_review?connectTimeout=1000"
-                    mysqlDialog.x { byVisibleText("Test connection") }.waitFound().click()
+                    val failureTest = mysqlDialog.x { byVisibleText("Test connection") }.waitFound()
+                    waitUntil("downloaded driver ready for connection testing") { failureTest.component.isEnabled() }
+                    // Switching to JDBC URL resizes the modal. Xvfb can lose Robot
+                    // clicks at its old coordinates; dispatch the real button action
+                    // on the IDE EDT and still require the backend's failure dialog.
+                    withContext(OnDispatcher.EDT) { cast(failureTest.component, LiveToolbarButton::class).doClick() }
+                    waitUntil("failed connection status from the downloaded driver") {
+                        mysqlDialog.hasSubtext("Connection failed · Check the settings")
+                    }
                     frame.x(DialogUiComponent::class.java) { byTitle("Connection Failed") }.waitFound().also {
                         captureScreen(screenshotsDirectory.resolve("mysql-connection-failure.png"))
                         it.pressButton("OK")
@@ -517,9 +726,7 @@ class IntellijUiScreenshotTest {
             assertDriverSummary(connectionDialog, "2.7.3-jdk8 · DOWNLOADED")
 
             if (postgres) {
-                connectionDialog.x(JComboBoxUiComponent::class.java) {
-                    and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"), byAccessibleName("Database type:"))
-                }.waitFound().selectItem("PostgreSQL")
+                connectionDialog.x { byAccessibleName("PostgreSQL") }.waitFound().click()
                 availableDriverCombo.selectItem("42.7.14 · BUNDLED")
                 assertDriverSummary(connectionDialog, "42.7.14 · BUNDLED")
                 captureScreen(screenshotsDirectory.resolve("postgresql-driver-selection.png"))
@@ -556,10 +763,23 @@ class IntellijUiScreenshotTest {
                     byJavaClass("com.intellij.ui.treeStructure.Tree")
                 }.waitFound()
             }
-            if (jdbcFixture != null) captureBusyState(jdbcFixture, pluginRoot, "Connecting to database…", "explorer-connecting.png", screenshotsDirectory) {
-                databaseTree.fixture.expandRow(1)
-            } else databaseTree.fixture.expandRow(1)
-            val connectionPath = arrayOf("Data Sources", "Lattice UI demo")
+            if (jdbcFixture != null) {
+                var overlay: LiveBalloon? = null
+                captureBusyState(jdbcFixture, pluginRoot, "Connecting to database…", "explorer-connecting.png", screenshotsDirectory,
+                    beforeCapture = {
+                    // Reproduce the first-session notice that covered the spinner
+                    // in CI. It must be dismissed before inspecting native pixels.
+                    overlay = showIdeNotificationOverlay(frame,
+                        pluginRoot.x { byAccessibleName("Database explorer status") }.waitFound())
+                    savePng(screenshotsDirectory.resolve("explorer-notification-overlay.png"),
+                        Robot().createScreenCapture(displayBounds))
+                    }) {
+                    withContext(OnDispatcher.EDT) { cast(databaseTree.component, LiveTree::class).expandRow(2) }
+                }
+                check(requireNotNull(overlay).isDisposed()) { "IDE notification overlay must be dismissed before capturing the spinner" }
+                println("Native notification overlay dismissed; explorer spinner still animates naturally")
+            } else databaseTree.fixture.expandRow(2)
+            val connectionPath = arrayOf("Data Sources", if (postgres) "PostgreSQL" else "HSQLDB", "Lattice UI demo")
             val schemaName = if (postgres) "public" else "PUBLIC"
             val publicSchemaPath = connectionPath + schemaName
             waitUntil("connected schema in the explorer") {
@@ -567,6 +787,24 @@ class IntellijUiScreenshotTest {
             }
             captureScreen(screenshotsDirectory.resolve("connected-explorer.png"))
             assertExplorerOverflow(pluginRoot, frame, screenshotsDirectory)
+            // Keep a saved but unconnected MySQL source beside the live HSQLDB fixture
+            // so the actual IDE capture exercises more than one source-type section.
+            openConnectionMenu(pluginRoot, frame, "MySQL…")
+            frame.x(DialogUiComponent::class.java) { byTitle("New connection") }.waitFound().also { mysqlDialog ->
+                mysqlDialog.x(JTextFieldUI::class.java) {
+                    and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("Name:"))
+                }.waitFound().text = "Analytics server"
+                mysqlDialog.pressButton("Add connection")
+            }
+            ideFrame { waitForNoOpenedDialogs() }
+            waitUntil("MySQL section alongside the live HSQLDB section") {
+                databaseTree.pathExists("Data Sources", "MySQL")
+            }
+            databaseTree.fixture.expandRow(if (postgres) 4 else 2)
+            waitUntil("HSQLDB connection restored after adding the second source type") {
+                databaseTree.pathExists(*publicSchemaPath)
+            }
+            captureScreen(screenshotsDirectory.resolve("data-source-groups-open.png"))
             if (review && !styleOnly) {
                 databaseTree.fixture.rightClickPath(connectionPath.joinToString(databaseTree.fixture.separator()))
                 captureScreen(screenshotsDirectory.resolve("connection-context-menu.png"))
@@ -879,6 +1117,7 @@ class IntellijUiScreenshotTest {
                         reviewedLightThemes.add(lightTheme)
                     }
                 }
+                verifyKeyHeaderFlow(frame, databaseTree, peoplePath, tableEditor, console, peopleSql, screenshotsDirectory)
                 Files.writeString(screenshotsDirectory.resolve("runtime-evidence.txt"), buildString {
                     appendLine("IDE target: IntelliJ IDEA $productCode ${System.getProperty("ui.ide.version")} (${System.getProperty("ui.ide.build")})")
                     appendLine("Actual IDE theme: ${actualTheme.getName()} (${actualTheme.getId()})")
@@ -888,6 +1127,7 @@ class IntellijUiScreenshotTest {
                     appendLine("IDE JBR release: ${Files.readString(ideHome.resolve("jbr/release")).lineSequence().filter { it.startsWith("JAVA_VERSION=") || it.startsWith("IMPLEMENTOR=") }.joinToString(", ")}")
                     appendLine("IDE display: ${displayBounds.width}x${displayBounds.height}; scale 1")
                     appendLine("Verified: six explorer actions in native hover overflow and working Add Connection invoker; failed connection status; valid/invalid/unchanged table edits; text and integer editor theme surfaces; native menu background; full auto-refresh caption; white active action labels and painted glyphs in normal and overflow toolbars")
+                    appendLine("Key header regressions: primary, foreign and combined badges/colors in table and aliased SQL results; markers clear after a new query or schema refresh")
                     appendLine("Scope: focused UI regressions including SQL export submenu palette, table filters and console layout; the default review continues through commit, export, alter-table and SQL flows")
                 })
                 println("Focused real IDE UI regression review passed: $themeId")
@@ -1304,6 +1544,7 @@ class IntellijUiScreenshotTest {
                 withContext(OnDispatcher.EDT) { ideWindow.setBounds((displayBounds.width - normalWidth) / 2, 40, normalWidth, normalHeight) }
                 captureScreen(screenshotsDirectory.resolve("sql-console-normal-after-resize.png"))
                 assertEditorControlsVisible(console, "restored SQL console")
+                verifyKeyHeaderFlow(frame, databaseTree, peoplePath, tableEditor, console, peopleSql, screenshotsDirectory)
                 databaseTree.fixture.rightClickPath(connectionPath.joinToString(databaseTree.fixture.separator()))
                 frame.x { byVisibleText("Remove connection") }.waitFound().click()
                 frame.x(DialogUiComponent::class.java) { byTitle("Remove connection") }.waitFound().also {
@@ -1347,6 +1588,7 @@ class IntellijUiScreenshotTest {
                 appendLine("Table insert validation: empty row displayed its auto ID and nullable timestamp defaults, marked its missing required name invalid, and kept Commit disabled until the name was supplied")
                 appendLine("Table edit validation: unchanged integer stayed clean; invalid integer was highlighted and blocked Commit; restoring the original stayed clean; a valid changed integer committed and reloaded")
                 appendLine("Table flow: created LATTICE_PEOPLE through the production dialog, inserted Ada Lovelace, and edited its ID through the production data grid")
+                appendLine("Key header regressions: primary, foreign and combined badges/colors in table and aliased SQL results; markers clear after a new query or schema refresh")
                 appendLine("Table editor production Swing class: com.segfault03.ideadb.ui.TableDataEditorPanel")
                 appendLine("Database grid production Swing class: com.segfault03.ideadb.ui.DatabaseTable")
             }
@@ -1355,10 +1597,160 @@ class IntellijUiScreenshotTest {
             println("Saved real IDE screenshots to $screenshotsDirectory")
         }
         } finally { jdbcFixture?.close() }
+        } finally { downloadFixture?.close() }
+    }
+
+    private fun assertDataSourcePicker(dialog: UiComponent) {
+        val picker = dialog.x { byJavaClass("com.segfault03.ideadb.dialog.DataSourcePanel") }.waitFound()
+        val name = dialog.x(JTextFieldUI::class.java) {
+            and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("Name:"))
+        }.waitFound()
+        check(picker.component.width <= 180) { "The source picker must stay compact" }
+        check(picker.component.getLocationOnScreen().x + picker.component.width < name.component.getLocationOnScreen().x) {
+            "The source picker must appear to the left of the connection form"
+        }
+        for ((source, port) in listOf("PostgreSQL" to "5432", "HSQLDB" to "9001", "MySQL" to "3306")) {
+            val choice = dialog.x { byAccessibleName(source) }.waitFound()
+            check(requireNotNull(dialog.driver.cast(choice.component, LiveSourceChoice::class).getIcon()).getIconWidth() == 24)
+            choice.click()
+            check(dialog.driver.cast(choice.component, LiveSourceChoice::class).isSelected())
+            val field = dialog.x(JTextFieldUI::class.java) {
+                and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("Port:"))
+            }.waitFound()
+            check(field.text == port) { "$source must select its default port $port" }
+        }
+        println("Compact left source picker: SVGs, source switching, and MySQL/HSQLDB/PostgreSQL ports verified")
+    }
+
+    private fun verifyKeyHeaderFlow(frame: IdeaFrameUI, tree: JTreeUiComponent, peoplePath: Array<String>,
+                                    editor: UiComponent, console: UiComponent, peopleSql: String, directory: Path) {
+        val query = console.xx { byJavaClass("com.intellij.ui.components.JBTextArea") }.list().first()
+        val text = console.driver.cast(query.component, JTextComponent::class)
+        val run = console.x { byVisibleText("Run") }.waitFound()
+        val stop = console.x { byVisibleText("Stop") }.waitFound()
+        fun execute(sql: String) {
+            console.driver.withContext(OnDispatcher.EDT) { text.setText(sql) }
+            run.click()
+            waitUntil("key metadata SQL completed: $sql") { run.component.isEnabled() && !stop.component.isEnabled() }
+            check(!console.hasSubtext("Query failed")) { "Key metadata fixture SQL failed: $sql" }
+        }
+        tree.fixture.rightClickPath(peoplePath.joinToString(tree.fixture.separator()))
+        frame.x { byVisibleText("Open data editor") }.waitFound().click()
+        val revert = editor.x { byAccessibleName("Revert pending changes") }.waitFound()
+        if (revert.component.isEnabled()) revert.click()
+        tree.fixture.rightClickPath(peoplePath.joinToString(tree.fixture.separator()))
+        frame.x { byVisibleText("Open in SQL console") }.waitFound().click()
+        val parent = peopleSql.substringBeforeLast('.') + ".\"UI_KEY_PARENT\""
+        execute("CREATE TABLE $parent (\"id\" INTEGER PRIMARY KEY)")
+        execute("INSERT INTO $parent SELECT \"id\" FROM $peopleSql")
+        execute("ALTER TABLE $peopleSql ADD COLUMN \"parent_id\" INTEGER")
+        execute("ALTER TABLE $peopleSql ADD CONSTRAINT \"UI_KEY_ID_FK\" FOREIGN KEY (\"id\") REFERENCES $parent (\"id\")")
+        execute("ALTER TABLE $peopleSql ADD CONSTRAINT \"UI_KEY_PARENT_FK\" FOREIGN KEY (\"parent_id\") REFERENCES $parent (\"id\")")
+        execute("SELECT \"id\" AS \"key\", \"parent_id\" AS \"key\", \"name\" AS \"label\", \"id\" + 1 AS \"computed\" FROM $peopleSql")
+        val results = console.x(JTableUiComponent::class.java) { byJavaClass("com.segfault03.ideadb.ui.DatabaseTable") }.waitFound()
+        waitUntil("aliased key query columns loaded") { console.driver.cast(results.component, LiveTableEditor::class).getColumnModel().getColumnCount() == 4 }
+        assertKeyHeaders(results, setOf(0), setOf(0, 1), "SQL aliases and dual keys")
+        captureScreen(directory.resolve("sql-key-headers.png"))
+        execute("SELECT \"name\" FROM $peopleSql")
+        waitUntil("ordinary query replaces key columns") { console.driver.cast(results.component, LiveTableEditor::class).getColumnModel().getColumnCount() == 1 }
+        assertKeyHeaders(results, emptySet(), emptySet(), "SQL key markers cleared on later query")
+        tree.fixture.rightClickPath(peoplePath.joinToString(tree.fixture.separator()))
+        frame.x { byVisibleText("Open data editor") }.waitFound().click()
+        editor.x { byAccessibleName("Refresh table data") }.waitFound().click()
+        val grid = editor.x(JTableUiComponent::class.java) { byJavaClass("com.segfault03.ideadb.ui.DatabaseTable") }.waitFound()
+        val live = editor.driver.cast(grid.component, LiveTableEditor::class)
+        waitUntil("foreign-key table metadata reloaded") {
+            val model = live.getModel()
+            (0 until model.getColumnCount()).any { model.getColumnName(it).startsWith("parent_id") }
+        }
+        val foreignColumn = (0 until live.getModel().getColumnCount()).first { live.getModel().getColumnName(it).startsWith("parent_id") }
+        assertKeyHeaders(grid, setOf(0), setOf(0, foreignColumn), "Table metadata and dual keys")
+        captureScreen(directory.resolve("table-key-headers.png"))
+        tree.fixture.rightClickPath(peoplePath.joinToString(tree.fixture.separator()))
+        frame.x { byVisibleText("Open in SQL console") }.waitFound().click()
+        execute("ALTER TABLE $peopleSql DROP CONSTRAINT \"UI_KEY_ID_FK\"")
+        execute("ALTER TABLE $peopleSql DROP CONSTRAINT \"UI_KEY_PARENT_FK\"")
+        execute("ALTER TABLE $peopleSql DROP COLUMN \"parent_id\"")
+        execute("DROP TABLE $parent")
+        tree.fixture.rightClickPath(peoplePath.joinToString(tree.fixture.separator()))
+        frame.x { byVisibleText("Open data editor") }.waitFound().click()
+        editor.x { byAccessibleName("Refresh table data") }.waitFound().click()
+        waitUntil("removed foreign-key column leaves the grid") { live.getModel().getColumnCount() == foreignColumn }
+        assertKeyHeaders(grid, setOf(0), emptySet(), "Table foreign-key markers cleared after schema refresh")
+        println("Live table and SQL key metadata regression passed")
+    }
+
+    private fun assertKeyHeaders(grid: UiComponent, primary: Set<Int>, foreign: Set<Int>, description: String) {
+        val expected = mutableListOf<Int>()
+        val samples = mutableListOf<Point>()
+        grid.driver.withContext(OnDispatcher.EDT) {
+            val table = grid.driver.cast(grid.component, LiveTableEditor::class)
+            val header = table.getTableHeader()
+            val renderer = header.getDefaultRenderer()
+            val columns = table.getColumnModel()
+            val point = header.getLocationOnScreen()
+            val visible = header.getVisibleRect()
+            var offset = 0
+            for (index in 0 until columns.getColumnCount()) {
+                val column = columns.getColumn(index)
+                val painted = renderer.getTableCellRendererComponent(table, column.getHeaderValue(), false, false, -1, index)
+                val icon = grid.driver.cast(painted, LiveLabel::class).getIcon()
+                check((icon != null) == (index in primary || index in foreign))
+                if (index in primary && index in foreign) check(requireNotNull(icon).getIconWidth() >= 32)
+                expected.add(painted.getBackground().getRGB())
+                if (visible.contains(offset + 5, 3)) samples.add(Point(point.x + offset + 5, point.y + 3))
+                else samples.add(Point(-1, -1))
+                offset += column.getWidth()
+            }
+        }
+        for (p in primary) for (f in foreign - primary) check(expected[p] != expected[f]) { "$description: primary and foreign key tints differ" }
+        for (key in primary + foreign) for (plain in expected.indices.filter { it !in primary && it !in foreign }) {
+            check(expected[key] != expected[plain]) { "$description: key and ordinary header tints differ" }
+        }
+        val robot = Robot()
+        robot.mouseMove(10, 10) // Keep toolbar tooltips away from the sampled header pixels.
+        repaintIdeBeforeCapture?.invoke()
+        for ((index, point) in samples.withIndex()) if (point.x >= 0) check(robot.getPixelColor(point.x, point.y).rgb == expected[index]) {
+            "$description: live painted header $index differs from its renderer"
+        }
+        println("Key header pixels and badges verified: $description")
+    }
+
+    private fun showIdeNotificationOverlay(frame: IdeaFrameUI, status: UiComponent): LiveBalloon {
+        val text = "IDE notification overlay regression"
+        lateinit var content: LiveSwingComponent
+        val balloon = frame.driver.withContext(OnDispatcher.EDT) {
+            val label = new(LiveLabel::class, text)
+            check(label.getText() == text)
+            content = cast(label, LiveSwingComponent::class)
+            content.setPreferredSize(new(LiveDimension::class, 350, 80))
+            content.setSize(350, 80)
+            val balloon = utility(LivePopupFactory::class).getInstance()
+                .createBalloonBuilder(content)
+                .setAnimationCycle(0).setHideOnClickOutside(false).setHideOnKeyOutside(false)
+                .setHideOnFrameResize(false).setHideOnAction(false)
+                .createBalloon()
+            requireNotNull(cast(frame.component, LiveIdeFrame::class).getBalloonLayout()).add(balloon)
+            val owner = cast(frame.component, LiveFrame::class).getRootPane().getLocationOnScreen()
+            val footer = status.component.getLocationOnScreen()
+            balloon.setBounds(Rectangle(footer.x - owner.x - 20, footer.y - owner.y - 35, 320, 90))
+            balloon
+        }
+        frame.driver.withContext(OnDispatcher.EDT) {
+            val root = cast(frame.component, LiveFrame::class).getRootPane()
+            root.validate()
+            root.paintImmediately(0, 0, frame.component.width, frame.component.height)
+        }
+        waitUntil("native IDE notification overlay is laid out and showing") {
+            content.isShowing() && content.getVisibleRect().let { it.width > 0 && it.height > 0 }
+        }
+        println("Native IDE balloon content: ${content.getLocationOnScreen()} ${content.getVisibleRect()}; disposed=${balloon.isDisposed()}")
+        check(!balloon.isDisposed())
+        return balloon
     }
 
     private fun captureBusyState(fixture: JdbcUiFixture, root: UiComponent, message: String, filename: String,
-                                 directory: Path, action: () -> Unit) {
+                                 directory: Path, beforeCapture: (() -> Unit)? = null, action: () -> Unit) {
         fixture.pauseResponses()
         try {
             action()
@@ -1367,24 +1759,66 @@ class IntellijUiScreenshotTest {
             // IDEA's optional plugin recommendation can cover the status bar.
             root.driver.ui.xx { byVisibleText("Don't suggest again") }.list()
                 .filter { it.component.isShowing() }.forEach { it.click() }
+            beforeCapture?.invoke()
             // A tree renderer also exposes the loading text. Inspect the persistent
             // status component, whose screen location and repaint lifecycle are real.
             val label = root.xx { byAccessibleName("Database explorer status") }.list().firstOrNull()
                 ?: root.x { byVisibleText(message) }.waitFound()
             assertAnimatedBusy(label)
             // Confirm that the actual icon animates on screen, rather than merely having a spinner class.
-            val point = label.component.getLocationOnScreen()
-            val region = Rectangle(point.x, point.y, minOf(40, label.component.width), label.component.height)
             val robot = Robot()
-            val first = robot.createScreenCapture(region)
-            var changed = false
-            repeat(5) {
-                Thread.sleep(100)
-                val next = robot.createScreenCapture(region)
-                if ((0 until first.width).any { x -> (0 until first.height).any { y -> first.getRGB(x, y) != next.getRGB(x, y) } }) changed = true
+            robot.mouseMove(10, 10) // A tooltip must not cover the status component.
+            // Closing a modal can leave the native tool-window footer unpainted under Xvfb.
+            // Prime it once, then require subsequent frames to repaint naturally.
+            repaintIdeBeforeCapture?.invoke()
+            Thread.sleep(350) // Let dismissed notification balloons finish fading before the baseline.
+            // Revalidation after a dialog closes can move the footer. Read its live
+            // geometry after painting and restart the baseline whenever it moves.
+            fun liveRegion(): Rectangle = root.driver.withContext(OnDispatcher.EDT) {
+                val live = cast(label.component, LiveSwingComponent::class)
+                check(live.isShowing()) { "Busy status must be showing: $message" }
+                val visible = live.getVisibleRect()
+                val point = label.component.getLocationOnScreen()
+                Rectangle(point.x + visible.x, point.y + visible.y, minOf(40, visible.width), visible.height).also {
+                    check(it.width > 0 && it.height > 0 && Rectangle(Toolkit.getDefaultToolkit().screenSize).contains(it)) {
+                        "Busy status must be inside the live display: $message; region=$it"
+                    }
+                }
             }
-            check(changed) { "Busy spinner did not animate on the live display: $message" }
-            println("Animated spinner pixels changed on the live IDE display: $message")
+            var region = liveRegion()
+            var first = robot.createScreenCapture(region)
+            var last = first
+            val started = System.nanoTime()
+            val deadline = started + 5_000_000_000L
+            var changed = false
+            while (!changed && System.nanoTime() < deadline) {
+                Thread.sleep(83) // Avoid sampling on the spinner's frame cadence.
+                val current = liveRegion()
+                if (current != region) {
+                    println("Busy status moved during layout: $message; $region -> $current")
+                    region = current
+                    first = robot.createScreenCapture(region)
+                    continue
+                }
+                last = robot.createScreenCapture(region)
+                changed = (0 until first.width).any { x ->
+                    (0 until first.height).any { y -> first.getRGB(x, y) != last.getRGB(x, y) }
+                }
+            }
+            if (!changed) {
+                javax.imageio.ImageIO.write(first, "png", directory.resolve("$filename-spinner-first.png").toFile())
+                javax.imageio.ImageIO.write(last, "png", directory.resolve("$filename-spinner-last.png").toFile())
+                captureScreen(directory.resolve("$filename-spinner-failure.png"))
+                // Keep the tiny native samples in the job log as well as the artifact,
+                // so a failed capture can be diagnosed when artifact downloads fail.
+                for ((name, sample) in listOf("first" to first, "last" to last)) {
+                    val bytes = java.io.ByteArrayOutputStream()
+                    javax.imageio.ImageIO.write(sample, "png", bytes)
+                    println("Spinner $name PNG ($message; region=$region): ${java.util.Base64.getEncoder().encodeToString(bytes.toByteArray())}")
+                }
+            }
+            check(changed) { "Busy spinner did not animate on the live display within 5 seconds: $message; region=$region" }
+            println("Animated spinner pixels changed on the live IDE display: $message after ${(System.nanoTime() - started) / 1_000_000} ms")
             if (message in listOf("Committing changes…", "Loading table data…", "Counting saved rows…", "Deleting saved rows…", "Exporting persisted rows…", "Loading CREATE TABLE statement…")) {
                 for (name in listOf("Refresh table data", "Add a new row", "Delete selected rows", "Commit pending changes to the database", "Revert pending changes", "Apply filter and sort")) {
                     check(!root.x { byAccessibleName(name) }.waitFound().component.isEnabled()) { "$name must be disabled during $message" }
@@ -1788,7 +2222,13 @@ class IntellijUiScreenshotTest {
         // A late IDE focus change (for example Maven import finishing) can close a
         // transient popup. Retry opening the production menu, not the whole test.
         repeat(3) {
-            root.x { byVisibleText("Add a connection…") }.waitFound().click()
+            val welcomeAction = root.xx { byVisibleText("Add a connection…") }.list().firstOrNull()
+            if (welcomeAction != null) welcomeAction.click()
+            else {
+                val addButton = root.xx { byAccessibleName("Add connection…") }.list().firstOrNull()
+                if (addButton != null) addButton.click()
+                else openToolbarOverflow(root, "Explorer actions").x { byAccessibleName("Add connection…") }.waitFound().click()
+            }
             repeat(20) {
                 val item = frame.xx { byVisibleText(itemText) }.list().firstOrNull()
                 if (item != null) {
@@ -1916,8 +2356,43 @@ interface LiveFrame {
     fun getRootPane(): LiveSwingComponent
 }
 
+@Remote("com.intellij.openapi.wm.IdeFrame")
+interface LiveIdeFrame { fun getBalloonLayout(): LiveBalloonLayout? }
+
+@Remote("com.intellij.ui.BalloonLayout")
+interface LiveBalloonLayout {
+    fun closeAll()
+    fun add(balloon: LiveBalloon)
+}
+
+@Remote("com.intellij.openapi.ui.popup.JBPopupFactory")
+interface LivePopupFactory {
+    fun getInstance(): LivePopupFactory
+    fun createBalloonBuilder(content: LiveSwingComponent): LiveBalloonBuilder
+}
+
+@Remote("com.intellij.openapi.ui.popup.BalloonBuilder")
+interface LiveBalloonBuilder {
+    fun setAnimationCycle(milliseconds: Int): LiveBalloonBuilder
+    fun setHideOnClickOutside(hide: Boolean): LiveBalloonBuilder
+    fun setHideOnKeyOutside(hide: Boolean): LiveBalloonBuilder
+    fun setHideOnFrameResize(hide: Boolean): LiveBalloonBuilder
+    fun setHideOnAction(hide: Boolean): LiveBalloonBuilder
+    fun createBalloon(): LiveBalloon
+}
+
+@Remote("com.intellij.openapi.ui.popup.Balloon")
+interface LiveBalloon {
+    fun isDisposed(): Boolean
+    fun setBounds(bounds: Rectangle)
+}
+
 @Remote("javax.swing.JComponent")
 interface LiveSwingComponent {
+    fun validate()
+    fun setPreferredSize(size: LiveDimension)
+    fun setSize(width: Int, height: Int)
+    fun getLocationOnScreen(): Point
     fun requestFocusInWindow(): Boolean
     fun isShowing(): Boolean
     fun paintImmediately(x: Int, y: Int, width: Int, height: Int)
@@ -1933,6 +2408,16 @@ interface LiveSwingComponent {
     fun getFont(): LiveFont
     fun getFontMetrics(font: LiveFont): LiveFontMetrics
 }
+
+@Remote("javax.swing.JTree")
+interface LiveTree {
+    fun expandRow(row: Int)
+    fun getRowCount(): Int
+    fun getClientProperty(key: String): LiveSearchMatches?
+}
+
+@Remote("java.util.Map")
+interface LiveSearchMatches { fun size(): Int }
 
 @Remote("java.awt.FontMetrics")
 interface LiveFontMetrics { fun stringWidth(text: String): Int }
@@ -1976,7 +2461,11 @@ interface LiveColumn {
 }
 
 @Remote("javax.swing.table.JTableHeader")
-interface LiveTableHeader { fun getDefaultRenderer(): LiveCellRenderer }
+interface LiveTableHeader {
+    fun getDefaultRenderer(): LiveCellRenderer
+    fun getLocationOnScreen(): Point
+    fun getVisibleRect(): Rectangle
+}
 
 @Remote("javax.swing.table.TableCellRenderer")
 interface LiveCellRenderer {
@@ -1985,6 +2474,7 @@ interface LiveCellRenderer {
 
 @Remote("javax.swing.JButton")
 interface LiveToolbarButton {
+    fun doClick()
     fun isFocusOwner(): Boolean
     fun getModel(): LiveButtonModel
     fun requestFocusInWindow(): Boolean
@@ -2058,6 +2548,7 @@ interface LiveViewport { fun getView(): LiveTableEditor }
 
 @Remote("javax.swing.JTable")
 interface LiveTableEditor {
+    fun getModel(): LiveTableModel
     fun getRowCount(): Int
     fun getColumnModel(): LiveColumnModel
     fun getTableHeader(): LiveTableHeader
@@ -2072,4 +2563,16 @@ interface LiveTableEditor {
 @Remote("javax.swing.table.TableCellEditor")
 interface LiveCellEditor {
     fun stopCellEditing(): Boolean
+}
+
+@Remote("javax.swing.table.TableModel")
+interface LiveTableModel {
+    fun getColumnCount(): Int
+    fun getColumnName(column: Int): String
+}
+
+@Remote("javax.swing.JToggleButton")
+interface LiveSourceChoice {
+    fun getIcon(): LiveIcon?
+    fun isSelected(): Boolean
 }

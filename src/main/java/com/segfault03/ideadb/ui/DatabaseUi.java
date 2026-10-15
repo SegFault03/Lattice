@@ -40,7 +40,7 @@ public final class DatabaseUi {
     public static JPopupMenu connectionMenu(Consumer<DatabaseType> choose) {
         JPopupMenu menu = popupMenu();
         for (DatabaseType type : DatabaseType.values()) {
-            JMenuItem item = new JMenuItem(type.getDisplayName() + "…");
+            JMenuItem item = new JMenuItem(type.getDisplayName() + "…", Icons.dataSource(type, 16));
             item.addActionListener(event -> choose.accept(type));
             menu.add(item);
         }
@@ -207,6 +207,7 @@ public final class DatabaseUi {
             if (source == null) return;
             setText(iconOnly ? "" : source.getText());
             setEnabled(source.isEnabled());
+            setSelected(source.isSelected());
             setBorder(iconOnly ? JBUI.Borders.empty(4, 6) : source.getBorder());
             setIconTextGap(source.getIconTextGap());
             setToolTipText(source.getToolTipText());
@@ -264,7 +265,7 @@ public final class DatabaseUi {
         @Override protected void paintComponent(Graphics graphics) {
             ButtonModel model = getModel();
             boolean emphasized = isEnabled() && emphasisColor != null;
-            boolean interactive = isEnabled() && (model.isRollover() || model.isPressed() && model.isArmed());
+            boolean interactive = isEnabled() && (model.isSelected() || model.isRollover() || model.isPressed() && model.isArmed());
             boolean focusVisible = hasFocus() && isFocusVisible(this);
             if (emphasized || interactive || isEnabled() && focusVisible) {
                 Graphics2D g = (Graphics2D) graphics.create();
