@@ -15,6 +15,7 @@ final class DatabaseExplorerToolbar extends JPanel {
     private final JButton remove;
     private final JButton refresh;
     private final JButton console;
+    private final JButton viewOnly;
     private final JButton help;
     private boolean hasConnections;
     private boolean busy;
@@ -22,7 +23,7 @@ final class DatabaseExplorerToolbar extends JPanel {
 
     DatabaseExplorerToolbar(Consumer<Component> addConnection, Runnable editConnection,
                             Runnable removeConnection, Runnable refreshConnection,
-                            Runnable openConsole, Runnable showHelp) {
+                            Runnable openConsole, Consumer<Component> selectSources, Runnable showHelp) {
         setLayout(new BoxLayout(this, BoxLayout.X_AXIS));
         setBorder(JBUI.Borders.empty(6, 12));
         add = button(AllIcons.General.Add, "Add connection…", null, true);
@@ -32,6 +33,8 @@ final class DatabaseExplorerToolbar extends JPanel {
         separator();
         refresh = button(AllIcons.Actions.Refresh, "Refresh", refreshConnection);
         console = button(Icons.CONSOLE, "Open SQL Console", openConsole);
+        viewOnly = button(AllIcons.Actions.Show, "View only…", null, true);
+        viewOnly.addActionListener(e -> selectSources.accept((Component)e.getSource()));
         separator();
         help = button(AllIcons.General.ContextHelp, "Welcome to Lattice", showHelp);
         setHasConnections(false);
@@ -41,7 +44,7 @@ final class DatabaseExplorerToolbar extends JPanel {
     JComponent createComponent(JComponent target) {
         removeAll(); // Transfer the existing production controls and their listeners.
         JComponent toolbar = DatabaseActionToolbar.create(target, "Explorer actions",
-                add, edit, remove, null, refresh, console, null, help);
+                add, edit, remove, null, refresh, console, viewOnly, null, help);
         return toolbar;
     }
 
@@ -57,6 +60,13 @@ final class DatabaseExplorerToolbar extends JPanel {
 
     void setBusy(boolean busy) { this.busy = busy; updateActions(); }
 
+    void setSourceFilter(String summary, boolean active) {
+        viewOnly.setSelected(active);
+        viewOnly.setToolTipText("View only: " + summary);
+        viewOnly.getAccessibleContext().setAccessibleName("View only…");
+        viewOnly.repaint();
+    }
+
     private void updateActions() {
         add.setEnabled(!busy);
         boolean connectionSelected = !busy && hasConnections && selection != null && selection.getConnectionConfig() != null;
@@ -67,6 +77,7 @@ final class DatabaseExplorerToolbar extends JPanel {
             default -> false;
         }));
         console.setEnabled(!busy && hasConnections);
+        viewOnly.setEnabled(!busy && hasConnections);
     }
 
     private JButton button(Icon icon, String tooltip, Runnable action) {
@@ -123,7 +134,7 @@ final class DatabaseExplorerToolbar extends JPanel {
 
         @Override protected void paintComponent(Graphics graphics) {
             ButtonModel model = getModel();
-            if (isEnabled() && (model.isRollover() || model.isPressed() && model.isArmed())) {
+            if (isEnabled() && (model.isSelected() || model.isRollover() || model.isPressed() && model.isArmed())) {
                 Graphics2D g = (Graphics2D) graphics.create();
                 try {
                     g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);

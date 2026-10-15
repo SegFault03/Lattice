@@ -13,7 +13,7 @@ public final class ExplorerPreview {
     public static JPanel create(ConnectionConfig config, boolean empty) {
         JPanel panel = new JPanel(new BorderLayout());
         DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(c -> {}, () -> {},
-                () -> {}, () -> {}, () -> {}, () -> {});
+                () -> {}, () -> {}, () -> {}, c -> {}, () -> {});
         panel.putClientProperty("lattice.preview.explorer.actions", toolbar);
         panel.add(toolbar.createComponent(panel), BorderLayout.NORTH);
         if (empty) {
@@ -59,7 +59,8 @@ public final class ExplorerPreview {
                 .add(new DefaultMutableTreeNode(TreeNodeData.placeholder("")));
         // IntelliJ's Tree requires application services; JTree shares its Swing
         // layout contract and still uses Lattice's production node renderer.
-        JTree tree = new JTree(new DefaultTreeModel(root));
+        JTree tree = new JTree(new DatabaseSourceTreeModel(root));
+        panel.putClientProperty("lattice.preview.explorer.tree", tree);
         tree.setCellRenderer(new DatabaseTreeCellRenderer());
         tree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
         tree.setRootVisible(true);
@@ -85,6 +86,43 @@ public final class ExplorerPreview {
         hint.setSelection(selection);
         panel.add(hint, BorderLayout.SOUTH);
         return panel;
+    }
+
+    public static JComponent viewOnly(ConnectionConfig config, boolean showPicker) {
+        JPanel panel = create(config, false);
+        JTree tree = (JTree) panel.getClientProperty("lattice.preview.explorer.tree");
+        DatabaseSourceTreeModel model = (DatabaseSourceTreeModel) tree.getModel();
+        DefaultMutableTreeNode root = (DefaultMutableTreeNode) model.getRoot();
+        DefaultMutableTreeNode postgres = node(root, TreeNodeData.sourceType(DatabaseType.POSTGRESQL));
+        ConnectionConfig reporting = new ConnectionConfig(DatabaseType.POSTGRESQL, "Reporting cluster");
+        node(postgres, TreeNodeData.connection(reporting, false)).add(new DefaultMutableTreeNode(TreeNodeData.placeholder("")));
+        java.util.Set<DatabaseType> visible = showPicker ? java.util.EnumSet.allOf(DatabaseType.class)
+                : java.util.EnumSet.of(DatabaseType.MYSQL);
+        model.setVisibleTypes(visible);
+        tree.expandPath(new TreePath(root.getPath()));
+        for (int i = 0; i < model.getChildCount(root); i++) {
+            DefaultMutableTreeNode group = (DefaultMutableTreeNode) model.getChild(root, i);
+            tree.expandPath(new TreePath(group.getPath()));
+        }
+        DatabaseExplorerToolbar toolbar = (DatabaseExplorerToolbar) panel.getClientProperty("lattice.preview.explorer.actions");
+        toolbar.setSourceFilter(showPicker ? "All data sources" : "MySQL", !showPicker);
+        if (!showPicker) return panel;
+        JPanel picker = new JPanel(new BorderLayout(0, 0));
+        JLabel title = new JLabel("View only");
+        title.setBorder(JBUI.Borders.empty(8, 12));
+        picker.add(title, BorderLayout.NORTH);
+        picker.add(new DatabaseSourceFilterPopup(java.util.List.of(DatabaseType.HSQLDB, DatabaseType.MYSQL, DatabaseType.POSTGRESQL),
+                java.util.EnumSet.of(DatabaseType.HSQLDB, DatabaseType.MYSQL), selected -> {}, () -> {}));
+        picker.setBorder(JBUI.Borders.customLine(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR, 1));
+        JLayeredPane layer = new JLayeredPane() {
+            @Override public void doLayout() {
+                panel.setBounds(0, 0, getWidth(), getHeight());
+                picker.setBounds(JBUI.scale(20), JBUI.scale(48), picker.getPreferredSize().width, picker.getPreferredSize().height);
+            }
+        };
+        layer.add(panel, JLayeredPane.DEFAULT_LAYER);
+        layer.add(picker, JLayeredPane.POPUP_LAYER);
+        return layer;
     }
 
     public static JPanel error(ConnectionConfig config) {

@@ -65,6 +65,7 @@ class IntellijUiScreenshotTest {
         val screenshotsDirectory = Path.of(requireNotNull(System.getProperty("ui.screenshot.dir")))
         val review = System.getProperty("ui.review.enabled").toBoolean()
         val styleOnly = System.getProperty("ui.style.only").toBoolean()
+        val sourceFilterOnly = System.getProperty("ui.sourceFilter.only").toBoolean()
         val postgresPort = Integer.getInteger("ui.postgres.port", 0)
         val postgres = postgresPort > 0
         val postgresPassword = System.getProperty("ui.postgres.password", "lattice-test")
@@ -124,7 +125,7 @@ class IntellijUiScreenshotTest {
         // IDEA's own ProxySelector supersedes JVM proxy flags. Configure the real
         // HTTP Proxy settings in this isolated profile, preserving cloud routing.
         val proxyAddress = System.getenv("HTTPS_PROXY") ?: System.getenv("HTTP_PROXY")
-        val downloadFixture = if (!postgres && !System.getProperty("ui.skip.remote.downloads", "false").toBoolean())
+        val downloadFixture = if (!sourceFilterOnly && !postgres && !System.getProperty("ui.skip.remote.downloads", "false").toBoolean())
             DriverDownloadUiFixture(proxyAddress) else null
         try {
         val configuredProxy = downloadFixture?.let { "http://127.0.0.1:${it.port}" } ?: proxyAddress
@@ -247,6 +248,71 @@ class IntellijUiScreenshotTest {
                     val root = cast(frame.component, LiveFrame::class).getRootPane()
                     root.paintImmediately(0, 0, frame.component.width, frame.component.height)
                 }
+            }
+            if (sourceFilterOnly) {
+                fun openPicker(): UiComponent {
+                    pluginRoot.x { byAccessibleName("View only…") }.waitFound().click()
+                    return ui.x { byJavaClass("com.segfault03.ideadb.ui.DatabaseSourceFilterPopup") }.waitFound()
+                }
+                fun checkbox(picker: UiComponent, name: String) = picker.x {
+                    and(byType("javax.swing.JCheckBox"), byAccessibleName(name))
+                }.waitFound()
+                for ((type, name) in listOf("HSQLDB" to "Scratch database", "MySQL" to "Analytics server", "PostgreSQL" to "Reporting cluster")) {
+                    openConnectionMenu(pluginRoot, frame, "$type…")
+                    frame.x(DialogUiComponent::class.java) { byTitle("New connection") }.waitFound().also { dialog ->
+                        dialog.x(JTextFieldUI::class.java) {
+                            and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("Name:"))
+                        }.waitFound().text = name
+                        dialog.pressButton("Add connection")
+                    }
+                    ideFrame { waitForNoOpenedDialogs() }
+                    if (type == "MySQL") {
+                        val emptyPicker = openPicker()
+                        checkbox(emptyPicker, "All data sources").click()
+                        checkbox(emptyPicker, "PostgreSQL").click()
+                        emptyPicker.x { byVisibleText("Apply") }.waitFound().click()
+                        pluginRoot.x { byVisibleText("No connections match this view") }.waitFound()
+                        captureScreen(screenshotsDirectory.resolve("view-only-empty.png"))
+                        pluginRoot.x { byVisibleText("Show all data sources") }.waitFound().click()
+                    }
+                }
+                val tree = pluginRoot.x(JTreeUiComponent::class.java) {
+                    byJavaClass("com.intellij.ui.treeStructure.Tree")
+                }.waitFound()
+                fun waitForRows(count: Int) = waitUntil("filtered explorer has $count rows") {
+                    withContext(OnDispatcher.EDT) { cast(tree.component, LiveTree::class).getRowCount() == count }
+                }
+                waitForRows(7)
+                captureScreen(screenshotsDirectory.resolve("view-only-all.png"))
+                var picker = openPicker()
+                check(cast(checkbox(picker, "All data sources").component, LiveSourceChoice::class).isSelected())
+                captureScreen(screenshotsDirectory.resolve("view-only-picker.png"))
+                checkbox(picker, "All data sources").click()
+                check(!picker.x { byVisibleText("Apply") }.waitFound().component.isEnabled())
+                checkbox(picker, "MySQL").click()
+                captureScreen(screenshotsDirectory.resolve("view-only-picker-mysql.png"))
+                picker.x { byVisibleText("Apply") }.waitFound().click()
+                waitForRows(3)
+                check(tree.pathExists("Data Sources", "MySQL"))
+                captureScreen(screenshotsDirectory.resolve("view-only-mysql.png"))
+                picker = openPicker()
+                checkbox(picker, "HSQLDB").click()
+                picker.x { byVisibleText("Apply") }.waitFound().click()
+                waitForRows(5)
+                check(tree.pathExists("Data Sources", "HSQLDB") && tree.pathExists("Data Sources", "MySQL"))
+                captureScreen(screenshotsDirectory.resolve("view-only-multiple.png"))
+                picker = openPicker()
+                checkbox(picker, "All data sources").click()
+                picker.x { byVisibleText("Cancel") }.waitFound().click()
+                waitForRows(5)
+                picker = openPicker()
+                checkbox(picker, "All data sources").click()
+                picker.x { byVisibleText("Apply") }.waitFound().click()
+                waitForRows(7)
+                check(tree.pathExists("Data Sources", "PostgreSQL"))
+                captureScreen(screenshotsDirectory.resolve("view-only-all-restored.png"))
+                println("Source filter: no-match recovery, new source included by All, empty draft disabled, one type, multiple types, Cancel and All restored")
+                return@useDriverAndCloseIde
             }
             openConnectionMenu(pluginRoot, frame, "MySQL…")
 
@@ -2225,7 +2291,10 @@ interface LiveSwingComponent {
 }
 
 @Remote("javax.swing.JTree")
-interface LiveTree { fun expandRow(row: Int) }
+interface LiveTree {
+    fun expandRow(row: Int)
+    fun getRowCount(): Int
+}
 
 @Remote("java.awt.FontMetrics")
 interface LiveFontMetrics { fun stringWidth(text: String): Int }

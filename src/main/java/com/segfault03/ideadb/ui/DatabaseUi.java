@@ -207,6 +207,7 @@ public final class DatabaseUi {
             if (source == null) return;
             setText(iconOnly ? "" : source.getText());
             setEnabled(source.isEnabled());
+            setSelected(source.isSelected());
             setBorder(iconOnly ? JBUI.Borders.empty(4, 6) : source.getBorder());
             setIconTextGap(source.getIconTextGap());
             setToolTipText(source.getToolTipText());
@@ -264,7 +265,7 @@ public final class DatabaseUi {
         @Override protected void paintComponent(Graphics graphics) {
             ButtonModel model = getModel();
             boolean emphasized = isEnabled() && emphasisColor != null;
-            boolean interactive = isEnabled() && (model.isRollover() || model.isPressed() && model.isArmed());
+            boolean interactive = isEnabled() && (model.isSelected() || model.isRollover() || model.isPressed() && model.isArmed());
             boolean focusVisible = hasFocus() && isFocusVisible(this);
             if (emphasized || interactive || isEnabled() && focusVisible) {
                 Graphics2D g = (Graphics2D) graphics.create();

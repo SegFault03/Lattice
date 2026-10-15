@@ -720,6 +720,12 @@ public final class UiPreview {
         render(editor, theme + "-table-new-row-1100", 1100, 620);
     }
 
+    static void renderSourceFilter(String theme) throws Exception {
+        render(ExplorerPreview.create(config(DatabaseType.MYSQL), false), theme + "-side-panel-340", 340, 620);
+        render(ExplorerPreview.viewOnly(config(DatabaseType.MYSQL), true), theme + "-side-panel-view-only-picker-340", 340, 620);
+        render(ExplorerPreview.viewOnly(config(DatabaseType.MYSQL), false), theme + "-side-panel-view-only-mysql-340", 340, 620);
+    }
+
     private static void initializePreviewApplication() throws Exception {
         com.intellij.testFramework.common.TestApplicationKt.loadApp();
         com.intellij.openapi.extensions.PluginDescriptor descriptor = (com.intellij.openapi.extensions.PluginDescriptor)
@@ -761,7 +767,8 @@ public final class UiPreview {
             output = Path.of(args[0]);
             Files.createDirectories(output);
             String theme = args[1];
-            featuredOnly = args.length < 3 || !args[2].equals("all");
+            boolean sourceFilterOnly = args.length >= 3 && args[2].equals("source-filter");
+            featuredOnly = !sourceFilterOnly && (args.length < 3 || !args[2].equals("all"));
             UIManager.setLookAndFeel(theme.equals("dark") ? new FlatDarculaLaf() : new FlatIntelliJLaf());
             Font font = new javax.swing.plaf.FontUIResource(previewFont());
             UIManager.put("defaultFont", font);
@@ -773,6 +780,14 @@ public final class UiPreview {
             com.intellij.ui.IconManager.Companion.activate(new com.intellij.ui.icons.CoreIconManager());
             IconLoader.activate();
             IconLoader.setUseDarkIcons(theme.equals("dark"));
+            if (sourceFilterOnly) {
+                SwingUtilities.invokeAndWait(() -> {
+                    try { renderSourceFilter(theme); }
+                    catch (Exception exception) { throw new RuntimeException(exception); }
+                });
+                Files.write(output.resolve(theme + "-manifest.txt"), snapshots);
+                return;
+            }
             if (featuredOnly) {
                 SwingUtilities.invokeAndWait(() -> {
                     try { renderFeatured(theme); }
@@ -788,7 +803,7 @@ public final class UiPreview {
                 render(welcome(false), theme + "-welcome-520", 520, 680);
                 render(welcome(true), theme + "-welcome-connected-900", 900, 680);
                 verifyWelcome();
-                render(ExplorerPreview.create(config(DatabaseType.MYSQL), false), theme + "-side-panel-340", 340, 620);
+                renderSourceFilter(theme);
                 render(ExplorerPreview.create(config(DatabaseType.MYSQL), true), theme + "-side-panel-empty-340", 340, 620);
                 connectionMenuPreview(ExplorerPreview.create(config(DatabaseType.MYSQL), true),
                         "Add a connection…", theme + "-side-panel-connection-menu-340", 340, 620);
