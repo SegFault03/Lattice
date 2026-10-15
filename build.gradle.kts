@@ -95,6 +95,16 @@ tasks.register<Test>("integrationTest") {
     shouldRunAfter(tasks.test)
 }
 
+tasks.register<Test>("h2IntegrationTest") {
+    description = "Run owned H2 TCP/SSL functional and regression suites"
+    group = "verification"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath + sourceSets["main"].compileClasspath
+    useJUnitPlatform { includeTags("h2integration") }
+    systemProperty("junit.jupiter.extensions.autodetection.enabled", "false")
+    shouldRunAfter(tasks.test)
+}
+
 // Keep Gradle and the standalone packager on the same IntelliJ 2025 / Java 21 baseline.
 tasks.withType<JavaCompile>().configureEach { options.release.set(21) }
 tasks.processResources {
