@@ -148,6 +148,7 @@ public class AlterTableDialog extends DialogWrapper {
                     columns = MetadataService.getInstance().getColumns(conn, config, databaseName, tableMetadata.getName());
                 } catch (Exception refresh) { error.addSuppressed(refresh); }
                 List<ColumnMetadata> loaded = columns;
+                DatabaseChangeListener.publish(DatabaseChange.table(config.getId(), databaseName, request.tableName()));
                 SwingUtilities.invokeLater(() -> {
                     if (isDisposed()) return;
                     applying = false; editor.setBusy(false);
@@ -165,6 +166,8 @@ public class AlterTableDialog extends DialogWrapper {
     }
     private void finish(String name, List<ColumnMetadata> loaded) {
         SwingUtilities.invokeLater(() -> {
+            // A completed write must invalidate other views even if this dialog has closed.
+            DatabaseChangeListener.publish(DatabaseChange.table(config.getId(), databaseName, null));
             if (isDisposed()) return;
             tableMetadata.setColumns(loaded);
             if (!name.equals(tableMetadata.getName()) && project != null && !project.isDisposed()) {

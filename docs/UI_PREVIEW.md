@@ -55,6 +55,16 @@ Dependency paths and cleanup are described in the [script reference](SCRIPTS.md#
 
 ## UI regression coverage
 
+Completed table operations publish a refresh to every open explorer and affected
+table editor. Refreshes re-read columns and data and invalidate cached row counts;
+metadata reads use auto-commit independently of a console's transaction setting.
+Busy views retain the request, and unsaved row drafts defer the grid reload until
+commit or revert. SQL console execution refreshes the connection because scripts,
+procedures and DML returning rows can affect objects outside the selected schema.
+The focused Composer scenario exercises grid insert/update/delete, alter-table,
+console DML/DDL, a hidden editor, draft preservation, explorer truncate/drop, and
+table counts without pressing Refresh.
+
 Both table dialogs share their header, fixed icon slots, adjacent captions and
 footer layout. Provider artwork and its text occupy separate components, so an
 SVG that resolves after layout cannot take width from the database name. Primary

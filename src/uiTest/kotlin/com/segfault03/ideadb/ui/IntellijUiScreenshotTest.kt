@@ -1025,7 +1025,7 @@ class IntellijUiScreenshotTest {
                 captureBusyState(jdbcFixture, tableEditor, "Deleting saved rows…", "table-deleting-rows.png", screenshotsDirectory) {
                     confirm.pressButton("Delete rows")
                 }
-                waitUntil("saved row deleted and editor unlocked") { dataGrid.rowCount() == 0 && tableEditor.hasSubtext("Deleted 1 saved row") }
+                waitUntil("saved row deleted and refreshed from the database") { dataGrid.rowCount() == 0 && tableEditor.hasSubtext("0 rows ·") }
                 captureScreen(screenshotsDirectory.resolve("table-deleted-empty.png"))
                 tableEditor.x { byAccessibleName("Add a new row") }.waitFound().click()
                 replaceCellValue(dataGrid, 0, 1, "Ada Lovelace")
@@ -2257,7 +2257,97 @@ class IntellijUiScreenshotTest {
         dialog = open(); inspectorInput(dialog,"Table name").text = "discarded_table"; dialog.pressButton("Cancel")
         frame.x(DialogUiComponent::class.java) { byTitle("Discard changes") }.waitFound().pressButton("Discard"); frame.waitForNoOpenedDialogs()
         check(columns("discarded_table").isEmpty())
+        verifyMutationRefresh(frame, tree, schema, directory)
         println("Column Composer: real creation, order, keys, identity, precision, defaults, hidden drafts, validation, cancellation, busy animation and retry verified in the running IDE")
+    }
+
+    private fun verifyMutationRefresh(frame: IdeaFrameUI, tree: JTreeUiComponent, schema: Array<String>, directory: Path) {
+        val tablePath = schema + arrayOf("Tables (2)", "customers")
+        val explorerStatus = frame.driver.cast(frame.x { byAccessibleName("Database explorer status") }.waitFound().component, LiveLabel::class)
+        fun menu(label: String) {
+            // pathExists uses substring matching: customers also matches customers_archive.
+            waitUntil("refresh target present and metadata read finished") {
+                !explorerStatus.getText().startsWith("Loading") && tree.component.isEnabled() &&
+                    tree.collectExpandedPaths().any { it.path == tablePath.toList() }
+            }
+            val row = tree.collectExpandedPaths().single { it.path == tablePath.toList() }.row
+            tree.fixture.rightClickRow(row)
+            frame.x { byVisibleText(label) }.waitFound().click()
+        }
+        menu("Open data editor")
+        val editor = frame.x { byJavaClass("com.segfault03.ideadb.ui.TableDataEditorPanel") }.waitFound()
+        val grid = editor.x(JTableUiComponent::class.java) { byJavaClass("com.segfault03.ideadb.ui.DatabaseTable") }.waitFound()
+        fun values() = grid.content().values.flatMap { it.values }
+        val model = editor.driver.cast(grid.component, LiveTableEditor::class).getModel()
+        val status = editor.driver.cast(editor.x { byAccessibleName("Table operation status") }.waitFound().component, LiveLabel::class)
+        fun columnNames() = (0 until model.getColumnCount()).map { model.getColumnName(it) }
+        waitUntil("refresh fixture grid loaded") { grid.rowCount() == 1 && editor.hasSubtext("1 row ·") }
+        val commit = editor.x { byAccessibleName("Commit pending changes to the database") }.waitFound()
+        val revert = editor.x { byAccessibleName("Revert pending changes") }.waitFound()
+
+        replaceCellValue(grid, 0, 1, "Grid update")
+        commit.click()
+        frame.x(DialogUiComponent::class.java) { byTitle("Changes Saved") }.waitFound().pressButton("OK")
+        waitUntil("grid update forces reload") { "Grid update" in values() && editor.hasSubtext("1 row ·") }
+        editor.x { byAccessibleName("Add a new row") }.waitFound().click()
+        replaceCellValue(grid, 1, 1, "Grid insert")
+        replaceCellValue(grid, 1, 2, "insert@example.com")
+        commit.click()
+        frame.x(DialogUiComponent::class.java) { byTitle("Changes Saved") }.waitFound().pressButton("OK")
+        waitUntil("grid insert forces reload including identity") { grid.rowCount() == 2 && editor.hasSubtext("2 rows ·") && "(Auto)" !in values() }
+        grid.clickCell(1, 1)
+        editor.x { byAccessibleName("Delete selected rows") }.waitFound().click()
+        frame.x(DialogUiComponent::class.java) { byTitle("Delete rows") }.waitFound().pressButton("Delete rows")
+        waitUntil("grid delete forces a server reload") { grid.rowCount() == 1 && editor.hasSubtext("1 row ·") }
+
+        menu("Alter table…")
+        frame.x(DialogUiComponent::class.java) { byTitle("Edit table: customers") }.waitFound().also { dialog ->
+            dialog.x { byAccessibleName("Add column") }.waitFound().click()
+            inspectorInput(dialog, "Column name").text = "refresh_note"
+            waitUntil("refresh DDL ready") { dialog.x { byAccessibleName("Apply table changes") }.waitFound().component.isEnabled() }
+            dialog.x { byAccessibleName("Apply table changes") }.waitFound().click()
+        }
+        frame.waitForNoOpenedDialogs()
+        waitUntil("alter dialog refreshes the existing grid") { columnNames().any { it.startsWith("refresh_note") } }
+        menu("Open in SQL console")
+        val console = frame.x { byJavaClass("com.segfault03.ideadb.ui.SqlQueryConsolePanel") }.waitFound()
+        val text = console.driver.cast(console.xx { byJavaClass("com.intellij.ui.components.JBTextArea") }.list().first().component, JTextComponent::class)
+        val run = console.x { byVisibleText("Run") }.waitFound()
+        val stop = console.x { byVisibleText("Stop") }.waitFound()
+        fun execute(sql: String) {
+            console.driver.withContext(OnDispatcher.EDT) { text.setText(sql) }
+            run.click()
+            waitUntil("refresh SQL completed") { run.component.isEnabled() && !stop.component.isEnabled() }
+            check(!console.hasSubtext("Query failed")) { "Refresh fixture SQL failed: $sql" }
+        }
+        execute("UPDATE \"PUBLIC\".\"customers\" SET \"name\" = 'Console update'")
+        waitUntil("console DML refreshes the hidden open grid") { "Console update" in values() }
+        execute("ALTER TABLE \"PUBLIC\".\"customers\" ADD COLUMN \"console_note\" INTEGER")
+        waitUntil("console DDL refreshes open grid metadata") { columnNames().any { it.startsWith("console_note") } }
+
+        menu("Open data editor")
+        replaceCellValue(grid, 0, 1, "Unsaved draft")
+        menu("Open in SQL console")
+        execute("UPDATE \"PUBLIC\".\"customers\" SET \"name\" = 'Fresh after revert'")
+        waitUntil("dirty editor queues automatic refresh") { status.getText().contains("Database changed") }
+        check("Unsaved draft" in values()) { "A refresh must preserve uncommitted cells" }
+        menu("Open data editor")
+        revert.click()
+        waitUntil("queued refresh runs after revert") { "Fresh after revert" in values() && !revert.component.isEnabled() }
+        captureScreen(directory.resolve("table-mutation-refresh.png"))
+
+        menu("Truncate table…")
+        frame.x(DialogUiComponent::class.java) { byTitle("Truncate table") }.waitFound().pressButton("Truncate table")
+        frame.x(DialogUiComponent::class.java) { byTitle("Table truncated") }.waitFound().pressButton("OK")
+        waitUntil("explorer truncate refreshes the open grid") { grid.rowCount() == 0 && editor.hasSubtext("0 rows ·") }
+        menu("Drop table…")
+        frame.x(DialogUiComponent::class.java) { byTitle("Drop table") }.waitFound().pressButton("Drop table")
+        frame.x(DialogUiComponent::class.java) { byTitle("Table dropped") }.waitFound().pressButton("OK")
+        waitUntil("drop refreshes folder counts and the open grid") {
+            tree.pathExists(*(schema + arrayOf("Tables (1)", "customers_archive"))) && editor.hasSubtext("Table no longer exists")
+        }
+        check(grid.rowCount() == 0 && !grid.component.isEnabled())
+        println("Automatic refresh: grid insert/update/delete, alter dialog, console DML/DDL, hidden editor, retained draft/revert, explorer truncate/drop and table counts verified without manual refresh")
     }
 
     private fun verifyAlterInspector(frame: IdeaFrameUI, root: UiComponent, fixture: JdbcUiFixture, directory: Path) {

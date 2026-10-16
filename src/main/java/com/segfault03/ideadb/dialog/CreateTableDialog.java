@@ -59,6 +59,7 @@ public class CreateTableDialog extends DialogWrapper {
                 String sql=DdlService.getInstance().buildCreateTableSql(config,databaseName,definition.name(),definition.definitions());
                 if(!sql.equals(request.sql()))throw new IllegalStateException("The SQL preview changed. Review the definition before creating the table.");
                 DdlService.getInstance().createTable(conn,config,databaseName,definition.name(),definition.definitions());
+                DatabaseChangeListener.publish(DatabaseChange.table(config.getId(), databaseName, definition.name()));
                 SwingUtilities.invokeLater(() -> { if(!isDisposed()){created=request;close(OK_EXIT_CODE);} });
             } catch(Exception error) {
                 SwingUtilities.invokeLater(() -> {

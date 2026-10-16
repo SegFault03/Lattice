@@ -27,6 +27,8 @@ import com.segfault03.ideadb.service.DatabaseConnectionManager;
 import com.segfault03.ideadb.service.DdlService;
 import com.segfault03.ideadb.service.ExportService;
 import com.segfault03.ideadb.service.MetadataService;
+import com.segfault03.ideadb.service.DatabaseChange;
+import com.segfault03.ideadb.service.DatabaseChangeListener;
 import com.segfault03.ideadb.state.TableDraftState;
 
 import javax.swing.*;
@@ -68,6 +70,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     private JButton filterBtn;
     private JButton clearFilterBtn;
     private JButton delRowBtn;
+    private JButton addRowBtn;
 
     private DatabaseTable dataTable;
     private EditableTableModel tableModel;
@@ -86,6 +89,9 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     private long loadGeneration;
     private volatile boolean disposed;
     private boolean wasModified;
+    private boolean refreshPending, refreshScheduled;
+    private boolean tableUnavailable;
+    private com.intellij.util.messages.MessageBusConnection changeSubscription;
 
     public TableDataEditorPanel(Project project, ConnectionConfig config, String databaseName, TableMetadata tableMetadata) {
         super(new WidthAwareBorderLayout());
@@ -95,6 +101,13 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         this.tableMetadata = tableMetadata;
 
         initUI();
+        dataTable.addPropertyChangeListener("tableCellEditor", event -> scheduleRefresh());
+        if (project != null) {
+            changeSubscription = com.intellij.openapi.application.ApplicationManager.getApplication().getMessageBus().connect();
+            changeSubscription.subscribe(DatabaseChangeListener.TOPIC, change -> {
+                if (change.affects(config.getId(), databaseName, tableMetadata.getName())) requestRefresh();
+            });
+        }
         TableDraftState.Draft draft = project == null ? null : TableDraftState.getInstance(project).get(draftKey());
         if (draft == null) loadData();
         else {
@@ -166,9 +179,9 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         nextPageBtn = DatabaseUi.action("", AllIcons.Actions.Forward, "Next page");
         nextPageBtn.addActionListener(e -> loadData(currentPage + 1, pageSize));
 
-        JButton addRowBtn = DatabaseUi.action("", AllIcons.General.Add, "Add a new row");
+        addRowBtn = DatabaseUi.action("", AllIcons.General.Add, "Add a new row");
         addRowBtn.addActionListener(e -> {
-            if (tableModel != null && !isBusy()) {
+            if (tableModel != null && !isBusy() && !tableUnavailable) {
                 tableModel.addNewRow();
                 updatePendingChangesState();
             }
@@ -385,13 +398,46 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
 
     public void loadData() { loadData(currentPage,pageSize,true); }
 
+    /** Coalesce notifications and keep the refresh pending until reads, writes and drafts settle. */
+    public void requestRefresh() {
+        if (disposed) return;
+        refreshPending = true;
+        totalRowCount = -1;
+        scheduleRefresh();
+    }
+
+    private void scheduleRefresh() {
+        if (!refreshPending || refreshScheduled || disposed || isBusy()) return;
+        if (hasPendingChanges()) {
+            DatabaseUi.status(statusLabel, "Database changed · Commit or revert pending edits to refresh", DatabaseUi.Tone.WARNING);
+            return;
+        }
+        refreshScheduled = true;
+        SwingUtilities.invokeLater(() -> {
+            refreshScheduled = false;
+            if (refreshPending && !disposed && !isBusy() && !hasPendingChanges()) loadData();
+        });
+    }
+
+    private void notifyTableChanged() {
+        DatabaseChangeListener.publish(DatabaseChange.table(config.getId(), databaseName, tableMetadata.getName()));
+        // Standalone previews have no message bus subscription.
+        if (changeSubscription == null) SwingUtilities.invokeLater(this::requestRefresh);
+    }
+
     private void loadData(int requestedPage,int requestedSize) { loadData(requestedPage,requestedSize,false); }
+    private static final class MissingTableException extends java.sql.SQLException {
+        MissingTableException() { super("The table no longer exists. Create it again or close this editor."); }
+    }
     private void loadData(int requestedPage, int requestedSize, boolean refreshMetadata) {
         if (isBusy() || disposed || !finishCellEditing()) return;
         if (tableModel.hasPendingChanges()) {
             statusLabel.setText("Pending edits preserved. Commit or Revert before reloading.");
             return;
         }
+        if (refreshPending) refreshMetadata = true;
+        refreshPending = false;
+        final boolean reloadMetadata = refreshMetadata;
         long generation = ++loadGeneration;
         String where = whereField.getText().trim();
         String order = orderField.getText().trim();
@@ -403,8 +449,11 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             try (var read = tasks.openRead(config)) {
                 Connection conn=read.connection();
 
+                if (reloadMetadata && MetadataService.getInstance().getTables(conn, config, databaseName).stream()
+                        .noneMatch(table -> table.getName().equals(tableMetadata.getName()))) throw new MissingTableException();
+
                 // Keep table columns metadata up to date
-                List<ColumnMetadata> cols = refreshMetadata || knownColumns.isEmpty() ? MetadataService.getInstance().getColumns(conn,config,databaseName,tableMetadata.getName()) : knownColumns;
+                List<ColumnMetadata> cols = reloadMetadata || knownColumns.isEmpty() ? MetadataService.getInstance().getColumns(conn,config,databaseName,tableMetadata.getName()) : knownColumns;
                 int offset = Math.multiplyExact(requestedPage - 1, requestedSize);
                 List<String> keys=cols.stream().filter(ColumnMetadata::isPrimaryKey).map(ColumnMetadata::getName).toList();
                 QueryResult fetched = DataService.getInstance().fetchData(conn,config,databaseName,tableMetadata.getName(),where,order,requestedSize+1,offset,keys);
@@ -415,6 +464,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
 
                 SwingUtilities.invokeLater(() -> {
                     if (disposed || generation != loadGeneration || mutationRunning || dataTable.isEditing() || tableModel.hasPendingChanges()) return;
+                    tableUnavailable = false;
                     setReadRunning(false);
                     tableMetadata.setColumns(cols);
                     totalRowCount = knownCount;
@@ -439,6 +489,18 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 SwingUtilities.invokeLater(() -> {
                     if (disposed || generation != loadGeneration || mutationRunning) return;
                     setReadRunning(false);
+                    if (ex instanceof MissingTableException) {
+                        tableUnavailable = true;
+                        tableMetadata.setColumns(List.of());
+                        tableModel.setData(List.of(), List.of(), List.of());
+                        totalRowCount = -1;
+                        pageLabel.setText("Table unavailable");
+                        prevPageBtn.setEnabled(false);
+                        nextPageBtn.setEnabled(false);
+                        DatabaseUi.status(statusLabel, "Table no longer exists · Refresh after recreating it", DatabaseUi.Tone.WARNING);
+                        updateOperationControls();
+                        return;
+                    }
                     DatabaseUi.status(statusLabel, "Could not load data · See error details", DatabaseUi.Tone.ERROR);
                     statusLabel.setToolTipText(ex.getMessage());
                     Messages.showErrorDialog(project, "Error: " + ex.getMessage(), "Data Fetch Error");
@@ -520,6 +582,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         );
         updateValidationDetails(errors);
         updateContextActions();
+        scheduleRefresh();
     }
 
     private void updateValidationDetails(Map<CellCoord, String> errors) {
@@ -562,11 +625,11 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     DdlService.getInstance().truncateTable(conn, config, databaseName, tableMetadata.getName());
                     return null;
                 });
+                notifyTableChanged();
                 SwingUtilities.invokeLater(() -> {
                     if (disposed) return;
                     setMutationRunning(false);
                     Messages.showInfoMessage(project, "Table '" + tableMetadata.getName() + "' truncated successfully.", "Table Truncated");
-                    loadData();
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
@@ -696,10 +759,12 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                         if (remainingDraft.hasChanges()) draftStore.put(draftKey(), remainingDraft);
                         else draftStore.remove(draftKey());
                     }
+                    notifyTableChanged();
                     if (disposed) return;
                     tableModel.removeRows(modelRows);
                     setMutationRunning(false);
                     DatabaseUi.status(statusLabel, "Deleted " + keys.size() + (keys.size() == 1 ? " saved row" : " saved rows"), DatabaseUi.Tone.SUCCESS);
+                    scheduleRefresh();
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
@@ -775,12 +840,12 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 });
                 SwingUtilities.invokeLater(() -> {
                     if (draftStore != null) draftStore.remove(draftKey());
+                    notifyTableChanged();
                     if (disposed) return;
                     tableModel.modifiedCells.clear();
                     tableModel.newRows.clear();
                     setMutationRunning(false);
                     Messages.showInfoMessage(project, "Changes committed.", "Changes Saved");
-                    loadData();
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
@@ -803,6 +868,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         finishCellEditing();
         updatePendingChangesState();
         disposed = true; loadGeneration++;
+        if (changeSubscription != null) changeSubscription.disconnect();
         tasks.cancelPending();
         com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(tasks::close);
         if (autoRefreshTimer != null) autoRefreshTimer.stop();
@@ -813,12 +879,14 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     private void setReadRunning(boolean running) {
         readRunning = running;
         updateOperationControls();
+        if (!running) scheduleRefresh();
     }
 
     private void setMutationRunning(boolean running) {
         if (running) loadGeneration++;
         mutationRunning = running;
         updateOperationControls();
+        if (!running) scheduleRefresh();
     }
 
     private void updateOperationControls() {
@@ -831,7 +899,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             enabledBeforeOperation.forEach(JComponent::setEnabled);
             enabledBeforeOperation.clear();
         }
-        dataTable.setEnabled(!isBusy());
+        dataTable.setEnabled(!isBusy() && !tableUnavailable);
+        addRowBtn.setEnabled(!isBusy() && !tableUnavailable && !tableMetadata.isView());
         updatePendingChangesState();
         updateContextActions();
     }
