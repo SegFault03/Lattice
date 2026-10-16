@@ -79,6 +79,9 @@ public final class DatabaseUi {
         button.setToolTipText(tooltip);
         button.getAccessibleContext().setAccessibleName(tooltip);
         button.setBorder(JBUI.Borders.empty(4, 6));
+        // Darcula subtracts both border insets and the Swing button margin.
+        // The border supplies our explicit padding; do not count that margin twice.
+        button.setMargin(new Insets(0, 0, 0, 0));
         button.setBorderPainted(false);
         button.setContentAreaFilled(false);
         button.setOpaque(false);
@@ -87,6 +90,15 @@ public final class DatabaseUi {
         button.setRolloverEnabled(true);
         button.setIconTextGap(JBUI.scale(5));
         installFocusVisibility(button);
+        return button;
+    }
+
+    /** Dialog actions include all padding required by the active native button UI. */
+    public static JButton dialogAction(String text, Icon icon, String tooltip) {
+        JButton button = new DialogButton(text, icon);
+        button.setToolTipText(tooltip);
+        button.getAccessibleContext().setAccessibleName(tooltip);
+        button.setIconTextGap(JBUI.scale(5));
         return button;
     }
 
@@ -142,6 +154,43 @@ public final class DatabaseUi {
     /** Highlights an enabled toolbar action while leaving disabled actions in the native quiet style. */
     public static void setActionEmphasis(JButton button, Color color) {
         if (button instanceof ActionButton actionButton) actionButton.setEmphasisColor(color);
+        if (button instanceof DialogButton dialogButton) dialogButton.setEmphasisColor(color);
+    }
+
+    /** Native sizing, focus ring, border and surface geometry shared with Cancel/Close. */
+    private static final class DialogButton extends JButton {
+        private Icon plainIcon, emphasizedIcon;
+        private Color emphasisColor;
+
+        DialogButton(String text, Icon icon) { super(text, icon); plainIcon = icon; setOpaque(false); }
+
+        private void setEmphasisColor(Color color) {
+            if (Objects.equals(emphasisColor, color)) return;
+            emphasisColor = color;
+            emphasizedIcon = color == null || plainIcon == null ? plainIcon : IconUtil.filterIcon(plainIcon,
+                    () -> new java.awt.image.RGBImageFilter() {
+                        @Override public int filterRGB(int x, int y, int rgb) { return (rgb & 0xFF000000) | 0x00FFFFFF; }
+                    }, null);
+            putClientProperty("lattice.action.emphasis", color);
+            refreshAppearance();
+        }
+
+        @Override public void setEnabled(boolean enabled) { super.setEnabled(enabled); refreshAppearance(); }
+        @Override public void updateUI() { super.updateUI(); refreshAppearance(); }
+        @Override public Color getForeground() {
+            return isEnabled() && emphasisColor != null ? Color.WHITE : super.getForeground();
+        }
+
+        private void refreshAppearance() {
+            setOpaque(false); // The native UI paints the rounded surface inside its focus-ring bounds.
+            boolean emphasized = isEnabled() && emphasisColor != null;
+            // Supported native theme properties preserve the same painted bounds as Cancel.
+            putClientProperty("JButton.backgroundColor", emphasized ? emphasisColor : null);
+            putClientProperty("JButton.borderColor", emphasized ? emphasisColor.darker() : null);
+            setBackground(emphasized ? emphasisColor : UIManager.getColor("Button.background"));
+            if (plainIcon != null) setIcon(emphasized ? emphasizedIcon : plainIcon);
+            repaint();
+        }
     }
 
     /** A popup view of an existing action; state and callbacks still belong to that action. */
@@ -247,17 +296,9 @@ public final class DatabaseUi {
         }
 
         @Override public Dimension getPreferredSize() {
-            // Size toolbar actions to content, bypassing native dialog-button minimum widths.
-            Insets padding = getInsets();
-            FontMetrics font = getFontMetrics(getFont());
-            String label = getText();
-            Icon glyph = getIcon();
-            int textWidth = label == null || label.isEmpty() ? 0 : font.stringWidth(label);
-            int iconWidth = glyph == null ? 0 : glyph.getIconWidth();
-            int gap = textWidth > 0 && iconWidth > 0 ? getIconTextGap() : 0;
-            return new Dimension(Math.max(JBUI.scale(28), padding.left + padding.right + textWidth + iconWidth + gap),
-                    Math.max(JBUI.scale(28), padding.top + padding.bottom
-                            + Math.max(textWidth > 0 ? font.getHeight() : 0, glyph == null ? 0 : glyph.getIconHeight())));
+            // Toolbar actions use compact content sizes; dialog actions are native JButtons.
+            Dimension content = javax.swing.plaf.basic.BasicGraphicsUtils.getPreferredButtonSize(this, getIconTextGap());
+            return new Dimension(Math.max(JBUI.scale(28), content.width), Math.max(JBUI.scale(28), content.height));
         }
 
         @Override public Dimension getMinimumSize() { return getPreferredSize(); }

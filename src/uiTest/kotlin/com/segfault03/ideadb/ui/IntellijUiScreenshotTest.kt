@@ -69,6 +69,7 @@ class IntellijUiScreenshotTest {
         val sourceFilterOnly = System.getProperty("ui.sourceFilter.only").toBoolean()
         val explorerSearchOnly = System.getProperty("ui.explorerSearch.only").toBoolean()
         val alterTableOnly = System.getProperty("ui.alterTable.only").toBoolean()
+        val createTableOnly = System.getProperty("ui.createTable.only").toBoolean()
         val postgresPort = Integer.getInteger("ui.postgres.port", 0)
         val postgres = postgresPort > 0
         val h2 = System.getProperty("ui.h2.enabled", "false").toBoolean()
@@ -115,7 +116,7 @@ class IntellijUiScreenshotTest {
         // Keep the IDE and the Driver/Robot test JVM in the same coordinate space.
         testContext.applyVMOptionsPatch {
             addSystemProperty("sun.java2d.uiScale", "1.0")
-            addSystemProperty("ide.ui.scale", "1.0")
+            addSystemProperty("ide.ui.scale", System.getProperty("ui.scale", "1.0"))
         }
         // Starter keeps the test IDE's config between runs. Reset only this test plugin's
         // saved connections so every run begins at the same real empty-state screen.
@@ -130,7 +131,7 @@ class IntellijUiScreenshotTest {
         // IDEA's own ProxySelector supersedes JVM proxy flags. Configure the real
         // HTTP Proxy settings in this isolated profile, preserving cloud routing.
         val proxyAddress = System.getenv("HTTPS_PROXY") ?: System.getenv("HTTP_PROXY")
-        val downloadFixture = if (!sourceFilterOnly && !explorerSearchOnly && !alterTableOnly && !postgres && !System.getProperty("ui.skip.remote.downloads", "false").toBoolean())
+        val downloadFixture = if (!sourceFilterOnly && !explorerSearchOnly && !alterTableOnly && !createTableOnly && !postgres && !System.getProperty("ui.skip.remote.downloads", "false").toBoolean())
             DriverDownloadUiFixture(proxyAddress) else null
         try {
         val configuredProxy = downloadFixture?.let { "http://127.0.0.1:${it.port}" } ?: proxyAddress
@@ -263,6 +264,18 @@ class IntellijUiScreenshotTest {
                     root.paintImmediately(0, 0, frame.component.width, frame.component.height)
                 }
             }
+            if (createTableOnly) {
+                check(jdbcFixture != null && !postgres && !h2) { "The focused Composer scenario owns its HSQLDB fixture; enable ui.review.enabled" }
+                verifyCreateComposer(frame, pluginRoot, jdbcFixture, screenshotsDirectory)
+                screenshotsDirectory.resolve("runtime-evidence.txt").writeText("""
+                    Running IDE: ${actualTheme.getName()} ($themeId)
+                    Production Column Composer loaded in the installed Lattice plugin.
+                    Owned HSQLDB fixture; CREATE SQL, column order, identity, primary key, precision, defaults and inserted data verified using JDBC.
+                    Checked hidden invalid drafts, filtering, duplicate names, add/remove/reorder, discard handling, busy animation and database failure with retry.
+                    Captures are actual desktop pixels; create-composer-dialog.png is a crop of the live modal.
+                """.trimIndent())
+                return@useDriverAndCloseIde
+            }
             if (alterTableOnly) {
                 verifyAlterInspector(frame, pluginRoot, requireNotNull(jdbcFixture), screenshotsDirectory)
                 screenshotsDirectory.resolve("runtime-evidence.txt").writeText("""
@@ -306,7 +319,7 @@ class IntellijUiScreenshotTest {
                     tree.fixture.rightClickPath(schema.joinToString(tree.fixture.separator()))
                     frame.x { byVisibleText("Create table…") }.waitFound().click()
                     frame.x(DialogUiComponent::class.java) { byTitle("Create table in PUBLIC") }.waitFound().also { dialog ->
-                        dialog.x(JTextFieldUI::class.java) { byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField") }.waitFound().text = name
+                        inspectorInput(dialog, "Table name").text = name
                         dialog.pressButton("Create table")
                     }
                     frame.x(DialogUiComponent::class.java) { byTitle("Table created") }.waitFound().pressButton("OK")
@@ -936,13 +949,11 @@ class IntellijUiScreenshotTest {
             val createTableDialog = frame.x(DialogUiComponent::class.java) {
                 byTitle("Create table in $schemaName")
             }.waitFound()
-            createTableDialog.x(JTextFieldUI::class.java) {
-                byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField")
-            }.waitFound().text = "LATTICE_PEOPLE"
+            inspectorInput(createTableDialog, "Table name").text = "LATTICE_PEOPLE"
             Thread.sleep(500)
             assertCreateTableLayout(createTableDialog)
             captureScreen(screenshotsDirectory.resolve("create-table-dialog.png"))
-            if (jdbcFixture != null) captureBusyState(jdbcFixture, pluginRoot, "Creating table…", "explorer-creating-table.png", screenshotsDirectory) {
+            if (jdbcFixture != null) captureBusyState(jdbcFixture, createTableDialog, "Creating table…", "explorer-creating-table.png", screenshotsDirectory) {
                 createTableDialog.pressButton("Create table")
             } else createTableDialog.pressButton("Create table")
             frame.x(DialogUiComponent::class.java) {
@@ -1917,25 +1928,135 @@ class IntellijUiScreenshotTest {
         check(ImageIO.write(image, "png", path.toFile())) { "No PNG ImageIO writer available" }
     }
 
-    private fun assertCreateTableLayout(dialog: UiComponent) {
-        for (caption in listOf("Remove column", "Move up", "Move down")) dialog.x { byVisibleText(caption) }.waitFound()
-        val grid = dialog.x(JTableUiComponent::class.java) { byJavaClass("com.intellij.ui.table.JBTable") }.waitFound()
-        val preview = dialog.x { byAccessibleName("Create table SQL preview") }.waitFound()
+    private fun assertTableDialogText(dialog: UiComponent) {
+        val labels = listOf("Table dialog title", "Table database engine", "Table SQL preview title")
+            .map { dialog.x { byAccessibleName(it) }.waitFound() }
+        val actions = dialog.xx { or(byJavaClass("com.segfault03.ideadb.ui.DatabaseUi\$ActionButton"), byJavaClass("com.segfault03.ideadb.ui.DatabaseUi\$DialogButton")) }.list()
+        val footer = dialog.x { byAccessibleName("Table dialog actions") }.waitFound()
+        val footerButtons = footer.xx { or(byJavaClass("javax.swing.JButton"), byJavaClass("com.segfault03.ideadb.ui.DatabaseUi\$DialogButton")) }.list()
+        check(footerButtons.size == 2)
+        val sourceIcon = dialog.x { byAccessibleName("Table database icon") }.waitFound()
+        val sourceText = dialog.x { byAccessibleName("Table database engine") }.waitFound()
+        check(actions.isNotEmpty())
         dialog.driver.withContext(OnDispatcher.EDT) {
-            val table = cast(grid.component, LiveTableEditor::class)
-            val columns = table.getColumnModel()
-            val header = table.getTableHeader().getDefaultRenderer()
-            for (index in 0 until columns.getColumnCount()) {
-                val column = columns.getColumn(index)
-                val painted = header.getTableCellRendererComponent(table, column.getHeaderValue(), false, false, -1, index)
-                check(column.getWidth() >= painted.getPreferredSize().getWidth()) { "Create Table truncates ${column.getHeaderValue()}" }
+            check(utility(LiveUiScale::class).scale(100f) == (System.getProperty("ui.scale", "1.0").toFloat() * 100)) { "IDE did not apply the requested UI scale" }
+            val a=footerButtons[0].component.getBounds(); val b=footerButtons[1].component.getBounds()
+            check(a.height==b.height && a.y==b.y) { "Footer buttons must share top/bottom edges: $a, $b" }
+            val first=cast(footerButtons[0].component,LiveSwingComponent::class)
+            val second=cast(footerButtons[1].component,LiveSwingComponent::class)
+            check(first.getBaseline(a.width,a.height)==second.getBaseline(b.width,b.height)) { "Footer text baselines differ" }
+            check(b.x-a.x-a.width==utility(LiveUiScale::class).scale(8f).toInt()) { "Footer action gap differs from 8 logical pixels" }
+            val glyph=sourceIcon.component.getLocationOnScreen(); val caption=sourceText.component.getLocationOnScreen()
+            check(caption.x>=glyph.x+sourceIcon.component.width+utility(LiveUiScale::class).scale(8f).toInt()) { "Source text overlaps its icon slot" }
+            println("Table dialog geometry: equal footer heights=${a.height}, aligned baselines; separate source icon/text")
+            for (label in labels) {
+                val text = cast(label.component, LiveLabel::class)
+                val live = cast(label.component, LiveSwingComponent::class)
+                val available = new(LiveDimension::class, label.component.width, label.component.height)
+                utility(LiveInsetsMath::class).removeFrom(available, live.getInsets())
+                val icon = text.getIcon()
+                val needed = live.getFontMetrics(live.getFont()).stringWidth(text.getText()) +
+                    (icon?.getIconWidth() ?: 0) + (if (icon != null) text.getIconTextGap() else 0)
+                check(available.getWidth() >= needed) { "Clipped label: ${text.getText()} (${label.component.width} < $needed)" }
             }
-            val text = cast(preview.component, LiveTextArea::class)
-            check(text.getText().startsWith("CREATE TABLE") && text.getCaretPosition() == 0)
-            check(cast(preview.component, LiveSwingComponent::class).getVisibleRect().y == 0) { "SQL preview must show the first line" }
-            check(text.getLineCount() <= text.getRows()) { "Initial SQL preview must fit the small default statement" }
+            for (action in actions) {
+                val button = cast(action.component, LiveToolbarButton::class)
+                val live = cast(action.component, LiveSwingComponent::class)
+                if (!live.isShowing() || button.getText().isEmpty()) continue
+                val available = new(LiveDimension::class, action.component.width, action.component.height)
+                utility(LiveInsetsMath::class).removeFrom(available, live.getInsets())
+                utility(LiveInsetsMath::class).removeFrom(available, button.getMargin())
+                val icon = button.getIcon()
+                val needed = live.getFontMetrics(live.getFont()).stringWidth(button.getText()) +
+                    (icon?.getIconWidth() ?: 0) + (if (icon != null) button.getIconTextGap() else 0)
+                check(available.getWidth() >= needed) { "Clipped action: ${button.getText()} (${action.component.width} < $needed)" }
+                if (button.getText() in listOf("Apply changes", "Apply all changes", "Create table")) {
+                    check(!live.isOpaque()) { "Primary button must not paint a rectangle outside its native rounded surface" }
+                    val nativeSize = button.getUI().getPreferredSize(live)
+                    check(action.component.width >= nativeSize.getWidth()) { "Footer button bypassed the native UI's preferred width" }
+                    check(action.component.height >= nativeSize.getHeight()) { "Footer button bypassed the native UI's preferred height" }
+                    println("Native footer sizing: ${button.getText()}, enabled=${action.component.isEnabled()}, default=${button.isDefaultButton()}, actual=${action.component.width}x${action.component.height}, preferred=${nativeSize.getWidth()}x${nativeSize.getHeight()}")
+                }
+            }
         }
-        println("P2 Create Table: all headers fit; updated SQL preview starts at CREATE TABLE")
+        println("Table dialog: complete title, source, SQL caption and action labels fit at UI scale ${System.getProperty("ui.scale", "1.0")}")
+    }
+
+    private fun auditTableDialog(dialog: UiComponent, directory: Path, prefix: String, create: Boolean) {
+        if (!System.getProperty("ui.dialog.audit", "false").toBoolean()) return
+        val panel=dialog.x { byJavaClass(if(create) "com.segfault03.ideadb.dialog.CreateTablePanel" else "com.segfault03.ideadb.dialog.AlterTablePanel") }.waitFound()
+        val original=dialog.component.getBounds()
+        val overhead=original.width-panel.component.width
+        val scale=System.getProperty("ui.scale", "1.0").toDouble()
+        val laf=dialog.driver.service(LiveLafManager::class)
+        val theme=laf.getCurrentUIThemeLookAndFeel().getId()
+        val themes=mutableListOf("ExperimentalLight","ExperimentalDark")
+        val installed=laf.getInstalledLookAndFeels().map { it.getName() }
+        for(id in listOf("Islands Light","Islands Dark")) if(id in installed)themes.add(id)
+        try {
+            for (id in themes) {
+                dialog.driver.withContext(OnDispatcher.EDT) { laf.setCurrentLookAndFeel(laf.findLaf(id),true);laf.updateUI() }
+                check(laf.getCurrentUIThemeLookAndFeel().getId()==id) { "Dialog audit rendered an unexpected theme" }
+                for (width in listOf(if(create)840 else 780,if(create)920 else 900,1200)) {
+                    val target=(width*scale).toInt()+overhead
+                    dialog.driver.withContext(OnDispatcher.EDT) {
+                        cast(dialog.component,Window::class).setBounds(20,20,target,original.height)
+                    }
+                    waitUntil("dialog audit resize") { panel.component.width >= (width*scale).toInt()-1 }
+                    Thread.sleep(200)
+                    val columns=dialog.x { byAccessibleName("Table columns") }.waitFound()
+                    dialog.driver.withContext(OnDispatcher.EDT) { cast(columns.component,LiveColumnList::class).ensureIndexIsVisible(0) }
+                    assertTableDialogText(dialog)
+                    val sql=dialog.x { byAccessibleName(if(create) "Create table SQL preview" else "Alter table SQL preview") }.waitFound()
+                    dialog.driver.withContext(OnDispatcher.EDT) {
+                        val pane=cast(sql.component,LiveStyledSql::class)
+                        val identifier=pane.getText().indexOf('"')
+                        check(identifier>=0)
+                        val attrs=pane.getStyledDocument().getCharacterElement(identifier).getAttributes()
+                        val actual=utility(LiveTextStyle::class).getForeground(attrs).getRGB()
+                        val expected=utility(LiveUiColors::class).getColor("Label.foreground").getRGB()
+                        check(actual==expected) { "SQL kept a foreground from another theme" }
+                    }
+                    val name=inspectorInput(dialog,"Column name")
+                    val heading=dialog.x { byAccessibleName("Selected column heading") }.waitFound()
+                    check(name.component.getLocationOnScreen().x==heading.component.getLocationOnScreen().x) { "Inspector title and fields are misaligned" }
+                    dialog.driver.withContext(OnDispatcher.EDT) { cast(name.component,LiveSwingComponent::class).requestFocusInWindow() }
+                    Robot().mouseMove(2,2);Thread.sleep(120)
+                    val point=dialog.component.getLocationOnScreen()
+                    savePng(directory.resolve("$prefix-$id-$width.png"),Robot().createScreenCapture(Rectangle(point.x,point.y,dialog.component.width,dialog.component.height)))
+                }
+            }
+        } finally {
+            dialog.driver.withContext(OnDispatcher.EDT) {
+                laf.setCurrentLookAndFeel(laf.findLaf(theme),true);laf.updateUI()
+                cast(dialog.component,Window::class).setBounds(original.x,original.y,original.width,original.height)
+            }
+            Thread.sleep(200)
+        }
+        println("Table dialog audit: $themes at minimum, preferred and wide widths passed")
+    }
+
+    private fun assertCreateTableLayout(dialog: UiComponent) {
+        val composer = dialog.x { byJavaClass("com.segfault03.ideadb.dialog.CreateTablePanel") }.waitFound()
+        check(composer.component.width >= 840 && composer.component.height >= 620)
+        assertTableDialogText(dialog)
+        for (name in listOf("Remove column", "Move column up", "Move column down")) dialog.x { byAccessibleName(name) }.waitFound()
+        val preview = dialog.x { byAccessibleName("Create table SQL preview") }.waitFound()
+        val fields = composer.xx { byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField") }.list()
+        dialog.driver.withContext(OnDispatcher.EDT) {
+            val text = cast(preview.component, LiveTextComponent::class)
+            check(text.getText().startsWith("CREATE TABLE") && text.getCaretPosition() == 0)
+            val livePreview = cast(preview.component, LiveSwingComponent::class)
+            check(livePreview.getVisibleRect().y == 0)
+            check(livePreview.getVisibleRect().height >= livePreview.getPreferredSize().getHeight()) { "The small CREATE statement must fit the SQL preview" }
+            for (field in fields) {
+                val live = cast(field.component, LiveSwingComponent::class)
+                if (!live.isShowing()) continue
+                check(field.component.height in (24 * System.getProperty("ui.scale", "1.0").toDouble()).toInt()..(34 * System.getProperty("ui.scale", "1.0").toDouble()).toInt()) { "Composer input lost its compact height" }
+                check(live.getVisibleRect().width == field.component.width) { "Composer input is clipped horizontally" }
+            }
+        }
+        println("Column Composer: compact inputs fit; SQL preview starts at CREATE TABLE")
     }
 
     private fun assertDriverSummary(dialog: UiComponent, expected: String) {
@@ -2032,16 +2153,111 @@ class IntellijUiScreenshotTest {
         val inspector = dialog.x { byJavaClass("com.segfault03.ideadb.dialog.AlterTablePanel") }.waitFound()
         val bounds = inspector.component.getBounds()
         check(bounds.width >= 780 && bounds.height >= 570)
+        assertTableDialogText(dialog)
         val fields = inspector.xx { byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField") }.list()
         dialog.driver.withContext(OnDispatcher.EDT) {
             for (field in fields) {
                 val live = cast(field.component, LiveSwingComponent::class)
                 if (!live.isShowing()) continue
-                check(field.component.height in 24..32) { "Inspector input lost its shared compact height" }
+                check(field.component.height in (24 * System.getProperty("ui.scale", "1.0").toDouble()).toInt()..(34 * System.getProperty("ui.scale", "1.0").toDouble()).toInt()) { "Inspector input lost its shared compact height" }
                 val visible = live.getVisibleRect()
                 check(visible.width == field.component.width) { "Inspector field is clipped horizontally" }
             }
         }
+    }
+
+    private fun verifyCreateComposer(frame: IdeaFrameUI, root: UiComponent, fixture: JdbcUiFixture, directory: Path) {
+        openConnectionMenu(root, frame, "HSQLDB…")
+        frame.x(DialogUiComponent::class.java) { byTitle("New connection") }.waitFound().also { dialog ->
+            inspectorInput(dialog, "Name:").text = "Local development"
+            dialog.x { byVisibleText("JDBC URL") }.waitFound().click()
+            inspectorInput(dialog, "JDBC URL:").text = fixture.jdbcUrl
+            inspectorInput(dialog, "User:").text = "SA"
+            waitUntil("Composer fixture connection ready") { dialog.x { byVisibleText("Add connection") }.waitFound().component.isEnabled() }
+            dialog.pressButton("Add connection")
+        }
+        frame.waitForNoOpenedDialogs()
+        val tree = root.x(JTreeUiComponent::class.java) { byJavaClass("com.intellij.ui.treeStructure.Tree") }.waitFound()
+        val separator = tree.fixture.separator()
+        val schema = arrayOf("Data Sources", "HSQLDB", "Local development", "PUBLIC")
+        tree.fixture.expandPath(schema.take(3).joinToString(separator))
+        waitUntil("Composer schema connected") { tree.pathExists(*schema) }
+        tree.fixture.expandPath(schema.joinToString(separator))
+        fun open(): DialogUiComponent {
+            tree.fixture.rightClickPath(schema.joinToString(separator))
+            frame.x { byVisibleText("Create table…") }.waitFound().click()
+            return frame.x(DialogUiComponent::class.java) { byTitle("Create table in PUBLIC") }.waitFound()
+        }
+        fun select(dialog: UiComponent, name: String) {
+            val list = dialog.x(JListUiComponent::class.java) { byAccessibleName("Table columns") }.waitFound()
+            val index = list.rawItems.indexOfFirst { it.substringBefore(" : ") == name }
+            check(index >= 0) { "Composer column $name is missing: ${list.rawItems}" }; list.clickItemAtIndex(index)
+        }
+        fun add(dialog: UiComponent, name: String) {
+            dialog.x { byAccessibleName("Add column") }.waitFound().click(); inspectorInput(dialog,"Column name").text = name
+        }
+        fun ready(dialog: UiComponent) = waitUntil("Composer ready") { dialog.x { byAccessibleName("Create new table") }.waitFound().component.isEnabled() }
+        fun columns(table: String): List<Pair<String,Int>> = java.sql.DriverManager.getConnection(fixture.jdbcUrl,"SA","").use { conn ->
+            conn.metaData.getColumns(null,"PUBLIC",table,"%").use { rows -> buildList { while(rows.next())add(rows.getString("COLUMN_NAME") to rows.getInt("COLUMN_SIZE")) } }
+        }
+        var dialog = open(); inspectorInput(dialog,"Table name").text = "customers"
+        select(dialog,"name"); inspectorInput(dialog,"Length / precision").text = "120"
+        select(dialog,"created_at"); dialog.x { byAccessibleName("Allow NULL values") }.waitFound().click()
+        inspectorInput(dialog,"Default value").text = "SQL:CURRENT_TIMESTAMP"
+        add(dialog,"email"); inspectorInput(dialog,"Length / precision").text = "oops"
+        select(dialog,"name"); check(!dialog.x { byAccessibleName("Create new table") }.waitFound().component.isEnabled())
+        select(dialog,"email"); check(inspectorInput(dialog,"Length / precision").text == "oops")
+        inspectorInput(dialog,"Length / precision").text = "255"; dialog.x { byAccessibleName("Allow NULL values") }.waitFound().click()
+        dialog.x { byAccessibleName("Move column up") }.waitFound().click()
+        inspectorInput(dialog,"Filter columns").text = "EMAIL"; inspectorInput(dialog,"Filter columns").text = ""
+        check(inspectorInput(dialog,"Length / precision").text == "255")
+        add(dialog,"status"); inspectorInput(dialog,"Length / precision").text = "20"; inspectorInput(dialog,"Default value").text = "TEXT:active"
+        dialog.x { byAccessibleName("Allow NULL values") }.waitFound().click(); dialog.x { byAccessibleName("Move column up") }.waitFound().click()
+        add(dialog,"balance")
+        selectComboItemWithKeyboard(dialog.x(JComboBoxUiComponent::class.java) { and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"),byAccessibleName("Data type")) }.waitFound(),"DECIMAL")
+        inspectorInput(dialog,"Length / precision").text = "10, 2"; inspectorInput(dialog,"Default value").text = "0"
+        dialog.x { byAccessibleName("Move column up") }.waitFound().click()
+        inspectorInput(dialog,"Column name").text = "email"; check(!dialog.x { byAccessibleName("Create new table") }.waitFound().component.isEnabled())
+        inspectorInput(dialog,"Column name").text = "balance"
+        add(dialog,"temporary"); dialog.x { byAccessibleName("Remove column") }.waitFound().click()
+        select(dialog,"email"); ready(dialog); assertCreateTableLayout(dialog)
+        dialog.pressButton("Cancel")
+        frame.x(DialogUiComponent::class.java) { byTitle("Discard changes") }.waitFound().pressButton("Keep editing")
+        check(columns("customers").isEmpty()); check(inspectorInput(dialog,"Column name").text == "email")
+        Robot().mouseMove(10,10); repaintIdeBeforeCapture?.invoke(); Thread.sleep(350)
+        auditTableDialog(dialog,directory,"create-composer",true)
+        captureScreen(directory.resolve("create-composer-full-ide.png"))
+        val point = dialog.component.getLocationOnScreen()
+        savePng(directory.resolve("create-composer-dialog.png"),Robot().createScreenCapture(Rectangle(point.x,point.y,dialog.component.width,dialog.component.height)))
+        captureBusyState(fixture,dialog,"Creating table…","create-composer-busy.png",directory) {
+            dialog.x { byAccessibleName("Create new table") }.waitFound().click()
+        }
+        frame.x(DialogUiComponent::class.java) { byTitle("Table created") }.waitFound().pressButton("OK"); frame.waitForNoOpenedDialogs()
+        check(columns("customers").map { it.first } == listOf("id","name","email","status","balance","created_at"))
+        check(columns("customers")[1].second == 120 && columns("customers")[2].second == 255)
+        java.sql.DriverManager.getConnection(fixture.jdbcUrl,"SA","").use { conn ->
+            conn.metaData.getColumns(null,"PUBLIC","customers","id").use { rows -> check(rows.next() && rows.getString("IS_AUTOINCREMENT") == "YES") }
+            conn.metaData.getPrimaryKeys(null,"PUBLIC","customers").use { rows -> check(rows.next() && rows.getString("COLUMN_NAME") == "id") }
+            conn.metaData.getColumns(null,"PUBLIC","customers","balance").use { rows -> check(rows.next() && rows.getInt("COLUMN_SIZE") == 10 && rows.getInt("DECIMAL_DIGITS") == 2) }
+            conn.createStatement().use { stmt ->
+                stmt.execute("INSERT INTO \"PUBLIC\".\"customers\" (\"name\",\"email\") VALUES('Ada Lovelace','ada@example.com')")
+                stmt.executeQuery("SELECT \"id\",\"status\",\"balance\",\"created_at\" FROM \"PUBLIC\".\"customers\"").use { rows -> check(rows.next() && rows.getObject(1) != null && rows.getString(2) == "active" && rows.getBigDecimal(3).toPlainString() == "0.00" && rows.getTimestamp(4) != null) }
+            }
+        }
+        waitUntil("created table appears") { tree.pathExists(*(schema + arrayOf("Tables (1)","customers"))) }
+        dialog = open(); inspectorInput(dialog,"Table name").text = "customers"; add(dialog,"nickname"); inspectorInput(dialog,"Length / precision").text = "64"
+        ready(dialog); dialog.x { byAccessibleName("Create new table") }.waitFound().click()
+        frame.x(DialogUiComponent::class.java) { byTitle("Create table failed") }.waitFound().also { captureScreen(directory.resolve("create-composer-error.png")); it.pressButton("OK") }
+        check(inspectorInput(dialog,"Column name").text == "nickname" && inspectorInput(dialog,"Length / precision").text == "64")
+        inspectorInput(dialog,"Table name").text = "customers_archive"; ready(dialog)
+        dialog.x { byAccessibleName("Create new table") }.waitFound().click()
+        frame.x(DialogUiComponent::class.java) { byTitle("Table created") }.waitFound().pressButton("OK"); frame.waitForNoOpenedDialogs()
+        check(columns("customers_archive").size == 4 && columns("customers_archive").last() == ("nickname" to 64))
+        waitUntil("archive appears") { tree.pathExists(*(schema + arrayOf("Tables (2)","customers_archive"))) }
+        dialog = open(); inspectorInput(dialog,"Table name").text = "discarded_table"; dialog.pressButton("Cancel")
+        frame.x(DialogUiComponent::class.java) { byTitle("Discard changes") }.waitFound().pressButton("Discard"); frame.waitForNoOpenedDialogs()
+        check(columns("discarded_table").isEmpty())
+        println("Column Composer: real creation, order, keys, identity, precision, defaults, hidden drafts, validation, cancellation, busy animation and retry verified in the running IDE")
     }
 
     private fun verifyAlterInspector(frame: IdeaFrameUI, root: UiComponent, fixture: JdbcUiFixture, directory: Path) {
@@ -2106,7 +2322,7 @@ class IntellijUiScreenshotTest {
         inspectorInput(dialog,"Filter columns").text = "EMAIL"
         inspectorInput(dialog,"Filter columns").text = ""
         check(inspectorInput(dialog,"Length / precision").text == "255")
-        ready(dialog)
+        ready(dialog); assertTableDialogText(dialog)
         dialog.pressButton("Close")
         frame.x(DialogUiComponent::class.java) { byTitle("Discard changes") }.waitFound().pressButton("Keep editing")
         check(inspectorInput(dialog,"Column name").text == "email_address")
@@ -2114,6 +2330,7 @@ class IntellijUiScreenshotTest {
         frame.x(DialogUiComponent::class.java) { byTitle("Drop column") }.waitFound().pressButton("Cancel")
         check(columns()["email"] == 180 && !columns().containsKey("loyalty"))
         Robot().mouseMove(10,10); repaintIdeBeforeCapture?.invoke(); Thread.sleep(350)
+        auditTableDialog(dialog,directory,"alter-inspector",false)
         captureScreen(directory.resolve("alter-inspector-full-ide.png"))
         val point = dialog.component.getLocationOnScreen()
         savePng(directory.resolve("alter-inspector-dialog.png"),Robot().createScreenCapture(Rectangle(point.x,point.y,dialog.component.width,dialog.component.height)))
@@ -2553,6 +2770,7 @@ interface LiveSwingComponent {
     fun isShowing(): Boolean
     fun paintImmediately(x: Int, y: Int, width: Int, height: Int)
     fun isVisible(): Boolean
+    fun isOpaque(): Boolean
     fun getVisibleRect(): Rectangle
     fun getPreferredSize(): LiveDimension
     fun getMinimumSize(): LiveDimension
@@ -2563,6 +2781,8 @@ interface LiveSwingComponent {
     fun getBackground(): LiveColor
     fun getFont(): LiveFont
     fun getFontMetrics(font: LiveFont): LiveFontMetrics
+    fun getBaseline(width: Int, height: Int): Int
+    fun getInsets(): LiveInsets
 }
 
 @Remote("javax.swing.JTree")
@@ -2575,8 +2795,36 @@ interface LiveTree {
 @Remote("java.util.Map")
 interface LiveSearchMatches { fun size(): Int }
 
+@Remote("javax.swing.JList")
+interface LiveColumnList { fun ensureIndexIsVisible(index: Int) }
+
+@Remote("javax.swing.JTextPane")
+interface LiveStyledSql {
+    fun getText(): String
+    fun getStyledDocument(): LiveStyledDocument
+}
+@Remote("javax.swing.text.StyledDocument")
+interface LiveStyledDocument { fun getCharacterElement(offset: Int): LiveStyledElement }
+@Remote("javax.swing.text.Element")
+interface LiveStyledElement { fun getAttributes(): LiveTextAttributes }
+@Remote("javax.swing.text.AttributeSet")
+interface LiveTextAttributes
+@Remote("javax.swing.text.StyleConstants")
+interface LiveTextStyle { fun getForeground(attributes: LiveTextAttributes): LiveColor }
+@Remote("javax.swing.UIManager")
+interface LiveUiColors { fun getColor(key: String): LiveColor }
+
 @Remote("java.awt.FontMetrics")
 interface LiveFontMetrics { fun stringWidth(text: String): Int }
+
+@Remote("java.awt.Insets")
+interface LiveInsets
+
+@Remote("com.intellij.util.ui.JBInsets")
+interface LiveInsetsMath { fun removeFrom(size: LiveDimension, insets: LiveInsets) }
+
+@Remote("com.intellij.util.ui.JBUI")
+interface LiveUiScale { fun scale(value: Float): Float }
 
 @Remote("java.awt.Dimension")
 interface LiveDimension {
@@ -2589,6 +2837,7 @@ interface LiveColor { fun getRGB(): Int }
 
 @Remote("javax.swing.JLabel")
 interface LiveLabel {
+    fun getIconTextGap(): Int
     fun getText(): String
     fun getIcon(): LiveIcon?
 }
@@ -2630,6 +2879,10 @@ interface LiveCellRenderer {
 
 @Remote("javax.swing.JButton")
 interface LiveToolbarButton {
+    fun getUI(): LiveButtonUi
+    fun isDefaultButton(): Boolean
+    fun getMargin(): LiveInsets
+    fun getIconTextGap(): Int
     fun doClick()
     fun isFocusOwner(): Boolean
     fun getModel(): LiveButtonModel
@@ -2638,6 +2891,9 @@ interface LiveToolbarButton {
     fun getToolTipText(): String
     fun getIcon(): LiveIcon?
 }
+
+@Remote("javax.swing.plaf.ButtonUI")
+interface LiveButtonUi { fun getPreferredSize(component: LiveSwingComponent): LiveDimension }
 
 @Remote("javax.swing.JMenuItem")
 interface LiveMenuItem {
@@ -2732,3 +2988,6 @@ interface LiveSourceChoice {
     fun getIcon(): LiveIcon?
     fun isSelected(): Boolean
 }
+
+@Remote("javax.swing.text.JTextComponent")
+interface LiveTextComponent { fun getText(): String; fun getCaretPosition(): Int }

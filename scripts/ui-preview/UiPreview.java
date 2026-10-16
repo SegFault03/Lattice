@@ -188,9 +188,7 @@ public final class UiPreview {
         render(database.previewPanel(), theme + "-schema-create-database-600", 600, database.previewPanel().getPreferredSize().height);
         CreateTableDialog create = new CreateTableDialog(null, config(DatabaseType.MYSQL), "shop");
         JPanel createPanel = create.previewPanel();
-        JTable columns = (JTable)field(create, "columnsTable");
-        ((JScrollPane)columns.getParent().getParent()).setColumnHeaderView(columns.getTableHeader());
-        render(createPanel, theme + "-schema-create-table-740", 740, createPanel.getPreferredSize().height);
+        render(createPanel, theme + "-schema-create-table-1040", 1040, createPanel.getPreferredSize().height);
         TableMetadata metadata = (TableMetadata)field(table(false), "tableMetadata");
         AlterTableDialog alter = new AlterTableDialog(null, config(DatabaseType.MYSQL), "shop", metadata);
         com.segfault03.ideadb.dialog.AlterTablePanel inspector = (com.segfault03.ideadb.dialog.AlterTablePanel)field(alter, "editor");

@@ -33,7 +33,7 @@ public final class AlterTablePanel extends JPanel {
     private final JCheckBox nullable = new JCheckBox("Allow NULL values");
     private final JBTextField defaultValue = DatabaseInputs.textField();
     private final JLabel heading = new JLabel(), badge = new JLabel(), summary = new JLabel("No pending changes");
-    private final JLabel columnCount = new JLabel("0 columns"), empty = new JLabel("No matching columns", SwingConstants.CENTER);
+    private final JLabel columnCount = new WrappingLabel("0 columns"), empty = new JLabel("No matching columns", SwingConstants.CENTER);
     private final JLabel status = new WrappingLabel("No pending changes");
     private final JLabel hint = new WrappingLabel(" ");
     private final JTextPane sql = new JTextPane();
@@ -46,7 +46,7 @@ public final class AlterTablePanel extends JPanel {
     private final JButton rename = DatabaseUi.action("Rename", AllIcons.Actions.Edit, "Rename column");
     private final JButton drop = DatabaseUi.action("Drop…", AllIcons.General.Remove, "Drop column");
     private final JButton renameTable = DatabaseUi.action("Rename table…", Icons.TABLE, "Rename table");
-    private final JButton apply = DatabaseUi.action("Apply changes", AllIcons.Actions.Checked, "Apply table changes");
+    private final JButton apply = DatabaseUi.dialogAction("Apply changes", AllIcons.Actions.Checked, "Apply table changes");
     private final JButton close = new JButton("Close");
     private final JButton revert = DatabaseUi.action("Revert", AllIcons.Actions.Rollback, "Revert column changes");
     private DraftColumn selected;
@@ -81,30 +81,20 @@ public final class AlterTablePanel extends JPanel {
         this.config = config; this.tableName = tableName; this.tableDraft = tableName; this.columns = List.copyOf(columns);
         type = DatabaseInputs.comboBox(DatabaseProviders.get(config.getType()).dataTypes().toArray(String[]::new));
         type.setEditable(DatabaseProviders.get(config.getType()).supportsCustomTypes());
-        setPreferredSize(JBUI.size(940, 690)); setMinimumSize(JBUI.size(780, 570));
+        setMinimumSize(JBUI.size(780, 570));
         setBorder(JBUI.Borders.empty());
 
-        JPanel header = panel(new BorderLayout());
-        header.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, border()), JBUI.Borders.empty(8, 8, 18, 8)));
-        JPanel identity = vertical();
-        JLabel title = new JLabel(tableName, Icons.TABLE, SwingConstants.LEFT);
-        title.setFont(title.getFont().deriveFont(Font.BOLD, 20f)); title.setIconTextGap(JBUI.scale(9));
-        stack(identity, title); gap(identity, 7);
-        stack(identity, muted(config.getName() + "   ›   " + namespace));
-        header.add(identity, BorderLayout.WEST);
-        JLabel source = muted(config.getType().getDisplayName());
-        source.setIcon(Icons.dataSource(config.getType(), 24)); source.setIconTextGap(JBUI.scale(8));
-        header.add(source, BorderLayout.EAST); add(header, BorderLayout.NORTH);
+        add(TableDialogChrome.header(config,namespace,tableName),BorderLayout.NORTH);
 
         JPanel body = panel(new BorderLayout());
         JPanel sidebar = panel(new BorderLayout(0, JBUI.scale(12)));
-        sidebar.setPreferredSize(JBUI.size(218, 100));
-        sidebar.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0, 0, 1, 1, border()), JBUI.Borders.empty(18, 4, 14, 14)));
+        sidebar.setPreferredSize(JBUI.size(210, 100));
+        sidebar.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0, 0, 1, 1, border()), JBUI.Borders.empty(10, 4, 10, 12)));
         JPanel top = vertical();
         JPanel titleRow = panel(new BorderLayout());
         JLabel caption = new JLabel("Columns"); caption.setFont(caption.getFont().deriveFont(Font.BOLD));
         titleRow.add(caption, BorderLayout.WEST); titleRow.add(DatabaseUi.group(refresh, add), BorderLayout.EAST);
-        stack(top, titleRow); gap(top, 12);
+        stack(top, titleRow); gap(top, 8);
         filter.getAccessibleContext().setAccessibleName("Filter columns");
         filter.putClientProperty("JTextField.placeholderText", "Filter columns");
         filter.getEmptyText().setText("Filter columns");
@@ -112,7 +102,7 @@ public final class AlterTablePanel extends JPanel {
         search.add(new JLabel(AllIcons.Actions.Search), BorderLayout.WEST); search.add(filter, BorderLayout.CENTER);
         stack(top, search); sidebar.add(top, BorderLayout.NORTH);
         columnList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        columnList.setFixedCellHeight(JBUI.scale(61)); columnList.setCellRenderer(new ColumnRenderer());
+        columnList.setFixedCellHeight(-1); columnList.setCellRenderer(new ColumnRenderer());
         columnList.setOpaque(false); columnList.getAccessibleContext().setAccessibleName("Table columns");
         JBScrollPane listScroll = new JBScrollPane(columnList); listScroll.setBorder(JBUI.Borders.empty());
         listScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
@@ -124,32 +114,31 @@ public final class AlterTablePanel extends JPanel {
         renameTable.setForeground(accent()); stack(sidebarBottom, renameTable); sidebar.add(sidebarBottom, BorderLayout.SOUTH);
         body.add(sidebar, BorderLayout.WEST);
 
-        JPanel detail = vertical(); detail.setBorder(JBUI.Borders.empty(18, 22, 20, 8));
-        JPanel detailTitle = panel(new BorderLayout()); heading.setFont(heading.getFont().deriveFont(Font.BOLD, 18f));
-        badge.setForeground(accent()); badge.setFont(badge.getFont().deriveFont(Font.BOLD, 11f));
-        JPanel selectedTitle = panel(new FlowLayout(FlowLayout.LEFT, JBUI.scale(8), 0));
-        selectedTitle.add(heading); selectedTitle.add(badge);
-        detailTitle.add(selectedTitle, BorderLayout.WEST); detailTitle.add(DatabaseUi.group(revert, rename, drop), BorderLayout.EAST);
-        stack(detail, detailTitle); gap(detail, 12);
+        JPanel detail = vertical(); detail.setBorder(JBUI.Borders.empty(10, 18, 12, 4));
+        JPanel detailTitle = panel(new BorderLayout()); heading.setFont(TableDialogChrome.font(Font.BOLD,5));
+        heading.getAccessibleContext().setAccessibleName("Selected column heading");
+        badge.setForeground(accent()); badge.setFont(TableDialogChrome.font(Font.BOLD,-2));
+        JPanel selectedTitle = TableDialogChrome.inline(heading,badge);
+        detailTitle.add(selectedTitle, BorderLayout.CENTER); detailTitle.add(DatabaseUi.group(revert, rename, drop), BorderLayout.EAST);
+        stack(detail, detailTitle); gap(detail, 4);
         stack(definition, DatabaseUi.section("Definition"));
-        nameGroup = field(nameLabel, name, "Column name"); stack(definition, nameGroup); gap(definition, 12);
+        nameGroup = field(nameLabel, name, "Column name"); stack(definition, nameGroup); gap(definition, 8);
         JPanel typeRow = panel(new BorderLayout(JBUI.scale(16), 0));
         typeRow.add(field(new JLabel("Data type"), type, "Data type"), BorderLayout.CENTER);
         JPanel lengthGroup = field(new JLabel("Length / precision"), length, "Length / precision");
-        lengthGroup.setPreferredSize(JBUI.size(160, lengthGroup.getPreferredSize().height));
-        typeRow.add(lengthGroup, BorderLayout.EAST); stack(definition, typeRow); gap(definition, 7);
-        hint.setForeground(info()); hint.setFont(hint.getFont().deriveFont(12f)); stack(definition, hint);
+        typeRow.add(TableDialogLayout.width(lengthGroup, 160), BorderLayout.EAST); stack(definition, typeRow); gap(definition, 4);
+        hint.setForeground(info()); hint.setFont(TableDialogChrome.font(Font.PLAIN,-1)); stack(definition, hint);
         stack(detail, definition);
         stack(values, DatabaseUi.section("Values"));
-        nullable.setOpaque(false); nullable.setBorder(JBUI.Borders.empty()); stack(values, nullable); gap(values, 14);
-        stack(values, field(new JLabel("Default value"), defaultValue, "Default value")); gap(values, 6);
+        nullable.setOpaque(false); stack(values, TableDialogChrome.constraints(nullable)); gap(values, 8);
+        stack(values, field(new JLabel("Default value"), defaultValue, "Default value")); gap(values, 4);
         defaultValue.putClientProperty("JTextField.placeholderText", "No default");
         defaultValue.getEmptyText().setText("No default");
         defaultValue.setToolTipText("Blank removes the default. Use TEXT: for a literal or SQL: for an expression.");
-        stack(values, muted("Blank removes the default · TEXT: literal · SQL: expression"));
+        stack(values, help("Blank removes the default · TEXT: literal · SQL: expression"));
         stack(detail, values);
-        warnings.setBorder(JBUI.Borders.empty(14, 0)); warning.setForeground(JBColor.namedColor("Label.warningForeground", new JBColor(0x88600C, 0xE5BA6A)));
-        stack(warnings, warning); stack(detail, warnings); gap(detail, 20);
+        warnings.setBorder(JBUI.Borders.empty(8, 0)); warning.setForeground(JBColor.namedColor("Label.warningForeground", new JBColor(0x88600C, 0xE5BA6A)));
+        stack(warnings, warning); stack(detail, warnings); gap(detail, 12);
         stack(detail, createPreview());
         JBScrollPane detailScroll = new JBScrollPane(detail); detailScroll.setBorder(JBUI.Borders.empty());
         detailScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
@@ -194,6 +183,7 @@ public final class AlterTablePanel extends JPanel {
         replaceColumns(columns, null);
     }
 
+    @Override public Dimension getPreferredSize() { return TableDialogLayout.preferredSize(this, 900, 570, 650); }
     public void onChange(Runnable callback) { changed = callback; }
     public JButton applyButton() { return apply; }
     public JButton closeButton() { return close; }
@@ -369,24 +359,25 @@ public final class AlterTablePanel extends JPanel {
     }
     private JComponent createFooter() {
         JPanel footer = panel(new BorderLayout(JBUI.scale(16), 0));
-        footer.setBorder(JBUI.Borders.empty(14, 8, 0, 8));
-        JPanel feedback = vertical(); summary.setFont(summary.getFont().deriveFont(Font.BOLD, 12f));
-        stack(feedback, summary); gap(feedback, 5); status.setFont(status.getFont().deriveFont(11f)); stack(feedback, status);
+        footer.setBorder(JBUI.Borders.empty(10, 4, 0, 4));
+        JPanel feedback = vertical(); summary.setFont(TableDialogChrome.font(Font.BOLD,-1));
+        stack(feedback, summary); gap(feedback, 3); status.setFont(TableDialogChrome.font(Font.PLAIN,-2)); stack(feedback, status);
         status.getAccessibleContext().setAccessibleName("Alter table status"); footer.add(feedback, BorderLayout.CENTER);
-        apply.setBorder(JBUI.Borders.empty(6, 12)); apply.setDefaultCapable(true);
+        apply.setDefaultCapable(true);
         close.getAccessibleContext().setAccessibleName("Close alter table");
-        footer.add(DatabaseUi.group(close, apply), BorderLayout.EAST); return footer;
+        footer.add(TableDialogChrome.buttons(close,apply), BorderLayout.EAST); return footer;
     }
     private JComponent createPreview() {
         JPanel preview = new RoundedPanel(); preview.setLayout(new BorderLayout(0, JBUI.scale(10)));
         preview.setBorder(JBUI.Borders.empty(12, 14));
         JPanel title = panel(new BorderLayout());
         JLabel caption = muted("SQL preview"); caption.setFont(caption.getFont().deriveFont(Font.BOLD));
+        caption.getAccessibleContext().setAccessibleName("Table SQL preview title");
         caption.setIcon(Icons.CONSOLE); caption.setIconTextGap(JBUI.scale(7));
-        title.add(caption, BorderLayout.WEST); title.add(muted(config.getType().getDisplayName()), BorderLayout.EAST);
+        title.add(caption, BorderLayout.CENTER); title.add(muted(config.getType().getDisplayName()), BorderLayout.EAST);
         preview.add(title, BorderLayout.NORTH);
         sql.setEditable(false); sql.setOpaque(false); sql.setBorder(JBUI.Borders.empty());
-        sql.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12)); sql.getAccessibleContext().setAccessibleName("Alter table SQL preview");
+        sql.setFont(new Font(Font.MONOSPACED, Font.PLAIN, Math.round(TableDialogChrome.font(Font.PLAIN,-1).getSize2D()))); sql.getAccessibleContext().setAccessibleName("Alter table SQL preview");
         JBScrollPane scroll = new JBScrollPane(sql); scroll.setBorder(JBUI.Borders.empty());
         scroll.setOpaque(false); scroll.getViewport().setOpaque(false);
         preview.add(scroll, BorderLayout.CENTER); preview.setPreferredSize(JBUI.size(400, 132));
@@ -394,32 +385,24 @@ public final class AlterTablePanel extends JPanel {
     }
     private void highlightSql() {
         StyledDocument doc = sql.getStyledDocument(); SimpleAttributeSet normal = new SimpleAttributeSet();
-        StyleConstants.setForeground(normal, UIManager.getColor("Label.foreground"));
+        StyleConstants.setForeground(normal, JBColor.namedColor("Label.foreground", new JBColor(0x000000,0xDFE1E5)));
         doc.setCharacterAttributes(0, doc.getLength(), normal, true);
         var tokens = java.util.regex.Pattern.compile("`(?:``|[^`])*`|\"(?:\"\"|[^\"])*\"|'(?:''|[^'])*'|\\b(?:ALTER|TABLE|COLUMN|ADD|MODIFY|DROP|RENAME|TO|SET|DATA|TYPE|DEFAULT|NULL|NOT|USING)\\b").matcher(sql.getText());
         SimpleAttributeSet keyword = new SimpleAttributeSet(); StyleConstants.setForeground(keyword, accent());
         while (tokens.find()) if (Character.isLetter(tokens.group().charAt(0))) doc.setCharacterAttributes(tokens.start(), tokens.end()-tokens.start(), keyword, false);
     }
     private static JPanel panel(LayoutManager layout) { JPanel p = new JPanel(layout); p.setOpaque(false); return p; }
-    private static JPanel vertical() {
-        JPanel p = new JPanel() {
-            @Override public void doLayout() {
-                for (Component child : getComponents()) if (child instanceof JComponent c && !(c instanceof Box.Filler))
-                    c.setMaximumSize(new Dimension(Integer.MAX_VALUE, c.getPreferredSize().height));
-                super.doLayout();
-            }
-        };
-        p.setOpaque(false); p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS)); return p;
-    }
-    private static void stack(JPanel p, JComponent c) { c.setAlignmentX(LEFT_ALIGNMENT); c.setMaximumSize(new Dimension(Integer.MAX_VALUE, c.getPreferredSize().height)); p.add(c); }
+    private static JPanel vertical() { return TableDialogLayout.column(); }
+    private static void stack(JPanel p, JComponent c) { TableDialogLayout.stack(p, c); }
     private static void gap(JPanel p, int size) { p.add(Box.createVerticalStrut(JBUI.scale(size))); }
     private static JPanel field(JLabel label, JComponent input, String accessibleName) {
-        JPanel p = panel(new BorderLayout(0, JBUI.scale(6))); label.setForeground(info()); label.setFont(label.getFont().deriveFont(12f));
+        JPanel p = panel(new BorderLayout(0, JBUI.scale(4))); label.setForeground(info()); label.setFont(TableDialogChrome.font(Font.PLAIN,-1));
         label.setLabelFor(input); input.getAccessibleContext().setAccessibleName(accessibleName);
         p.add(label, BorderLayout.NORTH); JPanel fixedHeight = panel(new BorderLayout()); fixedHeight.add(input, BorderLayout.NORTH);
         p.add(fixedHeight, BorderLayout.CENTER); return p;
     }
-    private static JLabel muted(String value) { JLabel l = new JLabel(value); l.setForeground(info()); l.setFont(l.getFont().deriveFont(12f)); return l; }
+    private static JLabel help(String value) { JLabel l = new WrappingLabel(value); l.setForeground(info()); l.setFont(TableDialogChrome.font(Font.PLAIN,-1)); return l; }
+    private static JLabel muted(String value) { JLabel l = new JLabel(value); l.setForeground(info()); l.setFont(TableDialogChrome.font(Font.PLAIN,-1)); return l; }
     private static Color info() { return JBColor.namedColor("Lattice.secondaryForeground", new JBColor(0x6B7078, 0xA8ADB5)); }
     private static Color accent() { return JBColor.namedColor("Link.activeForeground", new JBColor(0x3574F0, 0x82ABFF)); }
     private static Color border() { return JBColor.namedColor("Component.borderColor", new JBColor(0xD8DBE0, 0x505358)); }
@@ -436,6 +419,10 @@ public final class AlterTablePanel extends JPanel {
     private final class ColumnRenderer implements ListCellRenderer<DraftColumn> {
         @Override public Component getListCellRendererComponent(JList<? extends DraftColumn> list, DraftColumn column, int index, boolean isSelected, boolean focus) {
             JPanel row = new JPanel(new BorderLayout(JBUI.scale(9), 0)) {
+                @Override public Dimension getPreferredSize() {
+                    Dimension size=super.getPreferredSize();size.height=Math.max(size.height,JBUI.scale(56));return size;
+                }
+
                 @Override protected void paintComponent(Graphics graphics) {
                     if (isSelected) {
                         Graphics2D g = (Graphics2D)graphics.create(); g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -447,10 +434,10 @@ public final class AlterTablePanel extends JPanel {
             };
             row.setOpaque(false); row.setBorder(JBUI.Borders.empty(9, 10));
             row.add(new JLabel(column.original != null && column.original.isPrimaryKey() ? column.original != null && column.original.isForeignKey() ? Icons.PRIMARY_FOREIGN_KEY : Icons.KEY : column.original != null && column.original.isForeignKey() ? Icons.FOREIGN_KEY : Icons.COLUMN), BorderLayout.WEST);
-            JPanel captions = vertical(); JLabel title = new JLabel(column.getName());
+            JPanel captions = vertical(); JLabel title = new JLabel(column.getName()); title.setFont(list.getFont());
             if (isSelected) { title.setForeground(accent()); title.setFont(title.getFont().deriveFont(Font.BOLD)); }
-            stack(captions, title); gap(captions, 4); stack(captions, muted(column.getFormattedType())); row.add(captions, BorderLayout.CENTER);
-            if (draftChanged(column)) { JLabel dot = new JLabel(column.dropped ? "Drop" : column.original == null ? "New" : "●"); dot.setFont(dot.getFont().deriveFont(11f)); dot.setForeground(accent()); row.add(dot, BorderLayout.EAST); }
+            stack(captions, title); gap(captions, 4); JLabel dataType=muted(column.getFormattedType());dataType.setFont(list.getFont().deriveFont(Math.max(10f,list.getFont().getSize2D()-1)));stack(captions,dataType); row.add(captions, BorderLayout.CENTER);
+            if (draftChanged(column)) { JLabel dot = new JLabel(column.dropped ? "Drop" : column.original == null ? "New" : "●"); dot.setFont(TableDialogChrome.font(Font.PLAIN,-2)); dot.setForeground(accent()); row.add(dot, BorderLayout.EAST); }
             row.getAccessibleContext().setAccessibleName(column.getName() + " " + column.getFormattedType()); return row;
         }
     }

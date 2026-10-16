@@ -18,6 +18,9 @@ class UiReviewTests(unittest.TestCase):
     def test_inspector_mode_routes_both_themes_and_preserves_each_report(self):
         self.check_mode('LATTICE_UI_ALTER_TABLE_ONLY', '-Plattice.ui.alterTableOnly=true', 'alter-table')
 
+    def test_composer_mode_routes_both_themes_and_preserves_each_report(self):
+        self.check_mode('LATTICE_UI_CREATE_TABLE_ONLY', '-Plattice.ui.createTableOnly=true', 'create-table')
+
     def check_mode(self, variable, argument, folder):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

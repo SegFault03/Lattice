@@ -793,14 +793,10 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         CreateTableDialog dlg = new CreateTableDialog(project, cfg, dbName);
         if (!dlg.showAndGet()) return;
         String tableName = dlg.getTableName();
-        List<ColumnDefinition> columns = dlg.getColumns();
-        runMutation(cfg, "Creating table…", "Create table failed",
-                conn -> DdlService.getInstance().createTable(conn, cfg, dbName, tableName, columns), () -> {
-                    Messages.showInfoMessage(project, "Table '" + tableName + "' created.", "Table created");
-                    TreeNodeData data = (TreeNodeData) dbNode.getUserObject();
-                    data.setLoaded(false);
-                    loadTablesForDatabaseNode(dbNode, data);
-                });
+        Messages.showInfoMessage(project, "Table '" + tableName + "' created.", "Table created");
+        TreeNodeData data = (TreeNodeData) dbNode.getUserObject();
+        data.setLoaded(false);
+        loadTablesForDatabaseNode(dbNode, data);
     }
 
     private void doDropTable(ConnectionConfig cfg, String dbName, String tableName, DefaultMutableTreeNode tableNode) {

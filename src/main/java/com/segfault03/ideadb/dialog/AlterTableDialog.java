@@ -41,9 +41,12 @@ public class AlterTableDialog extends DialogWrapper {
         if (getRootPane() != null) getRootPane().setDefaultButton(editor.applyButton());
         if (tableMetadata.getColumns().isEmpty()) loadColumns();
     }
+    @Override protected javax.swing.border.Border createContentPaneBorder() {
+        return com.intellij.util.ui.JBUI.Borders.empty(6, 12, 10, 12);
+    }
     @Override protected Action[] createActions() { return new Action[0]; }
     @Override protected @Nullable JComponent createSouthPanel() { return null; }
-    @Override protected @Nullable String getDimensionServiceKey() { return "Lattice.AlterTableDialog.v2"; }
+    @Override protected @Nullable String getDimensionServiceKey() { return "Lattice.AlterTableDialog.v3"; }
     @Override public @Nullable JComponent getPreferredFocusedComponent() { return editor.columnList(); }
     @Override protected JComponent createCenterPanel() {
         editor = new AlterTablePanel(config, databaseName, tableMetadata.getName(), tableMetadata.getColumns());
