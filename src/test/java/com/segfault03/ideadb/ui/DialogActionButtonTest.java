@@ -16,6 +16,22 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DialogActionButtonTest {
+    @Test void inspectorActionsRespectNativeTextPaddingInEveryColumnState() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            JButton button=DatabaseUi.inspectorAction("Drop column",UIManager.getIcon("OptionPane.informationIcon"),"Drop column");
+            var ui=new PaddedButtonUI();button.setUI(ui);
+            for(float font:new float[]{13,16.25f,19.5f}) for(String text:List.of("Drop column","Restore column","Remove column","Rename","Revert")) {
+                button.setFont(button.getFont().deriveFont(font));button.setText(text);
+                for(boolean enabled:new boolean[]{false,true}) {
+                    button.setEnabled(enabled);button.setSize(button.getPreferredSize());
+                    var pixels=new BufferedImage(button.getWidth(),button.getHeight(),BufferedImage.TYPE_INT_ARGB);
+                    Graphics graphics=pixels.getGraphics();try{button.paint(graphics);}finally{graphics.dispose();}
+                    assertEquals(text,ui.paintedText,"Inspector action lost text to native padding");
+                }
+            }
+        });
+    }
+
     @Test void footerActionsPaintCompleteTextWithThemeAndDefaultButtonPadding() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             var config = new ConnectionConfig(DatabaseType.HSQLDB, "Local development");

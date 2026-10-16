@@ -102,6 +102,13 @@ public final class DatabaseUi {
         return button;
     }
 
+    /** Quiet inspector actions still reserve the text area required by the native painter. */
+    public static JButton inspectorAction(String text, Icon icon, String tooltip) {
+        ActionButton button = (ActionButton) action(text, icon, tooltip);
+        button.nativeTextSizing = true;
+        return button;
+    }
+
     /** Mouse interaction stays quiet; Tab/Shift+Tab and keyboard interaction show focus. */
     static void installFocusVisibility(JComponent component) {
         installMouseFocus(component, component);
@@ -213,6 +220,7 @@ public final class DatabaseUi {
         private Color emphasisColor;
         private JButton source;
         private boolean iconOnly;
+        private boolean nativeTextSizing;
         private Icon disabledGlyph;
         private Icon disabledSource;
         private Color disabledColor;
@@ -298,6 +306,11 @@ public final class DatabaseUi {
         @Override public Dimension getPreferredSize() {
             // Toolbar actions use compact content sizes; dialog actions are native JButtons.
             Dimension content = javax.swing.plaf.basic.BasicGraphicsUtils.getPreferredButtonSize(this, getIconTextGap());
+            if (nativeTextSizing) {
+                Dimension nativeSize = super.getPreferredSize();
+                content.width = Math.max(content.width, nativeSize.width);
+                content.height = Math.max(content.height, nativeSize.height);
+            }
             return new Dimension(Math.max(JBUI.scale(28), content.width), Math.max(JBUI.scale(28), content.height));
         }
 

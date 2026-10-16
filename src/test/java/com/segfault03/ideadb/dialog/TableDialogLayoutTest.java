@@ -13,6 +13,71 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class TableDialogLayoutTest {
+    @Test void previewAbsorbsHeightChangesAndTheFormScrollsOnlyBelowItsReadableMinimum() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            JPanel column=TableDialogLayout.column();
+            JLabel help=new com.segfault03.ideadb.ui.WrappingLabel("A longer form hint that wraps when the inspector becomes narrow and unwraps when it grows again.");
+            column.add(help);
+            JPanel surface=new JPanel(new BorderLayout(0,8));surface.setBorder(BorderFactory.createEmptyBorder(12,14,12,14));
+            JLabel caption=new JLabel("SQL preview");JTextPane sql=new JTextPane();surface.add(caption,BorderLayout.NORTH);surface.add(new JScrollPane(sql),BorderLayout.CENTER);
+            column.add(TableDialogLayout.preview(surface,caption,sql,180));
+            JScrollPane scroll=TableDialogLayout.inspector(column);
+            for(int width:new int[]{500,220,700,221,500}) {
+                scroll.setSize(width,400);for(int pass=0;pass<4;pass++)layout(scroll);
+                int minimum=column.getMinimumSize().height;
+                for(int height:new int[]{minimum+80,minimum+1,minimum,minimum+2,minimum-1,minimum+1,minimum+120}) {
+                    scroll.setSize(width,height);for(int pass=0;pass<4;pass++)layout(scroll);
+                    int actualMinimum=column.getMinimumSize().height;
+                    int available=scroll.getViewport().getHeight();
+                    assertEquals(available<actualMinimum,scroll.getVerticalScrollBar().isVisible(),"Scrollbar should follow the form minimum, not preferred preview height");
+                    if(available>=actualMinimum)assertEquals(available,column.getHeight());
+                    Component preview=column.getComponent(1);
+                    assertTrue(preview.getHeight()>=preview.getMinimumSize().height);
+                    assertTrue(preview.getY()+preview.getHeight()<=column.getHeight());
+                }
+            }
+        });
+    }
+
+    @Test void inspectorHeaderMovesActionsBelowLongNamesWithoutClippingThem() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            JLabel title=new JLabel("A_LONG_COLUMN_NAME_WITH_DETAILS");
+            JButton rename=DatabaseUi.inspectorAction("Rename",null,"Rename column");
+            JButton drop=DatabaseUi.inspectorAction("Drop column",null,"Drop column");
+            JPanel header=TableDialogChrome.inspectorHeading(TableDialogChrome.inline(title),rename,drop);
+            int natural=header.getPreferredSize().width;
+            for(int width:new int[]{natural+20,natural-80,natural+5}) {
+                int height=((TableDialogLayout.WidthAware)header).preferredSizeForWidth(width).height;
+                header.setSize(width,height);layout(header);
+                Point label=SwingUtilities.convertPoint(title,0,0,header),action=SwingUtilities.convertPoint(drop,0,0,header);
+                assertEquals(width<natural,action.y>=label.y+title.getHeight());
+                assertTrue(action.x+drop.getWidth()<=width);
+                assertFullText(drop,drop.getText(),drop.getIcon(),drop.getIconTextGap(),new Insets(0,0,0,0));
+            }
+        });
+    }
+
+    @Test void aPreviousScrollbarCannotKeepItselfVisibleByWrappingTheHint() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            JPanel column=TableDialogLayout.column();
+            column.add(new com.segfault03.ideadb.ui.WrappingLabel("Hints should unwrap when the scrollbar can disappear and make the entire viewport width available again."));
+            JScrollPane scroll=TableDialogLayout.inspector(column);
+            int bar=scroll.getVerticalScrollBar().getPreferredSize().width;
+            boolean checked=false;
+            for(int width=180;width<420;width++) {
+                column.setSize(width,400);for(int i=0;i<4;i++)layout(column);int full=column.getMinimumSize().height;
+                column.setSize(width-bar,400);for(int i=0;i<4;i++)layout(column);int narrow=column.getMinimumSize().height;
+                if(narrow<=full)continue;
+                scroll.setSize(width,full-1);for(int i=0;i<4;i++)layout(scroll);
+                assertTrue(scroll.getVerticalScrollBar().isVisible());
+                scroll.setSize(width,full+1);for(int i=0;i<4;i++)layout(scroll);
+                assertFalse(scroll.getVerticalScrollBar().isVisible(),"A scrollbar must not reserve its own width after the content fits: width="+width+", full="+full+", narrow="+narrow+", extent="+scroll.getViewport().getExtentSize()+", view="+column.getSize()+", tracks="+((Scrollable)column).getScrollableTracksViewportHeight()+", minimum="+column.getMinimumSize());
+                checked=true;break;
+            }
+            assertTrue(checked,"The fixture must cross a real text-wrapping threshold");
+        });
+    }
+
     @Test void nativeButtonMarginsDoNotConsumeActionTextSpace() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             var button = DatabaseUi.action("Apply changes", UIManager.getIcon("OptionPane.informationIcon"), "Apply changes");

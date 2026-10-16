@@ -24,7 +24,7 @@ public final class WrappingLabel extends JBLabel {
         return preferredSizeForWidth(width);
     }
 
-    Dimension preferredSizeForWidth(int width) {
+    public Dimension preferredSizeForWidth(int width) {
         prepareView(width);
         Dimension size = super.getPreferredSize();
         if (width > 0) size.width = Math.min(size.width, width);

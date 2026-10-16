@@ -1970,6 +1970,10 @@ class IntellijUiScreenshotTest {
                 val needed = live.getFontMetrics(live.getFont()).stringWidth(button.getText()) +
                     (icon?.getIconWidth() ?: 0) + (if (icon != null) button.getIconTextGap() else 0)
                 check(available.getWidth() >= needed) { "Clipped action: ${button.getText()} (${action.component.width} < $needed)" }
+                if (button.getText() in listOf("Drop column", "Restore column", "Remove column", "Rename", "Revert")) {
+                    val nativeSize=button.getUI().getPreferredSize(live)
+                    check(action.component.width>=nativeSize.getWidth() && action.component.height>=nativeSize.getHeight()) { "Inspector action bypassed native text padding: ${button.getText()}" }
+                }
                 if (button.getText() in listOf("Apply changes", "Apply all changes", "Create table")) {
                     check(!live.isOpaque()) { "Primary button must not paint a rectangle outside its native rounded surface" }
                     val nativeSize = button.getUI().getPreferredSize(live)
@@ -1980,6 +1984,17 @@ class IntellijUiScreenshotTest {
             }
         }
         println("Table dialog: complete title, source, SQL caption and action labels fit at UI scale ${System.getProperty("ui.scale", "1.0")}")
+    }
+
+    private fun assertInspectorViewport(dialog: UiComponent) {
+        val inspector=dialog.x { byAccessibleName("Table column inspector scroll pane") }.waitFound()
+        dialog.driver.withContext(OnDispatcher.EDT) {
+            val scroll=cast(inspector.component,LiveInspectorScroll::class)
+            val viewport=scroll.getViewport()
+            val minimum=viewport.getView().getMinimumSize().getHeight()
+            val available=viewport.getExtentSize().getHeight()
+            check(!scroll.getVerticalScrollBar().isVisible()) { "Unnecessary inspector scrollbar: readable minimum=$minimum, viewport=$available" }
+        }
     }
 
     private fun auditTableDialog(dialog: UiComponent, directory: Path, prefix: String, create: Boolean) {
@@ -2007,6 +2022,7 @@ class IntellijUiScreenshotTest {
                     val columns=dialog.x { byAccessibleName("Table columns") }.waitFound()
                     dialog.driver.withContext(OnDispatcher.EDT) { cast(columns.component,LiveColumnList::class).ensureIndexIsVisible(0) }
                     assertTableDialogText(dialog)
+                    assertInspectorViewport(dialog)
                     val sql=dialog.x { byAccessibleName(if(create) "Create table SQL preview" else "Alter table SQL preview") }.waitFound()
                     dialog.driver.withContext(OnDispatcher.EDT) {
                         val pane=cast(sql.component,LiveStyledSql::class)
@@ -2024,6 +2040,12 @@ class IntellijUiScreenshotTest {
                     Robot().mouseMove(2,2);Thread.sleep(120)
                     val point=dialog.component.getLocationOnScreen()
                     savePng(directory.resolve("$prefix-$id-$width.png"),Robot().createScreenCapture(Rectangle(point.x,point.y,dialog.component.width,dialog.component.height)))
+                    dialog.driver.withContext(OnDispatcher.EDT) {
+                        cast(dialog.component,Window::class).setBounds(20,20,target,original.height-(8*scale).toInt())
+                    }
+                    Thread.sleep(180)
+                    assertInspectorViewport(dialog)
+                    savePng(directory.resolve("$prefix-$id-$width-compact.png"),Robot().createScreenCapture(Rectangle(point.x,point.y,dialog.component.width,dialog.component.height)))
                 }
             }
         } finally {
@@ -2305,6 +2327,11 @@ class IntellijUiScreenshotTest {
             dialog.x { byAccessibleName("Add column") }.waitFound().click()
             inspectorInput(dialog, "Column name").text = "refresh_note"
             waitUntil("refresh DDL ready") { dialog.x { byAccessibleName("Apply table changes") }.waitFound().component.isEnabled() }
+            if (System.getProperty("ui.dialog.audit", "false").toBoolean()) {
+                selectInspectorColumn(dialog,0)
+                waitUntil("existing column audit ready") { dialog.x { byAccessibleName("Apply table changes") }.waitFound().component.isEnabled() }
+                auditTableDialog(dialog,directory,"alter-refresh",false)
+            }
             dialog.x { byAccessibleName("Apply table changes") }.waitFound().click()
         }
         frame.waitForNoOpenedDialogs()
@@ -3044,6 +3071,18 @@ interface LiveTabs {
 
 @Remote("javax.swing.JScrollPane")
 interface LiveScrollPane { fun getViewport(): LiveViewport }
+
+@Remote("javax.swing.JScrollPane")
+interface LiveInspectorScroll {
+    fun getViewport(): LiveInspectorViewport
+    fun getVerticalScrollBar(): LiveSwingComponent
+}
+
+@Remote("javax.swing.JViewport")
+interface LiveInspectorViewport {
+    fun getView(): LiveSwingComponent
+    fun getExtentSize(): LiveDimension
+}
 
 @Remote("javax.swing.JViewport")
 interface LiveViewport { fun getView(): LiveTableEditor }

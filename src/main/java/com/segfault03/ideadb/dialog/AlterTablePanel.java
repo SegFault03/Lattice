@@ -43,12 +43,12 @@ public final class AlterTablePanel extends JPanel {
     private final JLabel nameLabel = new JLabel("Column name");
     private final JButton add = DatabaseUi.action("", AllIcons.General.Add, "Add column");
     private final JButton refresh = DatabaseUi.action("", AllIcons.Actions.Refresh, "Reload table columns");
-    private final JButton rename = DatabaseUi.action("Rename", AllIcons.Actions.Edit, "Rename column");
-    private final JButton drop = DatabaseUi.action("Drop…", AllIcons.General.Remove, "Drop column");
+    private final JButton rename = DatabaseUi.inspectorAction("Rename", AllIcons.Actions.Edit, "Rename column");
+    private final JButton drop = DatabaseUi.inspectorAction("Drop column", AllIcons.General.Remove, "Drop column");
     private final JButton renameTable = DatabaseUi.action("Rename table…", Icons.TABLE, "Rename table");
     private final JButton apply = DatabaseUi.dialogAction("Apply changes", AllIcons.Actions.Checked, "Apply table changes");
     private final JButton close = new JButton("Close");
-    private final JButton revert = DatabaseUi.action("Revert", AllIcons.Actions.Rollback, "Revert column changes");
+    private final JButton revert = DatabaseUi.inspectorAction("Revert", AllIcons.Actions.Rollback, "Revert column changes");
     private DraftColumn selected;
     private boolean tableMode;
     private TableAlterationBatch batch;
@@ -115,11 +115,11 @@ public final class AlterTablePanel extends JPanel {
         body.add(sidebar, BorderLayout.WEST);
 
         JPanel detail = vertical(); detail.setBorder(JBUI.Borders.empty(10, 18, 12, 4));
-        JPanel detailTitle = panel(new BorderLayout()); heading.setFont(TableDialogChrome.font(Font.BOLD,5));
+        heading.setFont(TableDialogChrome.font(Font.BOLD,5));
         heading.getAccessibleContext().setAccessibleName("Selected column heading");
         badge.setForeground(accent()); badge.setFont(TableDialogChrome.font(Font.BOLD,-2));
         JPanel selectedTitle = TableDialogChrome.inline(heading,badge);
-        detailTitle.add(selectedTitle, BorderLayout.CENTER); detailTitle.add(DatabaseUi.group(revert, rename, drop), BorderLayout.EAST);
+        JPanel detailTitle = TableDialogChrome.inspectorHeading(selectedTitle, revert, rename, drop);
         stack(detail, detailTitle); gap(detail, 4);
         stack(definition, DatabaseUi.section("Definition"));
         nameGroup = field(nameLabel, name, "Column name"); stack(definition, nameGroup); gap(definition, 8);
@@ -140,8 +140,7 @@ public final class AlterTablePanel extends JPanel {
         warnings.setBorder(JBUI.Borders.empty(8, 0)); warning.setForeground(JBColor.namedColor("Label.warningForeground", new JBColor(0x88600C, 0xE5BA6A)));
         stack(warnings, warning); stack(detail, warnings); gap(detail, 12);
         stack(detail, createPreview());
-        JBScrollPane detailScroll = new JBScrollPane(detail); detailScroll.setBorder(JBUI.Borders.empty());
-        detailScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        JScrollPane detailScroll = TableDialogLayout.inspector(detail);
         body.add(detailScroll, BorderLayout.CENTER); add(body, BorderLayout.CENTER);
         add(createFooter(), BorderLayout.SOUTH);
 
@@ -235,7 +234,7 @@ public final class AlterTablePanel extends JPanel {
                 : !tableMode && generated ? "This is a generated column. Edit its expression in the SQL console." : "");
         warnings.setVisible(!tableMode && selected != null && (selected.dropped || generated));
         rename.setVisible(properties); drop.setVisible(!tableMode && selected != null); revert.setVisible(!tableMode && selected != null);
-        drop.setText(selected != null && selected.dropped ? "Restore" : selected != null && selected.original == null ? "Remove" : "Drop…");
+        drop.setText(selected != null && selected.dropped ? "Restore column" : selected != null && selected.original == null ? "Remove column" : "Drop column");
         drop.getAccessibleContext().setAccessibleName(selected != null && selected.dropped ? "Restore column" : "Drop column");
         restoreSelection(); binding = false; edited(); revalidate(); repaint();
     }
@@ -379,9 +378,10 @@ public final class AlterTablePanel extends JPanel {
         sql.setEditable(false); sql.setOpaque(false); sql.setBorder(JBUI.Borders.empty());
         sql.setFont(new Font(Font.MONOSPACED, Font.PLAIN, Math.round(TableDialogChrome.font(Font.PLAIN,-1).getSize2D()))); sql.getAccessibleContext().setAccessibleName("Alter table SQL preview");
         JBScrollPane scroll = new JBScrollPane(sql); scroll.setBorder(JBUI.Borders.empty());
+        scroll.setViewportBorder(JBUI.Borders.empty());
         scroll.setOpaque(false); scroll.getViewport().setOpaque(false);
-        preview.add(scroll, BorderLayout.CENTER); preview.setPreferredSize(JBUI.size(400, 132));
-        return preview;
+        preview.add(scroll, BorderLayout.CENTER);
+        return TableDialogLayout.preview(preview, title, sql, 132);
     }
     private void highlightSql() {
         StyledDocument doc = sql.getStyledDocument(); SimpleAttributeSet normal = new SimpleAttributeSet();

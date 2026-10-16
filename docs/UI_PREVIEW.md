@@ -79,11 +79,24 @@ alignment, metadata baselines, and larger UI fonts and list rows. Resizing check
 cover minimum, preferred and wide layouts. The previous combined source label
 and differently sized footer actions both fail the retained reproduction tests.
 
+Inspector actions reserve native text padding and show complete column-action
+labels. Their row moves below a long title when needed. Form rows measure wrapped
+content at the current viewport width; SQL preview takes the remaining height and
+can shrink to three readable lines before the outer form needs to scroll. Resize
+checks cross this threshold in both directions. Inspector padding reserves the
+current native scrollbar width consistently, preventing IntelliJ's transparent
+scrollbar insets from creating a persistent extra line of wrapped text.
+Native dialog audits also capture
+an 8-logical-pixel height reduction at each width and assert that no outer scrollbar
+appears while the form fits.
+
 Focused native reviews accept `-Plattice.ui.scale=1.25` (or `1.5`). Java2D device
 scaling stays at 100% so Driver and screenshot coordinates agree. Add
 `-Plattice.ui.dialogAudit=true` to the focused create/alter scenario to switch the
 live modal through Light/Dark and available Islands counterparts at three widths,
-assert its geometry and SQL palette, and retain six or twelve additional captures. The original theme and bounds are
+assert its geometry and SQL palette, and retain 12 or 24 additional captures per
+dialog (including compact heights). The focused create scenario audits both
+create and alter dialogs. The original theme and bounds are
 restored before the database scenario continues. For example:
 
 ```bash
@@ -116,7 +129,11 @@ identity/primary key metadata, precision and working defaults. It also exercises
 hidden invalid drafts, duplicates, add/remove/reorder, cancellation, animated busy
 feedback, database failure and successful retry. Results include
 `create-composer-dialog.png`, `create-composer-full-ide.png`, busy/error captures
-and `runtime-evidence.txt`. Embedded HSQLDB/H2 tests compare preview and executed
+and `runtime-evidence.txt`. It also verifies automatic explorer/grid refresh after
+grid insert/update/delete, alter-table changes, console DML/DDL and explorer
+truncate/drop, including deferred refresh while an unsaved row draft is present.
+Main PR CI runs this scenario with `LATTICE_UI_DIALOG_AUDIT=true` and
+`LATTICE_UI_SCALE=1.25` on the pinned build SDK. Embedded HSQLDB/H2 tests compare preview and executed
 CREATE statements and verify generated data and composite-key enforcement.
 
 ### Column Inspector
@@ -226,7 +243,8 @@ regression dispatches the production Swing button action on the IDE event thread
 and requires both the backend's failure status and its error dialog.
 
 For pull requests targeting `main`, Linux CI runs the dark functional review,
-light styling review, search reviews and PostgreSQL review as separate checks
+light styling review, search reviews, PostgreSQL review, mixed alter/recovery
+and a 125% create/alter dialog audit as separate checks
 after their shared prerequisites pass. Each suite can
 fail the job independently, and a failure does not suppress the other suites'
 reports. The artifact also retains native IDE logs, thread dumps and screenshots.

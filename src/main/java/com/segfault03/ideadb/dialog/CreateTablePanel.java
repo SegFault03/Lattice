@@ -35,7 +35,7 @@ public final class CreateTablePanel extends JPanel {
     private final JCheckBox identity = check("Auto increment", "Auto increment");
     private final JButton add = DatabaseUi.action("", AllIcons.General.Add, "Add column");
     private final JButton addBottom = DatabaseUi.action("Add column…", AllIcons.General.Add, "Add another column");
-    private final JButton remove = DatabaseUi.action("Remove", AllIcons.General.Remove, "Remove column");
+    private final JButton remove = DatabaseUi.inspectorAction("Remove column", AllIcons.General.Remove, "Remove column");
     private final JButton up = DatabaseUi.action("", AllIcons.Actions.MoveUp, "Move column up");
     private final JButton down = DatabaseUi.action("", AllIcons.Actions.MoveDown, "Move column down");
     private final JButton create = DatabaseUi.dialogAction("Create table", AllIcons.General.Add, "Create new table");
@@ -127,10 +127,10 @@ public final class CreateTablePanel extends JPanel {
     }
     private JComponent inspector() {
         JPanel detail = vertical(); detail.setBorder(JBUI.Borders.empty(10, 18, 12, 4));
-        JPanel title = panel(new BorderLayout()); heading.setFont(TableDialogChrome.font(Font.BOLD,5));
+        heading.setFont(TableDialogChrome.font(Font.BOLD,5));
         heading.getAccessibleContext().setAccessibleName("Selected column heading");
         position.setForeground(accent()); position.setFont(TableDialogChrome.font(Font.PLAIN,-2));
-        title.add(TableDialogChrome.inline(heading,position), BorderLayout.CENTER); title.add(DatabaseUi.group(up, down, remove), BorderLayout.EAST);
+        JPanel title=TableDialogChrome.inspectorHeading(TableDialogChrome.inline(heading,position),up,down,remove);
         stack(detail, title); gap(detail, 4); stack(form, DatabaseUi.section("Definition"));
         stack(form, field("Column name", name)); gap(form, 8);
         JPanel types = panel(new BorderLayout(JBUI.scale(16), 0)); types.add(field("Data type", type), BorderLayout.CENTER);
@@ -139,7 +139,7 @@ public final class CreateTablePanel extends JPanel {
         stack(form, TableDialogChrome.constraints(nullable,primaryKey,identity)); gap(form, 8); stack(form, field("Default value", defaultValue)); gap(form, 4);
         defaultValue.getEmptyText().setText("No default"); defaultValue.putClientProperty("JTextField.placeholderText", "No default");
         stack(form, help("Blank means no default · TEXT: literal · SQL: expression")); stack(detail, form); gap(detail, 12); stack(detail, preview());
-        JBScrollPane scroll = new JBScrollPane(detail); scroll.setBorder(JBUI.Borders.empty()); scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER); return scroll;
+        return TableDialogLayout.inspector(detail);
     }
     private JComponent preview() {
         JPanel preview = new RoundedPanel(); preview.setLayout(new BorderLayout(0, JBUI.scale(10))); preview.setBorder(JBUI.Borders.empty(12, 14));
@@ -147,7 +147,8 @@ public final class CreateTablePanel extends JPanel {
         title.add(label, BorderLayout.CENTER); title.add(muted(config.getType().getDisplayName()), BorderLayout.EAST); preview.add(title, BorderLayout.NORTH);
         sql.setEditable(false); sql.setOpaque(false); sql.setBorder(JBUI.Borders.empty()); sql.setFont(new Font(Font.MONOSPACED, Font.PLAIN, Math.round(TableDialogChrome.font(Font.PLAIN,-1).getSize2D())));
         sql.getAccessibleContext().setAccessibleName("Create table SQL preview"); JBScrollPane scroll = new JBScrollPane(sql); scroll.setBorder(JBUI.Borders.empty()); scroll.setOpaque(false); scroll.getViewport().setOpaque(false);
-        preview.add(scroll, BorderLayout.CENTER); preview.setPreferredSize(JBUI.size(400, 180)); return preview;
+        scroll.setViewportBorder(JBUI.Borders.empty());
+        preview.add(scroll, BorderLayout.CENTER); return TableDialogLayout.preview(preview,title,sql,180);
     }
     private JComponent footer() {
         JPanel footer = panel(new BorderLayout(JBUI.scale(16), 0)); footer.setBorder(JBUI.Borders.empty(10, 4, 0, 4));
