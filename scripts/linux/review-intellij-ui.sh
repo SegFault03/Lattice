@@ -61,6 +61,18 @@ for theme in "${themes[@]}"; do
     if [[ "${LATTICE_UI_EXPLORER_SEARCH_ONLY:-false}" == true ]]; then
         version_args+=("-Plattice.ui.explorerSearchOnly=true")
     fi
+    if [[ "${LATTICE_UI_ALTER_TABLE_ONLY:-false}" == true ]]; then
+        version_args+=("-Plattice.ui.alterTableOnly=true")
+    fi
+    if [[ "${LATTICE_UI_CREATE_TABLE_ONLY:-false}" == true ]]; then
+        version_args+=("-Plattice.ui.createTableOnly=true")
+    fi
+    if [[ "${LATTICE_UI_DIALOG_AUDIT:-false}" == true ]]; then
+        version_args+=("-Plattice.ui.dialogAudit=true")
+    fi
+    if [[ -n "${LATTICE_UI_SCALE:-}" ]]; then
+        version_args+=("-Plattice.ui.scale=$LATTICE_UI_SCALE")
+    fi
     ./scripts/linux/capture-intellij-ui.sh "${version_args[@]}" -Plattice.ui.review=true -Plattice.ui.theme="$theme" \
         -Plattice.ui.output="$result_dir" 2>&1 | tee "$result_root/$theme.log"
     cp build/test-results/uiScreenshotTest/TEST-com.segfault03.ideadb.ui.IntellijUiScreenshotTest.xml "$result_dir/test-result.xml"

@@ -81,7 +81,8 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
 
     /** Serialize complete browser operations, not just connection acquisition. */
     public <T> T executeBrowser(ConnectionConfig config, DatabaseSession.Operation<T> operation) throws Exception {
-        Connection connection = getConnection(config);
+        // Introspection must not retain a transaction snapshot when console auto-commit is off.
+        Connection connection = getConnection(config, config.isAutoCommit() ? "browser" : "browser-metadata");
         synchronized (connection) { return operation.run(connection); }
     }
 
@@ -108,7 +109,7 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
             if (conn != null && !conn.isClosed()) return conn;
             conn = createRawConnection(config);
             try {
-                conn.setAutoCommit(config.isAutoCommit());
+                conn.setAutoCommit("browser-metadata".equals(sessionId) || config.isAutoCommit());
                 group.connections.put(sessionId, conn);
                 return conn;
             } catch (Exception e) {

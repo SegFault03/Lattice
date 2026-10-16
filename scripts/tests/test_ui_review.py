@@ -13,6 +13,17 @@ ROOT = Path(__file__).resolve().parents[2]
 @unittest.skipUnless(shutil.which('bash') and os.name != 'nt', 'POSIX Bash required')
 class UiReviewTests(unittest.TestCase):
     def test_search_mode_routes_both_themes_and_preserves_each_report(self):
+        self.check_mode('LATTICE_UI_EXPLORER_SEARCH_ONLY', '-Plattice.ui.explorerSearchOnly=true', 'explorer-search')
+
+    def test_inspector_mode_routes_both_themes_and_preserves_each_report(self):
+        self.check_mode('LATTICE_UI_ALTER_TABLE_ONLY', '-Plattice.ui.alterTableOnly=true', 'alter-table')
+
+    def test_composer_mode_routes_both_themes_and_preserves_each_report(self):
+        self.check_mode('LATTICE_UI_CREATE_TABLE_ONLY', '-Plattice.ui.createTableOnly=true', 'create-table',
+                        {'LATTICE_UI_DIALOG_AUDIT': 'true', 'LATTICE_UI_SCALE': '1.25'},
+                        ('-Plattice.ui.dialogAudit=true', '-Plattice.ui.scale=1.25'))
+
+    def check_mode(self, variable, argument, folder, extra_env=None, extra_args=()):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             scripts = root / 'scripts/linux'
@@ -39,13 +50,14 @@ printf '<testsuite/>\\n' > build/test-results/uiScreenshotTest/TEST-com.segfault
             capture.chmod(0o755)
             result = subprocess.run(['bash', str(runner), 'ExperimentalDark', 'ExperimentalLight'], cwd=root,
                                     env=dict(os.environ, LATTICE_REVIEW_SUPERVISED='1',
-                                             LATTICE_UI_EXPLORER_SEARCH_ONLY='true',
-                                             LATTICE_UI_REVIEW_OUTPUT='build/ui-review/explorer-search'),
+                                             **{variable: 'true', **(extra_env or {})},
+                                             LATTICE_UI_REVIEW_OUTPUT=f'build/ui-review/{folder}'),
                                     capture_output=True, text=True)
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
             args = (root / 'build/capture-args.txt').read_text().splitlines()
-            self.assertEqual(2, args.count('-Plattice.ui.explorerSearchOnly=true'))
-            output = root / 'build/ui-review/explorer-search'
+            for expected in (argument, *extra_args):
+                self.assertEqual(2, args.count(expected))
+            output = root / f'build/ui-review/{folder}'
             for theme in ('ExperimentalDark', 'ExperimentalLight'):
                 self.assertIn(f'-Plattice.ui.theme={theme}', args)
                 self.assertIn(f'-Plattice.ui.output={output / theme}', args)

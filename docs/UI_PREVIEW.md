@@ -55,6 +55,134 @@ Dependency paths and cleanup are described in the [script reference](SCRIPTS.md#
 
 ## UI regression coverage
 
+Completed table operations publish a refresh to every open explorer and affected
+table editor. Refreshes re-read columns and data and invalidate cached row counts;
+metadata reads use auto-commit independently of a console's transaction setting.
+Busy views retain the request, and unsaved row drafts defer the grid reload until
+commit or revert. SQL console execution refreshes the connection because scripts,
+procedures and DML returning rows can affect objects outside the selected schema.
+The focused Composer scenario exercises grid insert/update/delete, alter-table,
+console DML/DDL, a hidden editor, draft preservation, explorer truncate/drop, and
+table counts without pressing Refresh.
+
+Both table dialogs share their header, fixed icon slots, adjacent captions and
+footer layout. Provider artwork and its text occupy separate components, so an
+SVG that resolves after layout cannot take width from the database name. Primary
+and secondary footer actions use native Swing button borders, painting and
+sizing; the shared row aligns both heights and text baselines with an 8-pixel
+logical gap. Theme color properties preserve green/red emphasis without painting
+outside the native rounded surface. SQL document colors follow theme changes.
+
+Regression checks cover late icon loading for every provider, enabled/disabled
+and default/non-default actions, matched button edges and baselines, field/title
+alignment, metadata baselines, and larger UI fonts and list rows. Resizing checks
+cover minimum, preferred and wide layouts. The previous combined source label
+and differently sized footer actions both fail the retained reproduction tests.
+
+Inspector actions reserve native text padding and show complete column-action
+labels. Their row moves below a long title when needed. Form rows measure wrapped
+content at the current viewport width; SQL preview takes the remaining height and
+can shrink to three readable lines before the outer form needs to scroll. Resize
+checks cross this threshold in both directions. Inspector padding reserves the
+current native scrollbar width consistently, preventing IntelliJ's transparent
+scrollbar insets from creating a persistent extra line of wrapped text.
+Native dialog audits also capture
+an 8-logical-pixel height reduction at each width and assert that no outer scrollbar
+appears while the form fits.
+
+Focused native reviews accept `-Plattice.ui.scale=1.25` (or `1.5`). Java2D device
+scaling stays at 100% so Driver and screenshot coordinates agree. Add
+`-Plattice.ui.dialogAudit=true` to the focused create/alter scenario to switch the
+live modal through Light/Dark and available Islands counterparts at three widths,
+assert its geometry and SQL palette, and retain 12 or 24 additional captures per
+dialog (including compact heights). The focused create scenario audits both
+create and alter dialogs. The original theme and bounds are
+restored before the database scenario continues. For example:
+
+```bash
+./scripts/linux/capture-intellij-ui.sh -Plattice.ui.review=true -Plattice.ui.createTableOnly=true -Plattice.ui.dialogAudit=true -Plattice.ui.ide.home=/path/to/idea-2026.2.3 -Plattice.ui.scale=1.25
+```
+
+### Column Composer
+
+The create-table dialog uses the selected Column Composer design: a persistent
+column navigator, table name, properties and a complete SQL preview. Add/remove
+and move controls update the same definition, including composite primary keys,
+identity columns, nullability, defaults and decimal precision/scale. Filtering
+and navigation retain every draft, including invalid input. Create stays disabled
+until the full definition and provider-specific SQL are valid.
+
+Creation runs on an owned background connection inside the dialog. Busy controls
+prevent duplicate submissions and closing during execution. Database errors keep
+the complete form available for correction and retry; successful creation closes
+the dialog and refreshes the explorer. Closing a changed definition requires a
+discard decision. The immutable preview snapshot supplies execution values.
+
+```bash
+LATTICE_UI_CREATE_TABLE_ONLY=true LATTICE_UI_REVIEW_OUTPUT=build/ui-review/create-table ./scripts/linux/review-intellij-ui.sh ExperimentalDark ExperimentalLight
+```
+
+Direct Gradle/capture users pass `-Plattice.ui.review=true` and
+`-Plattice.ui.createTableOnly=true`. The focused scenario owns an HSQLDB fixture,
+creates a six-column table using the real UI, then checks JDBC column order,
+identity/primary key metadata, precision and working defaults. It also exercises
+hidden invalid drafts, duplicates, add/remove/reorder, cancellation, animated busy
+feedback, database failure and successful retry. Results include
+`create-composer-dialog.png`, `create-composer-full-ide.png`, busy/error captures
+and `runtime-evidence.txt`. It also verifies automatic explorer/grid refresh after
+grid insert/update/delete, alter-table changes, console DML/DDL and explorer
+truncate/drop, including deferred refresh while an unsaved row draft is present.
+Main PR CI runs this scenario with `LATTICE_UI_DIALOG_AUDIT=true` and
+`LATTICE_UI_SCALE=1.25` on the pinned build SDK. Embedded HSQLDB/H2 tests compare preview and executed
+CREATE statements and verify generated data and composite-key enforcement.
+
+### Column Inspector
+
+The edit table dialog stages a batch across its column navigator and property
+inspector. Users can add several columns, change properties and names together,
+drop columns and rename the table before applying. Navigation and filtering retain
+all drafts, including invalid input. New and dropped rows remain visible; Revert
+resets a column, Restore cancels a pending drop, and removing a new draft never
+issues DDL. Closing or reloading a dirty dialog requires a discard decision.
+
+Apply is enabled only after every draft is valid and the complete batch has a SQL
+preview. Duplicate final names are checked across all drafts. Drops free names
+first, property changes precede column renames, rename chains run from their free
+end, additions follow, and table rename runs last. Rename cycles require an
+intermediate name in a separate Apply. Preview work only reads metadata off the
+EDT; the same dialect builders supply execution SQL, including preserved MySQL
+attributes and combined modify/rename definitions on MySQL 5.
+
+Before writing, Apply verifies the entire schema snapshot and reviewed SQL.
+PostgreSQL executes the batch in one transaction. MySQL, HSQLDB and H2 can commit
+DDL incrementally: execution stops at the first failure, reloads actual metadata,
+and rebases remaining drafts so successful additions, renames and drops are not
+replayed. A failed metadata refresh blocks Apply until an explicit reload.
+
+The focused real-IDE scenario uses an owned, disposable HSQLDB server. One Apply
+combines a same-column rename and modification, another column's type change,
+two additions, a drop and table rename. It verifies JDBC metadata and retained
+data, hidden invalid drafts, filtering, close/discard handling, destructive
+cancellation and animated busy feedback. A second batch deliberately fails after
+several committed operations, then fixes and retries the retained remainder.
+
+```bash
+LATTICE_UI_ALTER_TABLE_ONLY=true LATTICE_UI_REVIEW_OUTPUT=build/ui-review/alter-table ./scripts/linux/review-intellij-ui.sh ExperimentalDark ExperimentalLight
+```
+
+Direct capture/Gradle users can pass `-Plattice.ui.review=true` and
+`-Plattice.ui.alterTableOnly=true`; the capture requires the documented Maven
+fixtures. Results include `alter-inspector-full-ide.png`, the live modal crop
+`alter-inspector-dialog.png`, busy/error evidence and `runtime-evidence.txt`.
+These are actual IntelliJ desktop captures, with no replacement look and feel.
+The standalone Swing gallery also includes the inspector's normal and drop
+states. Unit tests cover editor state and invalid/stale previews; embedded
+database tests verify that preview is read-only and execution uses its statements.
+
+If the host restricts home-directory writes, point the Java preferences and
+runtime caches to writable directories using JVM `java.util.prefs.userRoot`,
+`java.util.prefs.systemRoot`, and the platform's cache settings before running.
+
 Table tab source badges are included in the full light/dark preview gallery used
 by CI. Rendering checks the standard 16 × 16 icon size, bottom-left placement and
 opaque brand colors that hide the table grid. Provider unit tests cover every
@@ -115,7 +243,8 @@ regression dispatches the production Swing button action on the IDE event thread
 and requires both the backend's failure status and its error dialog.
 
 For pull requests targeting `main`, Linux CI runs the dark functional review,
-light styling review, search reviews and PostgreSQL review as separate checks
+light styling review, search reviews, PostgreSQL review, mixed alter/recovery
+and a 125% create/alter dialog audit as separate checks
 after their shared prerequisites pass. Each suite can
 fail the job independently, and a failure does not suppress the other suites'
 reports. The artifact also retains native IDE logs, thread dumps and screenshots.

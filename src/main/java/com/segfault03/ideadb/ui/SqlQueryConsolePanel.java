@@ -289,6 +289,12 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
             try {
                 QueryResult result = session.executeQuery(database, finalSql, options, current);
                 final boolean connectionLost = result.isCancelled() && session.discardInvalidConnection();
+                // Arbitrary SQL can change other namespaces, return rows from DML, or call procedures.
+                // Read fresh metadata/data after completion rather than guessing targets from SQL text.
+                // A failed/cancelled script may also have committed earlier statements.
+                if (current.hasStartedSql())
+                    com.segfault03.ideadb.service.DatabaseChangeListener.publish(
+                            com.segfault03.ideadb.service.DatabaseChange.connection(config.getId()));
 
                 SwingUtilities.invokeLater(() -> {
                     if (disposed) return;

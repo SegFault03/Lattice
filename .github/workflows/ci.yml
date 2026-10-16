@@ -131,6 +131,10 @@ jobs:
             theme: both
           - suite: hsqldb
             theme: ExperimentalDark
+          - suite: alter-table
+            theme: ExperimentalDark
+          - suite: table-dialogs
+            theme: ExperimentalLight
           - suite: styling
             theme: ExperimentalLight
           - suite: search
@@ -168,9 +172,13 @@ jobs:
       - name: Run production Swing previews and painted badge checks
         if: matrix.suite == 'previews'
         run: python3 scripts/ui-preview.py --all-previews --ide-home "$(cat build/ui-ide-home.txt)"
-      - name: Run HSQLDB functional UI or focused styling and search
-        if: matrix.suite == 'hsqldb' || matrix.suite == 'styling' || matrix.suite == 'search'
+      - name: Run HSQLDB functional UI or focused table, styling and search scenarios
+        if: matrix.suite == 'hsqldb' || matrix.suite == 'styling' || matrix.suite == 'search' || matrix.suite == 'alter-table' || matrix.suite == 'table-dialogs'
         env:
+          LATTICE_UI_ALTER_TABLE_ONLY: ${{ matrix.suite == 'alter-table' }}
+          LATTICE_UI_CREATE_TABLE_ONLY: ${{ matrix.suite == 'table-dialogs' }}
+          LATTICE_UI_DIALOG_AUDIT: ${{ matrix.suite == 'table-dialogs' }}
+          LATTICE_UI_SCALE: ${{ matrix.suite == 'table-dialogs' && '1.25' || '1.0' }}
           LATTICE_UI_STYLE_ONLY: ${{ matrix.suite == 'styling' }}
           LATTICE_UI_EXPLORER_SEARCH_ONLY: ${{ matrix.suite == 'search' }}
           UI_THEME: ${{ matrix.theme }}

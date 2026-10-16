@@ -128,6 +128,35 @@ Set `LATTICE_UI_IDE_HOME` to an installed Linux IDEA directory to launch another
 
 For a faster review of connection-dialog spacing, explorer overflow, table editor/menu surfaces, auto-refresh sizing and active glyph colors, set `LATTICE_UI_STYLE_ONLY=true` (direct Gradle: `-Plattice.ui.styleOnly=true`). This still opens and edits the production UI inside the full IDE, then stops after those checks; omit it for the complete review.
 
+Direct Gradle/capture reviews accept `-Plattice.ui.scale=1.25` or `1.5` for
+larger IDE UI sizes. The default remains 100%; this changes IDE UI scaling
+without changing Driver/desktop device coordinates. The Linux review wrapper accepts
+`LATTICE_UI_SCALE=1.25` and `LATTICE_UI_DIALOG_AUDIT=true` for these same options.
+
+`-Plattice.ui.dialogAudit=true` adds a native table-dialog geometry/palette review
+to either focused create/alter scenario. It captures classic and available Islands Light/Dark themes at minimum,
+preferred and wide widths and slightly reduced heights, checks source text, full
+column actions, matched footer bounds/baselines and unnecessary inspector scrollbars,
+and restores the requested theme and dialog size. Use
+`-Plattice.ui.ide.home=/path/to/idea-2026.2.3` to review that platform's native UI.
+
+For the focused Column Inspector scenario, set `LATTICE_UI_ALTER_TABLE_ONLY=true`
+when calling the Linux review wrapper. Direct capture users pass
+`-Plattice.ui.review=true -Plattice.ui.alterTableOnly=true`. It owns an HSQLDB
+fixture and verifies add/modify/rename/drop/table-rename operations, SQL previews,
+validation, discard/confirmation decisions and failure recovery. Full IDE captures,
+a crop of the live dialog and runtime evidence are retained per theme. See
+[Column Inspector validation](UI_PREVIEW.md#column-inspector).
+
+For the focused Column Composer scenario, set `LATTICE_UI_CREATE_TABLE_ONLY=true`
+when calling the Linux review wrapper. Direct capture users pass
+`-Plattice.ui.review=true -Plattice.ui.createTableOnly=true`. The owned HSQLDB
+fixture checks creation, column order, keys, identity, precision, defaults,
+validation, draft retention, failure/retry, native busy animation and automatic
+explorer/grid refresh after DML and DDL. Main PR CI runs this scenario with the
+125% dialog audit, plus a separate mixed alter/recovery scenario. See
+[Column Composer validation](UI_PREVIEW.md#column-composer).
+
 Main-targeted PRs run the grouped production Swing and real-IDE scenarios as independent matrix jobs. Only embedded functional checks and plugin packaging run on every push/PR. The SDK path written by `./gradlew writeUiIdeHome` is reused for UI fixtures. Release tags run functional/package checks before signing. The newer-IDE/theme override remains available for local reviews.
 
 ```bash

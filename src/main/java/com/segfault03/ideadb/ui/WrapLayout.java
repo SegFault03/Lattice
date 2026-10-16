@@ -13,6 +13,10 @@ public final class WrapLayout extends FlowLayout {
         return layoutSize(target, true, target.getWidth());
     }
 
+    public Dimension preferredSizeForWidth(Container target, int width) {
+        return layoutSize(target, true, width);
+    }
+
     @Override
     public Dimension minimumLayoutSize(Container target) {
         return layoutSize(target, false, target.getWidth());

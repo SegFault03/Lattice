@@ -40,8 +40,22 @@ abstract class AbstractSqlDialect implements SqlDialect {
     }
 
     public void alterTableDropColumn(Connection conn, ConnectionConfig config, String dbName, String tableName, String colName) throws Exception {
-        String sql = "ALTER TABLE " + formatTable(config,dbName,tableName) + " DROP COLUMN " + quoteIdentifier(config,colName) + ";";
-        executeSql(conn, sql);
+        executeSql(conn, buildDropColumnSql(config, dbName, tableName, colName));
+    }
+
+    public String buildAddColumnSql(ConnectionConfig config, String dbName, String table, ColumnDefinition column) {
+        var sql = new StringBuilder("ALTER TABLE " + formatTable(config, dbName, table) + " ADD COLUMN ");
+        appendColumn(sql, column);
+        return sql + ";";
+    }
+    public String buildDropColumnSql(ConnectionConfig config, String dbName, String table, String column) {
+        return "ALTER TABLE " + formatTable(config, dbName, table) + " DROP COLUMN " + quoteIdentifier(column) + ";";
+    }
+    public String buildRenameColumnSql(Connection conn, ConnectionConfig config, String dbName, String table, String oldName, String newName) throws Exception {
+        return "ALTER TABLE " + formatTable(config, dbName, table) + " RENAME COLUMN " + quoteIdentifier(oldName) + " TO " + quoteIdentifier(newName) + ";";
+    }
+    public String buildRenameTableSql(ConnectionConfig config, String dbName, String oldName, String newName) {
+        return "ALTER TABLE " + formatTable(config, dbName, oldName) + " RENAME TO " + quoteIdentifier(newName) + ";";
     }
 
     public String buildCreateTableSql(ConnectionConfig config, String dbName, String tableName, List<ColumnDefinition> columns) {
@@ -208,6 +222,7 @@ abstract class AbstractSqlDialect implements SqlDialect {
     protected String formatDefault(ColumnDefinition column) {
         String raw=column.getDefaultValue(), value=raw.trim();
         ColumnDefinition.DefaultKind kind=column.getDefaultKind();
+        if (kind == ColumnDefinition.DefaultKind.PRESERVED) return raw;
         if (kind==ColumnDefinition.DefaultKind.AUTO && value.startsWith("SQL:")) { kind=ColumnDefinition.DefaultKind.EXPRESSION; value=value.substring(4).trim(); }
         if (kind==ColumnDefinition.DefaultKind.AUTO && value.startsWith("TEXT:")) { kind=ColumnDefinition.DefaultKind.LITERAL; raw=value.substring(5); value=raw; }
         if (kind==ColumnDefinition.DefaultKind.EXPRESSION) {
