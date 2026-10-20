@@ -280,6 +280,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         tableModel = new EditableTableModel();
         dataTable = new DatabaseTable(tableModel);
         dataTable.putClientProperty("lattice.showColumnIcons", Boolean.TRUE);
+        dataTable.setCellSelectionEnabled(true);
         dataTable.setFont(dataTable.getFont().deriveFont(JBUI.scale(15f)));
         dataTable.setRowHeight(JBUI.scale(36));
         dataTable.setDefaultRenderer(Object.class, new CellHighlightRenderer());
@@ -1541,6 +1542,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
 
         private final JBColor autoFg = new JBColor(new Color(120, 120, 120), new Color(155, 155, 155));
         private final JBColor inspectedBg = new JBColor(new Color(232, 241, 255), new Color(40, 52, 71));
+        private final JBColor inspectedRowBg = new JBColor(new Color(246, 249, 253), new Color(37, 42, 50));
         private final JBColor inspectedBorder = new JBColor(new Color(56, 104, 204), new Color(110, 163, 255));
 
         @Override
@@ -1600,7 +1602,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     c.setForeground(table.getSelectionForeground());
                     setFont(getFont().deriveFont(Font.PLAIN));
                 } else {
-                    c.setBackground(table.getBackground());
+                    c.setBackground(inspectorVisible && cellDetails != null && !cellDetails.isColumnMode()
+                            && modelRow == cellDetails.inspectedRow() ? inspectedRowBg : table.getBackground());
                     if (value == null) {
                         c.setForeground(table.getForeground());
                         setFont(getFont().deriveFont(Font.ITALIC));
@@ -1622,7 +1625,10 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             if (inspectorVisible && cellDetails != null && !cellDetails.isColumnMode()
                     && modelRow == cellDetails.inspectedRow() && modelCol == cellDetails.inspectedColumn()
                     && errorMsg == null) {
-                if (!isSelected && !isModified && !isNewRow) setBackground(inspectedBg);
+                if (!isModified && !isNewRow) {
+                    setBackground(inspectedBg);
+                    setForeground(table.getForeground());
+                }
                 setBorder(BorderFactory.createCompoundBorder(
                         BorderFactory.createLineBorder(inspectedBorder, JBUI.scale(2)), JBUI.Borders.empty(0, 6)));
             }

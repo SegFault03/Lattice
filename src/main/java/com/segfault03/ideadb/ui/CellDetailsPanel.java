@@ -146,6 +146,7 @@ final class CellDetailsPanel extends JPanel {
         actionsRow.add(edit); actionsRow.add(copy); actionsRow.add(more);
         staging = new JPanel(new FlowLayout(FlowLayout.LEADING, 4, 0)); staging.setOpaque(false);
         staging.setAlignmentX(Component.LEFT_ALIGNMENT);
+        quiet(cancel);
         apply.addActionListener(e -> applyDraft()); cancel.addActionListener(e -> cancelEdit());
         staging.add(apply); staging.add(cancel);
         actionsRow.add(staging, 0);
@@ -466,6 +467,7 @@ final class CellDetailsPanel extends JPanel {
         }
         refreshTextToggle(formattedTab); refreshTextToggle(rawTab); refreshTextToggle(wrap);
         quiet(more);
+        quiet(cancel);
         DatabaseUi.setActionEmphasis(edit, new JBColor(0x2F69CF, 0x3574D4));
         DatabaseUi.setActionEmphasis(apply, new JBColor(0x2F69CF, 0x3574D4));
         pin.setBorderPainted(false); pin.setContentAreaFilled(false); close.setBorderPainted(false); close.setContentAreaFilled(false);
