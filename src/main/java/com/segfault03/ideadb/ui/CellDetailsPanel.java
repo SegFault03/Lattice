@@ -69,8 +69,8 @@ final class CellDetailsPanel extends JPanel {
     private final JToggleButton wrap = new JToggleButton("Wrap");
     private final JButton edit = DatabaseUi.dialogAction("Edit value", AllIcons.Actions.Edit, "Edit selected cell value");
     private final JButton more = new JButton("More");
-    private final JButton apply = new JButton("Apply");
-    private final JButton cancel = new JButton("Cancel");
+    private final JButton apply = DatabaseUi.dialogAction("Apply", null, "Apply");
+    private final JButton cancel = DatabaseUi.dialogAction("Cancel", null, "Cancel");
     private final JButton editTable = new JButton("Edit table");
     private Cell cell;
     private Column column;
@@ -91,7 +91,7 @@ final class CellDetailsPanel extends JPanel {
         setLayout(new BorderLayout());
         setPreferredSize(new Dimension(JBUI.scale(520), 400));
         setMinimumSize(new Dimension(JBUI.scale(340), 220));
-        setBorder(JBUI.Borders.empty(0, 16));
+        setBorder(JBUI.Borders.empty(0, 23));
         title.setText("Value Workspace");
         title.setFont(title.getFont().deriveFont(Font.BOLD, title.getFont().getSize2D() + 5));
         header.add(title, BorderLayout.CENTER);
@@ -110,11 +110,12 @@ final class CellDetailsPanel extends JPanel {
         bodyScroll.getVerticalScrollBar().setUnitIncrement(JBUI.scale(16));
         add(bodyScroll, BorderLayout.CENTER);
         intro.setOpaque(false); intro.setAlignmentX(Component.LEFT_ALIGNMENT);
+        eyebrow.setIcon(Icons.TABLE); eyebrow.setIconTextGap(JBUI.scale(8));
         identity.setForeground(JBColor.namedColor("Label.infoForeground", JBColor.GRAY));
         summary.setForeground(JBColor.namedColor("Label.infoForeground", JBColor.GRAY));
         intro.add(eyebrow, BorderLayout.WEST); intro.add(identity, BorderLayout.EAST);
         intro.setBorder(JBUI.Borders.empty(10, 0, 11, 0));
-        JPanel tabs = new JPanel(new FlowLayout(FlowLayout.LEADING, 12, 0)); tabs.setOpaque(false);
+        JPanel tabs = new JPanel(new FlowLayout(FlowLayout.LEADING, 18, 0)); tabs.setOpaque(false);
         styleTextToggle(formattedTab); styleTextToggle(rawTab); styleTextToggle(wrap);
         formattedTab.addActionListener(e -> { rawMode = false; if (!editing) renderValue(); updateTabs(); });
         rawTab.addActionListener(e -> { rawMode = true; if (!editing) renderValue(); updateTabs(); });
@@ -122,28 +123,31 @@ final class CellDetailsPanel extends JPanel {
         tabs.add(formattedTab); tabs.add(rawTab); tabs.add(wrap);
         valueArea.setLineWrap(true); valueArea.setWrapStyleWord(true); valueArea.setEditable(false);
         valueArea.getAccessibleContext().setAccessibleName("Cell value");
-        valueArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, JBUI.scale(16)));
-        valueArea.setBorder(JBUI.Borders.empty(12));
+        valueArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, JBUI.scale(18)));
+        valueArea.setBorder(JBUI.Borders.empty(15));
         valueScroll.setRowHeaderView(lineNumbers);
-        valueScroll.setPreferredSize(new Dimension(100, JBUI.scale(300)));
+        valueScroll.setPreferredSize(new Dimension(100, JBUI.scale(385)));
         valueScroll.setMinimumSize(new Dimension(50, JBUI.scale(160)));
         JPanel tabLine = new JPanel(new BorderLayout()); tabLine.setOpaque(false);
+        tabLine.setBorder(JBUI.Borders.empty(7, 0, 6, 0));
         tabLine.add(tabs, BorderLayout.WEST); tabLine.add(summary, BorderLayout.EAST);
         JPanel valueCard = new JPanel(new BorderLayout(0, 6)); valueCard.setOpaque(false);
         valueCard.add(tabLine, BorderLayout.NORTH); valueCard.add(valueScroll, BorderLayout.CENTER);
-        JPanel actionsRow = new JPanel(new FlowLayout(FlowLayout.LEADING, 10, 0));
+        JPanel actionsRow = new JPanel(new FlowLayout(FlowLayout.LEADING, 18, 0));
         actionsRow.setOpaque(false); actionsRow.setBorder(JBUI.Borders.emptyTop(8));
         JButton copy = DatabaseUi.inspectorAction("Copy", AllIcons.Actions.Copy, "Copy the raw cell value");
         copy.addActionListener(e -> copyText());
         quiet(more);
-        edit.setMargin(new Insets(4, 10, 4, 10));
+        edit.setMargin(new Insets(6, 14, 6, 14));
         edit.addActionListener(e -> beginEdit());
         more.addActionListener(e -> showMore(more));
+        more.setIcon(AllIcons.Actions.MoreHorizontal); more.setIconTextGap(JBUI.scale(5));
         actionsRow.add(edit); actionsRow.add(copy); actionsRow.add(more);
-        staging = new JPanel(new FlowLayout(FlowLayout.TRAILING, 4, 0)); staging.setOpaque(false);
+        staging = new JPanel(new FlowLayout(FlowLayout.LEADING, 4, 0)); staging.setOpaque(false);
         staging.setAlignmentX(Component.LEFT_ALIGNMENT);
         apply.addActionListener(e -> applyDraft()); cancel.addActionListener(e -> cancelEdit());
-        staging.add(cancel); staging.add(apply);
+        staging.add(apply); staging.add(cancel);
+        actionsRow.add(staging, 0);
         valueBlock = new JPanel(new BorderLayout(0, 4)); valueBlock.setOpaque(false);
         valueBlock.setAlignmentX(Component.LEFT_ALIGNMENT);
         valueBlock.add(valueCard, BorderLayout.CENTER);
@@ -158,13 +162,13 @@ final class CellDetailsPanel extends JPanel {
         tableNote.setAlignmentX(Component.LEFT_ALIGNMENT);
         tableNoteLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         tableNoteText.setOpaque(false); tableNoteText.add(tableNoteLabel);
-        editTable.setMargin(new Insets(1, 4, 1, 4)); editTable.setAlignmentX(Component.LEFT_ALIGNMENT);
+        editTable.setIcon(Icons.TABLE);
+        editTable.setMargin(new Insets(3, 8, 3, 8)); editTable.setAlignmentX(Component.LEFT_ALIGNMENT);
         editTable.addActionListener(e -> actions.editTable());
         JPanel editTableRow = new JPanel(new FlowLayout(FlowLayout.LEADING, 0, 0));
         editTableRow.setOpaque(false); editTableRow.add(editTable);
         tableNote.add(tableNoteText); tableNote.add(editTableRow);
         tableNote.setBorder(JBUI.Borders.emptyTop(18));
-        lower.add(staging);
         footer.add(footerLabel);
         bottomDock.add(tableNote, BorderLayout.NORTH);
         bottomDock.add(footer, BorderLayout.SOUTH);
@@ -317,14 +321,14 @@ final class CellDetailsPanel extends JPanel {
                 BorderFactory.createLineBorder(new JBColor(0xD8E5F8, 0x40506A)),
                 JBUI.Borders.empty(13, 15)));
         card.setAlignmentX(Component.LEFT_ALIGNMENT);
-        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, JBUI.scale(78)));
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, JBUI.scale(91)));
         JLabel caption = new JLabel("SQL TYPE");
-        caption.setFont(caption.getFont().deriveFont(Font.BOLD, JBUI.scale(11f)));
+        caption.setFont(caption.getFont().deriveFont(Font.BOLD, JBUI.scale(13f)));
         caption.putClientProperty("lattice.secondary", Boolean.TRUE);
         caption.setForeground(JBColor.namedColor("Label.infoForeground", new JBColor(0x657185, 0xABB3BE)));
         caption.setAlignmentX(Component.LEFT_ALIGNMENT);
         JLabel type = new JLabel(safe(sqlType));
-        type.setFont(type.getFont().deriveFont(Font.BOLD, JBUI.scale(19f)));
+        type.setFont(type.getFont().deriveFont(Font.BOLD, JBUI.scale(22f)));
         type.putClientProperty("lattice.accent", Boolean.TRUE);
         type.setForeground(new JBColor(0x2F65BE, 0xA6C7FF));
         type.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -336,8 +340,9 @@ final class CellDetailsPanel extends JPanel {
     }
     private void addSection(String name) {
         JLabel label = new JLabel(name);
+        if ("Column".equals(name)) { label.setIcon(Icons.COLUMN); label.setIconTextGap(JBUI.scale(8)); }
         label.setAlignmentX(Component.LEFT_ALIGNMENT);
-        label.setFont(label.getFont().deriveFont(Font.BOLD, JBUI.scale(15f)));
+        label.setFont(label.getFont().deriveFont(Font.BOLD, JBUI.scale(17f)));
         label.setBorder(JBUI.Borders.empty(13, 0, 9, 0));
         metadata.add(label);
     }
@@ -347,16 +352,16 @@ final class CellDetailsPanel extends JPanel {
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
         if (!name.isEmpty()) {
             JLabel key = new JLabel(name);
-            key.setFont(key.getFont().deriveFont(JBUI.scale(14f)));
+            key.setFont(key.getFont().deriveFont(JBUI.scale(16f)));
             key.setForeground(JBColor.namedColor("Label.infoForeground", new JBColor(0x657185, 0xABB3BE)));
             key.putClientProperty("lattice.secondary", Boolean.TRUE);
-            key.setPreferredSize(new Dimension(JBUI.scale(126), key.getPreferredSize().height));
+            key.setPreferredSize(new Dimension(JBUI.scale(132), key.getPreferredSize().height));
             row.add(key, BorderLayout.WEST);
         }
         JLabel val = new JLabel("<html>" + escape(value) + "</html>");
-        val.setFont(val.getFont().deriveFont(JBUI.scale(14f)));
+        val.setFont(val.getFont().deriveFont(JBUI.scale(16f)));
         val.setToolTipText(value); row.add(val, BorderLayout.CENTER);
-        row.setBorder(JBUI.Borders.empty(4, 0)); metadata.add(row);
+        row.setBorder(JBUI.Borders.empty(6, 0)); metadata.add(row);
     }
     private void renderValue() {
         valueScroll.setVisible(!columnMode); valueArea.setEditable(editing);
@@ -386,12 +391,15 @@ final class CellDetailsPanel extends JPanel {
     private void updateMoreMenu() { more.setVisible(cell != null); }
     private void updateEnabled() {
         edit.setEnabled(cell != null && cell.editable() && !busy && !editing);
+        edit.setVisible(cell != null && !columnMode && !editing);
         apply.setEnabled(editing && !busy); cancel.setEnabled(editing && !busy);
         more.setEnabled(cell != null && cell.editable() && !busy && !editing);
+        more.setVisible(cell != null && !columnMode && !editing);
         formattedTab.setEnabled(!editing); rawTab.setEnabled(!editing);
         staging.setVisible(editing && !columnMode);
         editTable.setEnabled(!busy && (cell != null && !cell.view() || column != null && !column.view()));
         refreshTextToggle(formattedTab); refreshTextToggle(rawTab); refreshTextToggle(wrap);
+        resizeContentBlocks(); content.revalidate(); content.repaint();
     }
     private void updatePin() {
         pin.setIcon(pinned ? AllIcons.General.PinSelected : AllIcons.General.Pin);
@@ -428,24 +436,26 @@ final class CellDetailsPanel extends JPanel {
         Font labelFont = UIManager.getFont("Label.font");
         Font buttonFont = UIManager.getFont("Button.font");
         if (labelFont != null) {
-            title.setFont(labelFont.deriveFont(Font.BOLD, JBUI.scale(20f)));
-            eyebrow.setFont(labelFont.deriveFont(JBUI.scale(14f)));
-            identity.setFont(labelFont.deriveFont(JBUI.scale(14f)));
-            summary.setFont(labelFont.deriveFont(JBUI.scale(13f)));
-            tableNoteLabel.setFont(labelFont.deriveFont(JBUI.scale(14f)));
+            title.setFont(labelFont.deriveFont(Font.BOLD, JBUI.scale(25f)));
+            eyebrow.setFont(labelFont.deriveFont(JBUI.scale(16f)));
+            identity.setFont(labelFont.deriveFont(JBUI.scale(15f)));
+            summary.setFont(labelFont.deriveFont(JBUI.scale(15f)));
+            tableNoteLabel.setFont(labelFont.deriveFont(JBUI.scale(15f)));
         }
         if (buttonFont != null) for (AbstractButton button : new AbstractButton[]{formattedTab, rawTab, wrap, edit, more, editTable})
-            button.setFont(buttonFont.deriveFont(JBUI.scale(14f)));
+            button.setFont(buttonFont.deriveFont(JBUI.scale(16f)));
         title.setForeground(JBColor.foreground());
         summary.setForeground(new JBColor(0x667185, 0xAAB3C1));
         eyebrow.setForeground(new JBColor(0x2F6DDB, 0x70A5FF));
         identity.setForeground(new JBColor(0x667185, 0xAAB3C1));
+        tableNoteLabel.setForeground(new JBColor(0x667185, 0xAAB3C1));
         for (AbstractButton button : new AbstractButton[]{formattedTab, rawTab, wrap}) {
             button.setUI(new TextToggleUI()); button.setBorderPainted(false); button.setContentAreaFilled(false); button.setOpaque(false);
         }
         refreshTextToggle(formattedTab); refreshTextToggle(rawTab); refreshTextToggle(wrap);
         quiet(more);
         DatabaseUi.setActionEmphasis(edit, new JBColor(0x2F69CF, 0x3574D4));
+        DatabaseUi.setActionEmphasis(apply, new JBColor(0x2F69CF, 0x3574D4));
         pin.setBorderPainted(false); pin.setContentAreaFilled(false); close.setBorderPainted(false); close.setContentAreaFilled(false);
         resizeContentBlocks();
         revalidate(); repaint();

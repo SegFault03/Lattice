@@ -423,8 +423,14 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         if (visible) {
             cellDetailsSplitter.setSecondComponent(cellDetails);
             cellDetailsSplitter.setProportion(0.63f);
+            // A compact result set should span the available table side, as it does before
+            // the inspector opens. Keep scrolling for genuinely wide tables.
+            int available = Math.round(cellDetailsSplitter.getWidth() * 0.63f);
+            dataTable.setAutoResizeMode(dataTable.getColumnModel().getTotalColumnWidth() < available
+                    ? JTable.AUTO_RESIZE_ALL_COLUMNS : JTable.AUTO_RESIZE_OFF);
         } else {
             cellDetailsSplitter.setSecondComponent(null);
+            dataTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
             cellDetails.clearPin();
             inspectedHeaderName = null;
         }
