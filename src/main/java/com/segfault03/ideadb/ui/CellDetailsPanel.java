@@ -66,7 +66,7 @@ final class CellDetailsPanel extends JPanel {
     private final JButton formattedTab = new JButton("Formatted");
     private final JButton rawTab = new JButton("Raw");
     private final JToggleButton wrap = new JToggleButton("Wrap");
-    private final JButton edit = new JButton("Edit value");
+    private final JButton edit = DatabaseUi.dialogAction("Edit value", AllIcons.Actions.Edit, "Edit selected cell value");
     private final JButton more = new JButton("More");
     private final JButton apply = new JButton("Apply");
     private final JButton cancel = new JButton("Cancel");
@@ -120,6 +120,7 @@ final class CellDetailsPanel extends JPanel {
         wrap.addActionListener(e -> { valueArea.setLineWrap(wrap.isSelected()); valueArea.setWrapStyleWord(wrap.isSelected()); });
         tabs.add(formattedTab); tabs.add(rawTab); tabs.add(wrap);
         valueArea.setLineWrap(true); valueArea.setWrapStyleWord(true); valueArea.setEditable(false);
+        valueArea.getAccessibleContext().setAccessibleName("Cell value");
         valueArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, JBUI.scale(16)));
         valueArea.setBorder(JBUI.Borders.empty(12));
         valueScroll.setRowHeaderView(lineNumbers);
@@ -134,9 +135,7 @@ final class CellDetailsPanel extends JPanel {
         JButton copy = DatabaseUi.inspectorAction("Copy", AllIcons.Actions.Copy, "Copy the raw cell value");
         copy.addActionListener(e -> copyText());
         quiet(more);
-        edit.setIcon(AllIcons.Actions.Edit);
         edit.setMargin(new Insets(4, 10, 4, 10));
-        edit.putClientProperty("JButton.buttonType", "default");
         edit.addActionListener(e -> beginEdit());
         more.addActionListener(e -> showMore(more));
         actionsRow.add(edit); actionsRow.add(copy); actionsRow.add(more);
@@ -249,12 +248,15 @@ final class CellDetailsPanel extends JPanel {
         else renderEmpty();
         updateFooter();
         metadata.revalidate(); lower.revalidate(); content.revalidate();
+        resizeContentBlocks();
+        content.repaint(); updateEnabled();
+    }
+    private void resizeContentBlocks() {
         intro.setMaximumSize(new Dimension(Integer.MAX_VALUE, intro.getPreferredSize().height));
         valueBlock.setMaximumSize(new Dimension(Integer.MAX_VALUE, valueBlock.getPreferredSize().height));
         metadata.setMaximumSize(new Dimension(Integer.MAX_VALUE, metadata.getPreferredSize().height));
         tableNote.setMaximumSize(new Dimension(Integer.MAX_VALUE, tableNote.getPreferredSize().height));
         lower.setMaximumSize(new Dimension(Integer.MAX_VALUE, lower.getPreferredSize().height));
-        content.repaint(); updateEnabled();
     }
     private void updateFooter() {
         footerLabel.setText(pinned ? columnMode ? "Pinned to this column · Esc to close"
@@ -288,15 +290,17 @@ final class CellDetailsPanel extends JPanel {
         valueBlock.setVisible(false); tableNoteText.setVisible(true); tableNote.setVisible(true); editTable.setVisible(true);
         staging.setVisible(false);
         if (c != null) {
-            addSection("Column");
+            addSection("Definition");
             addMetadata("Name", c.getName());
-            addMetadata("Type", c.getFormattedType()); addMetadata("Nullable", c.isNullable() ? "Yes" : "No");
-            if (c.isPrimaryKey()) addMetadata("Primary key", "Yes");
-            if (c.isForeignKey()) addMetadata("Foreign key", "Yes");
+            addMetadata("SQL type", c.getFormattedType());
             addMetadata("Default", c.getDefaultValue() == null ? "—" : c.getDefaultValue());
             if (c.isGenerated() || c.isAutoIncrement()) addMetadata("Generated", c.isAutoIncrement() ? "Auto increment" : "Yes");
             if (c.getColumnSize() > 0) addMetadata("Size", Integer.toString(c.getColumnSize()));
             if (c.getDecimalDigits() > 0) addMetadata("Scale", Integer.toString(c.getDecimalDigits()));
+            addSection("Constraints");
+            addMetadata("Nullable", c.isNullable() ? "Yes" : "No");
+            addMetadata("Primary key", c.isPrimaryKey() ? "Yes" : "No");
+            addMetadata("Foreign key", c.isForeignKey() ? "Yes" : "No");
         }
         editTable.setEnabled(!column.view());
     }
@@ -362,6 +366,7 @@ final class CellDetailsPanel extends JPanel {
     private void updatePin() {
         pin.setIcon(pinned ? AllIcons.General.PinSelected : AllIcons.General.Pin);
         pin.setToolTipText(pinned ? "Unpin details" : "Pin details");
+        pin.getAccessibleContext().setAccessibleName(pinned ? "Unpin cell details" : "Pin cell details");
         updateFooter();
     }
     private void refreshTheme() {
@@ -409,10 +414,9 @@ final class CellDetailsPanel extends JPanel {
         }
         refreshTextToggle(formattedTab); refreshTextToggle(rawTab); refreshTextToggle(wrap);
         quiet(more);
-        edit.setBackground(new JBColor(0x2F69CF, 0x3574D4));
-        edit.setForeground(Color.WHITE);
-        edit.setContentAreaFilled(true);
+        DatabaseUi.setActionEmphasis(edit, new JBColor(0x2F69CF, 0x3574D4));
         pin.setBorderPainted(false); pin.setContentAreaFilled(false); close.setBorderPainted(false); close.setContentAreaFilled(false);
+        resizeContentBlocks();
         revalidate(); repaint();
     }
     private static void refreshTextToggle(AbstractButton button) {
