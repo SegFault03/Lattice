@@ -964,6 +964,30 @@ class IntellijUiScreenshotTest {
                 waitForNoOpenedDialogs()
             }
 
+            if (cellDetailsOnly) {
+                java.sql.DriverManager.getConnection(requireNotNull(jdbcFixture).jdbcUrl, "SA", "").use { conn ->
+                    conn.createStatement().use { statement ->
+                        statement.execute("ALTER TABLE PUBLIC.LATTICE_PEOPLE ADD COLUMN EMAIL VARCHAR(180)")
+                        statement.execute("ALTER TABLE PUBLIC.LATTICE_PEOPLE ADD COLUMN STATUS VARCHAR(20) DEFAULT 'active'")
+                        statement.execute("ALTER TABLE PUBLIC.LATTICE_PEOPLE ADD COLUMN BALANCE DECIMAL(10,2) DEFAULT 0")
+                    }
+                    val names = listOf("Amelia Brooks", "Liam Chen", "Sofia Patel", "Noah Williams", "Olivia Reyes",
+                        "Ethan Kim", "Isabella Rossi", "Lucas Martin", "Mia Thompson", "Aiden Davis",
+                        "Charlotte Wilson", "Leo Garcia")
+                    conn.prepareStatement("INSERT INTO PUBLIC.LATTICE_PEOPLE (NAME, CREATED_AT, EMAIL, STATUS, BALANCE) VALUES (?, ?, ?, ?, ?)").use { insert ->
+                        names.forEachIndexed { index, name ->
+                            insert.setString(1, name)
+                            insert.setTimestamp(2, java.sql.Timestamp.valueOf("2026-10-${(index + 1).toString().padStart(2, '0')} 10:30:00"))
+                            insert.setString(3, name.lowercase().replace(" ", ".") + "@example.com")
+                            insert.setString(4, if (index == 4 || index == 8) "inactive" else "active")
+                            insert.setBigDecimal(5, java.math.BigDecimal.valueOf(if (index % 3 == 0) 240.50 else 0.0))
+                            insert.addBatch()
+                        }
+                        insert.executeBatch()
+                    }
+                }
+            }
+
             val peoplePath = publicSchemaPath + "Tables (1)" + "LATTICE_PEOPLE"
             waitUntil("created LATTICE_PEOPLE table in the explorer") {
                 databaseTree.pathExists(*peoplePath)
@@ -976,6 +1000,9 @@ class IntellijUiScreenshotTest {
             val dataGrid = tableEditor.x(JTableUiComponent::class.java) {
                 byJavaClass("com.segfault03.ideadb.ui.DatabaseTable")
             }.waitFound()
+            val commitButton = tableEditor.x { byAccessibleName("Commit pending changes to the database") }.waitFound()
+            val revertButton = tableEditor.x { byAccessibleName("Revert pending changes") }.waitFound()
+            if (!cellDetailsOnly) {
             waitUntil("empty table data loaded") { tableEditor.hasSubtext("0 rows") }
             check(dataGrid.rowCount() == 0) { "New LATTICE_PEOPLE table should start empty" }
             captureScreen(screenshotsDirectory.resolve("table-editor-empty.png"))
@@ -989,8 +1016,6 @@ class IntellijUiScreenshotTest {
                 frame.resize(normalWidth, normalHeight)
             }
 
-            val commitButton = tableEditor.x { byAccessibleName("Commit pending changes to the database") }.waitFound()
-            val revertButton = tableEditor.x { byAccessibleName("Revert pending changes") }.waitFound()
             tableEditor.x { byAccessibleName("Add a new row") }.waitFound().click()
             waitUntil("empty insert row validates required fields") {
                 dataGrid.rowCount() == 1 && tableEditor.hasSubtext("1 invalid cell") && !commitButton.component.isEnabled()
@@ -1034,25 +1059,27 @@ class IntellijUiScreenshotTest {
                 frame.x(DialogUiComponent::class.java) { byTitle("Changes Saved") }.waitFound().pressButton("OK")
                 waitUntil("replacement saved row loaded") { dataGrid.rowCount() == 1 && tableEditor.hasSubtext("1 row ·") }
             }
+            }
 
             if (cellDetailsOnly) {
                 check(review && jdbcFixture != null) { "The focused Value Workspace capture requires the real IDE review and its owned HSQLDB fixture" }
+                waitUntil("populated Value Workspace fixture") { dataGrid.rowCount() == 12 }
                 withContext(OnDispatcher.EDT) {
                     cast(frame.component, Window::class).setBounds(16, 32, displayBounds.width - 32, displayBounds.height - 64)
                 }
                 ideFrame { invokeAction("HideAllWindows") }
-                dataGrid.clickCell(0, 1)
+                dataGrid.clickCell(0, 3)
                 val details = tableEditor.x { byJavaClass("com.segfault03.ideadb.ui.CellDetailsPanel") }.waitFound()
-                waitUntil("Value Workspace follows the selected Ada cell") {
-                    details.hasSubtext("Ada Lovelace")
+                waitUntil("Value Workspace follows the selected Amelia email cell") {
+                    details.hasSubtext("amelia.brooks@example.com")
                 }
                 captureScreen(screenshotsDirectory.resolve("value-workspace.png"))
 
                 details.x { byAccessibleName("Pin cell details") }.waitFound().click()
                 waitUntil("cell details are pinned") { details.hasSubtext("Pinned to this cell") }
                 dataGrid.clickCell(0, 0)
-                waitUntil("pinned details retain Ada Lovelace after another cell is selected") {
-                    details.hasSubtext("Ada Lovelace") && details.hasSubtext("Pinned to this cell")
+                waitUntil("pinned details retain Amelia email after another cell is selected") {
+                    details.hasSubtext("amelia.brooks@example.com") && details.hasSubtext("Pinned to this cell")
                 }
                 captureScreen(screenshotsDirectory.resolve("value-workspace-pinned.png"))
                 details.x { byAccessibleName("Unpin cell details") }.waitFound().click()
@@ -1061,8 +1088,8 @@ class IntellijUiScreenshotTest {
                     val table = cast(dataGrid.component, LiveTableEditor::class)
                     val header = table.getTableHeader()
                     val location = header.getLocationOnScreen()
-                    val x = table.getColumnModel().getColumn(0).getWidth()
-                    Point(location.x + x + table.getColumnModel().getColumn(1).getWidth() / 2,
+                    val x = (0 until 3).sumOf { table.getColumnModel().getColumn(it).getWidth() }
+                    Point(location.x + x + table.getColumnModel().getColumn(3).getWidth() / 2,
                         location.y + header.getHeight() / 2)
                 }
                 Robot().also { robot ->
@@ -1075,23 +1102,8 @@ class IntellijUiScreenshotTest {
                 captureScreen(screenshotsDirectory.resolve("value-workspace-header-details.png"))
                 val headerDetailsVerified = details.hasSubtext("Column Workspace")
 
-                dataGrid.clickCell(0, 1)
-                waitUntil("Ada cell details reopened") { details.hasSubtext("Value Workspace") && details.hasSubtext("Ada Lovelace") }
-                val valueArea = details.x { byAccessibleName("Cell value") }.waitFound()
-                val valuePoint = valueArea.component.getLocationOnScreen()
-                val robot = Robot()
-                robot.mouseMove(valuePoint.x + valueArea.component.width / 2, valuePoint.y + valueArea.component.height / 2)
-                repeat(2) {
-                    robot.mousePress(InputEvent.BUTTON1_DOWN_MASK)
-                    robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
-                    if (it == 0) Thread.sleep(100)
-                }
-                robot.waitForIdle()
-                waitUntil("double-clicking the value area enters edit mode") {
-                    details.x { byAccessibleName("Apply") }.waitFound().component.isVisible()
-                }
-                captureScreen(screenshotsDirectory.resolve("value-workspace-editing.png"))
-
+                dataGrid.clickCell(0, 3)
+                waitUntil("Amelia email details reopened") { details.hasSubtext("amelia.brooks@example.com") }
                 val oppositeThemes = if (themeId.contains("Dark", true) || themeId == "Darcula")
                     listOf("Islands Light", "ExperimentalLight", "IntelliJ", "JetBrainsLightTheme")
                     else listOf("Islands Dark", "ExperimentalDark", "Darcula")
@@ -1113,15 +1125,30 @@ class IntellijUiScreenshotTest {
                     captureScreen(screenshotsDirectory.resolve("value-workspace-restored-theme.png"))
                 }
 
+                val valueArea = details.x { byAccessibleName("Cell value") }.waitFound()
+                val valuePoint = valueArea.component.getLocationOnScreen()
+                val robot = Robot()
+                robot.mouseMove(valuePoint.x + valueArea.component.width / 2, valuePoint.y + valueArea.component.height / 2)
+                repeat(2) {
+                    robot.mousePress(InputEvent.BUTTON1_DOWN_MASK)
+                    robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
+                    if (it == 0) Thread.sleep(100)
+                }
+                robot.waitForIdle()
+                waitUntil("double-clicking the value area enters edit mode") {
+                    details.x { byAccessibleName("Apply") }.waitFound().component.isVisible()
+                }
+                captureScreen(screenshotsDirectory.resolve("value-workspace-editing.png"))
+
                 Files.writeString(screenshotsDirectory.resolve("runtime-evidence.txt"), buildString {
                     appendLine("Focused native Value Workspace capture")
                     appendLine("IDE: ${System.getProperty("ui.ide.version")} (${System.getProperty("ui.ide.build")})")
                     appendLine("Requested theme: $themeId")
-                    appendLine("Loaded cell: ${tableCellText(dataGrid, 0, 1)}")
+                    appendLine("Loaded cell: ${tableCellText(dataGrid, 0, 3)}")
                     appendLine("Pin selection persistence: verified after selecting ID cell")
                     appendLine("Column header details: $headerDetailsVerified")
                     appendLine("Double-click edit mode: verified")
-                    appendLine("Light theme switch: ${alternateTheme ?: "no supported light theme found; skipped"}")
+                    appendLine("Opposite theme switch: ${alternateTheme ?: "no supported opposite theme found; skipped"}")
                 })
                 println("Focused native Value Workspace flow completed")
                 return@useDriverAndCloseIde
