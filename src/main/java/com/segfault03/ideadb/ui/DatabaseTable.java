@@ -111,7 +111,8 @@ public final class DatabaseTable extends JBTable {
             setBackground(primaryKey ? new Color(light ? 0xFFF0C2 : 0x544525)
                     : foreignKey ? new Color(light ? 0xEDE3FA : 0x463453) : normal);
             setIcon(primaryKey ? foreignKey ? Icons.PRIMARY_FOREIGN_KEY : Icons.KEY
-                    : foreignKey ? Icons.FOREIGN_KEY : null);
+                    : foreignKey ? Icons.FOREIGN_KEY
+                    : Boolean.TRUE.equals(table.getClientProperty("lattice.showColumnIcons")) ? Icons.COLUMN : null);
             setIconTextGap(JBUI.scale(6));
             getAccessibleContext().setAccessibleDescription(primaryKey
                     ? foreignKey ? "Primary and foreign key column" : "Primary key column"

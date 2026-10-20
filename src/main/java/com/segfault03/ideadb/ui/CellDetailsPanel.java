@@ -68,9 +68,10 @@ final class CellDetailsPanel extends JPanel {
     private final JButton rawTab = new JButton("Raw");
     private final JToggleButton wrap = new JToggleButton("Wrap");
     private final JButton edit = DatabaseUi.dialogAction("Edit value", AllIcons.Actions.Edit, "Edit selected cell value");
+    private final JButton copy = new JButton("Copy", AllIcons.Actions.Copy);
     private final JButton more = new JButton("More");
     private final JButton apply = DatabaseUi.dialogAction("Apply", null, "Apply");
-    private final JButton cancel = DatabaseUi.dialogAction("Cancel", null, "Cancel");
+    private final JButton cancel = new JButton("Cancel");
     private final JButton editTable = new JButton("Edit table");
     private Cell cell;
     private Column column;
@@ -135,7 +136,7 @@ final class CellDetailsPanel extends JPanel {
         valueCard.add(tabLine, BorderLayout.NORTH); valueCard.add(valueScroll, BorderLayout.CENTER);
         JPanel actionsRow = new JPanel(new FlowLayout(FlowLayout.LEADING, 18, 0));
         actionsRow.setOpaque(false); actionsRow.setBorder(JBUI.Borders.emptyTop(8));
-        JButton copy = DatabaseUi.inspectorAction("Copy", AllIcons.Actions.Copy, "Copy the raw cell value");
+        quiet(copy); copy.setToolTipText("Copy the raw cell value");
         copy.addActionListener(e -> copyText());
         quiet(more);
         edit.setMargin(new Insets(6, 14, 6, 14));
@@ -198,6 +199,14 @@ final class CellDetailsPanel extends JPanel {
     }
 
     private static final class TextToggleUI extends BasicButtonUI {
+        @Override public void paint(Graphics graphics, JComponent component) {
+            super.paint(graphics, component);
+            AbstractButton button = (AbstractButton) component;
+            if (button.isSelected() && !(button instanceof JToggleButton)) {
+                graphics.setColor(button.getForeground());
+                graphics.fillRect(0, component.getHeight() - JBUI.scale(2), component.getWidth(), JBUI.scale(2));
+            }
+        }
         @Override protected void paintText(Graphics graphics, JComponent component, Rectangle bounds, String text) {
             AbstractButton button = (AbstractButton) component;
             Graphics2D copy = (Graphics2D) graphics.create();
@@ -442,13 +451,16 @@ final class CellDetailsPanel extends JPanel {
             summary.setFont(labelFont.deriveFont(JBUI.scale(15f)));
             tableNoteLabel.setFont(labelFont.deriveFont(JBUI.scale(15f)));
         }
-        if (buttonFont != null) for (AbstractButton button : new AbstractButton[]{formattedTab, rawTab, wrap, edit, more, editTable})
+        if (buttonFont != null) for (AbstractButton button : new AbstractButton[]{formattedTab, rawTab, wrap, edit, copy, more, apply, cancel, editTable})
             button.setFont(buttonFont.deriveFont(JBUI.scale(16f)));
         title.setForeground(JBColor.foreground());
         summary.setForeground(new JBColor(0x667185, 0xAAB3C1));
         eyebrow.setForeground(new JBColor(0x2F6DDB, 0x70A5FF));
         identity.setForeground(new JBColor(0x667185, 0xAAB3C1));
         tableNoteLabel.setForeground(new JBColor(0x667185, 0xAAB3C1));
+        copy.setForeground(JBColor.foreground());
+        more.setForeground(JBColor.foreground());
+        cancel.setForeground(JBColor.foreground());
         for (AbstractButton button : new AbstractButton[]{formattedTab, rawTab, wrap}) {
             button.setUI(new TextToggleUI()); button.setBorderPainted(false); button.setContentAreaFilled(false); button.setOpaque(false);
         }

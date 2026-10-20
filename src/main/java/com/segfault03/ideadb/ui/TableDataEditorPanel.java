@@ -279,6 +279,9 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
 
         tableModel = new EditableTableModel();
         dataTable = new DatabaseTable(tableModel);
+        dataTable.putClientProperty("lattice.showColumnIcons", Boolean.TRUE);
+        dataTable.setFont(dataTable.getFont().deriveFont(JBUI.scale(15f)));
+        dataTable.setRowHeight(JBUI.scale(36));
         dataTable.setDefaultRenderer(Object.class, new CellHighlightRenderer());
         JPopupMenu cellMenu = DatabaseUi.popupMenu();
         cellMenu.add(nullBtn);
