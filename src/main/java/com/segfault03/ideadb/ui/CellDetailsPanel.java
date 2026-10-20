@@ -294,9 +294,9 @@ final class CellDetailsPanel extends JPanel {
         valueBlock.setVisible(false); tableNoteText.setVisible(true); tableNote.setVisible(true); editTable.setVisible(true);
         staging.setVisible(false);
         if (c != null) {
+            addTypeCard(c.getFormattedType());
             addSection("Definition");
             addMetadata("Name", c.getName());
-            addMetadata("SQL type", c.getFormattedType());
             addMetadata("Default", c.getDefaultValue() == null ? "—" : c.getDefaultValue());
             if (c.isGenerated() || c.isAutoIncrement()) addMetadata("Generated", c.isAutoIncrement() ? "Auto increment" : "Yes");
             if (c.getColumnSize() > 0) addMetadata("Size", Integer.toString(c.getColumnSize()));
@@ -307,6 +307,32 @@ final class CellDetailsPanel extends JPanel {
             addMetadata("Foreign key", c.isForeignKey() ? "Yes" : "No");
         }
         editTable.setEnabled(!column.view());
+    }
+    private void addTypeCard(String sqlType) {
+        JPanel card = new JPanel();
+        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
+        card.setOpaque(true);
+        card.setBackground(new JBColor(0xEDF3FC, 0x2A3444));
+        card.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new JBColor(0xD8E5F8, 0x40506A)),
+                JBUI.Borders.empty(13, 15)));
+        card.setAlignmentX(Component.LEFT_ALIGNMENT);
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, JBUI.scale(78)));
+        JLabel caption = new JLabel("SQL TYPE");
+        caption.setFont(caption.getFont().deriveFont(Font.BOLD, JBUI.scale(11f)));
+        caption.putClientProperty("lattice.secondary", Boolean.TRUE);
+        caption.setForeground(JBColor.namedColor("Label.infoForeground", new JBColor(0x657185, 0xABB3BE)));
+        caption.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel type = new JLabel(safe(sqlType));
+        type.setFont(type.getFont().deriveFont(Font.BOLD, JBUI.scale(19f)));
+        type.putClientProperty("lattice.accent", Boolean.TRUE);
+        type.setForeground(new JBColor(0x2F65BE, 0xA6C7FF));
+        type.setAlignmentX(Component.LEFT_ALIGNMENT);
+        card.add(caption);
+        card.add(Box.createVerticalStrut(JBUI.scale(5)));
+        card.add(type);
+        metadata.add(Box.createVerticalStrut(JBUI.scale(15)));
+        metadata.add(card);
     }
     private void addSection(String name) {
         JLabel label = new JLabel(name);
@@ -436,7 +462,9 @@ final class CellDetailsPanel extends JPanel {
     }
     private static void refreshMetadataColors(Component component) {
         if (component instanceof JLabel label) {
-            label.setForeground(Boolean.TRUE.equals(label.getClientProperty("lattice.secondary"))
+            label.setForeground(Boolean.TRUE.equals(label.getClientProperty("lattice.accent"))
+                    ? new JBColor(0x2F65BE, 0xA6C7FF)
+                    : Boolean.TRUE.equals(label.getClientProperty("lattice.secondary"))
                     ? JBColor.namedColor("Label.infoForeground", new JBColor(0x657185, 0xABB3BE))
                     : JBColor.foreground());
             if (label.getText() != null && label.getText().startsWith("<html>"))

@@ -1125,11 +1125,29 @@ class IntellijUiScreenshotTest {
                     }
                     waitUntil("IDE applies $alternateTheme") { laf.getCurrentUIThemeLookAndFeel().getId() == alternateTheme }
                     captureScreen(screenshotsDirectory.resolve("value-workspace-opposite-theme.png"))
+                    val themedHeaderPoint = withContext(OnDispatcher.EDT) {
+                        val table = cast(dataGrid.component, LiveTableEditor::class)
+                        val header = table.getTableHeader()
+                        val location = header.getLocationOnScreen()
+                        val x = (0 until 3).sumOf { table.getColumnModel().getColumn(it).getWidth() }
+                        Point(location.x + x + table.getColumnModel().getColumn(3).getWidth() / 2,
+                            location.y + header.getHeight() / 2)
+                    }
+                    Robot().also { themedRobot ->
+                        themedRobot.mouseMove(themedHeaderPoint.x, themedHeaderPoint.y)
+                        themedRobot.mousePress(InputEvent.BUTTON1_DOWN_MASK)
+                        themedRobot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
+                        themedRobot.waitForIdle()
+                    }
+                    waitUntil("opposite theme shows column workspace") { details.hasSubtext("Column Workspace") }
+                    captureScreen(screenshotsDirectory.resolve("value-workspace-header-opposite-theme.png"))
                     withContext(OnDispatcher.EDT) {
                         laf.setCurrentLookAndFeel(laf.findLaf(themeId), true)
                         laf.updateUI()
                     }
                     waitUntil("IDE restores $themeId") { laf.getCurrentUIThemeLookAndFeel().getId() == themeId }
+                    dataGrid.clickCell(0, 3)
+                    waitUntil("cell workspace returns after restoring theme") { details.hasSubtext("amelia.brooks@example.com") }
                     captureScreen(screenshotsDirectory.resolve("value-workspace-restored-theme.png"))
                 }
 
