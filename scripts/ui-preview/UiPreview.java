@@ -975,7 +975,7 @@ public final class UiPreview {
                 verifyGrid(grid, 3, 2);
                 render(editor, theme + "-table-760", 760, 620);
                 render(editor, theme + "-table-520", 520, 620);
-                BorderLayout editorLayout = (BorderLayout)editor.getLayout();
+                BorderLayout editorLayout = (BorderLayout)((JPanel)field(editor, "tableWorkspace")).getLayout();
                 verifyControls((Container)editorLayout.getLayoutComponent(BorderLayout.NORTH));
                 verifyControls((Container)editorLayout.getLayoutComponent(BorderLayout.SOUTH));
                 Object model = field(editor, "tableModel");

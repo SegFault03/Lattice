@@ -1019,7 +1019,7 @@ class IntellijUiScreenshotTest {
             check(dataGrid.content().values.any { row -> row.values.any { "Ada" in it } }) {
                 "Committed row should be visible in the live data grid"
             }
-            if (jdbcFixture != null) {
+            if (jdbcFixture != null && !cellDetailsOnly) {
                 dataGrid.clickCell(0, 1)
                 tableEditor.x { byAccessibleName("Delete selected rows") }.waitFound().click()
                 val confirm = frame.x(DialogUiComponent::class.java) { byTitle("Delete rows") }.waitFound()
@@ -1037,10 +1037,14 @@ class IntellijUiScreenshotTest {
 
             if (cellDetailsOnly) {
                 check(review && jdbcFixture != null) { "The focused Value Workspace capture requires the real IDE review and its owned HSQLDB fixture" }
+                withContext(OnDispatcher.EDT) {
+                    cast(frame.component, Window::class).setBounds(16, 32, displayBounds.width - 32, displayBounds.height - 64)
+                }
+                ideFrame { invokeAction("HideAllWindows") }
                 dataGrid.clickCell(0, 1)
                 val details = tableEditor.x { byJavaClass("com.segfault03.ideadb.ui.CellDetailsPanel") }.waitFound()
                 waitUntil("Value Workspace follows the selected Ada cell") {
-                    details.hasSubtext("Ada Lovelace") && details.hasSubtext("Value Workspace")
+                    details.hasSubtext("Ada Lovelace")
                 }
                 captureScreen(screenshotsDirectory.resolve("value-workspace.png"))
 

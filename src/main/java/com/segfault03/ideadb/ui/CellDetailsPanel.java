@@ -60,6 +60,7 @@ final class CellDetailsPanel extends JPanel {
     private final JLabel tableNoteLabel = new JLabel("Review or change table structure");
     private final JPanel metadata = new JPanel();
     private final JPanel footer = new JPanel(new FlowLayout(FlowLayout.TRAILING, 4, 0));
+    private final JPanel bottomDock = new JPanel(new BorderLayout());
     private final JLabel footerLabel = new JLabel();
     private final JButton pin = new JButton(AllIcons.General.Pin);
     private final JButton close = new JButton("×");
@@ -163,8 +164,11 @@ final class CellDetailsPanel extends JPanel {
         editTableRow.setOpaque(false); editTableRow.add(editTable);
         tableNote.add(tableNoteText); tableNote.add(editTableRow);
         tableNote.setBorder(JBUI.Borders.emptyTop(18));
-        lower.add(tableNote); lower.add(staging);
-        footer.add(footerLabel); add(footer, BorderLayout.SOUTH);
+        lower.add(staging);
+        footer.add(footerLabel);
+        bottomDock.add(tableNote, BorderLayout.NORTH);
+        bottomDock.add(footer, BorderLayout.SOUTH);
+        add(bottomDock, BorderLayout.SOUTH);
         getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "escape");
         getActionMap().put("escape", new AbstractAction() { public void actionPerformed(ActionEvent e) { handleEscape(); } });
         getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.CTRL_DOWN_MASK), "apply");
@@ -376,6 +380,7 @@ final class CellDetailsPanel extends JPanel {
         setBackground(panelBackground);
         header.setBackground(panelBackground);
         footer.setBackground(panelBackground);
+        bottomDock.setBackground(panelBackground);
         content.setBackground(panelBackground);
         valueArea.setBackground(new JBColor(0xFFFFFF, 0x1E1F22));
         valueArea.setForeground(JBColor.foreground());

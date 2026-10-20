@@ -81,6 +81,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     private WrappingLabel validationDetails;
     private CellDetailsPanel cellDetails;
     private OnePixelSplitter cellDetailsSplitter;
+    private JPanel tableWorkspace;
     private boolean inspectorVisible;
     private String inspectedHeaderName;
 
@@ -145,6 +146,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     }
 
     private void initUI() {
+        tableWorkspace = new JPanel(new BorderLayout());
         JPanel heading = new JPanel(new WidthAwareBorderLayout());
 
         JButton refreshBtn = DatabaseUi.action("", AllIcons.Actions.Refresh, "Refresh table data");
@@ -273,7 +275,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 pageSizeCombo, prevPageBtn, nextPageBtn));
         heading.add(toolbar, BorderLayout.NORTH);
         heading.add(filters, BorderLayout.CENTER);
-        add(heading, BorderLayout.NORTH);
+        tableWorkspace.add(heading, BorderLayout.NORTH);
 
         tableModel = new EditableTableModel();
         dataTable = new DatabaseTable(tableModel);
@@ -313,6 +315,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             @Override public void popupMenuCanceled(javax.swing.event.PopupMenuEvent event) {}
         });
         JBScrollPane scroll = dataTable.createScrollPane();
+        tableWorkspace.add(scroll, BorderLayout.CENTER);
         cellDetails = new CellDetailsPanel(new CellDetailsPanel.Actions() {
             @Override public void apply(CellDetailsPanel.Cell cell, String text) { changeInspectedCell(cell, text); }
             @Override public void setNull(CellDetailsPanel.Cell cell) { changeInspectedCell(cell, null); }
@@ -336,7 +339,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             @Override public void unpin() { followGridSelection(); }
         });
         cellDetailsSplitter = new OnePixelSplitter(false, 0.63f);
-        cellDetailsSplitter.setFirstComponent(scroll);
+        cellDetailsSplitter.setFirstComponent(tableWorkspace);
         cellDetailsSplitter.setSecondComponent(null);
         add(cellDetailsSplitter, BorderLayout.CENTER);
         dataTable.addMouseListener(new MouseAdapter() {
@@ -392,7 +395,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         detailsAndNavigation.add(validationDetails, BorderLayout.NORTH);
         detailsAndNavigation.add(navigation, BorderLayout.CENTER);
         footer.add(detailsAndNavigation, BorderLayout.CENTER);
-        add(footer, BorderLayout.SOUTH);
+        tableWorkspace.add(footer, BorderLayout.SOUTH);
         dataTable.getSelectionModel().addListSelectionListener(event -> {
             if (!event.getValueIsAdjusting()) {
                 updateValidationDetails(tableModel.getValidationErrors());
