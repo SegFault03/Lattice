@@ -847,7 +847,7 @@ class IntellijUiScreenshotTest {
                 databaseTree.pathExists(*publicSchemaPath)
             }
             captureScreen(screenshotsDirectory.resolve("connected-explorer.png"))
-            assertExplorerOverflow(pluginRoot, frame, screenshotsDirectory)
+            if (!cellDetailsOnly) assertExplorerOverflow(pluginRoot, frame, screenshotsDirectory)
             // Keep a saved but unconnected MySQL source beside the live HSQLDB fixture
             // so the actual IDE capture exercises more than one source-type section.
             openConnectionMenu(pluginRoot, frame, "MySQL…")
