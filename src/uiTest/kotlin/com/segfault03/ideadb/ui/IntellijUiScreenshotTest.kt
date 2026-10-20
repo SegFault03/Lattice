@@ -967,14 +967,14 @@ class IntellijUiScreenshotTest {
             if (cellDetailsOnly) {
                 java.sql.DriverManager.getConnection(requireNotNull(jdbcFixture).jdbcUrl, "SA", "").use { conn ->
                     conn.createStatement().use { statement ->
-                        statement.execute("ALTER TABLE PUBLIC.LATTICE_PEOPLE ADD COLUMN EMAIL VARCHAR(180)")
-                        statement.execute("ALTER TABLE PUBLIC.LATTICE_PEOPLE ADD COLUMN STATUS VARCHAR(20) DEFAULT 'active'")
-                        statement.execute("ALTER TABLE PUBLIC.LATTICE_PEOPLE ADD COLUMN BALANCE DECIMAL(10,2) DEFAULT 0")
+                        statement.execute("ALTER TABLE PUBLIC.LATTICE_PEOPLE ADD COLUMN \"email\" VARCHAR(180)")
+                        statement.execute("ALTER TABLE PUBLIC.LATTICE_PEOPLE ADD COLUMN \"status\" VARCHAR(20) DEFAULT 'active'")
+                        statement.execute("ALTER TABLE PUBLIC.LATTICE_PEOPLE ADD COLUMN \"balance\" DECIMAL(10,2) DEFAULT 0")
                     }
                     val names = listOf("Amelia Brooks", "Liam Chen", "Sofia Patel", "Noah Williams", "Olivia Reyes",
                         "Ethan Kim", "Isabella Rossi", "Lucas Martin", "Mia Thompson", "Aiden Davis",
                         "Charlotte Wilson", "Leo Garcia")
-                    conn.prepareStatement("INSERT INTO PUBLIC.LATTICE_PEOPLE (NAME, CREATED_AT, EMAIL, STATUS, BALANCE) VALUES (?, ?, ?, ?, ?)").use { insert ->
+                    conn.prepareStatement("INSERT INTO PUBLIC.LATTICE_PEOPLE (\"name\", \"created_at\", \"email\", \"status\", \"balance\") VALUES (?, ?, ?, ?, ?)").use { insert ->
                         names.forEachIndexed { index, name ->
                             insert.setString(1, name)
                             insert.setTimestamp(2, java.sql.Timestamp.valueOf("2026-10-${(index + 1).toString().padStart(2, '0')} 10:30:00"))
@@ -1101,6 +1101,14 @@ class IntellijUiScreenshotTest {
                 waitUntil("column header opens its details workspace") { details.hasSubtext("Column Workspace") }
                 captureScreen(screenshotsDirectory.resolve("value-workspace-header-details.png"))
                 val headerDetailsVerified = details.hasSubtext("Column Workspace")
+                details.x { byAccessibleName("Pin cell details") }.waitFound().click()
+                waitUntil("column details are pinned") { details.hasSubtext("Pinned to this column") }
+                dataGrid.clickCell(0, 0)
+                waitUntil("pinned column details survive a cell selection") {
+                    details.hasSubtext("Column Workspace") && details.hasSubtext("Pinned to this column")
+                }
+                captureScreen(screenshotsDirectory.resolve("value-workspace-header-pinned.png"))
+                details.x { byAccessibleName("Unpin cell details") }.waitFound().click()
 
                 dataGrid.clickCell(0, 3)
                 waitUntil("Amelia email details reopened") { details.hasSubtext("amelia.brooks@example.com") }
