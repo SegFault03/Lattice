@@ -1,0 +1,14 @@
+# Value Workspace: native review
+
+The selected [light](value-workspace-poc.png) and [dark](value-workspace-poc-dark.png) Product Design proofs of concept set the target hierarchy: a table beside a value editor, clear cell context, one primary edit action, and concise column details. The shipped Swing panel follows that structure inside the real table editor. IntelliJ's own frame, toolbar, fonts, and controls give the native captures a different finish from the illustration.
+
+These are full 1920 × 1080 captures from IntelliJ IDEA Ultimate 2026.2.3 (build 262.10968.63), using the populated 12-row HSQLDB fixture. The run starts in Islands Dark, switches to Islands Light, then restores Dark.
+
+1. Click an email cell. The [Dark value view](value-workspace-idea-dark.png) and [Light value view](value-workspace-idea-light.png) show the active cell, formatted/raw tabs, text-only Wrap state, large value canvas, primary Edit value action, secondary actions, column metadata, and compact Edit table action. The grid now marks the cell and lightly marks its row instead of flooding the whole row with selection blue.
+2. Click the email header. The [Dark column view](column-workspace-idea-dark.png) and [Light column view](column-workspace-idea-light.png) show a dedicated SQL type card, definition, and constraints. The structural edit action stays in the bottom dock.
+3. Pin the cell or header, then select another cell. The [pinned cell](value-workspace-idea-pinned-dark.png) and [pinned column](column-workspace-idea-header-pinned-dark.png) remain on their original target. The icon changes to its selected pin form and the footer names the pinned target. Double-clicking inside the value canvas opens [inline editing](value-workspace-idea-editing-dark.png), with Apply and Cancel beside the value.
+4. Switch Dark → Light → Dark while the inspector is open. The [Light view](value-workspace-idea-light.png) has a light canvas, type surfaces, metadata, and controls; the [restored Dark view](value-workspace-idea-restored-dark.png) returns all of them to dark colors. No stale cross-theme surface appears in these captures.
+
+Visual review against the concept exposed an earlier low-contrast action row, a panel that began below the table toolbar, an undersized one-row fixture, and an overly strong grid selection. The panel now starts alongside the toolbar, the fixture fills the grid, edit actions sit directly below the value, and the selected cell is visually distinct without obscuring the table. In the native IDE, restrained surfaces and IDE controls replace the concept's illustrative glow and custom window chrome.
+
+The native flow checks the presence and persistence of pinned cell and column details, entry to edit mode by double-click, and both theme changes. The images confirm appearance at 1920 × 1080; they do not establish behavior at every scale, keyboard path, or high-contrast theme. The Java test suite passes 194 tests.
