@@ -107,6 +107,8 @@ python scripts/ui-preview.py
 
 This renders production Swing components with fixture data and a headless IntelliJ test application that supplies platform services such as the native Action System. It opens no IDE window. It discovers local JDK 21, IntelliJ 2025.1 and JUnit/Hamcrest jars, downloading missing inputs plus checksum-verified FlatLaf under `--download-dir`. Supply `--flatlaf-jar`, `--junit-jar` and `--hamcrest-jar` to override individual jars. `--all-previews` adds light/dark gallery variants; `--output` selects another gallery directory; `--compare-with` adds a before/after view. The default run refreshes only the five tracked PNGs under `screenshots/`. See [UI preview instructions](UI_PREVIEW.md).
 
+Use `python scripts/ui-preview.py --cell-details-only` for focused light and dark renders of the integrated cell and column details panel, including pinned and editing states. These renders stay under `build/ui-preview/` and do not update the tracked screenshots.
+
 For screenshots and interactions inside a real test IDE under Xvfb, run:
 
 ```sh

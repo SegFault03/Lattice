@@ -398,6 +398,50 @@ public final class UiPreview {
         ((JLabel) field(panel, "statusLabel")).setText("12 rows · 18 ms · Total: not counted");
         return panel;
     }
+    static void renderCellDetails(String theme) throws Exception {
+        TableDataEditorPanel editor = table(false);
+        JTable grid = (JTable) field(editor, "dataTable");
+        grid.changeSelection(0, 2, false, false);
+        invoke(editor, "openCellDetails", new Class<?>[]{int.class, int.class}, 0, 2);
+        JComponent details = (JComponent) field(editor, "cellDetails");
+        render(editor, theme + "-cell-details-1440", 1440, 900);
+        JButton pin = (JButton) field(details, "pin");
+        pin.doClick();
+        grid.changeSelection(1, 1, false, false);
+        if (!(Boolean) invokeResult(details, "isPinned") ||
+                (Integer) invokeResult(details, "inspectedRow") != 0 ||
+                (Integer) invokeResult(details, "inspectedColumn") != 2)
+            throw new AssertionError("Pinned cell details must stay on the original cell");
+        render(editor, theme + "-cell-details-pinned-1440", 1440, 900);
+        pin.doClick();
+        invoke(editor, "openColumnDetails", new Class<?>[]{int.class}, 3);
+        if (!(Boolean) invokeResult(details, "isColumnMode"))
+            throw new AssertionError("Column click must open column details");
+        pin.doClick();
+        grid.changeSelection(2, 2, false, false);
+        if (!(Boolean) invokeResult(details, "isColumnMode") ||
+                (Integer) invokeResult(details, "inspectedColumn") != 3)
+            throw new AssertionError("Pinned column details must stay on the header");
+        render(editor, theme + "-column-details-pinned-1440", 1440, 900);
+        JPanel metadata = (JPanel) field(details, "metadata");
+        JLabel title = (JLabel) field(details, "title");
+        if (metadata.getComponentCount() < 7 || title.getWidth() < title.getPreferredSize().width)
+            throw new AssertionError("Column details were clipped: rows=" + metadata.getComponentCount()
+                    + ", title=" + title.getWidth() + "/" + title.getPreferredSize().width);
+        pin.doClick();
+        invoke(editor, "openCellDetails", new Class<?>[]{int.class, int.class}, 1, 1);
+        JTextArea value = (JTextArea) field(details, "valueArea");
+        value.dispatchEvent(new java.awt.event.MouseEvent(value, java.awt.event.MouseEvent.MOUSE_CLICKED,
+                System.currentTimeMillis(), 0, 8, 8, 2, false));
+        if (!(Boolean) invokeResult(details, "isEditing"))
+            throw new AssertionError("Double-clicking the value must enable editing");
+        render(editor, theme + "-cell-details-editing-1440", 1440, 900);
+    }
+    static Object invokeResult(Object target, String name) throws Exception {
+        Method method = target.getClass().getDeclaredMethod(name);
+        method.setAccessible(true);
+        return method.invoke(target);
+    }
     static SqlQueryConsolePanel console() throws Exception {
         SqlQueryConsolePanel panel = new SqlQueryConsolePanel(null, config(DatabaseType.MYSQL), "shop", List.of("shop", "analytics"));
         panel.setSqlText("-- Active customers with an outstanding balance\nSELECT id, name, email, balance, status\nFROM customers\nWHERE status = 'active' AND balance > 0\nORDER BY balance DESC;\n");
@@ -842,7 +886,8 @@ public final class UiPreview {
             boolean sourceFilterOnly = args.length >= 3 && args[2].equals("source-filter");
             boolean searchOnly = args.length >= 3 && args[2].equals("search");
             boolean tabIconsOnly = args.length >= 3 && args[2].equals("tab-icons");
-            featuredOnly = !sourceFilterOnly && !searchOnly && !tabIconsOnly && (args.length < 3 || !args[2].equals("all"));
+            boolean cellDetailsOnly = args.length >= 3 && args[2].equals("cell-details");
+            featuredOnly = !sourceFilterOnly && !searchOnly && !tabIconsOnly && !cellDetailsOnly && (args.length < 3 || !args[2].equals("all"));
             UIManager.setLookAndFeel(theme.equals("dark") ? new FlatDarculaLaf() : new FlatIntelliJLaf());
             Font font = new javax.swing.plaf.FontUIResource(previewFont());
             UIManager.put("defaultFont", font);
@@ -854,9 +899,9 @@ public final class UiPreview {
             com.intellij.ui.IconManager.Companion.activate(new com.intellij.ui.icons.CoreIconManager());
             IconLoader.activate();
             IconLoader.setUseDarkIcons(theme.equals("dark"));
-            if (sourceFilterOnly || searchOnly || tabIconsOnly) {
+            if (sourceFilterOnly || searchOnly || tabIconsOnly || cellDetailsOnly) {
                 SwingUtilities.invokeAndWait(() -> {
-                    try { if (tabIconsOnly) renderTableTabIcons(theme); else if (searchOnly) renderExplorerSearch(theme); else renderSourceFilter(theme); }
+                    try { if (cellDetailsOnly) renderCellDetails(theme); else if (tabIconsOnly) renderTableTabIcons(theme); else if (searchOnly) renderExplorerSearch(theme); else renderSourceFilter(theme); }
                     catch (Exception exception) { throw new RuntimeException(exception); }
                 });
                 Files.write(output.resolve(theme + "-manifest.txt"), snapshots);
