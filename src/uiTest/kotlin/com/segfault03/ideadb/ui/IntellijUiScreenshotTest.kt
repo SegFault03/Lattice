@@ -1171,6 +1171,17 @@ class IntellijUiScreenshotTest {
                 }
                 captureScreen(screenshotsDirectory.resolve("value-workspace-editing.png"))
 
+                details.x { byAccessibleName("Cancel") }.waitFound().click()
+                val closeDetails = details.x { byAccessibleName("Close details panel") }.waitFound()
+                closeDetails.moveMouse(Point(closeDetails.component.width / 2, closeDetails.component.height / 2))
+                captureScreen(screenshotsDirectory.resolve("value-workspace-close-hover.png"))
+                closeDetails.click()
+                waitUntil("close control removes the inspector from the editor") { !details.component.isShowing() }
+                dataGrid.clickCell(0, 3)
+                waitUntil("cell selection reopens the inspector after closing it") {
+                    details.component.isShowing() && details.hasSubtext("Row 1") && details.hasSubtext("Column 4")
+                }
+
                 Files.writeString(screenshotsDirectory.resolve("runtime-evidence.txt"), buildString {
                     appendLine("Focused native Value Workspace capture")
                     appendLine("IDE: ${System.getProperty("ui.ide.version")} (${System.getProperty("ui.ide.build")})")
@@ -1179,6 +1190,7 @@ class IntellijUiScreenshotTest {
                     appendLine("Pin selection persistence: verified after selecting ID cell")
                     appendLine("Column header details: $headerDetailsVerified")
                     appendLine("Double-click edit mode: verified")
+                    appendLine("Close and reopen controls: verified")
                     appendLine("Opposite theme switch: ${alternateTheme ?: "no supported opposite theme found; skipped"}")
                 })
                 println("Focused native Value Workspace flow completed")
