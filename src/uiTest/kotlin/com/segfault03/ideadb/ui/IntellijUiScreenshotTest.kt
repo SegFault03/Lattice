@@ -1175,8 +1175,9 @@ class IntellijUiScreenshotTest {
                 val closeDetails = details.x { byAccessibleName("Close details panel") }.waitFound()
                 closeDetails.moveMouse(Point(closeDetails.component.width / 2, closeDetails.component.height / 2))
                 captureScreen(screenshotsDirectory.resolve("value-workspace-close-hover.png"))
+                val liveDetails = details.component
                 closeDetails.click()
-                waitUntil("close control removes the inspector from the editor") { !details.component.isShowing() }
+                waitUntil("close control removes the inspector from the editor") { !liveDetails.isShowing() }
                 dataGrid.clickCell(0, 3)
                 waitUntil("cell selection reopens the inspector after closing it") {
                     details.component.isShowing() && details.hasSubtext("Row 1") && details.hasSubtext("Column 4")
