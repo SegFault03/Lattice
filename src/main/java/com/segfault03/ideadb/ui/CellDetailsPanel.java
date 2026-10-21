@@ -431,7 +431,7 @@ final class CellDetailsPanel extends JPanel {
         JLabel caption = new JLabel("SQL TYPE");
         caption.setFont(caption.getFont().deriveFont(Font.BOLD, JBUI.scale(13f)));
         caption.putClientProperty("lattice.secondary", Boolean.TRUE);
-        caption.setForeground(JBColor.namedColor("Label.infoForeground", new JBColor(0x657185, 0xABB3BE)));
+        caption.setForeground(new JBColor(0x657185, 0xABB3BE));
         caption.setAlignmentX(Component.LEFT_ALIGNMENT);
         JLabel type = new JLabel(safe(sqlType));
         type.setFont(type.getFont().deriveFont(Font.BOLD, JBUI.scale(22f)));
@@ -459,7 +459,7 @@ final class CellDetailsPanel extends JPanel {
         if (!name.isEmpty()) {
             JLabel key = new JLabel(name);
             key.setFont(key.getFont().deriveFont(JBUI.scale(16f)));
-            key.setForeground(JBColor.namedColor("Label.infoForeground", new JBColor(0x657185, 0xABB3BE)));
+            key.setForeground(new JBColor(0x657185, 0xABB3BE));
             key.putClientProperty("lattice.secondary", Boolean.TRUE);
             key.setPreferredSize(new Dimension(JBUI.scale(132), key.getPreferredSize().height));
             row.add(key, BorderLayout.WEST);
@@ -606,7 +606,7 @@ final class CellDetailsPanel extends JPanel {
             label.setForeground(Boolean.TRUE.equals(label.getClientProperty("lattice.accent"))
                     ? new JBColor(0x2F65BE, 0xA6C7FF)
                     : Boolean.TRUE.equals(label.getClientProperty("lattice.secondary"))
-                    ? JBColor.namedColor("Label.infoForeground", new JBColor(0x657185, 0xABB3BE))
+                    ? new JBColor(0x657185, 0xABB3BE)
                     : JBColor.foreground());
             if (label.getText() != null && label.getText().startsWith("<html>"))
                 BasicHTML.updateRenderer(label, label.getText());
