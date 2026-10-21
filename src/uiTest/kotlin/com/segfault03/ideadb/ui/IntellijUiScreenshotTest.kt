@@ -1070,8 +1070,9 @@ class IntellijUiScreenshotTest {
                 ideFrame { invokeAction("HideAllWindows") }
                 dataGrid.clickCell(0, 3)
                 val details = tableEditor.x { byJavaClass("com.segfault03.ideadb.ui.CellDetailsPanel") }.waitFound()
-                waitUntil("Value Workspace follows the selected Amelia email cell") {
-                    details.hasSubtext("amelia.brooks@example.com")
+                waitUntil("email inspector shows its value and cell coordinates") {
+                    details.hasSubtext("amelia.brooks@example.com") &&
+                        details.hasSubtext("Row 1") && details.hasSubtext("Column 4")
                 }
                 captureScreen(screenshotsDirectory.resolve("value-workspace.png"))
 
@@ -1098,17 +1099,19 @@ class IntellijUiScreenshotTest {
                     robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
                     robot.waitForIdle()
                 }
-                waitUntil("column header opens its details workspace") { details.hasSubtext("Column Workspace") }
+                waitUntil("column header opens its schema details") {
+                    details.hasSubtext("Column 4") && details.hasSubtext("Structure")
+                }
                 captureScreen(screenshotsDirectory.resolve("value-workspace-header-details.png"))
-                val headerDetailsVerified = details.hasSubtext("Column Workspace")
-                details.x { byAccessibleName("Pin cell details") }.waitFound().click()
+                val headerDetailsVerified = details.hasSubtext("Column 4") && details.hasSubtext("Structure")
+                details.x { byAccessibleName("Pin column details") }.waitFound().click()
                 waitUntil("column details are pinned") { details.hasSubtext("Pinned to this column") }
                 dataGrid.clickCell(0, 0)
                 waitUntil("pinned column details survive a cell selection") {
-                    details.hasSubtext("Column Workspace") && details.hasSubtext("Pinned to this column")
+                    details.hasSubtext("Column 4") && details.hasSubtext("Pinned to this column")
                 }
                 captureScreen(screenshotsDirectory.resolve("value-workspace-header-pinned.png"))
-                details.x { byAccessibleName("Unpin cell details") }.waitFound().click()
+                details.x { byAccessibleName("Unpin column details") }.waitFound().click()
 
                 dataGrid.clickCell(0, 3)
                 waitUntil("Amelia email details reopened") { details.hasSubtext("amelia.brooks@example.com") }
@@ -1139,7 +1142,9 @@ class IntellijUiScreenshotTest {
                         themedRobot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
                         themedRobot.waitForIdle()
                     }
-                    waitUntil("opposite theme shows column workspace") { details.hasSubtext("Column Workspace") }
+                    waitUntil("opposite theme shows column structure") {
+                        details.hasSubtext("Column 4") && details.hasSubtext("Structure")
+                    }
                     captureScreen(screenshotsDirectory.resolve("value-workspace-header-opposite-theme.png"))
                     withContext(OnDispatcher.EDT) {
                         laf.setCurrentLookAndFeel(laf.findLaf(themeId), true)

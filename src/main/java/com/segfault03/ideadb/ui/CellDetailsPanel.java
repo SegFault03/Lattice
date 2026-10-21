@@ -13,6 +13,7 @@ import javax.swing.plaf.basic.BasicHTML;
 import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.*;
+import java.awt.geom.Path2D;
 import java.util.Objects;
 
 /** Native Swing details and staging surface for the selected table cell. */
@@ -48,10 +49,10 @@ final class CellDetailsPanel extends JPanel {
     };
     private final JScrollPane valueScroll = new JScrollPane(valueArea);
     private final SqlLineNumbers lineNumbers = new SqlLineNumbers(valueArea);
-    private final JPanel header = new JPanel(new BorderLayout(8, 0));
+    private final JPanel header = new JPanel(new BorderLayout(12, 0));
+    private final JPanel heading = new JPanel();
     private final Body content = new Body();
     private final JScrollPane bodyScroll = new JScrollPane(content);
-    private final JPanel intro = new JPanel(new BorderLayout(8, 0));
     private final JPanel lower = new JPanel();
     private JPanel valueBlock;
     private JPanel tableNote;
@@ -59,11 +60,11 @@ final class CellDetailsPanel extends JPanel {
     private final JPanel tableNoteText = new JPanel(new FlowLayout(FlowLayout.LEADING, 0, 0));
     private final JLabel tableNoteLabel = new JLabel("Review or change table structure");
     private final JPanel metadata = new JPanel();
-    private final JPanel footer = new JPanel(new FlowLayout(FlowLayout.TRAILING, 4, 0));
+    private final JPanel footer = new JPanel(new FlowLayout(FlowLayout.LEADING, 0, 0));
     private final JPanel bottomDock = new JPanel(new BorderLayout());
     private final JLabel footerLabel = new JLabel();
-    private final JButton pin = new JButton(AllIcons.General.Pin);
-    private final JButton close = new JButton("×");
+    private final HeaderIconButton pin = new HeaderIconButton(new HeaderGlyph(true, false));
+    private final HeaderIconButton close = new HeaderIconButton(new HeaderGlyph(false, false));
     private final JButton formattedTab = new JButton("Formatted");
     private final JButton rawTab = new JButton("Raw");
     private final JToggleButton wrap = new JToggleButton("Wrap");
@@ -87,22 +88,96 @@ final class CellDetailsPanel extends JPanel {
         @Override public boolean getScrollableTracksViewportHeight() { return false; }
     }
 
+    /** A consistent hit target and restrained state surface for the inspector header. */
+    private static final class HeaderIconButton extends JButton {
+        private boolean active;
+        HeaderIconButton(Icon icon) {
+            super(icon);
+            setBorderPainted(false);
+            setContentAreaFilled(false);
+            setFocusPainted(false);
+            setOpaque(false);
+            setRolloverEnabled(true);
+            setMargin(new Insets(0, 0, 0, 0));
+        }
+        void setActive(boolean active) { this.active = active; repaint(); }
+        @Override public Dimension getPreferredSize() { return new Dimension(JBUI.scale(34), JBUI.scale(34)); }
+        @Override public Dimension getMinimumSize() { return getPreferredSize(); }
+        @Override public Dimension getMaximumSize() { return getPreferredSize(); }
+        @Override protected void paintComponent(Graphics graphics) {
+            Graphics2D canvas = (Graphics2D) graphics.create();
+            try {
+                canvas.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                canvas.setColor(active ? new JBColor(0xE5EEFE, 0x344760)
+                        : getModel().isRollover() || getModel().isPressed()
+                        ? new JBColor(0xE5EAF2, 0x3B3E46) : new JBColor(0xF0F2F6, 0x2E3035));
+                canvas.fillRoundRect(1, 1, getWidth() - 2, getHeight() - 2, JBUI.scale(9), JBUI.scale(9));
+                canvas.setColor(active ? new JBColor(0xBBD0F6, 0x526E96) : new JBColor(0xDCE1E9, 0x41444C));
+                canvas.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, JBUI.scale(9), JBUI.scale(9));
+                if (isFocusOwner()) {
+                    canvas.setColor(new JBColor(0x2F6DDB, 0x70A5FF));
+                    canvas.setStroke(new BasicStroke(JBUI.scale(1.5f)));
+                    canvas.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, JBUI.scale(9), JBUI.scale(9));
+                }
+            } finally { canvas.dispose(); }
+            super.paintComponent(graphics);
+        }
+    }
+
+    private record HeaderGlyph(boolean pin, boolean selected) implements Icon {
+        @Override public int getIconWidth() { return JBUI.scale(18); }
+        @Override public int getIconHeight() { return JBUI.scale(18); }
+        @Override public void paintIcon(Component component, Graphics graphics, int x, int y) {
+            Graphics2D canvas = (Graphics2D) graphics.create();
+            try {
+                canvas.translate(x, y);
+                canvas.scale(getIconWidth() / 18.0, getIconHeight() / 18.0);
+                canvas.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                canvas.setStroke(new BasicStroke(1.6f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                canvas.setColor(selected ? new JBColor(0x2F6DDB, 0x83B0FF) : new JBColor(0x5F6A7C, 0xBAC3D1));
+                if (pin) {
+                    if (!selected) canvas.rotate(Math.PI / 6, 9, 9);
+                    Path2D head = new Path2D.Double();
+                    head.moveTo(6, 2.5); head.lineTo(12, 2.5); head.lineTo(12, 7);
+                    head.lineTo(14.5, 10); head.lineTo(3.5, 10); head.lineTo(6, 7); head.closePath();
+                    if (selected) canvas.fill(head); else canvas.draw(head);
+                    canvas.drawLine(9, 10, 9, 16);
+                } else {
+                    canvas.drawLine(4, 4, 14, 14);
+                    canvas.drawLine(14, 4, 4, 14);
+                }
+            } finally { canvas.dispose(); }
+        }
+    }
+
     CellDetailsPanel(Actions actions) {
         this.actions = actions;
         setLayout(new BorderLayout());
         setPreferredSize(new Dimension(JBUI.scale(520), 400));
         setMinimumSize(new Dimension(JBUI.scale(340), 220));
-        setBorder(JBUI.Borders.empty(0, 23));
-        title.setText("Value Workspace");
-        title.setFont(title.getFont().deriveFont(Font.BOLD, title.getFont().getSize2D() + 5));
-        header.add(title, BorderLayout.CENTER);
+        setBorder(JBUI.Borders.empty(0, 24));
+        heading.setOpaque(false);
+        heading.setLayout(new GridBagLayout());
+        eyebrow.setIcon(Icons.TABLE); eyebrow.setIconTextGap(JBUI.scale(7));
+        GridBagConstraints labelConstraints = new GridBagConstraints();
+        labelConstraints.gridx = 0; labelConstraints.weightx = 1;
+        labelConstraints.fill = GridBagConstraints.HORIZONTAL;
+        labelConstraints.anchor = GridBagConstraints.WEST;
+        labelConstraints.gridy = 0; labelConstraints.insets = JBUI.insetsBottom(5);
+        heading.add(eyebrow, labelConstraints);
+        labelConstraints.gridy = 1; labelConstraints.insets = JBUI.insetsBottom(3);
+        heading.add(title, labelConstraints);
+        labelConstraints.gridy = 2; labelConstraints.insets = JBUI.emptyInsets();
+        heading.add(identity, labelConstraints);
+        header.add(heading, BorderLayout.CENTER);
         pin.setToolTipText("Pin details"); pin.getAccessibleContext().setAccessibleName("Pin cell details");
-        pin.setBorderPainted(false); pin.setContentAreaFilled(false);
         pin.addActionListener(e -> { pinned = !pinned; updatePin(); if (!pinned) actions.unpin(); });
-        close.setToolTipText("Close details"); close.setBorderPainted(false); close.setContentAreaFilled(false);
+        close.setToolTipText("Close details"); close.getAccessibleContext().setAccessibleName("Close details panel");
         close.addActionListener(e -> actions.close());
-        JPanel controls = new JPanel(new FlowLayout(FlowLayout.TRAILING, 2, 0));
-        controls.setOpaque(false); controls.add(pin); controls.add(close);
+        JPanel controls = new JPanel(new FlowLayout(FlowLayout.TRAILING, 0, 0));
+        controls.setOpaque(false);
+        controls.setBorder(JBUI.Borders.emptyTop(16));
+        controls.add(pin); controls.add(Box.createHorizontalStrut(JBUI.scale(6))); controls.add(close);
         header.add(controls, BorderLayout.EAST); add(header, BorderLayout.NORTH);
 
         content.setOpaque(true); content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
@@ -110,48 +185,47 @@ final class CellDetailsPanel extends JPanel {
         bodyScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         bodyScroll.getVerticalScrollBar().setUnitIncrement(JBUI.scale(16));
         add(bodyScroll, BorderLayout.CENTER);
-        intro.setOpaque(false); intro.setAlignmentX(Component.LEFT_ALIGNMENT);
-        eyebrow.setIcon(Icons.TABLE); eyebrow.setIconTextGap(JBUI.scale(8));
         identity.setForeground(JBColor.namedColor("Label.infoForeground", JBColor.GRAY));
         summary.setForeground(JBColor.namedColor("Label.infoForeground", JBColor.GRAY));
-        intro.add(eyebrow, BorderLayout.WEST); intro.add(identity, BorderLayout.EAST);
-        intro.setBorder(JBUI.Borders.empty(10, 0, 11, 0));
-        JPanel tabs = new JPanel(new FlowLayout(FlowLayout.LEADING, 18, 0)); tabs.setOpaque(false);
+        JPanel tabs = new JPanel(new FlowLayout(FlowLayout.LEADING, 0, 0)); tabs.setOpaque(false);
         styleTextToggle(formattedTab); styleTextToggle(rawTab); styleTextToggle(wrap);
         formattedTab.addActionListener(e -> { rawMode = false; if (!editing) renderValue(); updateTabs(); });
         rawTab.addActionListener(e -> { rawMode = true; if (!editing) renderValue(); updateTabs(); });
         wrap.addActionListener(e -> { valueArea.setLineWrap(wrap.isSelected()); valueArea.setWrapStyleWord(wrap.isSelected()); });
-        tabs.add(formattedTab); tabs.add(rawTab); tabs.add(wrap);
+        tabs.add(formattedTab); tabs.add(Box.createHorizontalStrut(JBUI.scale(16)));
+        tabs.add(rawTab); tabs.add(Box.createHorizontalStrut(JBUI.scale(16))); tabs.add(wrap);
         valueArea.setLineWrap(true); valueArea.setWrapStyleWord(true); valueArea.setEditable(false);
         valueArea.getAccessibleContext().setAccessibleName("Cell value");
         valueArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, JBUI.scale(18)));
-        valueArea.setBorder(JBUI.Borders.empty(15));
+        valueArea.setBorder(JBUI.Borders.empty(16));
         valueScroll.setRowHeaderView(lineNumbers);
-        valueScroll.setPreferredSize(new Dimension(100, JBUI.scale(385)));
+        valueScroll.setPreferredSize(new Dimension(100, JBUI.scale(384)));
         valueScroll.setMinimumSize(new Dimension(50, JBUI.scale(160)));
         JPanel tabLine = new JPanel(new BorderLayout()); tabLine.setOpaque(false);
-        tabLine.setBorder(JBUI.Borders.empty(7, 0, 6, 0));
+        tabLine.setBorder(JBUI.Borders.empty(16, 0, 8, 0));
         tabLine.add(tabs, BorderLayout.WEST); tabLine.add(summary, BorderLayout.EAST);
         JPanel valueCard = new JPanel(new BorderLayout(0, 6)); valueCard.setOpaque(false);
         valueCard.add(tabLine, BorderLayout.NORTH); valueCard.add(valueScroll, BorderLayout.CENTER);
-        JPanel actionsRow = new JPanel(new FlowLayout(FlowLayout.LEADING, 18, 0));
-        actionsRow.setOpaque(false); actionsRow.setBorder(JBUI.Borders.emptyTop(8));
+        JPanel actionsRow = new JPanel(new FlowLayout(FlowLayout.LEADING, 0, 0));
+        actionsRow.setOpaque(false); actionsRow.setBorder(JBUI.Borders.emptyTop(12));
         quiet(copy); copy.setToolTipText("Copy the raw cell value");
         copy.addActionListener(e -> copyText());
         quiet(more);
-        edit.setMargin(new Insets(6, 14, 6, 14));
+        edit.setMargin(new Insets(6, 16, 6, 16));
         edit.addActionListener(e -> beginEdit());
         more.addActionListener(e -> showMore(more));
         more.setIcon(AllIcons.Actions.MoreHorizontal); more.setIconTextGap(JBUI.scale(5));
-        actionsRow.add(edit); actionsRow.add(copy); actionsRow.add(more);
-        staging = new JPanel(new FlowLayout(FlowLayout.LEADING, 4, 0)); staging.setOpaque(false);
+        staging = new JPanel(new FlowLayout(FlowLayout.LEADING, 0, 0)); staging.setOpaque(false);
         staging.setAlignmentX(Component.LEFT_ALIGNMENT);
         quiet(cancel);
         apply.addActionListener(e -> applyDraft()); cancel.addActionListener(e -> cancelEdit());
-        staging.add(apply); staging.add(cancel);
-        actionsRow.add(staging, 0);
+        staging.add(apply); staging.add(Box.createHorizontalStrut(JBUI.scale(8))); staging.add(cancel);
+        actionsRow.add(staging); actionsRow.add(edit);
+        actionsRow.add(Box.createHorizontalStrut(JBUI.scale(16))); actionsRow.add(copy);
+        actionsRow.add(Box.createHorizontalStrut(JBUI.scale(16))); actionsRow.add(more);
         valueBlock = new JPanel(new BorderLayout(0, 4)); valueBlock.setOpaque(false);
         valueBlock.setAlignmentX(Component.LEFT_ALIGNMENT);
+        valueBlock.setBorder(JBUI.Borders.emptyBottom(16));
         valueBlock.add(valueCard, BorderLayout.CENTER);
         valueBlock.add(actionsRow, BorderLayout.SOUTH);
         metadata.setLayout(new BoxLayout(metadata, BoxLayout.Y_AXIS));
@@ -170,7 +244,7 @@ final class CellDetailsPanel extends JPanel {
         JPanel editTableRow = new JPanel(new FlowLayout(FlowLayout.LEADING, 0, 0));
         editTableRow.setOpaque(false); editTableRow.add(editTable);
         tableNote.add(tableNoteText); tableNote.add(editTableRow);
-        tableNote.setBorder(JBUI.Borders.emptyTop(18));
+        tableNote.setBorder(JBUI.Borders.empty(16, 0, 16, 0));
         footer.add(footerLabel);
         bottomDock.add(tableNote, BorderLayout.NORTH);
         bottomDock.add(footer, BorderLayout.SOUTH);
@@ -257,20 +331,19 @@ final class CellDetailsPanel extends JPanel {
 
     private void rebuild() {
         content.removeAll();
-        content.add(intro);
         if (!columnMode) content.add(valueBlock);
         content.add(lower);
         metadata.removeAll();
         if (columnMode && column != null) buildColumn();
         else if (cell != null) buildCell();
         else renderEmpty();
-        updateFooter();
+        refreshSectionBorder();
+        updatePin();
         metadata.revalidate(); lower.revalidate(); content.revalidate();
         resizeContentBlocks();
         content.repaint(); updateEnabled();
     }
     private void resizeContentBlocks() {
-        intro.setMaximumSize(new Dimension(Integer.MAX_VALUE, intro.getPreferredSize().height));
         valueBlock.setMaximumSize(new Dimension(Integer.MAX_VALUE, valueBlock.getPreferredSize().height));
         metadata.setMaximumSize(new Dimension(Integer.MAX_VALUE, metadata.getPreferredSize().height));
         tableNote.setMaximumSize(new Dimension(Integer.MAX_VALUE, tableNote.getPreferredSize().height));
@@ -285,13 +358,16 @@ final class CellDetailsPanel extends JPanel {
     private void buildCell() {
         valueScroll.setVisible(true); edit.setVisible(true); more.setVisible(true);
         valueBlock.setVisible(true); tableNote.setVisible(true);
-        ColumnMetadata c = cell.column(); eyebrow.setText(safe(cell.tableName()) + "  /  " + (c == null ? "" : c.getName()));
-        title.setText("Value Workspace"); identity.setText(safe(cell.rowLabel()));
+        ColumnMetadata c = cell.column();
+        eyebrow.setText(safe(cell.tableName()));
+        title.setText(c == null ? "Cell value" : c.getName());
+        title.setToolTipText(title.getText());
+        identity.setText("Row " + (cell.modelRow() + 1) + "  ·  Column " + (cell.modelColumn() + 1));
+        identity.setToolTipText(safe(cell.rowLabel()));
         summary.setText(valueSummary(cell.value()));
         edit.setText(editing ? "Editing" : "Edit value"); if (!editing) renderValue();
         if (c != null) {
             addSection("Column");
-            addMetadata("Name", c.getName());
             addMetadata("SQL type", c.getFormattedType());
             addMetadata("Nullable", c.isNullable() ? "Yes" : "No");
             addMetadata("Default", c.getDefaultValue() == null ? "—" : c.getDefaultValue());
@@ -303,14 +379,19 @@ final class CellDetailsPanel extends JPanel {
         editTable.setEnabled(!cell.view()); updateMoreMenu();
     }
     private void buildColumn() {
-        ColumnMetadata c = column.column(); eyebrow.setText(safe(column.tableName()) + "  /  " + (c == null ? "" : c.getName()));
-        title.setText("Column Workspace"); identity.setText("Column structure"); summary.setText(c == null ? "" : c.getFormattedType());
+        ColumnMetadata c = column.column();
+        eyebrow.setText(safe(column.tableName()));
+        title.setText(c == null ? "Column details" : c.getName());
+        title.setToolTipText(title.getText());
+        identity.setText("Column " + (column.modelColumn() + 1) + "  ·  Structure");
+        identity.setToolTipText(null);
+        summary.setText(c == null ? "" : c.getFormattedType());
         valueBlock.setVisible(false); tableNoteText.setVisible(true); tableNote.setVisible(true); editTable.setVisible(true);
         staging.setVisible(false);
         if (c != null) {
             addTypeCard(c.getFormattedType());
             addSection("Definition");
-            addMetadata("Name", c.getName());
+            addMetadata("Position", Integer.toString(column.modelColumn() + 1));
             addMetadata("Default", c.getDefaultValue() == null ? "—" : c.getDefaultValue());
             if (c.isGenerated() || c.isAutoIncrement()) addMetadata("Generated", c.isAutoIncrement() ? "Auto increment" : "Yes");
             if (c.getColumnSize() > 0) addMetadata("Size", Integer.toString(c.getColumnSize()));
@@ -329,7 +410,7 @@ final class CellDetailsPanel extends JPanel {
         card.setBackground(new JBColor(0xEDF3FC, 0x2A3444));
         card.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(new JBColor(0xD8E5F8, 0x40506A)),
-                JBUI.Borders.empty(13, 15)));
+                JBUI.Borders.empty(16)));
         card.setAlignmentX(Component.LEFT_ALIGNMENT);
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, JBUI.scale(91)));
         JLabel caption = new JLabel("SQL TYPE");
@@ -345,7 +426,7 @@ final class CellDetailsPanel extends JPanel {
         card.add(caption);
         card.add(Box.createVerticalStrut(JBUI.scale(5)));
         card.add(type);
-        metadata.add(Box.createVerticalStrut(JBUI.scale(15)));
+        metadata.add(Box.createVerticalStrut(JBUI.scale(16)));
         metadata.add(card);
     }
     private void addSection(String name) {
@@ -353,10 +434,10 @@ final class CellDetailsPanel extends JPanel {
         if ("Column".equals(name)) { label.setIcon(Icons.COLUMN); label.setIconTextGap(JBUI.scale(8)); }
         label.setAlignmentX(Component.LEFT_ALIGNMENT);
         label.setFont(label.getFont().deriveFont(Font.BOLD, JBUI.scale(17f)));
-        label.setBorder(JBUI.Borders.empty(13, 0, 9, 0));
+        label.setBorder(JBUI.Borders.empty(16, 0, 8, 0));
         metadata.add(label);
     }
-    private void renderEmpty() { eyebrow.setText(""); title.setText("Value Workspace"); identity.setText("Select a cell to inspect its value"); summary.setText(""); valueArea.setText(""); metadata.removeAll(); if (valueBlock != null) valueBlock.setVisible(true); if (tableNote != null) tableNote.setVisible(false); if (staging != null) staging.setVisible(false); }
+    private void renderEmpty() { eyebrow.setText(""); title.setText("Cell details"); identity.setText("Select a cell to inspect its value"); summary.setText(""); valueArea.setText(""); metadata.removeAll(); if (valueBlock != null) valueBlock.setVisible(true); if (tableNote != null) tableNote.setVisible(false); if (staging != null) staging.setVisible(false); }
     private void addMetadata(String name, String value) {
         JPanel row = new JPanel(new BorderLayout(8, 0)); row.setOpaque(false);
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -412,9 +493,13 @@ final class CellDetailsPanel extends JPanel {
         resizeContentBlocks(); content.revalidate(); content.repaint();
     }
     private void updatePin() {
-        pin.setIcon(pinned ? AllIcons.General.PinSelected : AllIcons.General.Pin);
+        pin.setIcon(new HeaderGlyph(true, pinned));
+        pin.setSelected(pinned);
+        pin.setActive(pinned);
         pin.setToolTipText(pinned ? "Unpin details" : "Pin details");
-        pin.getAccessibleContext().setAccessibleName(pinned ? "Unpin cell details" : "Pin cell details");
+        pin.getAccessibleContext().setAccessibleName(pinned
+                ? columnMode ? "Unpin column details" : "Unpin cell details"
+                : columnMode ? "Pin column details" : "Pin cell details");
         updateFooter();
     }
     private void refreshTheme() {
@@ -433,24 +518,23 @@ final class CellDetailsPanel extends JPanel {
         lineNumbers.setForeground(JBColor.namedColor("Label.infoForeground", new JBColor(0x657185, 0xABB3BE)));
         Color separator = JBColor.namedColor("Component.borderColor", new JBColor(0xDCE0E5, 0x46484D));
         header.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(0, 0, 1, 0, separator), JBUI.Borders.empty(12, 0)));
-        intro.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(0, 0, 1, 0, separator), JBUI.Borders.empty(10, 0, 11, 0)));
-        lower.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(1, 0, 0, 0, separator), JBUI.Borders.emptyTop(5)));
-        footer.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, separator));
+                BorderFactory.createMatteBorder(0, 0, 1, 0, separator), JBUI.Borders.empty(20, 0, 16, 0)));
+        refreshSectionBorder();
+        footer.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(1, 0, 0, 0, separator), JBUI.Borders.empty(8, 0, 8, 0)));
         valueScroll.setBorder(BorderFactory.createLineBorder(separator));
         bodyScroll.getViewport().setBackground(content.getBackground());
-        footerLabel.setForeground(JBColor.namedColor("Label.infoForeground", new JBColor(0x657185, 0xABB3BE)));
+        footerLabel.setForeground(new JBColor(0x657185, 0xABB3BE));
         refreshMetadataColors(content);
         Font labelFont = UIManager.getFont("Label.font");
         Font buttonFont = UIManager.getFont("Button.font");
         if (labelFont != null) {
-            title.setFont(labelFont.deriveFont(Font.BOLD, JBUI.scale(25f)));
-            eyebrow.setFont(labelFont.deriveFont(JBUI.scale(16f)));
-            identity.setFont(labelFont.deriveFont(JBUI.scale(15f)));
+            title.setFont(labelFont.deriveFont(Font.BOLD, JBUI.scale(24f)));
+            eyebrow.setFont(labelFont.deriveFont(Font.BOLD, JBUI.scale(13f)));
+            identity.setFont(labelFont.deriveFont(JBUI.scale(14f)));
             summary.setFont(labelFont.deriveFont(JBUI.scale(15f)));
             tableNoteLabel.setFont(labelFont.deriveFont(JBUI.scale(15f)));
+            footerLabel.setFont(labelFont.deriveFont(JBUI.scale(13f)));
         }
         if (buttonFont != null) for (AbstractButton button : new AbstractButton[]{formattedTab, rawTab, wrap, edit, copy, more, apply, cancel, editTable})
             button.setFont(buttonFont.deriveFont(JBUI.scale(16f)));
@@ -470,9 +554,19 @@ final class CellDetailsPanel extends JPanel {
         quiet(cancel);
         DatabaseUi.setActionEmphasis(edit, new JBColor(0x2F69CF, 0x3574D4));
         DatabaseUi.setActionEmphasis(apply, new JBColor(0x2F69CF, 0x3574D4));
-        pin.setBorderPainted(false); pin.setContentAreaFilled(false); close.setBorderPainted(false); close.setContentAreaFilled(false);
+        for (HeaderIconButton button : new HeaderIconButton[]{pin, close}) {
+            button.setBorderPainted(false); button.setContentAreaFilled(false);
+            button.setOpaque(false); button.setFocusPainted(false);
+            button.setMargin(new Insets(0, 0, 0, 0));
+        }
         resizeContentBlocks();
         revalidate(); repaint();
+    }
+    private void refreshSectionBorder() {
+        Color separator = JBColor.namedColor("Component.borderColor", new JBColor(0xDCE0E5, 0x46484D));
+        lower.setBorder(columnMode ? JBUI.Borders.empty()
+                : BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, separator),
+                JBUI.Borders.emptyTop(5)));
     }
     private static void refreshTextToggle(AbstractButton button) {
         Color accent = new JBColor(0x2F6DDB, 0x70A5FF);
