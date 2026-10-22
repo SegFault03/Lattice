@@ -398,6 +398,112 @@ public final class UiPreview {
         ((JLabel) field(panel, "statusLabel")).setText("12 rows · 18 ms · Total: not counted");
         return panel;
     }
+    static void renderCellDetails(String theme) throws Exception {
+        TableDataEditorPanel editor = table(false);
+        JTable grid = (JTable) field(editor, "dataTable");
+        grid.changeSelection(0, 2, false, false);
+        invoke(editor, "openCellDetails", new Class<?>[]{int.class, int.class}, 0, 2);
+        JComponent details = (JComponent) field(editor, "cellDetails");
+        render(editor, theme + "-cell-details-1440", 1440, 900);
+        JButton pin = (JButton) field(details, "pin");
+        pin.doClick();
+        grid.changeSelection(1, 1, false, false);
+        if (!(Boolean) invokeResult(details, "isPinned") ||
+                (Integer) invokeResult(details, "inspectedRow") != 0 ||
+                (Integer) invokeResult(details, "inspectedColumn") != 2)
+            throw new AssertionError("Pinned cell details must stay on the original cell");
+        render(editor, theme + "-cell-details-pinned-1440", 1440, 900);
+        pin.doClick();
+        invoke(editor, "openColumnDetails", new Class<?>[]{int.class}, 3);
+        if (!(Boolean) invokeResult(details, "isColumnMode"))
+            throw new AssertionError("Column click must open column details");
+        pin.doClick();
+        grid.changeSelection(2, 2, false, false);
+        if (!(Boolean) invokeResult(details, "isColumnMode") ||
+                (Integer) invokeResult(details, "inspectedColumn") != 3)
+            throw new AssertionError("Pinned column details must stay on the header");
+        render(editor, theme + "-column-details-pinned-1440", 1440, 900);
+        JPanel metadata = (JPanel) field(details, "metadata");
+        JComponent title = (JComponent) field(details, "title");
+        if (metadata.getComponentCount() < 7 || title.getWidth() < title.getPreferredSize().width)
+            throw new AssertionError("Column details were clipped: rows=" + metadata.getComponentCount()
+                    + ", title=" + title.getWidth() + "/" + title.getPreferredSize().width);
+        pin.doClick();
+        invoke(editor, "openCellDetails", new Class<?>[]{int.class, int.class}, 1, 1);
+        JTextArea value = (JTextArea) field(details, "valueArea");
+        value.dispatchEvent(new java.awt.event.MouseEvent(value, java.awt.event.MouseEvent.MOUSE_CLICKED,
+                System.currentTimeMillis(), 0, 8, 8, 2, false));
+        if (!(Boolean) invokeResult(details, "isEditing"))
+            throw new AssertionError("Double-clicking the value must enable editing");
+        render(editor, theme + "-cell-details-editing-1440", 1440, 900);
+        ((JButton)field(details, "close")).doClick(0);
+        grid.changeSelection(2, 2, false, false);
+        Rectangle target = grid.getCellRect(2, 2, true);
+        grid.dispatchEvent(new java.awt.event.MouseEvent(grid, java.awt.event.MouseEvent.MOUSE_CLICKED,
+                System.currentTimeMillis(), 0, target.x + 8, target.y + 8, 1, false, java.awt.event.MouseEvent.BUTTON1));
+        com.intellij.util.ui.UIUtil.dispatchAllInvocationEvents();
+        if ((Boolean)field(editor, "inspectorVisible"))
+            throw new AssertionError("Ordinary cell selection must keep a closed inspector closed");
+        invoke(editor, "toggleInspector", new Class<?>[0]);
+        var splitter = (com.intellij.ui.OnePixelSplitter)field(editor, "cellDetailsSplitter");
+        splitter.setProportion(0.58f);
+        invoke(editor, "toggleInspector", new Class<?>[0]);
+        invoke(editor, "toggleInspector", new Class<?>[0]);
+        if (Math.abs(splitter.getProportion() - 0.58f) > 0.01f)
+            throw new AssertionError("Reopening must keep the user's divider position");
+        renderAdversarialCellDetails(editor, theme);
+    }
+
+    static void renderAdversarialCellDetails(TableDataEditorPanel editor, String theme) throws Exception {
+        JTable grid = (JTable)field(editor, "dataTable");
+        JComponent details = (JComponent)field(editor, "cellDetails");
+        grid.setValueAt("{\"customer\":{\"name\":\"Amelia Brooks\",\"notifications\":true},\"tags\":[\"premium\",\"newsletter\"]}", 0, 2);
+        grid.changeSelection(0, 2, false, false);
+        invoke(editor, "openCellDetails", new Class<?>[]{int.class, int.class}, 0, 2);
+        render(editor, theme + "-cell-json-1100", 1100, 700);
+        for (int width : new int[]{960, 760}) {
+            render(editor, theme + "-cell-json-compact-" + width, width, 600);
+            JComponent formatted = (JComponent)field(details, "formattedTab"), summary = (JComponent)field(details, "summary");
+            Rectangle formatBounds = SwingUtilities.convertRectangle(formatted.getParent(), formatted.getBounds(), details);
+            Rectangle summaryBounds = SwingUtilities.convertRectangle(summary.getParent(), summary.getBounds(), details);
+            if (formatBounds.intersects(summaryBounds)) throw new AssertionError("Presentation controls overlap the count");
+        }
+        ((JToggleButton)field(details, "detailsToggle")).doClick(0);
+        render(editor, theme + "-cell-metadata-expanded-960", 960, 700);
+        var constructor = Class.forName("com.segfault03.ideadb.ui.CellDetailsPanel$Column").getDeclaredConstructors()[0];
+        constructor.setAccessible(true);
+        Object longColumn = constructor.newInstance("customer_account_notification_history", 2,
+                new ColumnMetadata("customer_notification_preferences_override_payload", "VARCHAR", java.sql.Types.VARCHAR,
+                        4096, 0, true, false, false, "'notify-on-email-and-sms-unless-account-is-suspended'"), false);
+        invoke(details, "showColumn", new Class<?>[]{longColumn.getClass()}, longColumn);
+        render(editor, theme + "-column-long-metadata-960", 960, 700);
+        JTextArea title = (JTextArea)field(details, "title");
+        if (!title.getText().endsWith("override_payload") || title.getHeight() < title.getPreferredSize().height)
+            throw new AssertionError("Long identifiers must wrap without losing text");
+        grid.changeSelection(0, 4, false, false);
+        grid.setValueAt("not-a-number", 0, 4);
+        invoke(editor, "openCellDetails", new Class<?>[]{int.class, int.class}, 0, 4);
+        render(editor, theme + "-cell-validation-1100", 1100, 700);
+        if (!((JComponent)field(details, "validation")).isVisible())
+            throw new AssertionError("Invalid values need local feedback");
+        Font label = UIManager.getFont("Label.font"), button = UIManager.getFont("Button.font");
+        try {
+            UIManager.put("Label.font", label.deriveFont(label.getSize2D() * 1.5f));
+            UIManager.put("Button.font", button.deriveFont(button.getSize2D() * 1.5f));
+            SwingUtilities.updateComponentTreeUI(details);
+            invoke(details, "refreshTheme", new Class<?>[0]);
+            render(editor, theme + "-cell-large-font-1100", 1100, 800);
+            JButton edit = (JButton)field(details, "edit"), copy = (JButton)field(details, "copy");
+            if (edit.getHeight() != copy.getHeight()) throw new AssertionError("Action targets must share a height at larger fonts");
+        } finally {
+            UIManager.put("Label.font", label); UIManager.put("Button.font", button);
+        }
+    }
+    static Object invokeResult(Object target, String name) throws Exception {
+        Method method = target.getClass().getDeclaredMethod(name);
+        method.setAccessible(true);
+        return method.invoke(target);
+    }
     static SqlQueryConsolePanel console() throws Exception {
         SqlQueryConsolePanel panel = new SqlQueryConsolePanel(null, config(DatabaseType.MYSQL), "shop", List.of("shop", "analytics"));
         panel.setSqlText("-- Active customers with an outstanding balance\nSELECT id, name, email, balance, status\nFROM customers\nWHERE status = 'active' AND balance > 0\nORDER BY balance DESC;\n");
@@ -424,6 +530,10 @@ public final class UiPreview {
         return panel;
     }
     static void verifyControls(Container container) {
+        // Native AUTOLAYOUT keeps folded custom controls offscreen for its overflow popup.
+        // Their parent toolbar bounds are still checked by the caller; its internal
+        // placement is not a clipped application form/control.
+        if (container instanceof com.intellij.openapi.actionSystem.impl.ActionToolbarImpl) return;
         for (Component child : container.getComponents()) {
             if (!child.isVisible()) continue;
             if (child.getX() < 0 || child.getY() < 0 || child.getX() + child.getWidth() > container.getWidth()
@@ -842,7 +952,8 @@ public final class UiPreview {
             boolean sourceFilterOnly = args.length >= 3 && args[2].equals("source-filter");
             boolean searchOnly = args.length >= 3 && args[2].equals("search");
             boolean tabIconsOnly = args.length >= 3 && args[2].equals("tab-icons");
-            featuredOnly = !sourceFilterOnly && !searchOnly && !tabIconsOnly && (args.length < 3 || !args[2].equals("all"));
+            boolean cellDetailsOnly = args.length >= 3 && args[2].equals("cell-details");
+            featuredOnly = !sourceFilterOnly && !searchOnly && !tabIconsOnly && !cellDetailsOnly && (args.length < 3 || !args[2].equals("all"));
             UIManager.setLookAndFeel(theme.equals("dark") ? new FlatDarculaLaf() : new FlatIntelliJLaf());
             Font font = new javax.swing.plaf.FontUIResource(previewFont());
             UIManager.put("defaultFont", font);
@@ -854,9 +965,9 @@ public final class UiPreview {
             com.intellij.ui.IconManager.Companion.activate(new com.intellij.ui.icons.CoreIconManager());
             IconLoader.activate();
             IconLoader.setUseDarkIcons(theme.equals("dark"));
-            if (sourceFilterOnly || searchOnly || tabIconsOnly) {
+            if (sourceFilterOnly || searchOnly || tabIconsOnly || cellDetailsOnly) {
                 SwingUtilities.invokeAndWait(() -> {
-                    try { if (tabIconsOnly) renderTableTabIcons(theme); else if (searchOnly) renderExplorerSearch(theme); else renderSourceFilter(theme); }
+                    try { if (cellDetailsOnly) renderCellDetails(theme); else if (tabIconsOnly) renderTableTabIcons(theme); else if (searchOnly) renderExplorerSearch(theme); else renderSourceFilter(theme); }
                     catch (Exception exception) { throw new RuntimeException(exception); }
                 });
                 Files.write(output.resolve(theme + "-manifest.txt"), snapshots);
@@ -919,7 +1030,8 @@ public final class UiPreview {
                 nativeDelegates(nativeTable);
                 ((DatabaseTable)field(nativeTable, "dataTable")).sizeColumnsToContent();
                 render(nativeTable, theme + "-table-native-1100", 1100, 620);
-                verifyControls((Container)((BorderLayout)nativeTable.getLayout()).getLayoutComponent(BorderLayout.NORTH));
+                JPanel nativeWorkspace = (JPanel)field(nativeTable, "tableWorkspace");
+                verifyControls((Container)((BorderLayout)nativeWorkspace.getLayout()).getLayoutComponent(BorderLayout.NORTH));
                 autoEditing(theme);
                 verifyConnectionReadiness();
                 for (String variant : List.of("mysql", "new", "postgresql", "success", "failed", "hsql-server", "hsql-memory", "hsql-file", "jdbc-url", "driver-download", "driver-retained", "driver-retained-hsqldb", "driver-local", "mysql-bundled-expanded", "hsql-bundled-expanded", "hsql-memory-bundled-expanded", "hsql-file-bundled-expanded", "mysql-collapsed-after-expansion", "mysql-incomplete", "hsql-incomplete", "jdbc-url-incomplete")) connection(theme, variant, 740);
@@ -930,7 +1042,7 @@ public final class UiPreview {
                 verifyGrid(grid, 3, 2);
                 render(editor, theme + "-table-760", 760, 620);
                 render(editor, theme + "-table-520", 520, 620);
-                BorderLayout editorLayout = (BorderLayout)editor.getLayout();
+                BorderLayout editorLayout = (BorderLayout)((JPanel)field(editor, "tableWorkspace")).getLayout();
                 verifyControls((Container)editorLayout.getLayoutComponent(BorderLayout.NORTH));
                 verifyControls((Container)editorLayout.getLayoutComponent(BorderLayout.SOUTH));
                 Object model = field(editor, "tableModel");

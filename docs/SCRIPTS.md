@@ -107,6 +107,8 @@ python scripts/ui-preview.py
 
 This renders production Swing components with fixture data and a headless IntelliJ test application that supplies platform services such as the native Action System. It opens no IDE window. It discovers local JDK 21, IntelliJ 2025.1 and JUnit/Hamcrest jars, downloading missing inputs plus checksum-verified FlatLaf under `--download-dir`. Supply `--flatlaf-jar`, `--junit-jar` and `--hamcrest-jar` to override individual jars. `--all-previews` adds light/dark gallery variants; `--output` selects another gallery directory; `--compare-with` adds a before/after view. The default run refreshes only the five tracked PNGs under `screenshots/`. See [UI preview instructions](UI_PREVIEW.md).
 
+Use `python scripts/ui-preview.py --cell-details-only` for focused light and dark renders of the integrated cell and column details panel, including pinned and editing states. These renders stay under `build/ui-preview/` and do not update the tracked screenshots.
+
 For screenshots and interactions inside a real test IDE under Xvfb, run:
 
 ```sh
@@ -127,6 +129,8 @@ Results are written under `build/ui-review/<theme-id>/` with screenshots, logs, 
 Set `LATTICE_UI_IDE_HOME` to an installed Linux IDEA directory to launch another version with its bundled JBR, while compilation stays on the pinned 2025.1 / Java 21 SDK. This applies to both real IDE scripts; direct Gradle users can pass `-Plattice.ui.ide.home=/path/to/idea`. The test verifies the actual theme after startup, captures open text/numeric cell editors, auto-refresh options and menus, checks painted white action glyphs, and exercises the explorer's native hover toolbar. IDEA 2026.2.3 also provides `Islands Light`, `Islands Dark` and `Islands Darcula`; pass those quoted IDs explicitly alongside the seven classic IDs when reviewing that version.
 
 For a faster review of connection-dialog spacing, explorer overflow, table editor/menu surfaces, auto-refresh sizing and active glyph colors, set `LATTICE_UI_STYLE_ONLY=true` (direct Gradle: `-Plattice.ui.styleOnly=true`). This still opens and edits the production UI inside the full IDE, then stops after those checks; omit it for the complete review.
+
+For a focused native cell inspector capture, set `LATTICE_UI_CELL_DETAILS_ONLY=true` with the Linux review wrapper (direct Gradle: `-Plattice.ui.review=true -Plattice.ui.cellDetailsOnly=true`). It opens a populated 12-row fixture in the real IDE, captures cell and header details, verifies both pin states while selecting another cell, double-clicks the value area into edit mode, checks close/reopen, and switches the running IDE through an opposite theme and back. Screenshots and `runtime-evidence.txt` are written to the selected review output directory; the focused flow exits before the longer table review.
 
 Direct Gradle/capture reviews accept `-Plattice.ui.scale=1.25` or `1.5` for
 larger IDE UI sizes. The default remains 100%; this changes IDE UI scaling

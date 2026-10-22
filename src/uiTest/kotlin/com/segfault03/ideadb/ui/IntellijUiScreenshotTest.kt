@@ -70,6 +70,7 @@ class IntellijUiScreenshotTest {
         val explorerSearchOnly = System.getProperty("ui.explorerSearch.only").toBoolean()
         val alterTableOnly = System.getProperty("ui.alterTable.only").toBoolean()
         val createTableOnly = System.getProperty("ui.createTable.only").toBoolean()
+        val cellDetailsOnly = System.getProperty("ui.cellDetails.only").toBoolean()
         val postgresPort = Integer.getInteger("ui.postgres.port", 0)
         val postgres = postgresPort > 0
         val h2 = System.getProperty("ui.h2.enabled", "false").toBoolean()
@@ -320,7 +321,7 @@ class IntellijUiScreenshotTest {
                     frame.x { byVisibleText("Create table…") }.waitFound().click()
                     frame.x(DialogUiComponent::class.java) { byTitle("Create table in PUBLIC") }.waitFound().also { dialog ->
                         inspectorInput(dialog, "Table name").text = name
-                        dialog.pressButton("Create table")
+                        dialog.x { byAccessibleName("Create new table") }.waitFound().click()
                     }
                     frame.x(DialogUiComponent::class.java) { byTitle("Table created") }.waitFound().pressButton("OK")
                     ideFrame { waitForNoOpenedDialogs() }
@@ -846,7 +847,7 @@ class IntellijUiScreenshotTest {
                 databaseTree.pathExists(*publicSchemaPath)
             }
             captureScreen(screenshotsDirectory.resolve("connected-explorer.png"))
-            assertExplorerOverflow(pluginRoot, frame, screenshotsDirectory)
+            if (!cellDetailsOnly) assertExplorerOverflow(pluginRoot, frame, screenshotsDirectory)
             // Keep a saved but unconnected MySQL source beside the live HSQLDB fixture
             // so the actual IDE capture exercises more than one source-type section.
             openConnectionMenu(pluginRoot, frame, "MySQL…")
@@ -954,13 +955,37 @@ class IntellijUiScreenshotTest {
             assertCreateTableLayout(createTableDialog)
             captureScreen(screenshotsDirectory.resolve("create-table-dialog.png"))
             if (jdbcFixture != null) captureBusyState(jdbcFixture, createTableDialog, "Creating table…", "explorer-creating-table.png", screenshotsDirectory) {
-                createTableDialog.pressButton("Create table")
-            } else createTableDialog.pressButton("Create table")
+                createTableDialog.x { byAccessibleName("Create new table") }.waitFound().click()
+            } else createTableDialog.x { byAccessibleName("Create new table") }.waitFound().click()
             frame.x(DialogUiComponent::class.java) {
                 byTitle("Table created")
             }.waitFound().pressButton("OK")
             ideFrame {
                 waitForNoOpenedDialogs()
+            }
+
+            if (cellDetailsOnly) {
+                java.sql.DriverManager.getConnection(requireNotNull(jdbcFixture).jdbcUrl, "SA", "").use { conn ->
+                    conn.createStatement().use { statement ->
+                        statement.execute("ALTER TABLE PUBLIC.LATTICE_PEOPLE ADD COLUMN \"email\" VARCHAR(180)")
+                        statement.execute("ALTER TABLE PUBLIC.LATTICE_PEOPLE ADD COLUMN \"status\" VARCHAR(20) DEFAULT 'active'")
+                        statement.execute("ALTER TABLE PUBLIC.LATTICE_PEOPLE ADD COLUMN \"balance\" DECIMAL(10,2) DEFAULT 0")
+                    }
+                    val names = listOf("Amelia Brooks", "Liam Chen", "Sofia Patel", "Noah Williams", "Olivia Reyes",
+                        "Ethan Kim", "Isabella Rossi", "Lucas Martin", "Mia Thompson", "Aiden Davis",
+                        "Charlotte Wilson", "Leo Garcia")
+                    conn.prepareStatement("INSERT INTO PUBLIC.LATTICE_PEOPLE (\"name\", \"created_at\", \"email\", \"status\", \"balance\") VALUES (?, ?, ?, ?, ?)").use { insert ->
+                        names.forEachIndexed { index, name ->
+                            insert.setString(1, name)
+                            insert.setTimestamp(2, java.sql.Timestamp.valueOf("2026-10-${(index + 1).toString().padStart(2, '0')} 10:30:00"))
+                            insert.setString(3, name.lowercase().replace(" ", ".") + "@example.com")
+                            insert.setString(4, if (index == 4 || index == 8) "inactive" else "active")
+                            insert.setBigDecimal(5, java.math.BigDecimal.valueOf(if (index % 3 == 0) 240.50 else 0.0))
+                            insert.addBatch()
+                        }
+                        insert.executeBatch()
+                    }
+                }
             }
 
             val peoplePath = publicSchemaPath + "Tables (1)" + "LATTICE_PEOPLE"
@@ -975,6 +1000,9 @@ class IntellijUiScreenshotTest {
             val dataGrid = tableEditor.x(JTableUiComponent::class.java) {
                 byJavaClass("com.segfault03.ideadb.ui.DatabaseTable")
             }.waitFound()
+            val commitButton = tableEditor.x { byAccessibleName("Commit pending changes to the database") }.waitFound()
+            val revertButton = tableEditor.x { byAccessibleName("Revert pending changes") }.waitFound()
+            if (!cellDetailsOnly) {
             waitUntil("empty table data loaded") { tableEditor.hasSubtext("0 rows") }
             check(dataGrid.rowCount() == 0) { "New LATTICE_PEOPLE table should start empty" }
             captureScreen(screenshotsDirectory.resolve("table-editor-empty.png"))
@@ -988,8 +1016,6 @@ class IntellijUiScreenshotTest {
                 frame.resize(normalWidth, normalHeight)
             }
 
-            val commitButton = tableEditor.x { byAccessibleName("Commit pending changes to the database") }.waitFound()
-            val revertButton = tableEditor.x { byAccessibleName("Revert pending changes") }.waitFound()
             tableEditor.x { byAccessibleName("Add a new row") }.waitFound().click()
             waitUntil("empty insert row validates required fields") {
                 dataGrid.rowCount() == 1 && tableEditor.hasSubtext("1 invalid cell") && !commitButton.component.isEnabled()
@@ -1018,7 +1044,7 @@ class IntellijUiScreenshotTest {
             check(dataGrid.content().values.any { row -> row.values.any { "Ada" in it } }) {
                 "Committed row should be visible in the live data grid"
             }
-            if (jdbcFixture != null) {
+            if (jdbcFixture != null && !cellDetailsOnly) {
                 dataGrid.clickCell(0, 1)
                 tableEditor.x { byAccessibleName("Delete selected rows") }.waitFound().click()
                 val confirm = frame.x(DialogUiComponent::class.java) { byTitle("Delete rows") }.waitFound()
@@ -1032,6 +1058,151 @@ class IntellijUiScreenshotTest {
                 commitButton.click()
                 frame.x(DialogUiComponent::class.java) { byTitle("Changes Saved") }.waitFound().pressButton("OK")
                 waitUntil("replacement saved row loaded") { dataGrid.rowCount() == 1 && tableEditor.hasSubtext("1 row ·") }
+            }
+            }
+
+            if (cellDetailsOnly) {
+                check(review && jdbcFixture != null) { "The focused Value Workspace capture requires the real IDE review and its owned HSQLDB fixture" }
+                waitUntil("populated Value Workspace fixture") { dataGrid.rowCount() == 12 }
+                withContext(OnDispatcher.EDT) {
+                    cast(frame.component, Window::class).setBounds(16, 32, displayBounds.width - 32, displayBounds.height - 64)
+                }
+                ideFrame { invokeAction("HideAllWindows") }
+                dataGrid.clickCell(0, 3)
+                tableEditor.x { byAccessibleName("Toggle cell inspector (Alt+Enter)") }.waitFound().click()
+                val details = tableEditor.x { byJavaClass("com.segfault03.ideadb.ui.CellDetailsPanel") }.waitFound()
+                waitUntil("email inspector shows its value and cell coordinates") {
+                    details.hasSubtext("amelia.brooks@example.com") &&
+                        details.hasSubtext("Row 1") && details.hasSubtext("Column 4")
+                }
+                captureScreen(screenshotsDirectory.resolve("value-workspace.png"))
+
+                details.x { byAccessibleName("Pin cell details") }.waitFound().click()
+                waitUntil("cell details are pinned") { details.hasSubtext("Pinned to this cell") }
+                dataGrid.clickCell(0, 0)
+                waitUntil("pinned details retain Amelia email after another cell is selected") {
+                    details.hasSubtext("amelia.brooks@example.com") && details.hasSubtext("Pinned to this cell")
+                }
+                captureScreen(screenshotsDirectory.resolve("value-workspace-pinned.png"))
+                details.x { byAccessibleName("Unpin cell details") }.waitFound().click()
+
+                val headerPoint = withContext(OnDispatcher.EDT) {
+                    val table = cast(dataGrid.component, LiveTableEditor::class)
+                    val header = table.getTableHeader()
+                    val location = header.getLocationOnScreen()
+                    val x = (0 until 3).sumOf { table.getColumnModel().getColumn(it).getWidth() }
+                    Point(location.x + x + table.getColumnModel().getColumn(3).getWidth() / 2,
+                        location.y + header.getHeight() / 2)
+                }
+                Robot().also { robot ->
+                    robot.mouseMove(headerPoint.x, headerPoint.y)
+                    robot.mousePress(InputEvent.BUTTON1_DOWN_MASK)
+                    robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
+                    robot.waitForIdle()
+                }
+                waitUntil("column header opens its schema details") {
+                    details.hasSubtext("Column 4") && details.hasSubtext("Structure")
+                }
+                captureScreen(screenshotsDirectory.resolve("value-workspace-header-details.png"))
+                assertCellInspectorPalette(details)
+                val headerDetailsVerified = details.hasSubtext("Column 4") && details.hasSubtext("Structure")
+                details.x { byAccessibleName("Pin column details") }.waitFound().click()
+                waitUntil("column details are pinned") { details.hasSubtext("Pinned to this column") }
+                dataGrid.clickCell(0, 0)
+                waitUntil("pinned column details survive a cell selection") {
+                    details.hasSubtext("Column 4") && details.hasSubtext("Pinned to this column")
+                }
+                captureScreen(screenshotsDirectory.resolve("value-workspace-header-pinned.png"))
+                details.x { byAccessibleName("Unpin column details") }.waitFound().click()
+
+                dataGrid.clickCell(0, 3)
+                waitUntil("Amelia email details reopened") { details.hasSubtext("amelia.brooks@example.com") }
+                val oppositeThemes = if (themeId.contains("Dark", true) || themeId == "Darcula")
+                    listOf("Islands Light", "ExperimentalLight", "IntelliJ", "JetBrainsLightTheme")
+                    else listOf("Islands Dark", "ExperimentalDark", "Darcula")
+                val alternateTheme = oppositeThemes.firstOrNull { candidate ->
+                    laf.getInstalledLookAndFeels().any { it.getName() == candidate }
+                }
+                if (alternateTheme != null) {
+                    withContext(OnDispatcher.EDT) {
+                        laf.setCurrentLookAndFeel(laf.findLaf(alternateTheme), true)
+                        laf.updateUI()
+                    }
+                    waitUntil("IDE applies $alternateTheme") { laf.getCurrentUIThemeLookAndFeel().getId() == alternateTheme }
+                    captureScreen(screenshotsDirectory.resolve("value-workspace-opposite-theme.png"))
+                    val themedHeaderPoint = withContext(OnDispatcher.EDT) {
+                        val table = cast(dataGrid.component, LiveTableEditor::class)
+                        val header = table.getTableHeader()
+                        val location = header.getLocationOnScreen()
+                        val x = (0 until 3).sumOf { table.getColumnModel().getColumn(it).getWidth() }
+                        Point(location.x + x + table.getColumnModel().getColumn(3).getWidth() / 2,
+                            location.y + header.getHeight() / 2)
+                    }
+                    Robot().also { themedRobot ->
+                        themedRobot.mouseMove(themedHeaderPoint.x, themedHeaderPoint.y)
+                        themedRobot.mousePress(InputEvent.BUTTON1_DOWN_MASK)
+                        themedRobot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
+                        themedRobot.waitForIdle()
+                    }
+                    waitUntil("opposite theme shows column structure") {
+                        details.hasSubtext("Column 4") && details.hasSubtext("Structure")
+                    }
+                    captureScreen(screenshotsDirectory.resolve("value-workspace-header-opposite-theme.png"))
+                    assertCellInspectorPalette(details)
+                    withContext(OnDispatcher.EDT) {
+                        laf.setCurrentLookAndFeel(laf.findLaf(themeId), true)
+                        laf.updateUI()
+                    }
+                    waitUntil("IDE restores $themeId") { laf.getCurrentUIThemeLookAndFeel().getId() == themeId }
+                    dataGrid.clickCell(0, 3)
+                    waitUntil("cell workspace returns after restoring theme") { details.hasSubtext("amelia.brooks@example.com") }
+                    captureScreen(screenshotsDirectory.resolve("value-workspace-restored-theme.png"))
+                }
+
+                val valueArea = details.x { byAccessibleName("Cell value") }.waitFound()
+                val valuePoint = valueArea.component.getLocationOnScreen()
+                val robot = Robot()
+                robot.mouseMove(valuePoint.x + valueArea.component.width / 2, valuePoint.y + valueArea.component.height / 2)
+                repeat(2) {
+                    robot.mousePress(InputEvent.BUTTON1_DOWN_MASK)
+                    robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
+                    if (it == 0) Thread.sleep(100)
+                }
+                robot.waitForIdle()
+                waitUntil("double-clicking the value area enters edit mode") {
+                    details.x { byAccessibleName("Stage this value; Commit saves it to the database") }.waitFound().component.isVisible()
+                }
+                captureScreen(screenshotsDirectory.resolve("value-workspace-editing.png"))
+
+                details.x { byAccessibleName("Cancel") }.waitFound().click()
+                val closeDetails = details.x { byAccessibleName("Close details panel") }.waitFound()
+                closeDetails.moveMouse(Point(closeDetails.component.width / 2, closeDetails.component.height / 2))
+                captureScreen(screenshotsDirectory.resolve("value-workspace-close-hover.png"))
+                val liveDetails = details.component
+                closeDetails.click()
+                waitUntil("close control removes the inspector from the editor") { !liveDetails.isShowing() }
+                dataGrid.clickCell(0, 3)
+                check(!liveDetails.isShowing()) {
+                    "Ordinary cell selection must leave the inspector closed"
+                }
+                tableEditor.x { byAccessibleName("Toggle cell inspector (Alt+Enter)") }.waitFound().click()
+                waitUntil("Inspect explicitly reopens the inspector after closing it") {
+                    details.component.isShowing() && details.hasSubtext("Row 1") && details.hasSubtext("Column 4")
+                }
+
+                Files.writeString(screenshotsDirectory.resolve("runtime-evidence.txt"), buildString {
+                    appendLine("Focused native Value Workspace capture")
+                    appendLine("IDE: ${System.getProperty("ui.ide.version")} (${System.getProperty("ui.ide.build")})")
+                    appendLine("Requested theme: $themeId")
+                    appendLine("Loaded cell: ${tableCellText(dataGrid, 0, 3)}")
+                    appendLine("Pin selection persistence: verified after selecting ID cell")
+                    appendLine("Column header details: $headerDetailsVerified")
+                    appendLine("Double-click edit mode: verified")
+                    appendLine("Close and reopen controls: verified")
+                    appendLine("Opposite theme switch: ${alternateTheme ?: "no supported opposite theme found; skipped"}")
+                })
+                println("Focused native Value Workspace flow completed")
+                return@useDriverAndCloseIde
             }
 
             val initialId = tableCellText(dataGrid, row = 0, column = 0).toLong()
@@ -1661,13 +1832,14 @@ class IntellijUiScreenshotTest {
         val name = dialog.x(JTextFieldUI::class.java) {
             and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("Name:"))
         }.waitFound()
-        check(picker.component.width <= 180) { "The source picker must stay compact" }
+        val scale = System.getProperty("ui.scale", "1.0").toDouble()
+        check(picker.component.width <= kotlin.math.ceil(180 * scale).toInt()) { "The source picker must stay within 180 logical pixels" }
         check(picker.component.getLocationOnScreen().x + picker.component.width < name.component.getLocationOnScreen().x) {
             "The source picker must appear to the left of the connection form"
         }
         for ((source, port) in listOf("PostgreSQL" to "5432", "H2" to "9092", "HSQLDB" to "9001", "MySQL" to "3306")) {
             val choice = dialog.x { byAccessibleName(source) }.waitFound()
-            check(requireNotNull(dialog.driver.cast(choice.component, LiveSourceChoice::class).getIcon()).getIconWidth() == 24)
+            check(requireNotNull(dialog.driver.cast(choice.component, LiveSourceChoice::class).getIcon()).getIconWidth() == kotlin.math.round(24 * scale).toInt())
             choice.click()
             check(dialog.driver.cast(choice.component, LiveSourceChoice::class).isSelected())
             if (source == "H2") dialog.x(JComboBoxUiComponent::class.java) {
@@ -1679,6 +1851,19 @@ class IntellijUiScreenshotTest {
             check(field.text == port) { "$source must select its default port $port" }
         }
         println("Compact left source picker: SVGs, source switching, and MySQL/HSQLDB/PostgreSQL/H2 ports verified")
+    }
+
+    private fun assertCellInspectorPalette(details: UiComponent) {
+        val labels = listOf("SQL type", "Nullable", "Default").map { text ->
+            details.x { byVisibleText(text) }.waitFound()
+        }
+        details.driver.withContext(OnDispatcher.EDT) {
+            val background = cast(details.component, LiveSwingComponent::class).getBackground().getRGB()
+            labels.forEach { label ->
+                val foreground = cast(label.component, LiveSwingComponent::class).getForeground().getRGB()
+                check(contrastRatio(foreground, background) >= 4.5) { "Inspector metadata must keep readable contrast across native themes" }
+            }
+        }
     }
 
     private fun verifyKeyHeaderFlow(frame: IdeaFrameUI, tree: JTreeUiComponent, peoplePath: Array<String>,
@@ -2987,6 +3172,7 @@ interface LiveTableHeader {
     fun getDefaultRenderer(): LiveCellRenderer
     fun getLocationOnScreen(): Point
     fun getVisibleRect(): Rectangle
+    fun getHeight(): Int
 }
 
 @Remote("javax.swing.table.TableCellRenderer")
