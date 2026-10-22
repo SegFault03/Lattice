@@ -45,7 +45,8 @@ public class DatabaseTreeCellRenderer extends ColoredTreeCellRenderer {
             case CONNECTION:
                 String product = data.getConnectionConfig() == null ? "" : " · " + data.getConnectionConfig().getType().getDisplayName();
                 setToolTipText(data.getName() + product + (data.isConnected()
-                        ? " · Connected · Expand to browse databases" : " · Disconnected · Expand to connect"));
+                        ? " · Connected · Expand to browse databases" : data.isLoaded()
+                        ? " · Disconnected · Cached metadata · Refresh to connect" : " · Disconnected · Expand to connect"));
                 setIcon(new RowIcon(Icons.DATABASE, data.isConnected() ? AllIcons.General.GreenCheckmark : AllIcons.Actions.OfflineMode));
                 appendName(tree, data, data.getName(), data.isConnected() ? SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES : SimpleTextAttributes.REGULAR_ATTRIBUTES);
                 getAccessibleContext().setAccessibleDescription(getToolTipText());
@@ -91,7 +92,7 @@ public class DatabaseTreeCellRenderer extends ColoredTreeCellRenderer {
 
                     append(" : " + col.getFormattedType(), SimpleTextAttributes.GRAYED_ATTRIBUTES);
                     if (col.isPrimaryKey()) {
-                        append(" PK", SimpleTextAttributes.DARK_TEXT);
+                        append(" PK", data.isCached() ? SimpleTextAttributes.GRAYED_ATTRIBUTES : SimpleTextAttributes.DARK_TEXT);
                     }
                     if (!col.isNullable()) {
                         append(" NOT NULL", SimpleTextAttributes.GRAYED_SMALL_ATTRIBUTES);
@@ -116,9 +117,16 @@ public class DatabaseTreeCellRenderer extends ColoredTreeCellRenderer {
                 append(data.getName(), SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES);
                 break;
         }
+        if (data.isCached()) {
+            setToolTipText((getToolTipText() == null ? data.getName() : getToolTipText())
+                    + " · Cached metadata · Disconnected · Refresh to reconnect");
+            getAccessibleContext().setAccessibleDescription(getToolTipText());
+            if (getIcon() != null) setIcon(com.intellij.openapi.util.IconLoader.getTransparentIcon(getIcon(), 0.4f));
+        }
     }
 
     private void appendName(JTree tree, TreeNodeData data, String name, SimpleTextAttributes attributes) {
+        if (data.isCached()) attributes = SimpleTextAttributes.GRAYED_ATTRIBUTES;
         Object matches = tree.getClientProperty(DatabaseExplorerSearch.MATCHES_PROPERTY);
         if (!(matches instanceof java.util.Map<?, ?> map) || !(map.get(data) instanceof java.util.List<?> ranges)) {
             append(name, attributes);

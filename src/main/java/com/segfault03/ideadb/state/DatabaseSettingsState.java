@@ -75,7 +75,10 @@ public class DatabaseSettingsState implements PersistentStateComponent<DatabaseS
         }
         var manager = com.segfault03.ideadb.service.DatabaseConnectionManager.getInstance();
         for (ConnectionConfig old : state.connections) {
-            if (restored.connections.stream().noneMatch(c -> c.getId().equals(old.getId()))) manager.removeConfiguration(old.getId());
+            if (restored.connections.stream().noneMatch(c -> c.getId().equals(old.getId()))) {
+                manager.removeConfiguration(old.getId());
+                MetadataCacheState.getInstance().remove(old.getId());
+            }
         }
         restored.connections.forEach(manager::registerConfiguration);
         state = restored;
@@ -89,6 +92,7 @@ public class DatabaseSettingsState implements PersistentStateComponent<DatabaseS
         credentials.set(id, null);
         com.segfault03.ideadb.service.DatabaseConnectionManager.getInstance().removeConfiguration(id);
         state.connections.removeIf(c -> c.getId().equals(id));
+        MetadataCacheState.getInstance().remove(id);
         changed.run();
     }
     public synchronized void updateConnection(ConnectionConfig config) {

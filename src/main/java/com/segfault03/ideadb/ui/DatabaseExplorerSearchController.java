@@ -119,7 +119,7 @@ final class DatabaseExplorerSearchController implements AutoCloseable {
         originalSelection = null;
     }
 
-    private List<DefaultMutableTreeNode> connectedSources() {
+    private List<DefaultMutableTreeNode> searchableSources(boolean includeCached) {
         List<DefaultMutableTreeNode> sources = new ArrayList<>();
         var manager = DatabaseConnectionManager.getInstance();
         for (int groupIndex = 0; groupIndex < model.getChildCount(root); groupIndex++) {
@@ -127,7 +127,8 @@ final class DatabaseExplorerSearchController implements AutoCloseable {
             for (int i = 0; i < group.getChildCount(); i++) {
                 DefaultMutableTreeNode node = (DefaultMutableTreeNode) group.getChildAt(i);
                 TreeNodeData data = (TreeNodeData) node.getUserObject();
-                if (data.getConnectionConfig() != null && manager.isConnected(data.getConnectionConfig().getId())) sources.add(node);
+                if (data.getConnectionConfig() != null && (data.isConnected() && manager.isConnected(data.getConnectionConfig().getId())
+                        || includeCached && data.isLoaded())) sources.add(node);
             }
         }
         return sources;
@@ -138,7 +139,7 @@ final class DatabaseExplorerSearchController implements AutoCloseable {
         Map<TreeNodeData, List<DatabaseExplorerSearch.Range>> highlights = new IdentityHashMap<>();
         List<TreePath> paths = new ArrayList<>();
         Set<DefaultMutableTreeNode> groups = Collections.newSetFromMap(new IdentityHashMap<>());
-        List<DefaultMutableTreeNode> sources = connectedSources();
+        List<DefaultMutableTreeNode> sources = searchableSources(true);
         for (DefaultMutableTreeNode source : sources) {
             DefaultMutableTreeNode group = (DefaultMutableTreeNode) source.getParent();
             if (groups.add(group)) addMatch(group, highlights, paths);
@@ -176,7 +177,7 @@ final class DatabaseExplorerSearchController implements AutoCloseable {
     private void ensureMetadata() {
         if (closed || indexing || !query.isActive() || query.metadataDepth() == 0) return;
         int depth = query.metadataDepth(), token = generation.get();
-        List<DefaultMutableTreeNode> sources = connectedSources().stream().filter(node -> indexed.getOrDefault(node, 0) < depth).toList();
+        List<DefaultMutableTreeNode> sources = searchableSources(false).stream().filter(node -> indexed.getOrDefault(node, 0) < depth).toList();
         if (sources.isEmpty()) return;
         List<ConnectionConfig> configs = sources.stream().map(node -> ((TreeNodeData) node.getUserObject()).getConnectionConfig().copy()).toList();
         work = DatabaseTaskService.getInstance().newScope();

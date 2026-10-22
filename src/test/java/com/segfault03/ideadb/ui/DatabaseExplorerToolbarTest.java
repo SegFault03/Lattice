@@ -40,10 +40,12 @@ class DatabaseExplorerToolbarTest {
             ConnectionConfig config = new ConnectionConfig();
             toolbar.setSelection(TreeNodeData.connection(config, false));
             for (int i = 1; i <= 5; i++) {
-                assertTrue(buttons.get(i).isEnabled());
+                assertEquals(i != 4, buttons.get(i).isEnabled(), "A disconnected source cannot open a SQL console");
                 buttons.get(i).doClick(0);
             }
-            assertEquals(5, calls.get());
+            assertEquals(4, calls.get());
+            toolbar.setSelection(TreeNodeData.connection(config, true));
+            assertTrue(buttons.get(4).isEnabled());
             toolbar.setHasConnections(false);
             assertFalse(buttons.get(1).isEnabled());
             for (int width : new int[]{260, 420, 600}) {
@@ -71,7 +73,7 @@ class DatabaseExplorerToolbarTest {
             assertFalse(buttons.get(1).isEnabled());
             assertFalse(buttons.get(2).isEnabled());
             assertTrue(buttons.get(3).isEnabled());
-            assertTrue(buttons.get(4).isEnabled());
+            assertFalse(buttons.get(4).isEnabled(), "Saved sources alone do not make a console available");
 
             ConnectionConfig config = new ConnectionConfig();
             toolbar.setSelection(TreeNodeData.connection(config, false));
@@ -88,6 +90,49 @@ class DatabaseExplorerToolbarTest {
             assertTrue(buttons.get(3).isEnabled());
             toolbar.setHasConnections(false);
             for (int i = 1; i <= 5; i++) assertFalse(buttons.get(i).isEnabled());
+        });
+    }
+
+    @Test void disconnectedSelectionsDimTheConsoleInTheToolbarAndItsOverflowAndReconnectRestoresIt() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            Runnable noop = () -> {};
+            var toolbar = new DatabaseExplorerToolbar(component -> {}, noop, noop, noop, noop, component -> {}, noop, noop);
+            toolbar.setHasConnections(true);
+            var buttons = buttons(toolbar);
+            var console = buttons.get(4);
+            var overflow = DatabaseUi.mirrorAction(console);
+            overflow.addNotify();
+            try {
+                var config = new ConnectionConfig();
+                var cached = TreeNodeData.table(config, "shop", new TableMetadata("shop", null, "products", "TABLE"));
+                cached.setCached(true);
+                toolbar.setSelection(cached, false);
+                assertFalse(console.isEnabled());
+                assertFalse(overflow.isEnabled());
+                assertTrue(console.getToolTipText().contains("Connect"));
+                assertTrue(buttons.get(0).isEnabled(), "Adding a connection works offline");
+                assertTrue(buttons.get(1).isEnabled(), "Connection settings work offline");
+                assertTrue(buttons.get(3).isEnabled(), "Refresh remains available to reconnect");
+                assertTrue(buttons.get(5).isEnabled(), "Source filtering works offline");
+                assertTrue(buttons.get(6).isEnabled(), "Search includes cached metadata");
+                assertTrue(buttons.get(7).isEnabled());
+                var presentation = new com.intellij.openapi.actionSystem.Presentation();
+                var action = new DatabaseActionToolbar.ControlAction(console, null);
+                action.updatePresentation(presentation);
+                assertFalse(presentation.isEnabled());
+                assertTrue(presentation.getDescription().contains("Connect"));
+                assertNotNull(presentation.getDisabledIcon());
+                cached.setCached(false);
+                toolbar.setSelection(cached, true);
+                action.updatePresentation(presentation);
+                assertTrue(console.isEnabled()); assertTrue(overflow.isEnabled()); assertTrue(presentation.isEnabled());
+                assertEquals("Open SQL Console", presentation.getDescription());
+                toolbar.setBusy(true);
+                assertFalse(console.isEnabled()); assertFalse(overflow.isEnabled());
+                toolbar.setBusy(false);
+                toolbar.setSelection(cached, false);
+                assertFalse(console.isEnabled()); assertFalse(overflow.isEnabled());
+            } finally { overflow.removeNotify(); }
         });
     }
 
