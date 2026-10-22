@@ -323,7 +323,7 @@ final class CellDetailsPanel extends JPanel {
         JPanel valueLabelRow = new JPanel(new BorderLayout()); valueLabelRow.setOpaque(false);
         valueHeading.putClientProperty("lattice.section", Boolean.TRUE);
         valueLabelRow.add(valueHeading, BorderLayout.WEST); valueLabelRow.add(summary, BorderLayout.EAST);
-        valueLabelRow.setBorder(JBUI.Borders.empty(18, 0, 12, 0));
+        valueLabelRow.setBorder(JBUI.Borders.empty(18, 0, 9, 0));
         JPanel valuePresentation = new JPanel(new ColumnLayout()); valuePresentation.setOpaque(false);
         valuePresentation.add(valueLabelRow); valuePresentation.add(tabs);
         JPanel valueCard = new JPanel(new WidthAwareBorderLayout()); valueCard.setOpaque(false);
@@ -355,7 +355,7 @@ final class CellDetailsPanel extends JPanel {
         actionGroup.add(actionsRow); actionGroup.add(valueStates);
         valueBlock = new JPanel(new WidthAwareBorderLayout(0, JBUI.scale(4))); valueBlock.setOpaque(false);
         valueBlock.setAlignmentX(Component.LEFT_ALIGNMENT);
-        valueBlock.setBorder(JBUI.Borders.emptyBottom(20));
+        valueBlock.setBorder(JBUI.Borders.emptyBottom(21));
         valueBlock.add(actionGroup, BorderLayout.SOUTH);
         validation.setVisible(false);
         JPanel valueAndFeedback = new JPanel(new WidthAwareBorderLayout(0, JBUI.scale(8)));
@@ -562,7 +562,7 @@ final class CellDetailsPanel extends JPanel {
         label.setAlignmentX(Component.LEFT_ALIGNMENT);
         label.putClientProperty("lattice.section", Boolean.TRUE);
         label.setFont(bodyFont().deriveFont(Font.BOLD));
-        label.setBorder(JBUI.Borders.empty(16, 0, 8, 0));
+        label.setBorder(JBUI.Borders.empty(12, 0, 5, 0));
         metadata.add(label);
     }
     private void renderEmpty() { eyebrow.setText(""); title.setText("Cell details"); identity.setText("Select a cell to inspect its value"); summary.setText(""); valueArea.setText(""); metadata.removeAll(); if (valueBlock != null) valueBlock.setVisible(true); if (tableNote != null) tableNote.setVisible(false); if (staging != null) staging.setVisible(false); }
