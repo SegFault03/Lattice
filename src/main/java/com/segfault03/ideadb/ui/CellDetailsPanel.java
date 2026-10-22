@@ -84,6 +84,7 @@ final class CellDetailsPanel extends JPanel {
     private final JPanel controls = new JPanel(new FlowLayout(FlowLayout.TRAILING, JBUI.scale(8), 0));
     private LookAndFeel lastLookAndFeel;
     private boolean headerStacked;
+    private boolean structuredValue;
 
     private static final class Body extends JPanel implements Scrollable {
         @Override public Dimension getPreferredScrollableViewportSize() { return getPreferredSize(); }
@@ -290,7 +291,7 @@ final class CellDetailsPanel extends JPanel {
         identity.setForeground(JBColor.namedColor("Label.infoForeground", JBColor.GRAY));
         summary.setForeground(JBColor.namedColor("Label.infoForeground", JBColor.GRAY));
         tabs.setOpaque(false);
-        styleTextToggle(formattedTab); styleTextToggle(rawTab); styleTextToggle(wrap);
+        styleTextToggle(formattedTab); styleTextToggle(rawTab); styleTextToggle(wrap); styleTextToggle(detailsToggle);
         ButtonGroup presentation = new ButtonGroup(); presentation.add(formattedTab); presentation.add(rawTab);
         formattedTab.setToolTipText("Pretty-print structured content"); rawTab.setToolTipText("Show the stored value without formatting");
         wrap.setToolTipText("Wrap long lines");
@@ -392,7 +393,7 @@ final class CellDetailsPanel extends JPanel {
                     + (lower.isVisible() ? lower.getPreferredSize().height : 0) + detailsToggle.getPreferredSize().height
                     + valueBlock.getPreferredSize().height
                     - valueScroll.getPreferredSize().height;
-            boolean large = valueArea.getLineCount() > 1 || cell != null && CellValuePresentation.isStructured(cell.value());
+            boolean large = valueArea.getLineCount() > 1 || structuredValue;
             int lineHeight = valueArea.getFontMetrics(valueArea.getFont()).getHeight();
             int desired = large ? Math.min(JBUI.scale(320), Math.max(JBUI.scale(144), lineHeight * Math.min(12, valueArea.getLineCount()) + JBUI.scale(24)))
                     : Math.max(JBUI.scale(80), lineHeight * 2 + JBUI.scale(24));
@@ -471,6 +472,7 @@ final class CellDetailsPanel extends JPanel {
     }
     private void updateFooter() {
         footerLabel.setText(editing ? "Editing this cell · Stage change or Cancel · Esc cancels and closes"
+                : cell != null && cell.validationError() != null && !cell.validationError().isBlank() ? "Invalid value · Fix before committing"
                 : cell != null && cell.modified() ? "Pending change · Commit to save to database"
                 : pinned ? columnMode ? "Pinned to this column · Esc to close"
                 : "Pinned to this cell · Esc to close"
@@ -481,7 +483,9 @@ final class CellDetailsPanel extends JPanel {
         valueScroll.setVisible(true); edit.setVisible(true); more.setVisible(true);
         valueBlock.setVisible(true); tableNote.setVisible(false);
         ColumnMetadata c = cell.column();
+        structuredValue = CellValuePresentation.isStructured(cell.value());
         eyebrow.setText(safe(cell.tableName()));
+        eyebrow.setToolTipText(safe(cell.tableName()));
         title.setText(c == null ? "Cell value" : c.getName());
         title.setToolTipText(title.getText());
         identity.setText(safe(cell.rowLabel()) + " · Column " + (cell.modelColumn() + 1));
@@ -510,6 +514,7 @@ final class CellDetailsPanel extends JPanel {
     private void buildColumn() {
         ColumnMetadata c = column.column();
         eyebrow.setText(safe(column.tableName()));
+        eyebrow.setToolTipText(safe(column.tableName()));
         title.setText(c == null ? "Column details" : c.getName());
         title.setToolTipText(title.getText());
         identity.setText("Column " + (column.modelColumn() + 1) + "  ·  Structure");
@@ -557,7 +562,7 @@ final class CellDetailsPanel extends JPanel {
     }
     private void updateTabs() { formattedTab.setSelected(!editing && !rawMode); rawTab.setSelected(editing || rawMode); wrap.setSelected(valueArea.getLineWrap()); }
     private void updateValueTools() {
-        boolean structured = cell != null && CellValuePresentation.isStructured(cell.value());
+        boolean structured = cell != null && structuredValue;
         String text = valueArea.getText();
         boolean multiline = text.contains("\n");
         formattedTab.setVisible(structured); rawTab.setVisible(structured);
@@ -609,6 +614,9 @@ final class CellDetailsPanel extends JPanel {
         editTable.setEnabled(!busy && (cell != null && !cell.view() || column != null && !column.view()));
         refreshTextToggle(formattedTab); refreshTextToggle(rawTab); refreshTextToggle(wrap);
         updateValueTools();
+        if (editing) summary.setText(hasDraftChange() ? valueSummary(valueArea.getText()) : valueSummary(cell.value()) + " · Unchanged");
+        close.setToolTipText(editing ? "Cancel edit and close details" : "Close details");
+        close.getAccessibleContext().setAccessibleDescription(close.getToolTipText());
         updateFooter();
         resizeContentBlocks(); content.revalidate(); content.repaint();
     }
@@ -654,6 +662,7 @@ final class CellDetailsPanel extends JPanel {
             valueArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, labelFont.getSize()));
         }
         if (buttonFont != null) for (AbstractButton button : new AbstractButton[]{formattedTab, rawTab, wrap, detailsToggle, edit, copy, more, apply, cancel, editTable}) {
+            button.setOpaque(false); button.setForeground(JBColor.foreground());
             button.setFont(buttonFont); button.setIconTextGap(JBUI.scale(6)); button.setMargin(JBUI.insets(4, 10));
             sizeControl(button);
         }
@@ -724,5 +733,4 @@ final class CellDetailsPanel extends JPanel {
         return characters + (characters == 1 ? " character" : " characters");
     }
     private static String safe(String s) { return s == null ? "" : s; }
-    private static String escape(String s) { return safe(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"); }
 }

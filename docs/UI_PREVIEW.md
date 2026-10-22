@@ -1,5 +1,34 @@
 # Swing UI previews
 
+## Cell inspector interaction
+
+Use **Inspect** in the table toolbar or **Alt+Enter** to toggle the inspector.
+Closing it keeps it closed during ordinary cell selection. Clicking a column
+header opens column details; pinning retains the inspected value/column while
+the selection changes. Reopening restores the divider position.
+
+**Edit value** starts an unstaged draft. While editing, the inspector stays on
+that cell. **Stage change** explicitly adds the draft to the pending batch;
+**Commit** writes the batch to the database. Commit/reload cannot implicitly
+stage an inspector draft. Cancel, X and Escape discard the current inspector
+edit; X/Escape also close the inspector. Disposing the editor tab preserves an
+unconfirmed draft separately in the existing local project draft store and
+restores it in edit mode, outside the commit batch.
+
+Untouched values disable Stage change. SQL NULL, an empty string and a database
+default are distinct; use the value menu for explicit state changes. Character
+counts follow the draft, and invalid values show feedback beside the editor.
+Presentation controls appear for structured/long values, scalar editors remain
+compact, and column metadata expands on demand. Metadata and identifiers wrap
+and can be selected/copied. Actions retain native theme geometry and keyboard
+focus.
+
+The focused `--cell-details-only` previews also exercise closed-state retention,
+divider restoration, compact JSON, long metadata, local validation and larger
+fonts in both themes. The native focused scenario checks the explicit toolbar
+toggle and leaves the inspector closed after an ordinary grid click. See the
+[prioritized implementation checklist](design/data-cell-refresh-plan.md).
+
 Run the preview helper from the repository root on Windows, Linux or macOS:
 
 ```sh

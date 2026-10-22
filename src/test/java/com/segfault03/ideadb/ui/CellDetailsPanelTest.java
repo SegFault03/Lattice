@@ -42,6 +42,7 @@ class CellDetailsPanelTest {
                 CellDetailsPanel panel = new CellDetailsPanel(actions); panel.showCell(cell(value, 0));
                 click(panel, "edit");
                 assertFalse(field(panel, "apply", JButton.class).isEnabled());
+                assertTrue(field(panel, "summary", JLabel.class).getText().endsWith("Unchanged"));
                 click(panel, "apply");
                 assertTrue(actions.applied.isEmpty());
                 assertTrue(panel.finishEditing());

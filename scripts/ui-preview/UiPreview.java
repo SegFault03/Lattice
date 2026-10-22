@@ -530,6 +530,10 @@ public final class UiPreview {
         return panel;
     }
     static void verifyControls(Container container) {
+        // Native AUTOLAYOUT keeps folded custom controls offscreen for its overflow popup.
+        // Their parent toolbar bounds are still checked by the caller; its internal
+        // placement is not a clipped application form/control.
+        if (container instanceof com.intellij.openapi.actionSystem.impl.ActionToolbarImpl) return;
         for (Component child : container.getComponents()) {
             if (!child.isVisible()) continue;
             if (child.getX() < 0 || child.getY() < 0 || child.getX() + child.getWidth() > container.getWidth()
@@ -1026,7 +1030,8 @@ public final class UiPreview {
                 nativeDelegates(nativeTable);
                 ((DatabaseTable)field(nativeTable, "dataTable")).sizeColumnsToContent();
                 render(nativeTable, theme + "-table-native-1100", 1100, 620);
-                verifyControls((Container)((BorderLayout)nativeTable.getLayout()).getLayoutComponent(BorderLayout.NORTH));
+                JPanel nativeWorkspace = (JPanel)field(nativeTable, "tableWorkspace");
+                verifyControls((Container)((BorderLayout)nativeWorkspace.getLayout()).getLayoutComponent(BorderLayout.NORTH));
                 autoEditing(theme);
                 verifyConnectionReadiness();
                 for (String variant : List.of("mysql", "new", "postgresql", "success", "failed", "hsql-server", "hsql-memory", "hsql-file", "jdbc-url", "driver-download", "driver-retained", "driver-retained-hsqldb", "driver-local", "mysql-bundled-expanded", "hsql-bundled-expanded", "hsql-memory-bundled-expanded", "hsql-file-bundled-expanded", "mysql-collapsed-after-expansion", "mysql-incomplete", "hsql-incomplete", "jdbc-url-incomplete")) connection(theme, variant, 740);

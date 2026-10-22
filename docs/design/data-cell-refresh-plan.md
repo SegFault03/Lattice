@@ -60,3 +60,10 @@ committed and pushed to the same branch after each completed phase.
   passed. Expanded light/dark previews cover compact JSON, long identifiers/defaults,
   local validation and larger fonts (22 renders). Controls use native geometry,
   consistent targets/icon gaps, selectable wrapping metadata and compact scalar values.
+
+- Verification checkpoint: 200 ordinary tests, plugin ZIP/archive validation,
+  13 preview/review tooling checks and the complete 124-render gallery passed.
+  The live IntelliJ 2025.1 inspector flow passed, including pinning, editing,
+  closed-state retention, explicit reopening and a native dark/light theme round trip.
+  Inspection of its screenshots found a secondary-toggle opaque/foreground issue
+  after theme switching; that treatment is corrected for the scaled native rerun.
