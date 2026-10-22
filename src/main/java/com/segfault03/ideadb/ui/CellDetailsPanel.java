@@ -380,7 +380,7 @@ final class CellDetailsPanel extends JPanel {
         editTableRow.setOpaque(false); editTableRow.add(editTable);
         editTableRow.setBorder(JBUI.Borders.emptyTop(8));
         tableNote.add(tableNoteText); tableNote.add(editTableRow);
-        tableNote.setBorder(JBUI.Borders.empty(28, 0, 0, 0));
+        tableNote.setBorder(JBUI.Borders.empty(28, 0, 24, 0));
         lower.add(tableNote);
         footer.add(footerLabel, BorderLayout.CENTER);
         bottomDock.add(footer, BorderLayout.SOUTH);

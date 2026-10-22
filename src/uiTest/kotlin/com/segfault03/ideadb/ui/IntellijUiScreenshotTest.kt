@@ -1211,6 +1211,10 @@ class IntellijUiScreenshotTest {
                 frame.x { byVisibleText("Open data editor") }.waitFound().click()
                 ideFrame { invokeAction("HideAllWindows") }
                 withContext(OnDispatcher.EDT) { cast(frame.component, Window::class).setBounds(180, 60, 1487, 863) }
+                waitUntil("orders editor loaded") {
+                    frame.xx { byJavaClass("com.segfault03.ideadb.ui.TableDataEditorPanel") }.list()
+                        .any { it.component.isShowing() && it.hasSubtext("10 rows") }
+                }
                 val ordersEditor = frame.xx { byJavaClass("com.segfault03.ideadb.ui.TableDataEditorPanel") }.list().single { it.component.isShowing() }
                 val ordersGrid = ordersEditor.x(JTableUiComponent::class.java) { byJavaClass("com.segfault03.ideadb.ui.DatabaseTable") }.waitFound()
                 waitUntil("approved orders fixture loaded") { ordersGrid.rowCount() == 10 }

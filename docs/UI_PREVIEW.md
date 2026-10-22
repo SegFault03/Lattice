@@ -16,17 +16,21 @@ unconfirmed draft separately in the existing local project draft store and
 restores it in edit mode, outside the commit batch.
 
 Untouched values disable Stage change. SQL NULL, an empty string and a database
-default are distinct; use the value menu for explicit state changes. Character
+default are distinct; direct value-state actions appear when applicable. Character
 counts follow the draft, and invalid values show feedback beside the editor.
-Presentation controls appear for structured/long values, scalar editors remain
-compact, and column metadata expands on demand. Metadata and identifiers wrap
-and can be selected/copied. Actions retain native theme geometry and keyboard
-focus.
+Presentation controls appear for structured/long values. Column metadata stays
+visible, with compact Edit table below the structure hint. The column name is
+the title; the subtitle contains only row and column coordinates. Fixed header
+actions use a filled gray pinned icon. Rounded inspector buttons retain Swing
+keyboard and accessibility behavior across themes and platforms. Metadata and
+identifiers wrap and can be selected/copied.
 
 The focused `--cell-details-only` previews also exercise closed-state retention,
 divider restoration, compact JSON, long metadata, local validation and larger
-fonts in both themes. The native focused scenario checks the explicit toolbar
-toggle and leaves the inspector closed after an ordinary grid click. See the
+fonts in both themes. They also render the approved date fixture at 388 × 730
+and a narrow 320 × 650 viewport. The focused native flow captures the same
+WARMUP_ORDERS fixture in both themes and records its panel bounds for comparison.
+The native focused scenario checks the explicit toolbar toggle and leaves the inspector closed after an ordinary grid click. See the
 [prioritized implementation checklist](design/data-cell-refresh-plan.md).
 
 Run the preview helper from the repository root on Windows, Linux or macOS:
@@ -108,9 +112,9 @@ alignment, metadata baselines, and larger UI fonts and list rows. Resizing check
 cover minimum, preferred and wide layouts. The previous combined source label
 and differently sized footer actions both fail the retained reproduction tests.
 
-Inspector actions reserve native text padding and show complete column-action
-labels. Their row moves below a long title when needed. Form rows measure wrapped
-content at the current viewport width; SQL preview takes the remaining height and
+Inspector actions reserve text padding and show complete action labels. Pin and
+close occupy a fixed header rail above the column name, including when it wraps.
+Form rows measure wrapped content at the current viewport width; SQL preview takes the remaining height and
 can shrink to three readable lines before the outer form needs to scroll. Resize
 checks cross this threshold in both directions. Inspector padding reserves the
 current native scrollbar width consistently, preventing IntelliJ's transparent
