@@ -1255,6 +1255,7 @@ class IntellijUiScreenshotTest {
                         val identityText = ordersDetails.x { byAccessibleName("Inspected row and column") }.waitFound()
                         val valueText = ordersDetails.x { byAccessibleName("Cell value") }.waitFound()
                         val editAction = ordersDetails.x { byAccessibleName("Edit selected cell value") }.waitFound()
+                        val inspectAction = ordersEditor.x { byAccessibleName("Toggle cell inspector (Alt+Enter)") }.waitFound()
                         val identitySize = cast(identityText.component, LiveSwingComponent::class).getFont().getSize2D()
                         val valueSize = cast(valueText.component, LiveSwingComponent::class).getFont().getSize2D()
                         val buttonSize = cast(editAction.component, LiveSwingComponent::class).getFont().getSize2D()
@@ -1262,8 +1263,11 @@ class IntellijUiScreenshotTest {
                             kotlin.math.abs(buttonSize - nativeButton) < .01f) {
                             "Inspector overrides native text sizes: label=$nativeLabel identity=$identitySize value=$valueSize button=$nativeButton/$buttonSize"
                         }
+                        check(editAction.component.height <= inspectAction.component.height + (4 * inspectorReviewScale).toInt()) {
+                            "Edit action is oversized beside the IDE toolbar: ${editAction.component.height} vs ${inspectAction.component.height}"
+                        }
                         Files.writeString(screenshotsDirectory.resolve("inspector-text-metrics-${if (captureTheme.contains("Dark", true)) "dark" else "light"}.txt"),
-                            "UI scale: $inspectorReviewScale\nNative label: $nativeLabel\nInspector subtitle: $identitySize\nValue: $valueSize\nNative button: $nativeButton\nEdit button: $buttonSize\nHeader targets fully visible: true\n")
+                            "UI scale: $inspectorReviewScale\nNative label: $nativeLabel\nInspector subtitle: $identitySize\nValue: $valueSize\nNative button: $nativeButton\nEdit button: $buttonSize\nEdit bounds: ${editAction.component.width}x${editAction.component.height}\nInspect height: ${inspectAction.component.height}\nHeader targets fully visible: true\n")
                     }
                     closeAction.moveMouse(Point(closeAction.component.width / 2, closeAction.component.height / 2))
                     captureScreen(screenshotsDirectory.resolve("approved-inspector-${if (captureTheme.contains("Dark", true)) "dark" else "light"}-close-hover.png"))

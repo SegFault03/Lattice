@@ -52,6 +52,10 @@ class CellDetailsPanelTest {
                     assertEquals(label.getSize2D(), label(panel, "Nullable").getFont().getSize2D(), .01f);
                     assertEquals(label.getSize2D(), field(panel, "valueArea", JTextArea.class).getFont().getSize2D(), .01f);
                     assertEquals(button.getSize2D(), field(panel, "edit", JButton.class).getFont().getSize2D(), .01f);
+                    JButton nativeAction = new JButton("Edit value");
+                    assertTrue(field(panel, "edit", JButton.class).getPreferredSize().height <=
+                                    nativeAction.getPreferredSize().height + com.intellij.util.ui.JBUI.scale(6),
+                            "Edit should remain close to native button height, including its larger icon");
                 }
             } finally {
                 com.intellij.ui.scale.JBUIScale.setUserScaleFactor(previousScale);
