@@ -23,14 +23,14 @@ committed and pushed to the same branch after each completed phase.
 
 ## Phase 3 — responsive layout and visual finish
 
-- [ ] Prevent presentation/count overlap; preserve usable edit actions at compact widths/heights.
-- [ ] Wrap/select long identifiers, expressions and metadata; stack narrow metadata rows.
-- [ ] Use a smaller scalar editor, compact gutter and restrained type display.
-- [ ] Consolidate typography and spacing; align title/subtitle, header controls and action baselines.
-- [ ] Unify button shape, target heights, icon family, icon/text gaps and painted-edge spacing.
-- [ ] Add quiet-action hover/focus and distinct pressed feedback; retain readable contrast.
-- [ ] Add helper/action spacing and consistent section insets, borders and selected cues.
-- [ ] Reduce competing key-header/toolbar emphasis while retaining identifiable states.
+- [x] Prevent presentation/count overlap; preserve usable edit actions at compact widths/heights.
+- [x] Wrap/select long identifiers, expressions and metadata; stack narrow metadata rows.
+- [x] Use a smaller scalar editor, compact gutter and restrained type display.
+- [x] Consolidate typography and spacing; align title/subtitle, header controls and action baselines.
+- [x] Unify button shape, target heights, icon family, icon/text gaps and painted-edge spacing.
+- [x] Add quiet-action hover/focus and distinct pressed feedback; retain readable contrast.
+- [x] Add helper/action spacing and consistent section insets, borders and selected cues.
+- [x] Reduce competing key-header/toolbar emphasis while retaining identifiable states.
 
 ## Phase 4 — verification and handoff
 
@@ -55,3 +55,8 @@ committed and pushed to the same branch after each completed phase.
   verified closed-state retention and divider restoration. Inspect/Alt+Enter now
   explicitly opens the panel; scalar values hide irrelevant presentation controls,
   column metadata is expandable, and NULL/empty/default have explicit actions.
+
+- Phase 3: ordinary Java suite, plugin build and native UI scenario compilation
+  passed. Expanded light/dark previews cover compact JSON, long identifiers/defaults,
+  local validation and larger fonts (22 renders). Controls use native geometry,
+  consistent targets/icon gaps, selectable wrapping metadata and compact scalar values.

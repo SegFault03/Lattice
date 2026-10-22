@@ -293,8 +293,6 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         dataTable = new DatabaseTable(tableModel);
         dataTable.putClientProperty("lattice.showColumnIcons", Boolean.TRUE);
         dataTable.setCellSelectionEnabled(true);
-        dataTable.setFont(dataTable.getFont().deriveFont(JBUI.scale(15f)));
-        dataTable.setRowHeight(JBUI.scale(36));
         dataTable.setDefaultRenderer(Object.class, new CellHighlightRenderer());
         JPopupMenu cellMenu = DatabaseUi.popupMenu();
         cellMenu.add(nullBtn);
@@ -773,10 +771,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         Map<CellCoord, String> errors = tableModel.getValidationErrors();
         boolean hasErrors = !errors.isEmpty();
         revertBtn.setEnabled(hasPending && !isBusy());
-        DatabaseUi.setActionEmphasis(
-                revertBtn,
-                revertBtn.isEnabled() ? DatabaseUi.DESTRUCTIVE_ACTION_COLOR : null
-        );
+        DatabaseUi.setActionEmphasis(revertBtn, null);
 
         if (isBusy()) {
             saveBtn.setEnabled(false);

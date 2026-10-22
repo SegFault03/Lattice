@@ -424,7 +424,7 @@ public final class UiPreview {
             throw new AssertionError("Pinned column details must stay on the header");
         render(editor, theme + "-column-details-pinned-1440", 1440, 900);
         JPanel metadata = (JPanel) field(details, "metadata");
-        JLabel title = (JLabel) field(details, "title");
+        JComponent title = (JComponent) field(details, "title");
         if (metadata.getComponentCount() < 7 || title.getWidth() < title.getPreferredSize().width)
             throw new AssertionError("Column details were clipped: rows=" + metadata.getComponentCount()
                     + ", title=" + title.getWidth() + "/" + title.getPreferredSize().width);
@@ -451,6 +451,53 @@ public final class UiPreview {
         invoke(editor, "toggleInspector", new Class<?>[0]);
         if (Math.abs(splitter.getProportion() - 0.58f) > 0.01f)
             throw new AssertionError("Reopening must keep the user's divider position");
+        renderAdversarialCellDetails(editor, theme);
+    }
+
+    static void renderAdversarialCellDetails(TableDataEditorPanel editor, String theme) throws Exception {
+        JTable grid = (JTable)field(editor, "dataTable");
+        JComponent details = (JComponent)field(editor, "cellDetails");
+        grid.setValueAt("{\"customer\":{\"name\":\"Amelia Brooks\",\"notifications\":true},\"tags\":[\"premium\",\"newsletter\"]}", 0, 2);
+        grid.changeSelection(0, 2, false, false);
+        invoke(editor, "openCellDetails", new Class<?>[]{int.class, int.class}, 0, 2);
+        render(editor, theme + "-cell-json-1100", 1100, 700);
+        for (int width : new int[]{960, 760}) {
+            render(editor, theme + "-cell-json-compact-" + width, width, 600);
+            JComponent formatted = (JComponent)field(details, "formattedTab"), summary = (JComponent)field(details, "summary");
+            Rectangle formatBounds = SwingUtilities.convertRectangle(formatted.getParent(), formatted.getBounds(), details);
+            Rectangle summaryBounds = SwingUtilities.convertRectangle(summary.getParent(), summary.getBounds(), details);
+            if (formatBounds.intersects(summaryBounds)) throw new AssertionError("Presentation controls overlap the count");
+        }
+        ((JToggleButton)field(details, "detailsToggle")).doClick(0);
+        render(editor, theme + "-cell-metadata-expanded-960", 960, 700);
+        var constructor = Class.forName("com.segfault03.ideadb.ui.CellDetailsPanel$Column").getDeclaredConstructors()[0];
+        constructor.setAccessible(true);
+        Object longColumn = constructor.newInstance("customer_account_notification_history", 2,
+                new ColumnMetadata("customer_notification_preferences_override_payload", "VARCHAR", java.sql.Types.VARCHAR,
+                        4096, 0, true, false, false, "'notify-on-email-and-sms-unless-account-is-suspended'"), false);
+        invoke(details, "showColumn", new Class<?>[]{longColumn.getClass()}, longColumn);
+        render(editor, theme + "-column-long-metadata-960", 960, 700);
+        JTextArea title = (JTextArea)field(details, "title");
+        if (!title.getText().endsWith("override_payload") || title.getHeight() < title.getPreferredSize().height)
+            throw new AssertionError("Long identifiers must wrap without losing text");
+        grid.changeSelection(0, 4, false, false);
+        grid.setValueAt("not-a-number", 0, 4);
+        invoke(editor, "openCellDetails", new Class<?>[]{int.class, int.class}, 0, 4);
+        render(editor, theme + "-cell-validation-1100", 1100, 700);
+        if (!((JComponent)field(details, "validation")).isVisible())
+            throw new AssertionError("Invalid values need local feedback");
+        Font label = UIManager.getFont("Label.font"), button = UIManager.getFont("Button.font");
+        try {
+            UIManager.put("Label.font", label.deriveFont(label.getSize2D() * 1.5f));
+            UIManager.put("Button.font", button.deriveFont(button.getSize2D() * 1.5f));
+            SwingUtilities.updateComponentTreeUI(details);
+            invoke(details, "refreshTheme", new Class<?>[0]);
+            render(editor, theme + "-cell-large-font-1100", 1100, 800);
+            JButton edit = (JButton)field(details, "edit"), copy = (JButton)field(details, "copy");
+            if (edit.getHeight() != copy.getHeight()) throw new AssertionError("Action targets must share a height at larger fonts");
+        } finally {
+            UIManager.put("Label.font", label); UIManager.put("Button.font", button);
+        }
     }
     static Object invokeResult(Object target, String name) throws Exception {
         Method method = target.getClass().getDeclaredMethod(name);

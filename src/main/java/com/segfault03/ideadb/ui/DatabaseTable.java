@@ -108,8 +108,8 @@ public final class DatabaseTable extends JBTable {
                     && keys.isForeignKeyColumn(table.convertColumnIndexToModel(column));
             Color normal = table.getTableHeader().getBackground();
             boolean light = normal.getRed() + normal.getGreen() + normal.getBlue() > 384;
-            setBackground(primaryKey ? new Color(light ? 0xFFF0C2 : 0x544525)
-                    : foreignKey ? new Color(light ? 0xEDE3FA : 0x463453) : normal);
+            setBackground(primaryKey ? new Color(light ? 0xF5EFDE : 0x423D30)
+                    : foreignKey ? new Color(light ? 0xEEEAF4 : 0x3E3648) : normal);
             setIcon(primaryKey ? foreignKey ? Icons.PRIMARY_FOREIGN_KEY : Icons.KEY
                     : foreignKey ? Icons.FOREIGN_KEY
                     : Boolean.TRUE.equals(table.getClientProperty("lattice.showColumnIcons")) ? Icons.COLUMN : null);
