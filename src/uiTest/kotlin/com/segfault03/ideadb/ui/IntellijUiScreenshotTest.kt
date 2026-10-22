@@ -1190,6 +1190,52 @@ class IntellijUiScreenshotTest {
                     details.component.isShowing() && details.hasSubtext("Row 1") && details.hasSubtext("Column 4")
                 }
 
+                // The approved design fixture is separate from interaction fixtures above.
+                java.sql.DriverManager.getConnection(requireNotNull(jdbcFixture).jdbcUrl, "SA", "").use { conn ->
+                    conn.createStatement().use { statement ->
+                        statement.execute("CREATE TABLE PUBLIC.WARMUP_ORDERS (ID INTEGER PRIMARY KEY, CUSTOMER_ID INTEGER NOT NULL, STATUS VARCHAR(24), ORDER_DATE DATE NOT NULL, TOTAL DECIMAL(10,2))")
+                        val days = listOf(10, 18, 21, 12, 5, 28, 14, 30, 16, 22)
+                        val states = listOf("shipped", "processing", "delivered", "cancelled", "shipped", "processing", "delivered", "shipped", "delivered", "processing")
+                        val totals = listOf("125.00", "240.50", "75.00", "0.00", "310.00", "89.99", "152.25", "67.00", "205.10", "99.95")
+                        days.forEachIndexed { index, day ->
+                            statement.execute("INSERT INTO PUBLIC.WARMUP_ORDERS VALUES (${index + 1}, ${1001 + index % 6}, '${states[index]}', DATE '2026-09-${day.toString().padStart(2, '0')}', ${totals[index]})")
+                        }
+                    }
+                }
+                ideFrame { invokeAction("com.segfault03.lattice.open") }
+                databaseTree.fixture.rightClickPath(publicSchemaPathText)
+                frame.x { byVisibleText("Refresh tables") }.waitFound().click()
+                val ordersPath = publicSchemaPath + "Tables (2)" + "WARMUP_ORDERS"
+                waitUntil("approved orders fixture available") { databaseTree.pathExists(*ordersPath) }
+                databaseTree.fixture.rightClickPath(ordersPath.joinToString(databaseTree.fixture.separator()))
+                frame.x { byVisibleText("Open data editor") }.waitFound().click()
+                ideFrame { invokeAction("HideAllWindows") }
+                withContext(OnDispatcher.EDT) { cast(frame.component, Window::class).setBounds(180, 60, 1487, 863) }
+                val ordersEditor = frame.xx { byJavaClass("com.segfault03.ideadb.ui.TableDataEditorPanel") }.list().single { it.component.isShowing() }
+                val ordersGrid = ordersEditor.x(JTableUiComponent::class.java) { byJavaClass("com.segfault03.ideadb.ui.DatabaseTable") }.waitFound()
+                waitUntil("approved orders fixture loaded") { ordersGrid.rowCount() == 10 }
+                ordersGrid.clickCell(1, 3)
+                ordersEditor.x { byAccessibleName("Toggle cell inspector (Alt+Enter)") }.waitFound().click()
+                val ordersDetails = ordersEditor.x { byJavaClass("com.segfault03.ideadb.ui.CellDetailsPanel") }.waitFound()
+                waitUntil("approved date and coordinates shown") {
+                    ordersDetails.hasSubtext("2026-09-18") && ordersDetails.hasSubtext("Row 2 · Column 4")
+                }
+                withContext(OnDispatcher.EDT) {
+                    cast(frame.component, Window::class).setBounds(180, 60, 1487, 863 + 730 - ordersDetails.component.height)
+                }
+                ordersDetails.x { byAccessibleName("Pin cell details") }.waitFound().click()
+                for (captureTheme in listOfNotNull(themeId, alternateTheme)) {
+                    withContext(OnDispatcher.EDT) {
+                        laf.setCurrentLookAndFeel(laf.findLaf(captureTheme), true); laf.updateUI()
+                    }
+                    waitUntil("approved prototype in $captureTheme") { laf.getCurrentUIThemeLookAndFeel().getId() == captureTheme }
+                    captureScreen(screenshotsDirectory.resolve("approved-inspector-${if (captureTheme.contains("Dark", true)) "dark" else "light"}.png"))
+                    val panelLocation = ordersDetails.component.getLocationOnScreen()
+                    Files.writeString(screenshotsDirectory.resolve("approved-inspector-${if (captureTheme.contains("Dark", true)) "dark" else "light"}-bounds.txt"),
+                        "${panelLocation.x},${panelLocation.y},${ordersDetails.component.width},${ordersDetails.component.height}")
+                    assertCellInspectorPalette(ordersDetails)
+                }
+
                 Files.writeString(screenshotsDirectory.resolve("runtime-evidence.txt"), buildString {
                     appendLine("Focused native Value Workspace capture")
                     appendLine("IDE: ${System.getProperty("ui.ide.version")} (${System.getProperty("ui.ide.build")})")

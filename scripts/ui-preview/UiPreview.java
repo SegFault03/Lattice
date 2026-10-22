@@ -495,6 +495,8 @@ public final class UiPreview {
         if (!((JComponent)field(details, "lower")).isVisible())
             throw new AssertionError("Column metadata must always remain visible");
         render(editor, theme + "-cell-metadata-expanded-960", 960, 700);
+        updateToolbars(editor);
+        com.intellij.util.ui.UIUtil.dispatchAllInvocationEvents();
         var constructor = Class.forName("com.segfault03.ideadb.ui.CellDetailsPanel$Column").getDeclaredConstructors()[0];
         constructor.setAccessible(true);
         Object longColumn = constructor.newInstance("customer_account_notification_history", 2,

@@ -1,6 +1,7 @@
 package com.segfault03.ideadb.ui;
 
 import com.intellij.icons.AllIcons;
+import com.intellij.openapi.util.IconLoader;
 import com.intellij.ui.JBColor;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.IconUtil;
@@ -9,6 +10,7 @@ import com.segfault03.ideadb.model.RowDefaults;
 
 import javax.swing.*;
 import javax.swing.plaf.basic.BasicHTML;
+import javax.swing.plaf.basic.BasicButtonUI;
 import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.*;
@@ -58,8 +60,8 @@ final class CellDetailsPanel extends JPanel {
     private JPanel valueBlock;
     private JPanel tableNote;
     private JPanel staging;
-    private final JPanel tableNoteText = new JPanel(new FlowLayout(FlowLayout.LEADING, 0, 0));
-    private final JLabel tableNoteLabel = new JLabel("Review or change table structure");
+    private final JPanel tableNoteText = new JPanel(new BorderLayout());
+    private final WrappingLabel tableNoteLabel = new WrappingLabel("Review or change table structure");
     private final JPanel metadata = new JPanel();
     private final JPanel footer = new JPanel(new BorderLayout());
     private final JPanel bottomDock = new JPanel(new BorderLayout());
@@ -69,23 +71,23 @@ final class CellDetailsPanel extends JPanel {
     private final JToggleButton formattedTab = new JToggleButton("Formatted");
     private final JToggleButton rawTab = new JToggleButton("Raw");
     private final JToggleButton wrap = new JToggleButton("Wrap");
-    private final JButton edit = DatabaseUi.dialogAction("Edit value", AllIcons.Actions.Edit, "Edit selected cell value");
-    private final JButton copy = new QuietButton("Copy", AllIcons.Actions.Copy);
+    private final JButton edit = new InspectorButton("Edit value", IconUtil.scale(AllIcons.Actions.Edit, null, 1.5f), ButtonStyle.PRIMARY);
+    private final JButton copy = new QuietButton("Copy", IconUtil.scale(AllIcons.Actions.Copy, null, 1.5f));
     private final JButton setNull = new QuietButton("Set NULL", null);
     private final JButton emptyString = new QuietButton("Empty string", null);
     private final JButton useDefault = new QuietButton("Use default", null);
     private final JButton revert = new QuietButton("Revert", AllIcons.Actions.Rollback);
     private final JPanel valueStates = new JPanel(new ActionLayout());
-    private final JButton apply = DatabaseUi.dialogAction("Stage change", null, "Stage this value; Commit saves it to the database");
+    private final JButton apply = new InspectorButton("Stage change", null, ButtonStyle.PRIMARY);
     private final JButton cancel = new QuietButton("Cancel", null);
-    private final JButton editTable = new JButton("Edit table");
+    private final JButton editTable = new InspectorButton("Edit table", null, ButtonStyle.SECONDARY);
     private Cell cell;
     private Column column;
     private boolean pinned, columnMode, editing, busy, rawMode;
     private String draft;
     private final WrappingLabel validation = new WrappingLabel("");
     private final JPanel tabs = new JPanel(new ActionLayout());
-    private final JPanel controls = new JPanel(new FlowLayout(FlowLayout.TRAILING, JBUI.scale(4), 0));
+    private final JPanel controls = new JPanel(new GridLayout(1, 2, JBUI.scale(10), 0));
     private LookAndFeel lastLookAndFeel;
     private boolean structuredValue;
 
@@ -157,7 +159,7 @@ final class CellDetailsPanel extends JPanel {
             super(null); setOpaque(false); setBorder(JBUI.Borders.empty(6, 32, 6, 0));
             key = new JLabel(name); key.putClientProperty("lattice.secondary", Boolean.TRUE);
             key.setForeground(new JBColor(0x657185, 0xABB3BE));
-            value.setText(text); value.setToolTipText(text); value.getAccessibleContext().setAccessibleName(name);
+            value.setText(text); value.putClientProperty("lattice.secondary", "—".equals(text)); value.setToolTipText(text); value.getAccessibleContext().setAccessibleName(name);
             add(key); add(value);
         }
         private int valueWidth(int width) { return Math.max(1, width < JBUI.scale(220) || key.getText().isEmpty() ? width : width - JBUI.scale(120)); }
@@ -184,26 +186,59 @@ final class CellDetailsPanel extends JPanel {
         text.setFont(UIManager.getFont("Label.font")); return text;
     }
 
-    /** Native button geometry with hover/pressed/focus surfaces for quiet actions. */
-    private static class QuietButton extends JButton {
-        QuietButton(String text, Icon icon) {
-            super(text, icon); setOpaque(false); setRolloverEnabled(true); setIconTextGap(JBUI.scale(6));
-            getModel().addChangeListener(e -> refreshSurface());
+    private enum ButtonStyle { PRIMARY, SECONDARY, QUIET }
+
+    /** Stable rounded surfaces across Windows/Linux LAFs, using native button semantics. */
+    private static class InspectorButton extends JButton {
+        private final ButtonStyle style;
+        InspectorButton(String text, Icon icon, ButtonStyle style) {
+            super(text, icon); this.style = style;
+            setBorder(style == ButtonStyle.PRIMARY ? JBUI.Borders.empty(6, 16)
+                    : style == ButtonStyle.SECONDARY ? JBUI.Borders.empty(5, 12) : JBUI.Borders.empty(4, 10));
+            setIconTextGap(JBUI.scale(6)); setRolloverEnabled(true);
+            getModel().addChangeListener(e -> repaint());
             addFocusListener(new FocusAdapter() {
-                @Override public void focusGained(FocusEvent event) { refreshSurface(); }
-                @Override public void focusLost(FocusEvent event) { refreshSurface(); }
+                @Override public void focusGained(FocusEvent e) { repaint(); }
+                @Override public void focusLost(FocusEvent e) { repaint(); }
             });
-            refreshSurface();
         }
-        private void refreshSurface() {
-            boolean active = isEnabled() && (getModel().isRollover() || getModel().isPressed() || isFocusOwner() || isSelected());
-            setContentAreaFilled(active); setBorderPainted(active); setFocusPainted(true);
+        @Override public void updateUI() {
+            setUI(new BasicButtonUI()); setOpaque(false); setContentAreaFilled(false); setBorderPainted(false);
         }
-        @Override public void updateUI() { super.updateUI(); setOpaque(false); if (getModel() != null) refreshSurface(); }
+        @Override public Color getForeground() {
+            return style == ButtonStyle.PRIMARY && isEnabled() ? Color.WHITE : super.getForeground();
+        }
+        @Override protected void paintComponent(Graphics graphics) {
+            Graphics2D g = (Graphics2D)graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            boolean hover = isEnabled() && (getModel().isRollover() || getModel().isPressed());
+            Color surface = style == ButtonStyle.PRIMARY
+                    ? !isEnabled() ? new JBColor(0xDCE4F2, 0x343F53)
+                    : getModel().isPressed() ? new JBColor(0x124DCE, 0x2054CD)
+                    : hover ? new JBColor(0x1B57DF, 0x326DFA) : new JBColor(0x1F62F2, 0x2864F6)
+                    : hover ? new JBColor(0xE8ECF2, 0x35383F)
+                    : style == ButtonStyle.SECONDARY ? new JBColor(0xFFFFFF, 0x2B2D30) : null;
+            int arc = JBUI.scale(10);
+            if (surface != null) {
+                g.setColor(surface); g.fillRoundRect(0, 0, getWidth(), getHeight(), arc, arc);
+                if (style != ButtonStyle.QUIET) {
+                    g.setColor(style == ButtonStyle.PRIMARY ? new JBColor(0x1753D5, 0x3B73FC) : new JBColor(0xD4D9E1, 0x484C54));
+                    g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, arc, arc);
+                }
+            }
+            if (isFocusOwner()) {
+                g.setColor(new JBColor(0x356EDE, 0x8AAFFF)); g.setStroke(new BasicStroke(JBUI.scale(2f)));
+                g.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, arc, arc);
+            }
+            g.dispose(); super.paintComponent(graphics);
+        }
         @Override public Dimension getPreferredSize() {
             Dimension size = super.getPreferredSize();
             return new Dimension(size.width, Math.max(JBUI.scale(36), size.height));
         }
+    }
+    private static final class QuietButton extends InspectorButton {
+        QuietButton(String text, Icon icon) { super(text, icon, ButtonStyle.QUIET); }
     }
 
     /** Paint only the neutral surface; the IDE supplies the standard action glyphs. */
@@ -215,7 +250,8 @@ final class CellDetailsPanel extends JPanel {
         }
         void setActive(boolean active) { setSelected(active); repaint(); }
         @Override public void updateUI() {
-            super.updateUI(); setOpaque(false); setContentAreaFilled(false); setBorderPainted(false);
+            setUI(new BasicButtonUI()); setOpaque(false); setContentAreaFilled(false); setBorderPainted(false);
+            setBorder(JBUI.Borders.empty());
         }
         @Override protected void paintComponent(Graphics graphics) {
             Graphics2D g = (Graphics2D) graphics.create();
@@ -238,7 +274,7 @@ final class CellDetailsPanel extends JPanel {
         setPreferredSize(new Dimension(JBUI.scale(388), 400));
         setMinimumSize(new Dimension(JBUI.scale(320), 220));
         setBorder(JBUI.Borders.empty(0, 24));
-        eyebrow.setIcon(Icons.TABLE); eyebrow.setIconTextGap(JBUI.scale(6));
+        eyebrow.setIcon(IconUtil.scale(Icons.TABLE, null, 1.5f)); eyebrow.setIconTextGap(JBUI.scale(6));
         title.getAccessibleContext().setAccessibleName("Inspected column");
         identity.getAccessibleContext().setAccessibleName("Inspected row and column");
         GridBagConstraints labelConstraints = new GridBagConstraints();
@@ -259,7 +295,7 @@ final class CellDetailsPanel extends JPanel {
         controls.add(pin); controls.add(close);
         GridBagConstraints actionsConstraints = new GridBagConstraints();
         actionsConstraints.gridx = 1; actionsConstraints.gridy = 0;
-        actionsConstraints.anchor = GridBagConstraints.NORTHEAST; actionsConstraints.insets = JBUI.insetsLeft(12);
+        actionsConstraints.anchor = GridBagConstraints.NORTHEAST; actionsConstraints.insets = JBUI.insets(0, 12, 0, -8);
         header.add(controls, actionsConstraints); add(header, BorderLayout.NORTH);
 
         content.setOpaque(true); content.setLayout(new ColumnLayout());
@@ -296,6 +332,10 @@ final class CellDetailsPanel extends JPanel {
         actionsRow.setOpaque(false); actionsRow.setBorder(JBUI.Borders.emptyTop(8));
         copy.setToolTipText("Copy the raw cell value");
         copy.addActionListener(e -> copyText());
+        edit.setToolTipText("Edit selected cell value");
+        edit.getAccessibleContext().setAccessibleName("Edit selected cell value");
+        apply.setToolTipText("Stage this value; Commit saves it to the database");
+        apply.getAccessibleContext().setAccessibleName("Stage this value; Commit saves it to the database");
         edit.setMargin(JBUI.insets(6, 16));
         apply.setMargin(JBUI.insets(6, 16));
         edit.addActionListener(e -> beginEdit());
@@ -333,16 +373,16 @@ final class CellDetailsPanel extends JPanel {
         tableNote.setAlignmentX(Component.LEFT_ALIGNMENT);
         tableNoteLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         tableNoteText.setOpaque(false); tableNoteText.add(tableNoteLabel);
-        editTable.setIcon(Icons.TABLE);
+        editTable.setIcon(IconUtil.scale(Icons.TABLE, null, 1.5f));
         editTable.setMargin(new Insets(3, 8, 3, 8)); editTable.setAlignmentX(Component.LEFT_ALIGNMENT);
         editTable.addActionListener(e -> actions.editTable());
         JPanel editTableRow = new JPanel(new FlowLayout(FlowLayout.LEADING, 0, 0));
         editTableRow.setOpaque(false); editTableRow.add(editTable);
         editTableRow.setBorder(JBUI.Borders.emptyTop(8));
         tableNote.add(tableNoteText); tableNote.add(editTableRow);
-        tableNote.setBorder(JBUI.Borders.empty(24, 0, 28, 0));
+        tableNote.setBorder(JBUI.Borders.empty(28, 0, 0, 0));
+        lower.add(tableNote);
         footer.add(footerLabel, BorderLayout.CENTER);
-        bottomDock.add(tableNote, BorderLayout.NORTH);
         bottomDock.add(footer, BorderLayout.SOUTH);
         add(bottomDock, BorderLayout.SOUTH);
         getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "escape");
@@ -518,7 +558,7 @@ final class CellDetailsPanel extends JPanel {
     }
     private void addSection(String name) {
         JLabel label = new JLabel(name);
-        if ("Column".equals(name)) { label.setIcon(Icons.COLUMN); label.setIconTextGap(JBUI.scale(8)); }
+        if ("Column".equals(name)) { label.setIcon(IconUtil.scale(Icons.COLUMN, null, 1.5f)); label.setIconTextGap(JBUI.scale(8)); }
         label.setAlignmentX(Component.LEFT_ALIGNMENT);
         label.putClientProperty("lattice.section", Boolean.TRUE);
         label.setFont(bodyFont().deriveFont(Font.BOLD));
@@ -595,10 +635,11 @@ final class CellDetailsPanel extends JPanel {
     }
     private void updatePin() {
         Color glyph = new JBColor(0x657185, 0xADB5C2);
-        pin.setIcon(IconUtil.filterIcon(pinned ? AllIcons.General.PinSelected : AllIcons.General.Pin_tab,
+        pin.setIcon(IconUtil.filterIcon(IconUtil.scale(pinned ? IconLoader.getIcon("/icons/inspector-pinned.svg", CellDetailsPanel.class) : AllIcons.General.Pin_tab, null, pinned ? 2f : 1.5f),
                 () -> new java.awt.image.RGBImageFilter() {
                     @Override public int filterRGB(int x, int y, int rgb) { return (rgb & 0xFF000000) | (glyph.getRGB() & 0xFFFFFF); }
                 }, null));
+        close.setIcon(IconUtil.scale(AllIcons.Actions.CloseDarkGrey, null, 1.75f));
         pin.setActive(pinned);
         pin.setToolTipText(pinned ? "Unpin details" : "Pin details");
         pin.getAccessibleContext().setAccessibleName(pinned
@@ -620,9 +661,9 @@ final class CellDetailsPanel extends JPanel {
         valueScroll.getViewport().setBackground(valueArea.getBackground());
         lineNumbers.setBackground(new JBColor(0xF4F6F9, 0x25262A));
         lineNumbers.setForeground(JBColor.namedColor("Label.infoForeground", new JBColor(0x657185, 0xABB3BE)));
-        Color separator = JBColor.namedColor("Component.borderColor", new JBColor(0xDCE0E5, 0x46484D));
+        Color separator = new JBColor(0xD4D9E1, 0x41454D);
         header.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(0, 0, 1, 0, separator), JBUI.Borders.empty(10, 0, 18, 0)));
+                BorderFactory.createMatteBorder(0, 0, 1, 0, separator), JBUI.Borders.empty(10, 0, 22, 0)));
         refreshSectionBorder();
         footer.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(1, 0, 0, 0, separator), JBUI.Borders.empty(14, 0, 30, 0)));
@@ -641,10 +682,11 @@ final class CellDetailsPanel extends JPanel {
         }
         if (buttonFont != null) for (AbstractButton button : new AbstractButton[]{formattedTab, rawTab, wrap, edit, copy, setNull, emptyString, useDefault, revert, apply, cancel, editTable}) {
             button.setOpaque(false); button.setForeground(JBColor.foreground());
-            button.setFont(buttonFont); button.setIconTextGap(JBUI.scale(6)); button.setMargin(JBUI.insets(4, 10));
+            button.setFont(buttonFont); button.setIconTextGap(JBUI.scale(6));
+            button.setMargin(button == edit || button == apply ? JBUI.insets(6, 16) : JBUI.insets(4, 10));
             sizeControl(button);
         }
-        int actionHeight = JBUI.scale(40);
+        int actionHeight = JBUI.scale(36);
         for (JButton button : new JButton[]{edit, apply, cancel, copy}) actionHeight = Math.max(actionHeight, button.getPreferredSize().height);
         for (JButton button : new JButton[]{edit, apply, cancel, copy})
             button.setPreferredSize(new Dimension(button.getPreferredSize().width, actionHeight));
@@ -656,8 +698,10 @@ final class CellDetailsPanel extends JPanel {
         copy.setForeground(JBColor.foreground());
         cancel.setForeground(JBColor.foreground());
         refreshTextToggle(formattedTab); refreshTextToggle(rawTab); refreshTextToggle(wrap);
-        DatabaseUi.setActionEmphasis(edit, new JBColor(0x2F69CF, 0x3574D4));
-        DatabaseUi.setActionEmphasis(apply, new JBColor(0x2F69CF, 0x3574D4));
+        edit.setIcon(IconUtil.filterIcon(IconUtil.scale(AllIcons.Actions.Edit, null, 1.5f),
+                () -> new java.awt.image.RGBImageFilter() {
+                    @Override public int filterRGB(int x, int y, int rgb) { return (rgb & 0xFF000000) | 0xFFFFFF; }
+                }, null));
         updatePin();
         resizeContentBlocks();
         revalidate(); repaint();
@@ -670,11 +714,11 @@ final class CellDetailsPanel extends JPanel {
     private void refreshValueBorder() {
         Color color = cell != null && cell.validationError() != null && !cell.validationError().isBlank()
                 ? JBColor.namedColor("Label.errorForeground", new JBColor(0xB83232, 0xFF8282))
-                : JBColor.namedColor("Component.borderColor", new JBColor(0xDCE0E5, 0x46484D));
+                : new JBColor(0xD4D9E1, 0x41454D);
         valueScroll.setBorder(BorderFactory.createLineBorder(color));
     }
     private void refreshSectionBorder() {
-        Color separator = JBColor.namedColor("Component.borderColor", new JBColor(0xDCE0E5, 0x46484D));
+        Color separator = new JBColor(0xD4D9E1, 0x41454D);
         lower.setBorder(columnMode ? JBUI.Borders.empty()
                 : BorderFactory.createMatteBorder(1, 0, 0, 0, separator));
     }
@@ -689,7 +733,8 @@ final class CellDetailsPanel extends JPanel {
     private static void refreshMetadataColors(Component component) {
         Font font = bodyFont();
         if (component instanceof JTextArea text && font != null) {
-            text.setFont(font); text.setForeground(JBColor.foreground());
+            text.setFont(font); text.setForeground(Boolean.TRUE.equals(text.getClientProperty("lattice.secondary"))
+                    ? new JBColor(0x657185, 0xABB3BE) : JBColor.foreground());
         }
         if (component instanceof JLabel label) {
             if (font != null) label.setFont(Boolean.TRUE.equals(label.getClientProperty("lattice.section")) ? font.deriveFont(Font.BOLD) : font);

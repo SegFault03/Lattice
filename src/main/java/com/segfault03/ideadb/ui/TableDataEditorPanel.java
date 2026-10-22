@@ -84,6 +84,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     private JPanel tableWorkspace;
     private boolean inspectorVisible;
     private float inspectorProportion = 0.63f;
+    private boolean inspectorWidthInitialized;
     private JButton inspectBtn;
     private String inspectedHeaderName;
 
@@ -435,6 +436,11 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         if (!visible && cellDetails.isEditing() && !cellDetails.finishEditing()) return;
         inspectorVisible = visible;
         if (visible) {
+            if (!inspectorWidthInitialized && cellDetailsSplitter.getWidth() > 0) {
+                inspectorProportion = Math.max(0.3f, Math.min(0.8f,
+                        1f - (float)cellDetails.getPreferredSize().width / cellDetailsSplitter.getWidth()));
+                inspectorWidthInitialized = true;
+            }
             cellDetailsSplitter.setSecondComponent(cellDetails);
             cellDetailsSplitter.setProportion(inspectorProportion);
             // A compact result set should span the available table side, as it does before
