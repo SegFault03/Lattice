@@ -47,7 +47,7 @@ public class DatabaseTreeCellRenderer extends ColoredTreeCellRenderer {
                 setToolTipText(data.getName() + product + (data.isConnected()
                         ? " · Connected · Expand to browse databases" : data.isLoaded()
                         ? " · Disconnected · Cached metadata · Refresh to connect" : " · Disconnected · Expand to connect"));
-                setIcon(new RowIcon(Icons.DATABASE, data.isConnected() ? AllIcons.General.GreenCheckmark : AllIcons.Actions.OfflineMode));
+                setIcon(new RowIcon(Icons.DATABASE, data.isConnected() ? Icons.PLUG_CONNECTED : Icons.PLUG_DISCONNECTED));
                 appendName(tree, data, data.getName(), data.isConnected() ? SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES : SimpleTextAttributes.REGULAR_ATTRIBUTES);
                 getAccessibleContext().setAccessibleDescription(getToolTipText());
                 break;

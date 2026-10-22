@@ -45,7 +45,8 @@ class DatabaseTreeCellRendererTest {
                 String tooltip = renderer.getToolTipText();
                 assertTrue(tooltip.startsWith(config.getName() + " · HSQLDB · "));
                 assertTrue(tooltip.contains(connected ? "Connected" : "Disconnected"));
-                assertInstanceOf(RowIcon.class, renderer.getIcon(), "State must be visible before the connection text");
+                RowIcon connectionIcon = assertInstanceOf(RowIcon.class, renderer.getIcon(), "State must be visible before the connection text");
+                assertSame(connected ? Icons.PLUG_CONNECTED : Icons.PLUG_DISCONNECTED, connectionIcon.getIcon(1));
                 assertEquals(tooltip, renderer.getAccessibleContext().getAccessibleDescription());
             }
             renderer.getTreeCellRendererComponent(new JTree(), new DefaultMutableTreeNode(TreeNodeData.root()),

@@ -12,6 +12,8 @@ public class Icons {
     public static final Icon LATTICE = loadIcon("/icons/lattice.svg", AllIcons.Nodes.DataTables);
     public static final Icon LATTICE_LARGE = loadIcon("/icons/lattice_large.svg", AllIcons.Nodes.DataTables);
     public static final Icon DATABASE = loadIcon("/icons/database.svg", AllIcons.Nodes.DataTables);
+    public static final Icon PLUG_CONNECTED = loadIcon("/icons/plug-connected.svg", AllIcons.General.GreenCheckmark);
+    public static final Icon PLUG_DISCONNECTED = loadIcon("/icons/plug-disconnected.svg", AllIcons.Actions.OfflineMode);
     public static final Icon TABLE = loadIcon("/icons/table.svg", AllIcons.Nodes.DataTables);
     public static final Icon COLUMN = loadIcon("/icons/column.svg", AllIcons.Nodes.DataColumn);
     public static final Icon KEY = loadIcon("/icons/key.svg", AllIcons.Nodes.ResourceBundle);
