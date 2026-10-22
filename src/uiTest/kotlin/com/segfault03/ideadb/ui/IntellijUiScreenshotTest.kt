@@ -1104,6 +1104,7 @@ class IntellijUiScreenshotTest {
                     details.hasSubtext("Column 4") && details.hasSubtext("Structure")
                 }
                 captureScreen(screenshotsDirectory.resolve("value-workspace-header-details.png"))
+                assertCellInspectorPalette(details)
                 val headerDetailsVerified = details.hasSubtext("Column 4") && details.hasSubtext("Structure")
                 details.x { byAccessibleName("Pin column details") }.waitFound().click()
                 waitUntil("column details are pinned") { details.hasSubtext("Pinned to this column") }
@@ -1147,6 +1148,7 @@ class IntellijUiScreenshotTest {
                         details.hasSubtext("Column 4") && details.hasSubtext("Structure")
                     }
                     captureScreen(screenshotsDirectory.resolve("value-workspace-header-opposite-theme.png"))
+                    assertCellInspectorPalette(details)
                     withContext(OnDispatcher.EDT) {
                         laf.setCurrentLookAndFeel(laf.findLaf(themeId), true)
                         laf.updateUI()
@@ -1830,13 +1832,14 @@ class IntellijUiScreenshotTest {
         val name = dialog.x(JTextFieldUI::class.java) {
             and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("Name:"))
         }.waitFound()
-        check(picker.component.width <= 180) { "The source picker must stay compact" }
+        val scale = System.getProperty("ui.scale", "1.0").toDouble()
+        check(picker.component.width <= kotlin.math.ceil(180 * scale).toInt()) { "The source picker must stay within 180 logical pixels" }
         check(picker.component.getLocationOnScreen().x + picker.component.width < name.component.getLocationOnScreen().x) {
             "The source picker must appear to the left of the connection form"
         }
         for ((source, port) in listOf("PostgreSQL" to "5432", "H2" to "9092", "HSQLDB" to "9001", "MySQL" to "3306")) {
             val choice = dialog.x { byAccessibleName(source) }.waitFound()
-            check(requireNotNull(dialog.driver.cast(choice.component, LiveSourceChoice::class).getIcon()).getIconWidth() == 24)
+            check(requireNotNull(dialog.driver.cast(choice.component, LiveSourceChoice::class).getIcon()).getIconWidth() == kotlin.math.round(24 * scale).toInt())
             choice.click()
             check(dialog.driver.cast(choice.component, LiveSourceChoice::class).isSelected())
             if (source == "H2") dialog.x(JComboBoxUiComponent::class.java) {
@@ -1848,6 +1851,19 @@ class IntellijUiScreenshotTest {
             check(field.text == port) { "$source must select its default port $port" }
         }
         println("Compact left source picker: SVGs, source switching, and MySQL/HSQLDB/PostgreSQL/H2 ports verified")
+    }
+
+    private fun assertCellInspectorPalette(details: UiComponent) {
+        val labels = listOf("SQL type", "Nullable", "Default").map { text ->
+            details.x { byVisibleText(text) }.waitFound()
+        }
+        details.driver.withContext(OnDispatcher.EDT) {
+            val background = cast(details.component, LiveSwingComponent::class).getBackground().getRGB()
+            labels.forEach { label ->
+                val foreground = cast(label.component, LiveSwingComponent::class).getForeground().getRGB()
+                check(contrastRatio(foreground, background) >= 4.5) { "Inspector metadata must keep readable contrast across native themes" }
+            }
+        }
     }
 
     private fun verifyKeyHeaderFlow(frame: IdeaFrameUI, tree: JTreeUiComponent, peoplePath: Array<String>,

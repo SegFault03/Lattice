@@ -192,7 +192,7 @@ final class CellDetailsPanel extends JPanel {
         MetadataRow(String name, String text) {
             super(null); setOpaque(false); setBorder(JBUI.Borders.empty(6, 0));
             key = new JLabel(name); key.putClientProperty("lattice.secondary", Boolean.TRUE);
-            key.setForeground(JBColor.namedColor("Label.infoForeground", new JBColor(0x657185, 0xABB3BE)));
+            key.setForeground(new JBColor(0x657185, 0xABB3BE));
             value.setText(text); value.setToolTipText(text); value.getAccessibleContext().setAccessibleName(name);
             add(key); add(value);
         }
@@ -659,7 +659,7 @@ final class CellDetailsPanel extends JPanel {
             title.setFont(labelFont.deriveFont(Font.BOLD, labelFont.getSize2D() + JBUI.scale(4f)));
             eyebrow.setFont(labelFont); identity.setFont(labelFont); summary.setFont(labelFont);
             tableNoteLabel.setFont(labelFont); footerLabel.setFont(labelFont); validation.setFont(labelFont);
-            valueArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, labelFont.getSize()));
+            valueArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 1).deriveFont(labelFont.getSize2D()));
         }
         if (buttonFont != null) for (AbstractButton button : new AbstractButton[]{formattedTab, rawTab, wrap, detailsToggle, edit, copy, more, apply, cancel, editTable}) {
             button.setOpaque(false); button.setForeground(JBColor.foreground());

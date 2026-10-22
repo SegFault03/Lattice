@@ -118,4 +118,37 @@ class CellDetailsPanelTest {
             assertEquals(List.of(""), actions.applied);
         });
     }
+
+    @Test void metadataKeepsReadableContrastEvenWhenTheNativeInfoColorIsTooFaint() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            boolean dark = !com.intellij.ui.JBColor.isBright();
+            Object previous = UIManager.get("Label.infoForeground");
+            try {
+                UIManager.put("Label.infoForeground", new java.awt.Color(0x777777));
+                for (boolean useDark : new boolean[]{false, true}) {
+                    com.intellij.ui.JBColor.setDark(useDark);
+                    CellDetailsPanel panel = new CellDetailsPanel(new RecordingActions());
+                    panel.showColumn(new CellDetailsPanel.Column("customers", 0, cell("", 0).column(), false));
+                    JLabel key = label(panel, "Nullable");
+                    double a = luminance(key.getForeground()), b = luminance(panel.getBackground());
+                    assertTrue((Math.max(a, b) + .05) / (Math.min(a, b) + .05) >= 4.5);
+                }
+            } finally { UIManager.put("Label.infoForeground", previous); com.intellij.ui.JBColor.setDark(dark); }
+        });
+    }
+
+    private static JLabel label(java.awt.Container parent, String text) {
+        for (java.awt.Component component : parent.getComponents()) {
+            if (component instanceof JLabel label && text.equals(label.getText())) return label;
+            if (component instanceof java.awt.Container nested) {
+                JLabel found = label(nested, text); if (found != null) return found;
+            }
+        }
+        return null;
+    }
+    private static double luminance(java.awt.Color color) {
+        double[] values = {color.getRed() / 255d, color.getGreen() / 255d, color.getBlue() / 255d};
+        for (int i = 0; i < values.length; i++) values[i] = values[i] <= .04045 ? values[i] / 12.92 : Math.pow((values[i] + .055) / 1.055, 2.4);
+        return .2126 * values[0] + .7152 * values[1] + .0722 * values[2];
+    }
 }

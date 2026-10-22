@@ -67,3 +67,10 @@ committed and pushed to the same branch after each completed phase.
   closed-state retention, explicit reopening and a native dark/light theme round trip.
   Inspection of its screenshots found a secondary-toggle opaque/foreground issue
   after theme switching; that treatment is corrected for the scaled native rerun.
+
+- Scaled verification: the native flow passed at 125% after converting the
+  source-picker width/icon assertions to logical pixels. Added a regression
+  requiring readable metadata contrast even when the native info color is faint,
+  and added equivalent live dark/light assertions. All 201 ordinary tests,
+  native scenario compilation, refreshed focused previews and archive validation
+  pass; the final native run includes those contrast assertions.
