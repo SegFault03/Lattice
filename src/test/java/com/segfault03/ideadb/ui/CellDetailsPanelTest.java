@@ -112,10 +112,26 @@ class CellDetailsPanelTest {
         SwingUtilities.invokeAndWait(() -> {
             RecordingActions actions = new RecordingActions(); CellDetailsPanel panel = new CellDetailsPanel(actions);
             panel.showCell(cell(null, 0));
-            JPopupMenu menu = panel.createValueMenu();
-            for (java.awt.Component component : menu.getComponents())
-                if (component instanceof JMenuItem item && "Set empty string".equals(item.getText())) item.doClick(0);
+            JButton empty = field(panel, "emptyString", JButton.class);
+            assertTrue(empty.isVisible(), "Empty string must be available directly, without a More menu");
+            empty.doClick(0);
             assertEquals(List.of(""), actions.applied);
+        });
+    }
+
+    @Test void subtitleUsesCoordinatesAndMetadataStaysVisibleAcrossSelections() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            CellDetailsPanel panel = new CellDetailsPanel(new RecordingActions());
+            panel.showCell(cell("first", 1));
+            assertEquals("Row 2 · Column 1", field(panel, "identity", JTextArea.class).getText());
+            assertTrue(field(panel, "lower", JPanel.class).isVisible());
+            assertNotNull(label(panel, "Nullable"));
+            panel.showColumn(new CellDetailsPanel.Column("customers", 0, cell("", 0).column(), false));
+            click(panel, "pin"); assertTrue(panel.isPinned());
+            assertEquals(0, panel.inspectedColumn());
+            panel.clearPin(); panel.showCell(cell("second", 4));
+            assertEquals("Row 5 · Column 1", field(panel, "identity", JTextArea.class).getText());
+            assertTrue(field(panel, "lower", JPanel.class).isVisible());
         });
     }
 

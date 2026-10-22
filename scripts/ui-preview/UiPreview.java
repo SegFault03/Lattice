@@ -399,6 +399,7 @@ public final class UiPreview {
         return panel;
     }
     static void renderCellDetails(String theme) throws Exception {
+        renderApprovedInspector(theme);
         TableDataEditorPanel editor = table(false);
         JTable grid = (JTable) field(editor, "dataTable");
         grid.changeSelection(0, 2, false, false);
@@ -454,6 +455,29 @@ public final class UiPreview {
         renderAdversarialCellDetails(editor, theme);
     }
 
+    /** Exact approved fixture and viewport, independent of the surrounding table width. */
+    static void renderApprovedInspector(String theme) throws Exception {
+        Class<?> panelType = Class.forName("com.segfault03.ideadb.ui.CellDetailsPanel");
+        Class<?> actionsType = Class.forName("com.segfault03.ideadb.ui.CellDetailsPanel$Actions");
+        Object actions = java.lang.reflect.Proxy.newProxyInstance(actionsType.getClassLoader(),
+                new Class<?>[]{actionsType}, (proxy, method, args) -> null);
+        var panelConstructor = panelType.getDeclaredConstructor(actionsType); panelConstructor.setAccessible(true);
+        JComponent panel = (JComponent)panelConstructor.newInstance(actions);
+        Class<?> cellType = Class.forName("com.segfault03.ideadb.ui.CellDetailsPanel$Cell");
+        var cellConstructor = cellType.getDeclaredConstructors()[0]; cellConstructor.setAccessible(true);
+        Object cell = cellConstructor.newInstance("WARMUP_ORDERS", 1, 3,
+                new ColumnMetadata("ORDER_DATE", "DATE", java.sql.Types.DATE, 10, 0, false, false, false, null),
+                "2026-09-18", false, false, true, false, null, "Row 2 · ID = 2", "");
+        invoke(panel, "showCell", new Class<?>[]{cellType}, cell);
+        ((JButton)field(panel, "pin")).doClick(0);
+        render(panel, theme + "-approved-inspector", 388, 730);
+        if (!"Row 2 · Column 4".equals(((JTextArea)field(panel, "identity")).getText()))
+            throw new AssertionError("Subtitle must contain only row and column coordinates");
+        render(panel, theme + "-approved-inspector-narrow", 320, 650);
+        invoke(panel, "clearPin", new Class<?>[0]);
+        render(panel, theme + "-approved-inspector-unpinned", 388, 730);
+    }
+
     static void renderAdversarialCellDetails(TableDataEditorPanel editor, String theme) throws Exception {
         JTable grid = (JTable)field(editor, "dataTable");
         JComponent details = (JComponent)field(editor, "cellDetails");
@@ -468,7 +492,8 @@ public final class UiPreview {
             Rectangle summaryBounds = SwingUtilities.convertRectangle(summary.getParent(), summary.getBounds(), details);
             if (formatBounds.intersects(summaryBounds)) throw new AssertionError("Presentation controls overlap the count");
         }
-        ((JToggleButton)field(details, "detailsToggle")).doClick(0);
+        if (!((JComponent)field(details, "lower")).isVisible())
+            throw new AssertionError("Column metadata must always remain visible");
         render(editor, theme + "-cell-metadata-expanded-960", 960, 700);
         var constructor = Class.forName("com.segfault03.ideadb.ui.CellDetailsPanel$Column").getDeclaredConstructors()[0];
         constructor.setAccessible(true);

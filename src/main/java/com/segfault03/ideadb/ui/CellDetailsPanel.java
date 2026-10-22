@@ -3,6 +3,7 @@ package com.segfault03.ideadb.ui;
 import com.intellij.icons.AllIcons;
 import com.intellij.ui.JBColor;
 import com.intellij.util.ui.JBUI;
+import com.intellij.util.IconUtil;
 import com.segfault03.ideadb.model.ColumnMetadata;
 import com.segfault03.ideadb.model.RowDefaults;
 
@@ -29,6 +30,7 @@ final class CellDetailsPanel extends JPanel {
     private final JLabel eyebrow = new JLabel();
     private final JTextArea identity = selectableText();
     private final JLabel summary = new JLabel();
+    private final JLabel valueHeading = new JLabel("Value");
     private final JTextArea valueArea = new JTextArea() {
         @Override public void updateUI() {
             javax.swing.text.Caret previous = getCaret();
@@ -63,15 +65,17 @@ final class CellDetailsPanel extends JPanel {
     private final JPanel bottomDock = new JPanel(new BorderLayout());
     private final WrappingLabel footerLabel = new WrappingLabel("");
     private final HeaderIconButton pin = new HeaderIconButton(AllIcons.General.Pin_tab);
-    private final HeaderIconButton close = new HeaderIconButton(AllIcons.Actions.Close);
+    private final HeaderIconButton close = new HeaderIconButton(AllIcons.Actions.CloseDarkGrey);
     private final JToggleButton formattedTab = new JToggleButton("Formatted");
     private final JToggleButton rawTab = new JToggleButton("Raw");
     private final JToggleButton wrap = new JToggleButton("Wrap");
-    private final JToggleButton detailsToggle = new JToggleButton("Column details");
-    private final JPanel detailsRow = new JPanel(new BorderLayout());
     private final JButton edit = DatabaseUi.dialogAction("Edit value", AllIcons.Actions.Edit, "Edit selected cell value");
     private final JButton copy = new QuietButton("Copy", AllIcons.Actions.Copy);
-    private final JButton more = new QuietButton("More", AllIcons.Actions.MoreHorizontal);
+    private final JButton setNull = new QuietButton("Set NULL", null);
+    private final JButton emptyString = new QuietButton("Empty string", null);
+    private final JButton useDefault = new QuietButton("Use default", null);
+    private final JButton revert = new QuietButton("Revert", AllIcons.Actions.Rollback);
+    private final JPanel valueStates = new JPanel(new ActionLayout());
     private final JButton apply = DatabaseUi.dialogAction("Stage change", null, "Stage this value; Commit saves it to the database");
     private final JButton cancel = new QuietButton("Cancel", null);
     private final JButton editTable = new JButton("Edit table");
@@ -81,9 +85,8 @@ final class CellDetailsPanel extends JPanel {
     private String draft;
     private final WrappingLabel validation = new WrappingLabel("");
     private final JPanel tabs = new JPanel(new ActionLayout());
-    private final JPanel controls = new JPanel(new FlowLayout(FlowLayout.TRAILING, JBUI.scale(8), 0));
+    private final JPanel controls = new JPanel(new FlowLayout(FlowLayout.TRAILING, JBUI.scale(4), 0));
     private LookAndFeel lastLookAndFeel;
-    private boolean headerStacked;
     private boolean structuredValue;
 
     private static final class Body extends JPanel implements Scrollable {
@@ -138,51 +141,12 @@ final class CellDetailsPanel extends JPanel {
         }
     }
 
-    private final class PresentationRow extends JPanel {
-        PresentationRow() { setLayout(null); setOpaque(false); }
-        private boolean hasControls() { for (Component c : tabs.getComponents()) if (c.isVisible()) return true; return false; }
-        private int controlsWidth() {
-            int width = 0;
-            for (Component c : tabs.getComponents()) if (c.isVisible()) width += c.getPreferredSize().width + JBUI.scale(8);
-            return Math.max(0, width - JBUI.scale(8));
-        }
-        @Override public Dimension getPreferredSize() {
-            Insets in = getInsets(); int width = Math.max(1, getWidth() - in.left - in.right);
-            tabs.setSize(width, tabs.getHeight()); Dimension items = tabs.getPreferredSize(), count = summary.getPreferredSize();
-            boolean fits = controlsWidth() + JBUI.scale(12) + count.width <= width;
-            int height = !hasControls() ? count.height : fits ? Math.max(items.height, count.height)
-                    : items.height + JBUI.scale(8) + count.height;
-            return new Dimension(width + in.left + in.right, height + in.top + in.bottom);
-        }
-        @Override public void doLayout() {
-            Insets in = getInsets(); int width = Math.max(1, getWidth() - in.left - in.right);
-            tabs.setSize(width, tabs.getHeight()); Dimension items = tabs.getPreferredSize(), count = summary.getPreferredSize();
-            boolean fits = controlsWidth() + JBUI.scale(12) + count.width <= width;
-            tabs.setBounds(in.left, in.top, hasControls() ? (fits ? Math.max(1, width - count.width - JBUI.scale(12)) : width) : 0,
-                    hasControls() ? items.height : 0);
-            int y = !hasControls() ? in.top : fits ? in.top + Math.max(0, (items.height - count.height) / 2)
-                    : in.top + items.height + JBUI.scale(8);
-            summary.setBounds(fits && hasControls() ? in.left + Math.max(0, width - count.width) : in.left,
-                    y, Math.min(width, count.width), count.height);
-        }
-    }
-
+    /** A stable header rail: controls never move when the column name wraps. */
     private void prepareHeaderWidth() {
         if (title == null || controls == null || header == null || header.getWidth() <= 0) return;
-        Insets in = header.getInsets(); int width = Math.max(1, header.getWidth() - in.left - in.right);
-        int titleWidth = Math.max(1, width - controls.getPreferredSize().width - JBUI.scale(12));
-        boolean stacked = title.getFontMetrics(title.getFont()).stringWidth(title.getText()) > titleWidth;
-        if (stacked != headerStacked) {
-            headerStacked = stacked;
-            GridBagLayout layout = (GridBagLayout)header.getLayout();
-            GridBagConstraints titleConstraints = layout.getConstraints(title);
-            titleConstraints.gridwidth = stacked ? 2 : 1; layout.setConstraints(title, titleConstraints);
-            GridBagConstraints eyebrowConstraints = layout.getConstraints(eyebrow);
-            eyebrowConstraints.gridwidth = stacked ? 1 : 2; layout.setConstraints(eyebrow, eyebrowConstraints);
-            GridBagConstraints controlConstraints = layout.getConstraints(controls);
-            controlConstraints.gridy = stacked ? 0 : 1; layout.setConstraints(controls, controlConstraints);
-        }
-        title.setSize(stacked ? width : titleWidth, title.getHeight());
+        Insets in = header.getInsets();
+        int width = Math.max(1, header.getWidth() - in.left - in.right);
+        title.setSize(width, title.getHeight());
         identity.setSize(width, identity.getHeight());
     }
 
@@ -190,27 +154,27 @@ final class CellDetailsPanel extends JPanel {
         private final JLabel key;
         private final JTextArea value = selectableText();
         MetadataRow(String name, String text) {
-            super(null); setOpaque(false); setBorder(JBUI.Borders.empty(6, 0));
+            super(null); setOpaque(false); setBorder(JBUI.Borders.empty(6, 32, 6, 0));
             key = new JLabel(name); key.putClientProperty("lattice.secondary", Boolean.TRUE);
             key.setForeground(new JBColor(0x657185, 0xABB3BE));
             value.setText(text); value.setToolTipText(text); value.getAccessibleContext().setAccessibleName(name);
             add(key); add(value);
         }
-        private int valueWidth(int width) { return Math.max(1, width < JBUI.scale(320) || key.getText().isEmpty() ? width : width - JBUI.scale(116)); }
+        private int valueWidth(int width) { return Math.max(1, width < JBUI.scale(220) || key.getText().isEmpty() ? width : width - JBUI.scale(120)); }
         @Override public Dimension getPreferredSize() {
-            int width = Math.max(1, getWidth()); Insets in = getInsets(); value.setSize(valueWidth(width), value.getHeight());
+            Insets in = getInsets(); int width = Math.max(1, getWidth() - in.left - in.right); value.setSize(valueWidth(width), value.getHeight());
             int h = value.getPreferredSize().height;
-            if (!key.getText().isEmpty()) h = width < JBUI.scale(320) ? h + key.getPreferredSize().height + JBUI.scale(4)
+            if (!key.getText().isEmpty()) h = width < JBUI.scale(220) ? h + key.getPreferredSize().height + JBUI.scale(4)
                     : Math.max(h, key.getPreferredSize().height);
             return new Dimension(width, h + in.top + in.bottom);
         }
         @Override public void doLayout() {
-            int width = getWidth(); Insets in = getInsets(); boolean stacked = width < JBUI.scale(320);
+            Insets in = getInsets(); int width = Math.max(1, getWidth() - in.left - in.right); boolean stacked = width < JBUI.scale(220);
             int keyHeight = key.getPreferredSize().height;
-            key.setBounds(0, in.top, key.getText().isEmpty() ? 0 : stacked ? width : JBUI.scale(104), keyHeight);
-            int x = stacked || key.getText().isEmpty() ? 0 : JBUI.scale(116);
+            key.setBounds(in.left, in.top, key.getText().isEmpty() ? 0 : stacked ? width : JBUI.scale(104), keyHeight);
+            int x = stacked || key.getText().isEmpty() ? 0 : JBUI.scale(120);
             int y = in.top + (stacked && !key.getText().isEmpty() ? keyHeight + JBUI.scale(4) : 0);
-            value.setBounds(x, y, valueWidth(width), Math.max(1, getHeight() - y - in.bottom));
+            value.setBounds(in.left + x, y, valueWidth(width), Math.max(1, getHeight() - y - in.bottom));
         }
     }
 
@@ -242,13 +206,28 @@ final class CellDetailsPanel extends JPanel {
         }
     }
 
-    /** A consistent hit target and restrained state surface for the inspector header. */
-    private static final class HeaderIconButton extends QuietButton {
+    /** Paint only the neutral surface; the IDE supplies the standard action glyphs. */
+    private static final class HeaderIconButton extends JButton {
         HeaderIconButton(Icon icon) {
-            super(null, icon);
+            super(icon); setOpaque(false); setContentAreaFilled(false); setBorderPainted(false);
+            setRolloverEnabled(true); setFocusable(true); setBorder(JBUI.Borders.empty());
+            getModel().addChangeListener(e -> repaint());
         }
-        void setActive(boolean active) { setSelected(active); }
-        @Override public Dimension getPreferredSize() { return new Dimension(JBUI.scale(36), JBUI.scale(36)); }
+        void setActive(boolean active) { setSelected(active); repaint(); }
+        @Override public void updateUI() {
+            super.updateUI(); setOpaque(false); setContentAreaFilled(false); setBorderPainted(false);
+        }
+        @Override protected void paintComponent(Graphics graphics) {
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            if (isSelected() || getModel().isRollover() || getModel().isPressed() || isFocusOwner()) {
+                g.setColor(getModel().isPressed() ? new JBColor(0xD3D7DF, 0x42454C)
+                        : isSelected() ? new JBColor(0xE3E6EC, 0x35383F) : new JBColor(0xE9ECF1, 0x303339));
+                g.fillRoundRect(0, 0, getWidth(), getHeight(), JBUI.scale(6), JBUI.scale(6));
+            }
+            g.dispose(); super.paintComponent(graphics);
+        }
+        @Override public Dimension getPreferredSize() { return new Dimension(JBUI.scale(32), JBUI.scale(32)); }
         @Override public Dimension getMinimumSize() { return getPreferredSize(); }
         @Override public Dimension getMaximumSize() { return getPreferredSize(); }
     }
@@ -256,8 +235,8 @@ final class CellDetailsPanel extends JPanel {
     CellDetailsPanel(Actions actions) {
         this.actions = actions;
         setLayout(new BorderLayout());
-        setPreferredSize(new Dimension(JBUI.scale(440), 400));
-        setMinimumSize(new Dimension(JBUI.scale(340), 220));
+        setPreferredSize(new Dimension(JBUI.scale(388), 400));
+        setMinimumSize(new Dimension(JBUI.scale(320), 220));
         setBorder(JBUI.Borders.empty(0, 24));
         eyebrow.setIcon(Icons.TABLE); eyebrow.setIconTextGap(JBUI.scale(6));
         title.getAccessibleContext().setAccessibleName("Inspected column");
@@ -266,9 +245,9 @@ final class CellDetailsPanel extends JPanel {
         labelConstraints.gridx = 0; labelConstraints.weightx = 1;
         labelConstraints.fill = GridBagConstraints.HORIZONTAL;
         labelConstraints.anchor = GridBagConstraints.WEST;
-        labelConstraints.gridy = 0; labelConstraints.gridwidth = 2; labelConstraints.insets = JBUI.insetsBottom(4);
+        labelConstraints.gridy = 0; labelConstraints.gridwidth = 1; labelConstraints.insets = JBUI.emptyInsets();
         header.add(eyebrow, labelConstraints);
-        labelConstraints.gridy = 1; labelConstraints.gridwidth = 1; labelConstraints.insets = JBUI.emptyInsets();
+        labelConstraints.gridy = 1; labelConstraints.gridwidth = 2; labelConstraints.insets = JBUI.insetsTop(8);
         header.add(title, labelConstraints);
         labelConstraints.gridy = 2; labelConstraints.gridwidth = 2; labelConstraints.insets = JBUI.insetsTop(8);
         header.add(identity, labelConstraints);
@@ -279,7 +258,7 @@ final class CellDetailsPanel extends JPanel {
         controls.setOpaque(false);
         controls.add(pin); controls.add(close);
         GridBagConstraints actionsConstraints = new GridBagConstraints();
-        actionsConstraints.gridx = 1; actionsConstraints.gridy = 1;
+        actionsConstraints.gridx = 1; actionsConstraints.gridy = 0;
         actionsConstraints.anchor = GridBagConstraints.NORTHEAST; actionsConstraints.insets = JBUI.insetsLeft(12);
         header.add(controls, actionsConstraints); add(header, BorderLayout.NORTH);
 
@@ -291,35 +270,28 @@ final class CellDetailsPanel extends JPanel {
         identity.setForeground(JBColor.namedColor("Label.infoForeground", JBColor.GRAY));
         summary.setForeground(JBColor.namedColor("Label.infoForeground", JBColor.GRAY));
         tabs.setOpaque(false);
-        styleTextToggle(formattedTab); styleTextToggle(rawTab); styleTextToggle(wrap); styleTextToggle(detailsToggle);
+        styleTextToggle(formattedTab); styleTextToggle(rawTab); styleTextToggle(wrap);
         ButtonGroup presentation = new ButtonGroup(); presentation.add(formattedTab); presentation.add(rawTab);
         formattedTab.setToolTipText("Pretty-print structured content"); rawTab.setToolTipText("Show the stored value without formatting");
         wrap.setToolTipText("Wrap long lines");
-        detailsToggle.setAlignmentX(Component.LEFT_ALIGNMENT);
-        detailsRow.setOpaque(false); detailsRow.add(detailsToggle, BorderLayout.WEST);
-        detailsToggle.setIcon(UIManager.getIcon("Tree.collapsedIcon"));
-        detailsToggle.addActionListener(e -> {
-            lower.setVisible(detailsToggle.isSelected());
-            detailsToggle.setText(detailsToggle.isSelected() ? "Hide column details" : "Column details");
-            detailsToggle.setIcon(UIManager.getIcon(detailsToggle.isSelected() ? "Tree.expandedIcon" : "Tree.collapsedIcon"));
-            sizeControl(detailsToggle);
-            resizeContentBlocks(); content.revalidate(); content.repaint();
-        });
         formattedTab.addActionListener(e -> { rawMode = false; if (!editing) renderValue(); updateTabs(); });
         rawTab.addActionListener(e -> { rawMode = true; if (!editing) renderValue(); updateTabs(); });
-        wrap.addActionListener(e -> { valueArea.setLineWrap(wrap.isSelected()); valueArea.setWrapStyleWord(wrap.isSelected()); });
+        wrap.addActionListener(e -> { valueArea.setLineWrap(wrap.isSelected()); valueArea.setWrapStyleWord(wrap.isSelected()); refreshTextToggle(wrap); });
         tabs.add(formattedTab); tabs.add(rawTab); tabs.add(wrap);
         valueArea.setLineWrap(true); valueArea.setWrapStyleWord(true); valueArea.setEditable(false);
         valueArea.getAccessibleContext().setAccessibleName("Cell value");
-        valueArea.setBorder(JBUI.Borders.empty(12));
+        valueArea.setBorder(JBUI.Borders.empty(16));
         valueScroll.setRowHeaderView(lineNumbers);
-        valueScroll.setPreferredSize(new Dimension(100, JBUI.scale(80)));
+        valueScroll.setPreferredSize(new Dimension(100, JBUI.scale(164)));
         valueScroll.setMinimumSize(new Dimension(50, JBUI.scale(64)));
-        JPanel tabLine = new PresentationRow();
-        tabLine.setBorder(JBUI.Borders.empty(16, 0, 8, 0));
-        tabLine.add(tabs); tabLine.add(summary);
+        JPanel valueLabelRow = new JPanel(new BorderLayout()); valueLabelRow.setOpaque(false);
+        valueHeading.putClientProperty("lattice.section", Boolean.TRUE);
+        valueLabelRow.add(valueHeading, BorderLayout.WEST); valueLabelRow.add(summary, BorderLayout.EAST);
+        valueLabelRow.setBorder(JBUI.Borders.empty(18, 0, 12, 0));
+        JPanel valuePresentation = new JPanel(new ColumnLayout()); valuePresentation.setOpaque(false);
+        valuePresentation.add(valueLabelRow); valuePresentation.add(tabs);
         JPanel valueCard = new JPanel(new WidthAwareBorderLayout()); valueCard.setOpaque(false);
-        valueCard.add(tabLine, BorderLayout.NORTH); valueCard.add(valueScroll, BorderLayout.CENTER);
+        valueCard.add(valuePresentation, BorderLayout.NORTH); valueCard.add(valueScroll, BorderLayout.CENTER);
         JPanel actionsRow = new JPanel(new ActionLayout());
         actionsRow.setOpaque(false); actionsRow.setBorder(JBUI.Borders.emptyTop(8));
         copy.setToolTipText("Copy the raw cell value");
@@ -327,18 +299,24 @@ final class CellDetailsPanel extends JPanel {
         edit.setMargin(JBUI.insets(6, 16));
         apply.setMargin(JBUI.insets(6, 16));
         edit.addActionListener(e -> beginEdit());
-        more.addActionListener(e -> showMore(more));
-        more.setIcon(AllIcons.Actions.MoreHorizontal); more.setIconTextGap(JBUI.scale(5));
+        setNull.setToolTipText("Set SQL NULL"); setNull.addActionListener(e -> actions.setNull(cell));
+        emptyString.setToolTipText("Set an empty string"); emptyString.addActionListener(e -> actions.apply(cell, ""));
+        useDefault.setToolTipText("Use database default"); useDefault.addActionListener(e -> actions.useDefault(cell));
+        revert.setToolTipText("Revert this pending value"); revert.addActionListener(e -> actions.revert(cell));
+        valueStates.setOpaque(false); valueStates.setBorder(JBUI.Borders.emptyTop(4));
+        valueStates.add(setNull); valueStates.add(emptyString); valueStates.add(useDefault); valueStates.add(revert);
         staging = new JPanel(new FlowLayout(FlowLayout.LEADING, 0, 0)); staging.setOpaque(false);
         staging.setAlignmentX(Component.LEFT_ALIGNMENT);
         apply.addActionListener(e -> applyDraft()); cancel.addActionListener(e -> cancelEdit());
         staging.add(apply); staging.add(Box.createHorizontalStrut(JBUI.scale(8))); staging.add(cancel);
         actionsRow.add(staging); actionsRow.add(edit);
-        actionsRow.add(copy); actionsRow.add(more);
+        actionsRow.add(copy);
+        JPanel actionGroup = new JPanel(new ColumnLayout()); actionGroup.setOpaque(false);
+        actionGroup.add(actionsRow); actionGroup.add(valueStates);
         valueBlock = new JPanel(new WidthAwareBorderLayout(0, JBUI.scale(4))); valueBlock.setOpaque(false);
         valueBlock.setAlignmentX(Component.LEFT_ALIGNMENT);
-        valueBlock.setBorder(JBUI.Borders.emptyBottom(12));
-        valueBlock.add(actionsRow, BorderLayout.SOUTH);
+        valueBlock.setBorder(JBUI.Borders.emptyBottom(20));
+        valueBlock.add(actionGroup, BorderLayout.SOUTH);
         validation.setVisible(false);
         JPanel valueAndFeedback = new JPanel(new WidthAwareBorderLayout(0, JBUI.scale(8)));
         valueAndFeedback.setOpaque(false);
@@ -362,7 +340,7 @@ final class CellDetailsPanel extends JPanel {
         editTableRow.setOpaque(false); editTableRow.add(editTable);
         editTableRow.setBorder(JBUI.Borders.emptyTop(8));
         tableNote.add(tableNoteText); tableNote.add(editTableRow);
-        tableNote.setBorder(JBUI.Borders.empty(16, 0, 16, 0));
+        tableNote.setBorder(JBUI.Borders.empty(24, 0, 28, 0));
         footer.add(footerLabel, BorderLayout.CENTER);
         bottomDock.add(tableNote, BorderLayout.NORTH);
         bottomDock.add(footer, BorderLayout.SOUTH);
@@ -390,13 +368,13 @@ final class CellDetailsPanel extends JPanel {
         content.setSize(width, content.getHeight());
         if (!columnMode && valueBlock != null && getHeight() > 0) {
             int fixedHeight = header.getPreferredSize().height + bottomDock.getPreferredSize().height
-                    + (lower.isVisible() ? lower.getPreferredSize().height : 0) + detailsToggle.getPreferredSize().height
+                    + lower.getPreferredSize().height
                     + valueBlock.getPreferredSize().height
                     - valueScroll.getPreferredSize().height;
             boolean large = valueArea.getLineCount() > 1 || structuredValue;
             int lineHeight = valueArea.getFontMetrics(valueArea.getFont()).getHeight();
             int desired = large ? Math.min(JBUI.scale(320), Math.max(JBUI.scale(144), lineHeight * Math.min(12, valueArea.getLineCount()) + JBUI.scale(24)))
-                    : Math.max(JBUI.scale(80), lineHeight * 2 + JBUI.scale(24));
+                    : Math.max(JBUI.scale(164), lineHeight * 2 + JBUI.scale(32));
             int editorHeight = Math.max(JBUI.scale(64), Math.min(desired, getHeight() - fixedHeight));
             if (valueScroll.getPreferredSize().height != editorHeight) {
                 valueScroll.setPreferredSize(new Dimension(100, editorHeight));
@@ -454,14 +432,15 @@ final class CellDetailsPanel extends JPanel {
 
     private void rebuild() {
         content.removeAll();
-        if (!columnMode) { content.add(valueBlock); content.add(detailsRow); }
+        if (!columnMode) content.add(valueBlock);
         content.add(lower);
-        lower.setVisible(columnMode || detailsToggle.isSelected());
+        lower.setVisible(true);
         metadata.removeAll();
         if (columnMode && column != null) buildColumn();
         else if (cell != null) buildCell();
         else renderEmpty();
         refreshSectionBorder();
+        refreshMetadataColors(metadata);
         updatePin();
         metadata.revalidate(); lower.revalidate(); content.revalidate();
         resizeContentBlocks();
@@ -480,16 +459,16 @@ final class CellDetailsPanel extends JPanel {
         footer.revalidate(); footer.repaint();
     }
     private void buildCell() {
-        valueScroll.setVisible(true); edit.setVisible(true); more.setVisible(true);
-        valueBlock.setVisible(true); tableNote.setVisible(false);
+        valueScroll.setVisible(true); edit.setVisible(true);
+        valueBlock.setVisible(true); tableNote.setVisible(true);
         ColumnMetadata c = cell.column();
         structuredValue = CellValuePresentation.isStructured(cell.value());
         eyebrow.setText(safe(cell.tableName()));
         eyebrow.setToolTipText(safe(cell.tableName()));
         title.setText(c == null ? "Cell value" : c.getName());
         title.setToolTipText(title.getText());
-        identity.setText(safe(cell.rowLabel()) + " · Column " + (cell.modelColumn() + 1));
-        identity.setToolTipText(safe(cell.rowLabel()));
+        identity.setText("Row " + (cell.modelRow() + 1) + " · Column " + (cell.modelColumn() + 1));
+        identity.setToolTipText(identity.getText());
         summary.setText(valueSummary(editing ? valueArea.getText() : cell.value()));
         edit.setText("Edit value"); if (!editing) renderValue();
         if (c != null) {
@@ -509,7 +488,7 @@ final class CellDetailsPanel extends JPanel {
         valueScroll.putClientProperty("JComponent.outline", invalid ? "error" : null);
         refreshValueBorder();
         if (cell.editabilityHint() != null && !cell.editabilityHint().isBlank()) addMetadata("", cell.editabilityHint());
-        editTable.setEnabled(!cell.view()); updateMoreMenu();
+        editTable.setEnabled(!cell.view());
     }
     private void buildColumn() {
         ColumnMetadata c = column.column();
@@ -542,7 +521,7 @@ final class CellDetailsPanel extends JPanel {
         if ("Column".equals(name)) { label.setIcon(Icons.COLUMN); label.setIconTextGap(JBUI.scale(8)); }
         label.setAlignmentX(Component.LEFT_ALIGNMENT);
         label.putClientProperty("lattice.section", Boolean.TRUE);
-        label.setFont(UIManager.getFont("Label.font").deriveFont(Font.BOLD));
+        label.setFont(bodyFont().deriveFont(Font.BOLD));
         label.setBorder(JBUI.Borders.empty(16, 0, 8, 0));
         metadata.add(label);
     }
@@ -569,6 +548,7 @@ final class CellDetailsPanel extends JPanel {
         wrap.setVisible(structured || multiline || text.length() > 80);
         valueScroll.setRowHeaderView(multiline ? lineNumbers : null);
         updateTabs();
+        tabs.setVisible(structured || wrap.isVisible());
     }
     private void beginEdit() { if (cell == null || !cell.editable() || busy || editing) return; draft = CellValuePresentation.editable(cell.value()); editing = true; valueArea.setEditable(true); valueArea.setText(draft); summary.setText(valueSummary(draft)); valueArea.requestFocusInWindow(); valueArea.setCaretPosition(valueArea.getDocument().getLength()); updateEnabled(); }
     private void applyDraft() { if (!editing || busy || !hasDraftChange()) return; stageCurrentEdit(); }
@@ -579,36 +559,29 @@ final class CellDetailsPanel extends JPanel {
     }
     private void cancelEdit() { if (!editing) return; editing = false; draft = null; renderValue(); updateEnabled(); }
     private void copyText() { String text = editing ? valueArea.getText() : CellValuePresentation.raw(cell == null ? null : cell.value()); Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null); }
-    private void showMore(Component at) {
-        JPopupMenu menu = createValueMenu();
-        menu.show(at, 0, at.getHeight());
-    }
-    JPopupMenu createValueMenu() {
-        JPopupMenu menu = DatabaseUi.popupMenu(); JMenuItem nullItem = new JMenuItem("Set SQL NULL"); nullItem.setEnabled(cell != null && cell.editable() && !busy && cell.column() != null && cell.column().isNullable()); nullItem.addActionListener(e -> actions.setNull(cell)); menu.add(nullItem);
-        if (cell != null && cell.column() != null && switch (cell.column().getDataType()) {
+    private boolean isTextColumn() {
+        return cell != null && cell.column() != null && switch (cell.column().getDataType()) {
             case java.sql.Types.CHAR, java.sql.Types.VARCHAR, java.sql.Types.LONGVARCHAR,
                     java.sql.Types.NCHAR, java.sql.Types.NVARCHAR, java.sql.Types.LONGNVARCHAR,
                     java.sql.Types.CLOB, java.sql.Types.NCLOB -> true;
             default -> false;
-        }) {
-            JMenuItem empty = new JMenuItem("Set empty string");
-            empty.setEnabled(cell.editable() && !busy); empty.addActionListener(e -> actions.apply(cell, "")); menu.add(empty);
-        }
-        if (cell != null && cell.newRow() && cell.column() != null && (cell.column().getDefaultValue() != null || cell.column().isAutoIncrement())) { JMenuItem def = new JMenuItem("Use database default"); def.setEnabled(cell.editable() && !busy); def.addActionListener(e -> actions.useDefault(cell)); menu.add(def); }
-        if (cell != null && cell.modified()) { JMenuItem rev = new JMenuItem("Revert value"); rev.setEnabled(cell.editable() && !busy); rev.addActionListener(e -> actions.revert(cell)); menu.add(rev); }
-        menu.addSeparator();
-        JMenuItem structure = new JMenuItem("Edit table…", Icons.TABLE);
-        structure.setEnabled(cell != null && !cell.view() && !busy);
-        structure.addActionListener(e -> actions.editTable()); menu.add(structure);
-        return menu;
+        };
     }
-    private void updateMoreMenu() { more.setVisible(cell != null); }
+    private void updateValueStates() {
+        boolean available = cell != null && !columnMode && !editing && cell.editable();
+        setNull.setVisible(available && cell.column() != null && cell.column().isNullable());
+        emptyString.setVisible(available && isTextColumn());
+        useDefault.setVisible(available && cell.newRow() && cell.column() != null
+                && (cell.column().getDefaultValue() != null || cell.column().isAutoIncrement()));
+        revert.setVisible(available && cell.modified());
+        for (JButton button : new JButton[]{setNull, emptyString, useDefault, revert}) button.setEnabled(!busy);
+        valueStates.setVisible(setNull.isVisible() || emptyString.isVisible() || useDefault.isVisible() || revert.isVisible());
+    }
     private void updateEnabled() {
         edit.setEnabled(cell != null && cell.editable() && !busy && !editing);
         edit.setVisible(cell != null && !columnMode && !editing);
         apply.setEnabled(hasDraftChange() && !busy); cancel.setEnabled(editing && !busy);
-        more.setEnabled(cell != null && !busy && !editing);
-        more.setVisible(cell != null && !columnMode && !editing);
+        updateValueStates();
         formattedTab.setEnabled(!editing); rawTab.setEnabled(!editing);
         staging.setVisible(editing && !columnMode);
         editTable.setEnabled(!busy && (cell != null && !cell.view() || column != null && !column.view()));
@@ -621,7 +594,11 @@ final class CellDetailsPanel extends JPanel {
         resizeContentBlocks(); content.revalidate(); content.repaint();
     }
     private void updatePin() {
-        pin.setSelected(pinned);
+        Color glyph = new JBColor(0x657185, 0xADB5C2);
+        pin.setIcon(IconUtil.filterIcon(pinned ? AllIcons.General.PinSelected : AllIcons.General.Pin_tab,
+                () -> new java.awt.image.RGBImageFilter() {
+                    @Override public int filterRGB(int x, int y, int rgb) { return (rgb & 0xFF000000) | (glyph.getRGB() & 0xFFFFFF); }
+                }, null));
         pin.setActive(pinned);
         pin.setToolTipText(pinned ? "Unpin details" : "Pin details");
         pin.getAccessibleContext().setAccessibleName(pinned
@@ -645,30 +622,31 @@ final class CellDetailsPanel extends JPanel {
         lineNumbers.setForeground(JBColor.namedColor("Label.infoForeground", new JBColor(0x657185, 0xABB3BE)));
         Color separator = JBColor.namedColor("Component.borderColor", new JBColor(0xDCE0E5, 0x46484D));
         header.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(0, 0, 1, 0, separator), JBUI.Borders.empty(16, 0)));
+                BorderFactory.createMatteBorder(0, 0, 1, 0, separator), JBUI.Borders.empty(10, 0, 18, 0)));
         refreshSectionBorder();
         footer.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(1, 0, 0, 0, separator), JBUI.Borders.empty(8, 0, 8, 0)));
+                BorderFactory.createMatteBorder(1, 0, 0, 0, separator), JBUI.Borders.empty(14, 0, 30, 0)));
         refreshValueBorder();
         bodyScroll.getViewport().setBackground(content.getBackground());
         footerLabel.setForeground(new JBColor(0x657185, 0xABB3BE));
         refreshMetadataColors(content);
-        Font labelFont = UIManager.getFont("Label.font");
-        Font buttonFont = UIManager.getFont("Button.font");
+        Font labelFont = bodyFont();
+        Font buttonFont = bodyFont();
         if (labelFont != null) {
-            title.setFont(labelFont.deriveFont(Font.BOLD, labelFont.getSize2D() + JBUI.scale(4f)));
+            title.setFont(labelFont.deriveFont(Font.BOLD, labelFont.getSize2D() + JBUI.scale(7f)));
             eyebrow.setFont(labelFont); identity.setFont(labelFont); summary.setFont(labelFont);
+            valueHeading.setFont(labelFont.deriveFont(Font.BOLD, labelFont.getSize2D() + JBUI.scale(2f)));
             tableNoteLabel.setFont(labelFont); footerLabel.setFont(labelFont); validation.setFont(labelFont);
-            valueArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 1).deriveFont(labelFont.getSize2D()));
+            valueArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 1).deriveFont(labelFont.getSize2D() + JBUI.scale(1f)));
         }
-        if (buttonFont != null) for (AbstractButton button : new AbstractButton[]{formattedTab, rawTab, wrap, detailsToggle, edit, copy, more, apply, cancel, editTable}) {
+        if (buttonFont != null) for (AbstractButton button : new AbstractButton[]{formattedTab, rawTab, wrap, edit, copy, setNull, emptyString, useDefault, revert, apply, cancel, editTable}) {
             button.setOpaque(false); button.setForeground(JBColor.foreground());
             button.setFont(buttonFont); button.setIconTextGap(JBUI.scale(6)); button.setMargin(JBUI.insets(4, 10));
             sizeControl(button);
         }
-        int actionHeight = JBUI.scale(36);
-        for (JButton button : new JButton[]{edit, apply, cancel, copy, more}) actionHeight = Math.max(actionHeight, button.getPreferredSize().height);
-        for (JButton button : new JButton[]{edit, apply, cancel, copy, more})
+        int actionHeight = JBUI.scale(40);
+        for (JButton button : new JButton[]{edit, apply, cancel, copy}) actionHeight = Math.max(actionHeight, button.getPreferredSize().height);
+        for (JButton button : new JButton[]{edit, apply, cancel, copy})
             button.setPreferredSize(new Dimension(button.getPreferredSize().width, actionHeight));
         title.setForeground(JBColor.foreground());
         summary.setForeground(new JBColor(0x667185, 0xAAB3C1));
@@ -676,11 +654,11 @@ final class CellDetailsPanel extends JPanel {
         identity.setForeground(new JBColor(0x667185, 0xAAB3C1));
         tableNoteLabel.setForeground(new JBColor(0x667185, 0xAAB3C1));
         copy.setForeground(JBColor.foreground());
-        more.setForeground(JBColor.foreground());
         cancel.setForeground(JBColor.foreground());
         refreshTextToggle(formattedTab); refreshTextToggle(rawTab); refreshTextToggle(wrap);
         DatabaseUi.setActionEmphasis(edit, new JBColor(0x2F69CF, 0x3574D4));
         DatabaseUi.setActionEmphasis(apply, new JBColor(0x2F69CF, 0x3574D4));
+        updatePin();
         resizeContentBlocks();
         revalidate(); repaint();
     }
@@ -701,10 +679,15 @@ final class CellDetailsPanel extends JPanel {
                 : BorderFactory.createMatteBorder(1, 0, 0, 0, separator));
     }
     private static void refreshTextToggle(AbstractButton button) {
-        button.setForeground(JBColor.foreground());
+        button.setContentAreaFilled(false); button.setBorderPainted(false); button.setOpaque(false);
+        button.setForeground(button.isSelected() ? new JBColor(0x275DCD, 0x78A9FF) : new JBColor(0x657185, 0xABB3BE));
+    }
+    private static Font bodyFont() {
+        Font nativeFont = UIManager.getFont("Label.font");
+        return nativeFont.deriveFont(nativeFont.getSize2D() + JBUI.scale(2f));
     }
     private static void refreshMetadataColors(Component component) {
-        Font font = UIManager.getFont("Label.font");
+        Font font = bodyFont();
         if (component instanceof JTextArea text && font != null) {
             text.setFont(font); text.setForeground(JBColor.foreground());
         }
