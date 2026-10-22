@@ -121,6 +121,13 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         if (draft == null) loadData();
         else {
             tableModel.restoreDraft(draft);
+            if (draft.inspectorText != null) {
+                CellDetailsPanel.Cell cell = cellSnapshot(draft.inspectorRow, draft.inspectorColumn);
+                if (cell != null) {
+                    cellDetails.restoreDraft(cell, draft.inspectorText);
+                    setInspectorVisible(true);
+                }
+            }
             setReadRunning(true);
             DatabaseUi.status(statusLabel, "Restoring draft · Loading columns…", DatabaseUi.Tone.BUSY);
             tasks.submit(() -> {
@@ -450,8 +457,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         int col = dataTable.convertColumnIndexToModel(viewColumn);
         CellDetailsPanel.Cell cell = cellSnapshot(row, col);
         if (cell == null) return;
+        if (!cellDetails.showCell(cell)) return;
         inspectedHeaderName = null;
-        cellDetails.showCell(cell);
         setInspectorVisible(true);
         dataTable.repaint();
     }
@@ -460,8 +467,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         if (cellDetails == null || cellDetails.isPinned() || viewColumn < 0
                 || viewColumn >= dataTable.getColumnCount()) return;
         int col = dataTable.convertColumnIndexToModel(viewColumn);
+        if (!cellDetails.showColumn(columnSnapshot(col))) return;
         inspectedHeaderName = tableModel.getRawColumnName(col);
-        cellDetails.showColumn(columnSnapshot(col));
         setInspectorVisible(true);
         dataTable.repaint();
     }
@@ -1075,8 +1082,17 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         return tableModel.hasPendingChanges() || dataTable.isEditing() || cellDetails != null && cellDetails.isEditing();
     }
     @Override public void close() {
-        finishCellEditing();
+        finishGridCellEditing();
         updatePendingChangesState();
+        // A tab/project disposal must preserve an unconfirmed inspector draft separately
+        // from the staged batch. Restoring it must never make it eligible for Commit.
+        if (project != null && cellDetails != null && cellDetails.hasDraftChange()) {
+            TableDraftState.Draft draft = tableModel.captureDraft();
+            draft.inspectorRow = cellDetails.inspectedRow();
+            draft.inspectorColumn = cellDetails.inspectedColumn();
+            draft.inspectorText = cellDetails.draftText();
+            TableDraftState.getInstance(project).put(draftKey(), draft);
+        }
         disposed = true; loadGeneration++;
         if (changeSubscription != null) changeSubscription.disconnect();
         tasks.cancelPending();

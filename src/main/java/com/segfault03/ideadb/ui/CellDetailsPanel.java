@@ -71,13 +71,14 @@ final class CellDetailsPanel extends JPanel {
     private final JButton edit = DatabaseUi.dialogAction("Edit value", AllIcons.Actions.Edit, "Edit selected cell value");
     private final JButton copy = new JButton("Copy", AllIcons.Actions.Copy);
     private final JButton more = new JButton("More");
-    private final JButton apply = DatabaseUi.dialogAction("Apply", null, "Apply");
+    private final JButton apply = DatabaseUi.dialogAction("Stage change", null, "Stage this value; Commit saves it to the database");
     private final JButton cancel = new JButton("Cancel");
     private final JButton editTable = new JButton("Edit table");
     private Cell cell;
     private Column column;
     private boolean pinned, columnMode, editing, busy, rawMode;
     private String draft;
+    private final WrappingLabel validation = new WrappingLabel("");
     private LookAndFeel lastLookAndFeel;
 
     private static final class Body extends JPanel implements Scrollable {
@@ -173,7 +174,7 @@ final class CellDetailsPanel extends JPanel {
         pin.setToolTipText("Pin details"); pin.getAccessibleContext().setAccessibleName("Pin cell details");
         pin.addActionListener(e -> { pinned = !pinned; updatePin(); if (!pinned) actions.unpin(); });
         close.setToolTipText("Close details"); close.getAccessibleContext().setAccessibleName("Close details panel");
-        close.addActionListener(e -> actions.close());
+        close.addActionListener(e -> { cancelEdit(); actions.close(); });
         JPanel controls = new JPanel(new FlowLayout(FlowLayout.TRAILING, 0, 0));
         controls.setOpaque(false);
         controls.setBorder(JBUI.Borders.emptyTop(16));
@@ -229,6 +230,12 @@ final class CellDetailsPanel extends JPanel {
         valueBlock.setBorder(JBUI.Borders.emptyBottom(12));
         valueBlock.add(valueCard, BorderLayout.CENTER);
         valueBlock.add(actionsRow, BorderLayout.SOUTH);
+        validation.setVisible(false);
+        JPanel valueAndFeedback = new JPanel(new BorderLayout(0, JBUI.scale(8)));
+        valueAndFeedback.setOpaque(false);
+        valueAndFeedback.add(valueCard, BorderLayout.CENTER);
+        valueAndFeedback.add(validation, BorderLayout.SOUTH);
+        valueBlock.add(valueAndFeedback, BorderLayout.CENTER);
         metadata.setLayout(new BoxLayout(metadata, BoxLayout.Y_AXIS));
         metadata.setOpaque(false);
         metadata.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -255,6 +262,7 @@ final class CellDetailsPanel extends JPanel {
         getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.CTRL_DOWN_MASK), "apply");
         getActionMap().put("apply", new AbstractAction() { public void actionPerformed(ActionEvent e) { if (editing) applyDraft(); } });
         valueArea.addMouseListener(new MouseAdapter() { public void mouseClicked(MouseEvent e) { if (e.getClickCount() == 2 && cell != null && cell.editable()) beginEdit(); } });
+        DatabaseUi.onTextChange(valueArea, () -> { if (editing) { summary.setText(valueSummary(valueArea.getText())); updateEnabled(); } });
         renderEmpty();
         updatePin();
         lastLookAndFeel = UIManager.getLookAndFeel();
@@ -313,18 +321,21 @@ final class CellDetailsPanel extends JPanel {
         button.setFocusPainted(false); button.setMargin(new Insets(2, 5, 2, 5));
         button.getModel().addChangeListener(e -> refreshTextToggle(button));
     }
-    void showCell(Cell cell) {
+    boolean showCell(Cell cell) {
         ensureCurrentTheme();
         boolean same = this.cell != null && cell != null && Objects.equals(this.cell.tableName(), cell.tableName())
                 && this.cell.modelRow() == cell.modelRow() && this.cell.modelColumn() == cell.modelColumn();
-        if (!same && editing) stageCurrentEdit();
+        // Selection may change while typing; keep the draft attached to its original cell.
+        if (!same && editing) return false;
         if (!same) { editing = false; draft = null; }
         this.cell = cell; this.column = null; columnMode = false; rebuild();
+        return true;
     }
-    void showColumn(Column column) {
+    boolean showColumn(Column column) {
         ensureCurrentTheme();
-        if (editing) stageCurrentEdit();
+        if (editing) return false;
         this.column = column; this.cell = null; columnMode = true; editing = false; draft = null; rebuild();
+        return true;
     }
     private void ensureCurrentTheme() {
         if (lastLookAndFeel != UIManager.getLookAndFeel()) {
@@ -337,11 +348,19 @@ final class CellDetailsPanel extends JPanel {
     boolean isPinned() { return pinned; }
     boolean isColumnMode() { return columnMode; }
     boolean isEditing() { return editing; }
-    boolean finishEditing() { if (editing && busy) return false; if (editing) stageCurrentEdit(); return true; }
+    boolean finishEditing() {
+        if (!editing) return true;
+        if (!hasDraftChange()) { cancelEdit(); return true; }
+        updateFooter(); valueArea.requestFocusInWindow();
+        return false;
+    }
+    boolean hasDraftChange() { return editing && !Objects.equals(draft, valueArea.getText()); }
+    String draftText() { return hasDraftChange() ? valueArea.getText() : null; }
+    void restoreDraft(Cell cell, String text) { showCell(cell); beginEdit(); valueArea.setText(text); }
     void cancelEditing() { cancelEdit(); }
     int inspectedRow() { return cell == null ? -1 : cell.modelRow(); }
     int inspectedColumn() { return cell != null ? cell.modelColumn() : column == null ? -1 : column.modelColumn(); }
-    boolean handleEscape() { if (editing) { cancelEdit(); return true; } actions.close(); return true; }
+    boolean handleEscape() { cancelEdit(); actions.close(); return true; }
     void setBusy(boolean busy) { this.busy = busy; updateEnabled(); }
 
     private void rebuild() {
@@ -365,7 +384,9 @@ final class CellDetailsPanel extends JPanel {
         lower.setMaximumSize(new Dimension(Integer.MAX_VALUE, lower.getPreferredSize().height));
     }
     private void updateFooter() {
-        footerLabel.setText(pinned ? columnMode ? "Pinned to this column · Esc to close"
+        footerLabel.setText(editing ? "Editing this cell · Stage change or Cancel · Esc cancels and closes"
+                : cell != null && cell.modified() ? "Pending change · Commit to save to database"
+                : pinned ? columnMode ? "Pinned to this column · Esc to close"
                 : "Pinned to this cell · Esc to close"
                 : columnMode ? "Follows column selection · Esc to close" : "Follows cell selection · Esc to close");
         footer.revalidate(); footer.repaint();
@@ -377,9 +398,9 @@ final class CellDetailsPanel extends JPanel {
         eyebrow.setText(safe(cell.tableName()));
         title.setText(c == null ? "Cell value" : c.getName());
         title.setToolTipText(title.getText());
-        identity.setText("Row " + (cell.modelRow() + 1) + "  ·  Column " + (cell.modelColumn() + 1));
+        identity.setText(safe(cell.rowLabel()));
         identity.setToolTipText(safe(cell.rowLabel()));
-        summary.setText(valueSummary(cell.value()));
+        summary.setText(valueSummary(editing ? valueArea.getText() : cell.value()));
         edit.setText("Edit value"); if (!editing) renderValue();
         if (c != null) {
             addSection("Column");
@@ -389,7 +410,12 @@ final class CellDetailsPanel extends JPanel {
             if (c.isPrimaryKey()) addMetadata("Primary key", "Yes");
             if (c.isForeignKey()) addMetadata("Foreign key", "Yes");
         }
-        if (cell.validationError() != null && !cell.validationError().isBlank()) addMetadata("Validation", cell.validationError());
+        boolean invalid = cell.validationError() != null && !cell.validationError().isBlank();
+        validation.setText(invalid ? cell.validationError() : "");
+        validation.setIcon(invalid ? AllIcons.General.Error : null);
+        validation.setForeground(JBColor.namedColor("Label.errorForeground", new JBColor(0xB83232, 0xFF8282)));
+        validation.setVisible(invalid);
+        valueScroll.putClientProperty("JComponent.outline", invalid ? "error" : null);
         if (cell.editabilityHint() != null && !cell.editabilityHint().isBlank()) addMetadata("", cell.editabilityHint());
         editTable.setEnabled(!cell.view()); updateMoreMenu();
     }
@@ -474,13 +500,14 @@ final class CellDetailsPanel extends JPanel {
         String text = editing ? draft : rawMode ? CellValuePresentation.raw(cell == null ? null : cell.value())
                 : CellValuePresentation.formatted(cell == null ? null : cell.value());
         valueArea.setText(text == null ? "" : text);
+        summary.setText(valueSummary(cell == null ? null : cell.value()));
         valueArea.setBackground(new JBColor(0xFFFFFF, 0x1E1F22));
         valueArea.setForeground(JBColor.foreground());
         valueArea.setCaretPosition(0); updateTabs();
     }
     private void updateTabs() { formattedTab.setSelected(!rawMode); rawTab.setSelected(rawMode); wrap.setSelected(valueArea.getLineWrap()); }
-    private void beginEdit() { if (cell == null || !cell.editable() || busy || editing) return; draft = CellValuePresentation.editable(cell.value()); editing = true; valueArea.setEditable(true); valueArea.setText(draft); valueArea.requestFocusInWindow(); valueArea.setCaretPosition(valueArea.getDocument().getLength()); updateEnabled(); }
-    private void applyDraft() { if (!editing || busy) return; stageCurrentEdit(); }
+    private void beginEdit() { if (cell == null || !cell.editable() || busy || editing) return; draft = CellValuePresentation.editable(cell.value()); editing = true; valueArea.setEditable(true); valueArea.setText(draft); summary.setText(valueSummary(draft)); valueArea.requestFocusInWindow(); valueArea.setCaretPosition(valueArea.getDocument().getLength()); updateEnabled(); }
+    private void applyDraft() { if (!editing || busy || !hasDraftChange()) return; stageCurrentEdit(); }
     private void stageCurrentEdit() {
         String text = valueArea.getText(); Cell target = cell;
         editing = false; draft = null; valueArea.setEditable(false); updateEnabled();
@@ -498,13 +525,14 @@ final class CellDetailsPanel extends JPanel {
     private void updateEnabled() {
         edit.setEnabled(cell != null && cell.editable() && !busy && !editing);
         edit.setVisible(cell != null && !columnMode && !editing);
-        apply.setEnabled(editing && !busy); cancel.setEnabled(editing && !busy);
+        apply.setEnabled(hasDraftChange() && !busy); cancel.setEnabled(editing && !busy);
         more.setEnabled(cell != null && cell.editable() && !busy && !editing);
         more.setVisible(cell != null && !columnMode && !editing);
         formattedTab.setEnabled(!editing); rawTab.setEnabled(!editing);
         staging.setVisible(editing && !columnMode);
         editTable.setEnabled(!busy && (cell != null && !cell.view() || column != null && !column.view()));
         refreshTextToggle(formattedTab); refreshTextToggle(rawTab); refreshTextToggle(wrap);
+        updateFooter();
         resizeContentBlocks(); content.revalidate(); content.repaint();
     }
     private void updatePin() {
@@ -617,6 +645,7 @@ final class CellDetailsPanel extends JPanel {
     private static String valueSummary(Object value) {
         if (value == RowDefaults.Value.USE_DEFAULT) return "Database default";
         if (value == null) return "SQL NULL";
+        if (value instanceof String text && text.isEmpty()) return "Empty string · 0 characters";
         if (value instanceof byte[] bytes) return bytes.length + (bytes.length == 1 ? " byte" : " bytes");
         String s = CellValuePresentation.raw(value);
         int characters = s.codePointCount(0, s.length());

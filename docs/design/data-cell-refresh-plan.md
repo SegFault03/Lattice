@@ -6,12 +6,12 @@ committed and pushed to the same branch after each completed phase.
 
 ## Phase 1 — edit safety and feedback (highest priority)
 
-- [ ] Preserve untouched SQL NULL and database-default values; distinguish empty strings.
-- [ ] Stage changes only through an explicit action; make navigation, X and Escape safe and consistent.
-- [ ] Keep an in-progress draft available when selection changes; make Commit's relationship to the draft explicit.
-- [ ] Update draft character counts and raw-editing feedback; show pending status locally.
-- [ ] Put validation beside the value with recognizable error treatment.
-- [ ] Add behavioral regression coverage for sentinel preservation and draft transitions.
+- [x] Preserve untouched SQL NULL and database-default values; distinguish empty strings.
+- [x] Stage changes only through an explicit action; make navigation, X and Escape safe and consistent.
+- [x] Keep an in-progress draft available when selection changes; make Commit's relationship to the draft explicit.
+- [x] Update draft character counts and raw-editing feedback; show pending status locally.
+- [x] Put validation beside the value with recognizable error treatment.
+- [x] Add behavioral regression coverage for sentinel preservation and draft transitions.
 
 ## Phase 2 — predictable inspector interaction and accessibility
 
@@ -45,3 +45,8 @@ committed and pushed to the same branch after each completed phase.
 - Planning checkpoint: collected the overlapping findings above into one implementation scope.
 - Evidence from the initial reviews remains under ignored `build/adversarial-ui-review/`.
   Generated screenshots and local probe sources are not committed.
+
+- Phase 1: focused CellDetailsPanel/CellValuePresentation tests passed (6 tests);
+  light/dark production inspector previews passed. Untouched sentinels stay unchanged,
+  navigation retains the current draft, X/Escape cancel it, and tab disposal stores
+  an unconfirmed draft separately for recovery.
