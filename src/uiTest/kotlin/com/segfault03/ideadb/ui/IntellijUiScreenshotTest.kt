@@ -1210,7 +1210,14 @@ class IntellijUiScreenshotTest {
                 databaseTree.fixture.rightClickPath(ordersPath.joinToString(databaseTree.fixture.separator()))
                 frame.x { byVisibleText("Open data editor") }.waitFound().click()
                 ideFrame { invokeAction("HideAllWindows") }
-                withContext(OnDispatcher.EDT) { cast(frame.component, Window::class).setBounds(180, 60, 1487, 863) }
+                val inspectorReviewScale = System.getProperty("ui.scale", "1.0").toDouble()
+                val scaledInspectorReview = inspectorReviewScale != 1.0
+                withContext(OnDispatcher.EDT) {
+                    cast(frame.component, Window::class).setBounds(
+                        if (scaledInspectorReview) 10 else 180, if (scaledInspectorReview) 20 else 60,
+                        if (scaledInspectorReview) minOf(1900, displayBounds.width - 20) else 1487,
+                        if (scaledInspectorReview) minOf(1020, displayBounds.height - 60) else 863)
+                }
                 waitUntil("orders editor loaded") {
                     frame.xx { byJavaClass("com.segfault03.ideadb.ui.TableDataEditorPanel") }.list()
                         .any { it.component.isShowing() && it.hasSubtext("10 rows") }
@@ -1224,7 +1231,7 @@ class IntellijUiScreenshotTest {
                 waitUntil("approved date and coordinates shown") {
                     ordersDetails.hasSubtext("2026-09-18") && ordersDetails.hasSubtext("Row 2 · Column 4")
                 }
-                withContext(OnDispatcher.EDT) {
+                if (!scaledInspectorReview) withContext(OnDispatcher.EDT) {
                     cast(frame.component, Window::class).setBounds(180, 60, 1487, 863 + 730 - ordersDetails.component.height)
                 }
                 ordersDetails.x { byAccessibleName("Pin cell details") }.waitFound().click()
@@ -1234,6 +1241,33 @@ class IntellijUiScreenshotTest {
                     }
                     waitUntil("approved prototype in $captureTheme") { laf.getCurrentUIThemeLookAndFeel().getId() == captureTheme }
                     captureScreen(screenshotsDirectory.resolve("approved-inspector-${if (captureTheme.contains("Dark", true)) "dark" else "light"}.png"))
+                    val closeAction = ordersDetails.x { byAccessibleName("Close details panel") }.waitFound()
+                    withContext(OnDispatcher.EDT) {
+                        for (name in listOf("Close details panel", "Unpin cell details")) {
+                            val action = ordersDetails.x { byAccessibleName(name) }.waitFound()
+                            val visible = cast(action.component, LiveSwingComponent::class).getVisibleRect()
+                            check(visible == Rectangle(0, 0, action.component.width, action.component.height)) {
+                                "$name hover target is clipped: $visible vs ${action.component.width}x${action.component.height}"
+                            }
+                        }
+                        val nativeLabel = utility(LiveUiFontDefaults::class).getFont("Label.font").getSize2D()
+                        val nativeButton = utility(LiveUiFontDefaults::class).getFont("Button.font").getSize2D()
+                        val identityText = ordersDetails.x { byAccessibleName("Inspected row and column") }.waitFound()
+                        val valueText = ordersDetails.x { byAccessibleName("Cell value") }.waitFound()
+                        val editAction = ordersDetails.x { byAccessibleName("Edit selected cell value") }.waitFound()
+                        val identitySize = cast(identityText.component, LiveSwingComponent::class).getFont().getSize2D()
+                        val valueSize = cast(valueText.component, LiveSwingComponent::class).getFont().getSize2D()
+                        val buttonSize = cast(editAction.component, LiveSwingComponent::class).getFont().getSize2D()
+                        check(kotlin.math.abs(identitySize - nativeLabel) < .01f && kotlin.math.abs(valueSize - nativeLabel) < .01f &&
+                            kotlin.math.abs(buttonSize - nativeButton) < .01f) {
+                            "Inspector overrides native text sizes: label=$nativeLabel identity=$identitySize value=$valueSize button=$nativeButton/$buttonSize"
+                        }
+                        Files.writeString(screenshotsDirectory.resolve("inspector-text-metrics-${if (captureTheme.contains("Dark", true)) "dark" else "light"}.txt"),
+                            "UI scale: $inspectorReviewScale\nNative label: $nativeLabel\nInspector subtitle: $identitySize\nValue: $valueSize\nNative button: $nativeButton\nEdit button: $buttonSize\nHeader targets fully visible: true\n")
+                    }
+                    closeAction.moveMouse(Point(closeAction.component.width / 2, closeAction.component.height / 2))
+                    captureScreen(screenshotsDirectory.resolve("approved-inspector-${if (captureTheme.contains("Dark", true)) "dark" else "light"}-close-hover.png"))
+                    ordersGrid.moveMouse(Point(12, 12))
                     val panelLocation = ordersDetails.component.getLocationOnScreen()
                     Files.writeString(screenshotsDirectory.resolve("approved-inspector-${if (captureTheme.contains("Dark", true)) "dark" else "light"}-bounds.txt"),
                         "${panelLocation.x},${panelLocation.y},${ordersDetails.component.width},${ordersDetails.component.height}")
@@ -1244,6 +1278,9 @@ class IntellijUiScreenshotTest {
                     appendLine("Focused native Value Workspace capture")
                     appendLine("IDE: ${System.getProperty("ui.ide.version")} (${System.getProperty("ui.ide.build")})")
                     appendLine("Requested theme: $themeId")
+                    appendLine("UI scale: $inspectorReviewScale; display: ${displayBounds.width}x${displayBounds.height}")
+                    appendLine("IDE Java runtime: ${utility(LiveJavaSystem::class).getProperty("java.runtime.version")}")
+                    appendLine("Native inspector text sizes and unclipped hover targets: verified in both themes")
                     appendLine("Loaded cell: ${tableCellText(dataGrid, 0, 3)}")
                     appendLine("Pin selection persistence: verified after selecting ID cell")
                     appendLine("Column header details: $headerDetailsVerified")
@@ -3195,7 +3232,13 @@ interface LiveLabel {
 }
 
 @Remote("java.awt.Font")
-interface LiveFont { fun isItalic(): Boolean }
+interface LiveFont { fun isItalic(): Boolean; fun getSize2D(): Float }
+
+@Remote("javax.swing.UIManager")
+interface LiveUiFontDefaults { fun getFont(key: String): LiveFont }
+
+@Remote("java.lang.System")
+interface LiveJavaSystem { fun getProperty(key: String): String }
 
 @Remote("javax.swing.JTextArea")
 interface LiveTextArea {

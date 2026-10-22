@@ -273,7 +273,8 @@ final class CellDetailsPanel extends JPanel {
         setLayout(new BorderLayout());
         setPreferredSize(new Dimension(JBUI.scale(388), 400));
         setMinimumSize(new Dimension(JBUI.scale(320), 220));
-        setBorder(JBUI.Borders.empty(0, 24));
+        // Each region owns its padding. The header has a wider layout area so its
+        // right-aligned hover targets stay inside every ancestor's paint bounds.
         eyebrow.setIcon(IconUtil.scale(Icons.TABLE, null, 1.5f)); eyebrow.setIconTextGap(JBUI.scale(6));
         title.getAccessibleContext().setAccessibleName("Inspected column");
         identity.getAccessibleContext().setAccessibleName("Inspected row and column");
@@ -295,11 +296,11 @@ final class CellDetailsPanel extends JPanel {
         controls.add(pin); controls.add(close);
         GridBagConstraints actionsConstraints = new GridBagConstraints();
         actionsConstraints.gridx = 1; actionsConstraints.gridy = 0;
-        actionsConstraints.anchor = GridBagConstraints.NORTHEAST; actionsConstraints.insets = JBUI.insets(0, 12, 0, -8);
+        actionsConstraints.anchor = GridBagConstraints.NORTHEAST; actionsConstraints.insets = JBUI.insetsLeft(12);
         header.add(controls, actionsConstraints); add(header, BorderLayout.NORTH);
 
         content.setOpaque(true); content.setLayout(new ColumnLayout());
-        bodyScroll.setBorder(BorderFactory.createEmptyBorder());
+        bodyScroll.setBorder(JBUI.Borders.empty(0, 24));
         bodyScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         bodyScroll.getVerticalScrollBar().setUnitIncrement(JBUI.scale(16));
         add(bodyScroll, BorderLayout.CENTER);
@@ -384,6 +385,7 @@ final class CellDetailsPanel extends JPanel {
         lower.add(tableNote);
         footer.add(footerLabel, BorderLayout.CENTER);
         bottomDock.add(footer, BorderLayout.SOUTH);
+        bottomDock.setBorder(JBUI.Borders.empty(0, 24));
         add(bottomDock, BorderLayout.SOUTH);
         getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "escape");
         getActionMap().put("escape", new AbstractAction() { public void actionPerformed(ActionEvent e) { handleEscape(); } });
@@ -403,9 +405,9 @@ final class CellDetailsPanel extends JPanel {
     }
 
     @Override public void doLayout() {
-        int width = Math.max(1, getWidth() - getInsets().left - getInsets().right);
-        header.setSize(width, header.getHeight());
-        content.setSize(width, content.getHeight());
+        header.setSize(getWidth(), header.getHeight());
+        int contentWidth = Math.max(1, getWidth() - JBUI.scale(48));
+        content.setSize(contentWidth, content.getHeight());
         if (!columnMode && valueBlock != null && getHeight() > 0) {
             int fixedHeight = header.getPreferredSize().height + bottomDock.getPreferredSize().height
                     + lower.getPreferredSize().height
@@ -655,6 +657,7 @@ final class CellDetailsPanel extends JPanel {
         header.setBackground(panelBackground);
         footer.setBackground(panelBackground);
         bottomDock.setBackground(panelBackground);
+        bodyScroll.setBackground(panelBackground);
         content.setBackground(panelBackground);
         valueArea.setBackground(new JBColor(0xFFFFFF, 0x1E1F22));
         valueArea.setForeground(JBColor.foreground());
@@ -662,8 +665,17 @@ final class CellDetailsPanel extends JPanel {
         lineNumbers.setBackground(new JBColor(0xF4F6F9, 0x25262A));
         lineNumbers.setForeground(JBColor.namedColor("Label.infoForeground", new JBColor(0x657185, 0xABB3BE)));
         Color separator = new JBColor(0xD4D9E1, 0x41454D);
-        header.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(0, 0, 1, 0, separator), JBUI.Borders.empty(10, 0, 22, 0)));
+        header.setBorder(new javax.swing.border.AbstractBorder() {
+            @Override public Insets getBorderInsets(Component component) { return JBUI.insets(10, 24, 23, 16); }
+            @Override public Insets getBorderInsets(Component component, Insets insets) {
+                insets.set(JBUI.scale(10), JBUI.scale(24), JBUI.scale(23), JBUI.scale(16));
+                return insets;
+            }
+            @Override public void paintBorder(Component component, Graphics graphics, int x, int y, int width, int height) {
+                graphics.setColor(separator);
+                graphics.drawLine(x + JBUI.scale(24), y + height - 1, x + width - JBUI.scale(24) - 1, y + height - 1);
+            }
+        });
         refreshSectionBorder();
         footer.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(1, 0, 0, 0, separator), JBUI.Borders.empty(14, 0, 30, 0)));
@@ -672,13 +684,13 @@ final class CellDetailsPanel extends JPanel {
         footerLabel.setForeground(new JBColor(0x657185, 0xABB3BE));
         refreshMetadataColors(content);
         Font labelFont = bodyFont();
-        Font buttonFont = bodyFont();
+        Font buttonFont = UIManager.getFont("Button.font");
         if (labelFont != null) {
-            title.setFont(labelFont.deriveFont(Font.BOLD, labelFont.getSize2D() + JBUI.scale(7f)));
+            title.setFont(labelFont.deriveFont(Font.BOLD, labelFont.getSize2D() + JBUI.scale(6f)));
             eyebrow.setFont(labelFont); identity.setFont(labelFont); summary.setFont(labelFont);
-            valueHeading.setFont(labelFont.deriveFont(Font.BOLD, labelFont.getSize2D() + JBUI.scale(2f)));
+            valueHeading.setFont(labelFont.deriveFont(Font.BOLD, labelFont.getSize2D() + JBUI.scale(1f)));
             tableNoteLabel.setFont(labelFont); footerLabel.setFont(labelFont); validation.setFont(labelFont);
-            valueArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 1).deriveFont(labelFont.getSize2D() + JBUI.scale(1f)));
+            valueArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 1).deriveFont(labelFont.getSize2D()));
         }
         if (buttonFont != null) for (AbstractButton button : new AbstractButton[]{formattedTab, rawTab, wrap, edit, copy, setNull, emptyString, useDefault, revert, apply, cancel, editTable}) {
             button.setOpaque(false); button.setForeground(JBColor.foreground());
@@ -727,8 +739,7 @@ final class CellDetailsPanel extends JPanel {
         button.setForeground(button.isSelected() ? new JBColor(0x275DCD, 0x78A9FF) : new JBColor(0x657185, 0xABB3BE));
     }
     private static Font bodyFont() {
-        Font nativeFont = UIManager.getFont("Label.font");
-        return nativeFont.deriveFont(nativeFont.getSize2D() + JBUI.scale(2f));
+        return UIManager.getFont("Label.font");
     }
     private static void refreshMetadataColors(Component component) {
         Font font = bodyFont();

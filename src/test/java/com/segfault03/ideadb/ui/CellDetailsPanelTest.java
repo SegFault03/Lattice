@@ -5,6 +5,7 @@ import com.segfault03.ideadb.model.RowDefaults;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.*;
+import java.awt.*;
 import java.lang.reflect.Field;
 import java.sql.Types;
 import java.util.ArrayList;
@@ -34,6 +35,65 @@ class CellDetailsPanelTest {
         catch (ReflectiveOperationException ex) { throw new AssertionError(ex); }
     }
     static void click(CellDetailsPanel panel, String name) { field(panel, name, JButton.class).doClick(0); }
+
+    @Test void inspectorUsesNativeTextSizesAtEveryUiScale() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            float previousScale = com.intellij.ui.scale.JBUIScale.scale(1f);
+            Font previousLabel = UIManager.getFont("Label.font"), previousButton = UIManager.getFont("Button.font");
+            try {
+                for (float scale : new float[]{1f, 1.25f, 1.5f}) {
+                    com.intellij.ui.scale.JBUIScale.setUserScaleFactor(scale);
+                    Font label = previousLabel.deriveFont(13f * scale);
+                    Font button = previousButton.deriveFont(14f * scale);
+                    UIManager.put("Label.font", label); UIManager.put("Button.font", button);
+                    CellDetailsPanel panel = new CellDetailsPanel(new RecordingActions()); panel.showCell(cell("value", 0));
+                    assertEquals(label.getSize2D(), field(panel, "identity", JTextArea.class).getFont().getSize2D(), .01f);
+                    assertEquals(label.getSize2D(), field(panel, "summary", JLabel.class).getFont().getSize2D(), .01f);
+                    assertEquals(label.getSize2D(), label(panel, "Nullable").getFont().getSize2D(), .01f);
+                    assertEquals(label.getSize2D(), field(panel, "valueArea", JTextArea.class).getFont().getSize2D(), .01f);
+                    assertEquals(button.getSize2D(), field(panel, "edit", JButton.class).getFont().getSize2D(), .01f);
+                }
+            } finally {
+                com.intellij.ui.scale.JBUIScale.setUserScaleFactor(previousScale);
+                UIManager.put("Label.font", previousLabel); UIManager.put("Button.font", previousButton);
+            }
+        });
+    }
+
+    @Test void completeHeaderHoverTargetsFitEveryAncestorAtEveryUiScale() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            float previousScale = com.intellij.ui.scale.JBUIScale.scale(1f);
+            try {
+                for (float scale : new float[]{1f, 1.25f, 1.5f}) {
+                    com.intellij.ui.scale.JBUIScale.setUserScaleFactor(scale);
+                    CellDetailsPanel panel = new CellDetailsPanel(new RecordingActions()); panel.showCell(cell("value", 0));
+                    for (int width : new int[]{320, 388}) {
+                        panel.setSize(com.intellij.util.ui.JBUI.scale(width), com.intellij.util.ui.JBUI.scale(730));
+                        for (int pass = 0; pass < 5; pass++) layout(panel);
+                        for (String action : new String[]{"pin", "close"}) {
+                            JButton button = field(panel, action, JButton.class);
+                            button.getModel().setRollover(true);
+                            Component child = button;
+                            Rectangle hover = new Rectangle(0, 0, button.getWidth(), button.getHeight());
+                            while (child != panel) {
+                                Container parent = child.getParent();
+                                hover.translate(child.getX(), child.getY());
+                                assertTrue(new Rectangle(0, 0, parent.getWidth(), parent.getHeight()).contains(hover),
+                                        action + " hover target clips at " + parent.getClass().getName() + " at scale " + scale);
+                                child = parent;
+                            }
+                            button.getModel().setRollover(false);
+                        }
+                    }
+                }
+            } finally { com.intellij.ui.scale.JBUIScale.setUserScaleFactor(previousScale); }
+        });
+    }
+
+    private static void layout(Container container) {
+        container.doLayout();
+        for (Component child : container.getComponents()) if (child instanceof Container nested) layout(nested);
+    }
 
     @Test void untouchedNullDefaultAndOrdinaryValuesNeverBecomePendingChanges() throws Exception {
         SwingUtilities.invokeAndWait(() -> {

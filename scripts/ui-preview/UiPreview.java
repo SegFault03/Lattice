@@ -473,6 +473,10 @@ public final class UiPreview {
         render(panel, theme + "-approved-inspector", 388, 730);
         if (!"Row 2 · Column 4".equals(((JTextArea)field(panel, "identity")).getText()))
             throw new AssertionError("Subtitle must contain only row and column coordinates");
+        JButton close = (JButton)field(panel, "close");
+        close.getModel().setRollover(true);
+        render(panel, theme + "-approved-inspector-close-hover", 388, 730);
+        close.getModel().setRollover(false);
         render(panel, theme + "-approved-inspector-narrow", 320, 650);
         invoke(panel, "clearPin", new Class<?>[0]);
         render(panel, theme + "-approved-inspector-unpinned", 388, 730);
