@@ -1,0 +1,12 @@
+Focused native Value Workspace capture
+IDE: 2026.2.3 (262.10968.63)
+Requested theme: ExperimentalLight
+UI scale: 1.25; display: 1920x1080
+IDE Java runtime: 25.0.4+1-b508.27
+Native inspector text sizes and unclipped hover targets: verified in both themes
+Loaded cell: amelia.brooks@example.com
+Pin selection persistence: verified after selecting ID cell
+Column header details: true
+Double-click edit mode: verified
+Close and reopen controls: verified
+Opposite theme switch: Islands Dark

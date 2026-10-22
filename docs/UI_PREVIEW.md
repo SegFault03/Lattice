@@ -22,13 +22,19 @@ Presentation controls appear for structured/long values. Column metadata stays
 visible, with compact Edit table below the structure hint. The column name is
 the title; the subtitle contains only row and column coordinates. Fixed header
 actions use a filled gray pinned icon. Rounded inspector buttons retain Swing
-keyboard and accessibility behavior across themes and platforms. Metadata and
-identifiers wrap and can be selected/copied.
+keyboard and accessibility behavior across themes and platforms. Body/value text
+uses the IDE label font size, and actions use its button font size; the inspector
+does not enlarge normal text. Header controls occupy real layout space so their
+complete hover targets fit at all scales. Action targets have a compact
+28-logical-pixel minimum with two-pixel vertical padding. The editor/action gap
+is eight pixels, metadata rows use four-pixel vertical padding, and the footer
+uses symmetric 12-pixel padding. Metadata and identifiers wrap and can
+be selected/copied.
 
 The focused `--cell-details-only` previews also exercise closed-state retention,
 divider restoration, compact JSON, long metadata, local validation and larger
 fonts in both themes. They also render the approved date fixture at 388 × 730
-and a narrow 320 × 650 viewport. The focused native flow captures the same
+and a narrow 320 × 650 viewport, including the close-hover state. The focused native flow captures the same
 WARMUP_ORDERS fixture in both themes and records its panel bounds for comparison.
 The native focused scenario checks the explicit toolbar toggle and leaves the inspector closed after an ordinary grid click. See the
 [prioritized implementation checklist](design/data-cell-refresh-plan.md).
