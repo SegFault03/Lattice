@@ -34,11 +34,11 @@ committed and pushed to the same branch after each completed phase.
 
 ## Phase 4 — verification and handoff
 
-- [ ] Run the ordinary Java suite and focused production previews in both themes.
-- [ ] Exercise scalar, JSON, NULL/default, long metadata, invalid, pinned, editing and disabled states.
-- [ ] Check compact/wide layouts, larger fonts and scaled layouts; inspect saved renders.
-- [ ] Update preview/native-review expectations and UI documentation for the final interaction model.
-- [ ] Build the plugin and report remaining native desktop/platform limitations precisely.
+- [x] Run the ordinary Java suite and focused production previews in both themes.
+- [x] Exercise scalar, JSON, NULL/default, long metadata, invalid, pinned, editing and disabled states.
+- [x] Check compact/wide layouts, larger fonts and scaled layouts; inspect saved renders.
+- [x] Update preview/native-review expectations and UI documentation for the final interaction model.
+- [x] Build the plugin and report remaining native desktop/platform limitations precisely.
 
 ## Progress
 
@@ -74,3 +74,24 @@ committed and pushed to the same branch after each completed phase.
   and added equivalent live dark/light assertions. All 201 ordinary tests,
   native scenario compilation, refreshed focused previews and archive validation
   pass; the final native run includes those contrast assertions.
+
+## Final verification
+
+- 201 ordinary Java tests passed with no failures, errors or skips.
+- Plugin build and release-archive validation passed; native UI scenarios compile.
+- 13 preview/review tooling tests passed.
+- The complete light/dark gallery passed (124 renders); five tracked README
+  images were refreshed. Focused inspector checks passed (22 renders), including
+  760px/960px compact layouts and 150% UI fonts.
+- Live IntelliJ IDEA 2025.1 / Linux flows passed at 100% and 125% UI scale,
+  including an HSQLDB fixture, pinning, editing, explicit close/reopen, both
+  cell/column views and a dark/light/dark theme round trip. The final 125% run
+  also requires at least 4.5:1 contrast for metadata labels in both native themes.
+- Final saved native renders were inspected; the secondary-toggle theme artifact
+  is resolved. Capture output: `build/inspector-native-final/`; focused gallery:
+  `build/inspector-final/`; complete gallery: `build/ui-preview-final/`.
+
+Remaining coverage limits: native Windows/macOS, other IDE versions/themes,
+screen readers, and physical display scaling beyond the exercised Linux setup.
+These checks do not establish full accessibility compliance. The optional bottom
+inspector direction was unnecessary for the corrected compact side layout.
