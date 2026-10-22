@@ -96,8 +96,13 @@ class CellDetailsPanelTest {
                         for (String name : new String[]{"pin", "close"}) {
                             JButton action = field(panel, name, JButton.class);
                             assertEquals(tableIcon.getPreferredSize(), action.getPreferredSize(), name + " target differs from table controls");
-                            assertEquals(tableIcon.getIcon().getIconWidth(), action.getIcon().getIconWidth(), name + " icon differs at " + scale + ", pinned=" + pinned);
-                            assertEquals(tableIcon.getIcon().getIconHeight(), action.getIcon().getIconHeight());
+                            // Core icons can be fixed-size placeholders in a headless JVM.
+                            // Compare each glyph to its original artwork; native checks compare live controls.
+                            Icon standard = "close".equals(name) ? com.intellij.icons.AllIcons.Actions.CloseDarkGrey
+                                    : pinned ? com.intellij.openapi.util.IconLoader.getIcon("/icons/inspector-pinned.svg", CellDetailsPanel.class)
+                                    : com.intellij.icons.AllIcons.General.Pin_tab;
+                            assertEquals(standard.getIconWidth(), action.getIcon().getIconWidth(), name + " icon differs at " + scale + ", pinned=" + pinned);
+                            assertEquals(standard.getIconHeight(), action.getIcon().getIconHeight());
                         }
                     }
                     JLabel tableName = field(panel, "eyebrow", JLabel.class);

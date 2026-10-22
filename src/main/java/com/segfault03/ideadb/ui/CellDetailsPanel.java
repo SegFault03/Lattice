@@ -692,7 +692,7 @@ final class CellDetailsPanel extends JPanel {
             button.setOpaque(false); button.setForeground(JBColor.foreground());
             button.setFont(buttonFont);
             if (!(button instanceof InspectorButton)) {
-                button.setIconTextGap(JBUI.scale(5)); button.setMargin(JBUI.insets(2, 6));
+                button.setIconTextGap(JBUI.scale(4)); button.setMargin(JBUI.insets(2, 6));
             }
             sizeControl(button);
         }

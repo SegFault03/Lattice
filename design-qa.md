@@ -6,7 +6,7 @@ Implementation and component checks are complete. Native IDEA light/dark compari
 
 ## Requested correction
 
-The user flagged the inspector icons and controls as larger than those in the table viewer. This supersedes the earlier enlarged-icon request. The table viewer is the sizing reference: standard 16-logical-pixel icons and 28-logical-pixel minimum controls, with four-pixel vertical/six-pixel horizontal padding and a five-pixel icon-to-text gap.
+The user flagged the inspector icons and controls as larger than those in the table viewer. This supersedes the earlier enlarged-icon request. The table viewer is the sizing reference: standard 16-logical-pixel icons and 28-logical-pixel minimum controls, with four-pixel vertical/six-pixel horizontal padding and a four-pixel native icon-to-text gap.
 
 ## Changes and current verification
 
@@ -14,13 +14,17 @@ The user flagged the inspector icons and controls as larger than those in the ta
 - Shared the table toolbar's actual padding, margin, icon gap and preferred-size calculation in `DatabaseUi`. Inspector surfaces retain rounded painting and native button semantics.
 - Header pin/close targets now use the same compact dimensions as table icon actions, with four logical pixels between them. Both remain right-aligned inside the header's paint bounds.
 - Reduced metadata indentation to align with the now-standard column icon and label. Existing content margins, typography, visible metadata, editing and draft behavior are preserved.
-- All 215 ordinary tests pass, including equality against actual table toolbar buttons at 100%, 125% and 150% UI scale, both pin states and ancestor clipping checks. Tests enable SVG loading so they exercise actual icons rather than unloaded placeholders.
+- All 215 ordinary tests pass, including equality against actual table toolbar buttons at 100%, 125% and 150% UI scale, both pin states and ancestor clipping checks. The pinned glyph is compared to its original artwork, since core icons can remain fixed-size placeholders in headless tests; native checks compare actual controls directly.
 - All 30 production Swing preview states pass; before/after comparisons opened together in light and dark. Plugin build and archive validation pass.
 
 ## Opened evidence
 
 - Same 388 × 730 viewport/state, 100% UI/device scale, ORDER_DATE / Row 2 · Column 4 / pinned / close hovered: [light comparison](docs/design/cell-inspector-qa/standard-actions-light-comparison.png), [dark comparison](docs/design/cell-inspector-qa/standard-actions-dark-comparison.png).
 - Previous Windows typography, hover and compact-spacing review is archived in [the earlier report](docs/design/cell-inspector-qa/design-qa-before-standard-actions.md).
+
+## Native iteration
+
+The first live run passed icon-size and control-height comparisons, then caught a one-physical-pixel icon-to-text gap mismatch at 125% IDE zoom. IDEA's Darcula button UI explicitly resets the table action gap to four logical pixels when installing a theme; the previous factory used five. Both table and inspector now use IDEA's four-pixel standard directly. The exact native gap assertion remains in place for both themes.
 
 ## Native check pending
 

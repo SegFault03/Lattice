@@ -1275,7 +1275,9 @@ class IntellijUiScreenshotTest {
                             check(icon.getIconWidth() == tableIcon.getIconWidth() && icon.getIconHeight() == tableIcon.getIconHeight()) {
                                 "$name icon differs from table icons: ${icon.getIconWidth()}x${icon.getIconHeight()} vs ${tableIcon.getIconWidth()}x${tableIcon.getIconHeight()}"
                             }
-                            check(button.getIconTextGap() == tableButton.getIconTextGap()) { "$name icon-to-text gap differs from table controls" }
+                            check(button.getIconTextGap() == tableButton.getIconTextGap()) {
+                                "$name icon-to-text gap differs from table controls: ${button.getIconTextGap()} vs ${tableButton.getIconTextGap()}"
+                            }
                             "$name: ${action.component.width}x${action.component.height}; icon ${icon.getIconWidth()}x${icon.getIconHeight()}; gap ${button.getIconTextGap()}"
                         }
                         Files.writeString(screenshotsDirectory.resolve("inspector-text-metrics-${if (captureTheme.contains("Dark", true)) "dark" else "light"}.txt"),

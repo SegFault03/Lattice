@@ -95,7 +95,8 @@ public final class DatabaseUi {
         // Darcula subtracts both border insets and the Swing button margin.
         // The border supplies our explicit padding; do not count that margin twice.
         button.setMargin(new Insets(0, 0, 0, 0));
-        button.setIconTextGap(JBUI.scale(5));
+        // IDEA reapplies its native four-pixel gap on every theme change.
+        button.setIconTextGap(JBUI.scale(4));
     }
 
     static Dimension actionPreferredSize(AbstractButton button) {
