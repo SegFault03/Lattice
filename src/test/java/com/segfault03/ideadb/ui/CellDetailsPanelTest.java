@@ -2,6 +2,7 @@ package com.segfault03.ideadb.ui;
 
 import com.segfault03.ideadb.model.ColumnMetadata;
 import com.segfault03.ideadb.model.RowDefaults;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.*;
@@ -14,6 +15,11 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class CellDetailsPanelTest {
+    @BeforeAll static void enableSvgIcons() {
+        com.intellij.ui.IconManager.Companion.activate(new com.intellij.ui.icons.CoreIconManager());
+        com.intellij.openapi.util.IconLoader.activate();
+    }
+
     static final class RecordingActions implements CellDetailsPanel.Actions {
         final List<String> applied = new ArrayList<>();
         int closes;
@@ -52,14 +58,55 @@ class CellDetailsPanelTest {
                     assertEquals(label.getSize2D(), label(panel, "Nullable").getFont().getSize2D(), .01f);
                     assertEquals(label.getSize2D(), field(panel, "valueArea", JTextArea.class).getFont().getSize2D(), .01f);
                     assertEquals(button.getSize2D(), field(panel, "edit", JButton.class).getFont().getSize2D(), .01f);
-                    JButton nativeAction = new JButton("Edit value");
-                    assertTrue(field(panel, "edit", JButton.class).getPreferredSize().height <=
-                                    nativeAction.getPreferredSize().height + com.intellij.util.ui.JBUI.scale(6),
-                            "Edit should remain close to native button height, including its larger icon");
                 }
             } finally {
                 com.intellij.ui.scale.JBUIScale.setUserScaleFactor(previousScale);
                 UIManager.put("Label.font", previousLabel); UIManager.put("Button.font", previousButton);
+            }
+        });
+    }
+
+    @Test void inspectorActionsMatchTableToolbarGeometryAtEveryUiScale() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            float previousScale = com.intellij.ui.scale.JBUIScale.scale(1f);
+            Font previousButton = UIManager.getFont("Button.font");
+            try {
+                for (float scale : new float[]{1f, 1.25f, 1.5f}) {
+                    com.intellij.ui.scale.JBUIScale.setUserScaleFactor(scale);
+                    UIManager.put("Button.font", previousButton.deriveFont(13f * scale));
+                    CellDetailsPanel panel = new CellDetailsPanel(new RecordingActions()); panel.showCell(cell("value", 0));
+                    for (String name : new String[]{"edit", "copy", "editTable"}) {
+                        JButton action = field(panel, name, JButton.class);
+                        Icon icon = switch (name) {
+                            case "edit" -> com.intellij.icons.AllIcons.Actions.Edit;
+                            case "copy" -> com.intellij.icons.AllIcons.Actions.Copy;
+                            default -> Icons.TABLE;
+                        };
+                        JButton toolbar = DatabaseUi.action(action.getText(), icon, "Table action");
+                        assertEquals(toolbar.getPreferredSize(), action.getPreferredSize(), name + " differs from table sizing at " + scale);
+                        assertEquals(toolbar.getInsets(), action.getInsets());
+                        assertEquals(toolbar.getMargin(), action.getMargin());
+                        assertEquals(toolbar.getIconTextGap(), action.getIconTextGap());
+                        assertEquals(icon.getIconWidth(), action.getIcon().getIconWidth(), name + " icon was enlarged");
+                        assertEquals(icon.getIconHeight(), action.getIcon().getIconHeight());
+                    }
+                    JButton tableIcon = DatabaseUi.action("", com.intellij.icons.AllIcons.General.Pin_tab, "Table icon");
+                    for (boolean pinned : new boolean[]{false, true, false}) {
+                        if (pinned != field(panel, "pin", JButton.class).isSelected()) click(panel, "pin");
+                        for (String name : new String[]{"pin", "close"}) {
+                            JButton action = field(panel, name, JButton.class);
+                            assertEquals(tableIcon.getPreferredSize(), action.getPreferredSize(), name + " target differs from table controls");
+                            assertEquals(tableIcon.getIcon().getIconWidth(), action.getIcon().getIconWidth(), name + " icon differs at " + scale + ", pinned=" + pinned);
+                            assertEquals(tableIcon.getIcon().getIconHeight(), action.getIcon().getIconHeight());
+                        }
+                    }
+                    JLabel tableName = field(panel, "eyebrow", JLabel.class);
+                    assertEquals(Icons.TABLE.getIconWidth(), tableName.getIcon().getIconWidth());
+                    assertEquals(Icons.COLUMN.getIconWidth(), label(panel, "Column").getIcon().getIconWidth());
+                }
+            } finally {
+                com.intellij.ui.scale.JBUIScale.setUserScaleFactor(previousScale);
+                UIManager.put("Button.font", previousButton);
             }
         });
     }

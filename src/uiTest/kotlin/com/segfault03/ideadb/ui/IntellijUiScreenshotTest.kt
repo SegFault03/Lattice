@@ -1263,11 +1263,23 @@ class IntellijUiScreenshotTest {
                             kotlin.math.abs(buttonSize - nativeButton) < .01f) {
                             "Inspector overrides native text sizes: label=$nativeLabel identity=$identitySize value=$valueSize button=$nativeButton/$buttonSize"
                         }
-                        check(editAction.component.height <= inspectAction.component.height + (4 * inspectorReviewScale).toInt()) {
-                            "Edit action is oversized beside the IDE toolbar: ${editAction.component.height} vs ${inspectAction.component.height}"
+                        val tableButton = cast(inspectAction.component, LiveToolbarButton::class)
+                        val tableIcon = checkNotNull(tableButton.getIcon())
+                        val actionMetrics = listOf("Edit selected cell value", "Copy", "Edit table", "Unpin cell details", "Close details panel").joinToString("\n") { name ->
+                            val action = ordersDetails.x { byAccessibleName(name) }.waitFound()
+                            val button = cast(action.component, LiveToolbarButton::class)
+                            val icon = checkNotNull(button.getIcon())
+                            check(kotlin.math.abs(action.component.height - inspectAction.component.height) <= 1) {
+                                "$name height differs from table controls: ${action.component.height} vs ${inspectAction.component.height}"
+                            }
+                            check(icon.getIconWidth() == tableIcon.getIconWidth() && icon.getIconHeight() == tableIcon.getIconHeight()) {
+                                "$name icon differs from table icons: ${icon.getIconWidth()}x${icon.getIconHeight()} vs ${tableIcon.getIconWidth()}x${tableIcon.getIconHeight()}"
+                            }
+                            check(button.getIconTextGap() == tableButton.getIconTextGap()) { "$name icon-to-text gap differs from table controls" }
+                            "$name: ${action.component.width}x${action.component.height}; icon ${icon.getIconWidth()}x${icon.getIconHeight()}; gap ${button.getIconTextGap()}"
                         }
                         Files.writeString(screenshotsDirectory.resolve("inspector-text-metrics-${if (captureTheme.contains("Dark", true)) "dark" else "light"}.txt"),
-                            "UI scale: $inspectorReviewScale\nNative label: $nativeLabel\nInspector subtitle: $identitySize\nValue: $valueSize\nNative button: $nativeButton\nEdit button: $buttonSize\nEdit bounds: ${editAction.component.width}x${editAction.component.height}\nInspect height: ${inspectAction.component.height}\nHeader targets fully visible: true\n")
+                            "UI scale: $inspectorReviewScale\nNative label: $nativeLabel\nInspector subtitle: $identitySize\nValue: $valueSize\nNative button: $nativeButton\nEdit button: $buttonSize\nInspect height: ${inspectAction.component.height}; icon ${tableIcon.getIconWidth()}x${tableIcon.getIconHeight()}; gap ${tableButton.getIconTextGap()}\n$actionMetrics\nHeader targets fully visible: true\n")
                     }
                     closeAction.moveMouse(Point(closeAction.component.width / 2, closeAction.component.height / 2))
                     captureScreen(screenshotsDirectory.resolve("approved-inspector-${if (captureTheme.contains("Dark", true)) "dark" else "light"}-close-hover.png"))

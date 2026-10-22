@@ -71,8 +71,8 @@ final class CellDetailsPanel extends JPanel {
     private final JToggleButton formattedTab = new JToggleButton("Formatted");
     private final JToggleButton rawTab = new JToggleButton("Raw");
     private final JToggleButton wrap = new JToggleButton("Wrap");
-    private final JButton edit = new InspectorButton("Edit value", IconUtil.scale(AllIcons.Actions.Edit, null, 1.5f), ButtonStyle.PRIMARY);
-    private final JButton copy = new QuietButton("Copy", IconUtil.scale(AllIcons.Actions.Copy, null, 1.5f));
+    private final JButton edit = new InspectorButton("Edit value", AllIcons.Actions.Edit, ButtonStyle.PRIMARY);
+    private final JButton copy = new QuietButton("Copy", AllIcons.Actions.Copy);
     private final JButton setNull = new QuietButton("Set NULL", null);
     private final JButton emptyString = new QuietButton("Empty string", null);
     private final JButton useDefault = new QuietButton("Use default", null);
@@ -87,7 +87,7 @@ final class CellDetailsPanel extends JPanel {
     private String draft;
     private final WrappingLabel validation = new WrappingLabel("");
     private final JPanel tabs = new JPanel(new ActionLayout());
-    private final JPanel controls = new JPanel(new GridLayout(1, 2, JBUI.scale(10), 0));
+    private final JPanel controls = new JPanel(new GridLayout(1, 2, JBUI.scale(4), 0));
     private LookAndFeel lastLookAndFeel;
     private boolean structuredValue;
 
@@ -156,7 +156,7 @@ final class CellDetailsPanel extends JPanel {
         private final JLabel key;
         private final JTextArea value = selectableText();
         MetadataRow(String name, String text) {
-            super(null); setOpaque(false); setBorder(JBUI.Borders.empty(4, 32, 4, 0));
+            super(null); setOpaque(false); setBorder(JBUI.Borders.empty(4, 24, 4, 0));
             key = new JLabel(name); key.putClientProperty("lattice.secondary", Boolean.TRUE);
             key.setForeground(new JBColor(0x657185, 0xABB3BE));
             value.setText(text); value.putClientProperty("lattice.secondary", "—".equals(text)); value.setToolTipText(text); value.getAccessibleContext().setAccessibleName(name);
@@ -193,8 +193,7 @@ final class CellDetailsPanel extends JPanel {
         private final ButtonStyle style;
         InspectorButton(String text, Icon icon, ButtonStyle style) {
             super(text, icon); this.style = style;
-            setBorder(style == ButtonStyle.PRIMARY ? JBUI.Borders.empty(2, 10) : JBUI.Borders.empty(2, 8));
-            setIconTextGap(JBUI.scale(6)); setRolloverEnabled(true);
+            DatabaseUi.configureActionSizing(this); setRolloverEnabled(true);
             getModel().addChangeListener(e -> repaint());
             addFocusListener(new FocusAdapter() {
                 @Override public void focusGained(FocusEvent e) { repaint(); }
@@ -203,6 +202,7 @@ final class CellDetailsPanel extends JPanel {
         }
         @Override public void updateUI() {
             setUI(new BasicButtonUI()); setOpaque(false); setContentAreaFilled(false); setBorderPainted(false);
+            DatabaseUi.configureActionSizing(this);
         }
         @Override public Color getForeground() {
             return style == ButtonStyle.PRIMARY && isEnabled() ? Color.WHITE : super.getForeground();
@@ -232,8 +232,7 @@ final class CellDetailsPanel extends JPanel {
             g.dispose(); super.paintComponent(graphics);
         }
         @Override public Dimension getPreferredSize() {
-            Dimension size = super.getPreferredSize();
-            return new Dimension(size.width, Math.max(JBUI.scale(28), size.height));
+            return DatabaseUi.actionPreferredSize(this);
         }
     }
     private static final class QuietButton extends InspectorButton {
@@ -244,13 +243,13 @@ final class CellDetailsPanel extends JPanel {
     private static final class HeaderIconButton extends JButton {
         HeaderIconButton(Icon icon) {
             super(icon); setOpaque(false); setContentAreaFilled(false); setBorderPainted(false);
-            setRolloverEnabled(true); setFocusable(true); setBorder(JBUI.Borders.empty());
+            setRolloverEnabled(true); setFocusable(true); DatabaseUi.configureActionSizing(this);
             getModel().addChangeListener(e -> repaint());
         }
         void setActive(boolean active) { setSelected(active); repaint(); }
         @Override public void updateUI() {
             setUI(new BasicButtonUI()); setOpaque(false); setContentAreaFilled(false); setBorderPainted(false);
-            setBorder(JBUI.Borders.empty());
+            DatabaseUi.configureActionSizing(this);
         }
         @Override protected void paintComponent(Graphics graphics) {
             Graphics2D g = (Graphics2D) graphics.create();
@@ -262,7 +261,7 @@ final class CellDetailsPanel extends JPanel {
             }
             g.dispose(); super.paintComponent(graphics);
         }
-        @Override public Dimension getPreferredSize() { return new Dimension(JBUI.scale(32), JBUI.scale(32)); }
+        @Override public Dimension getPreferredSize() { return DatabaseUi.actionPreferredSize(this); }
         @Override public Dimension getMinimumSize() { return getPreferredSize(); }
         @Override public Dimension getMaximumSize() { return getPreferredSize(); }
     }
@@ -274,7 +273,7 @@ final class CellDetailsPanel extends JPanel {
         setMinimumSize(new Dimension(JBUI.scale(320), 220));
         // Each region owns its padding. The header has a wider layout area so its
         // right-aligned hover targets stay inside every ancestor's paint bounds.
-        eyebrow.setIcon(IconUtil.scale(Icons.TABLE, null, 1.5f)); eyebrow.setIconTextGap(JBUI.scale(6));
+        eyebrow.setIcon(Icons.TABLE); eyebrow.setIconTextGap(JBUI.scale(6));
         title.getAccessibleContext().setAccessibleName("Inspected column");
         identity.getAccessibleContext().setAccessibleName("Inspected row and column");
         GridBagConstraints labelConstraints = new GridBagConstraints();
@@ -371,7 +370,7 @@ final class CellDetailsPanel extends JPanel {
         tableNote.setAlignmentX(Component.LEFT_ALIGNMENT);
         tableNoteLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         tableNoteText.setOpaque(false); tableNoteText.add(tableNoteLabel);
-        editTable.setIcon(IconUtil.scale(Icons.TABLE, null, 1.5f));
+        editTable.setIcon(Icons.TABLE);
         editTable.setAlignmentX(Component.LEFT_ALIGNMENT);
         editTable.addActionListener(e -> actions.editTable());
         JPanel editTableRow = new JPanel(new FlowLayout(FlowLayout.LEADING, 0, 0));
@@ -557,7 +556,7 @@ final class CellDetailsPanel extends JPanel {
     }
     private void addSection(String name) {
         JLabel label = new JLabel(name);
-        if ("Column".equals(name)) { label.setIcon(IconUtil.scale(Icons.COLUMN, null, 1.5f)); label.setIconTextGap(JBUI.scale(8)); }
+        if ("Column".equals(name)) { label.setIcon(Icons.COLUMN); label.setIconTextGap(JBUI.scale(8)); }
         label.setAlignmentX(Component.LEFT_ALIGNMENT);
         label.putClientProperty("lattice.section", Boolean.TRUE);
         label.setFont(bodyFont().deriveFont(Font.BOLD));
@@ -634,11 +633,11 @@ final class CellDetailsPanel extends JPanel {
     }
     private void updatePin() {
         Color glyph = new JBColor(0x657185, 0xADB5C2);
-        pin.setIcon(IconUtil.filterIcon(IconUtil.scale(pinned ? IconLoader.getIcon("/icons/inspector-pinned.svg", CellDetailsPanel.class) : AllIcons.General.Pin_tab, null, pinned ? 2f : 1.5f),
+        pin.setIcon(IconUtil.filterIcon(pinned ? IconLoader.getIcon("/icons/inspector-pinned.svg", CellDetailsPanel.class) : AllIcons.General.Pin_tab,
                 () -> new java.awt.image.RGBImageFilter() {
                     @Override public int filterRGB(int x, int y, int rgb) { return (rgb & 0xFF000000) | (glyph.getRGB() & 0xFFFFFF); }
                 }, null));
-        close.setIcon(IconUtil.scale(AllIcons.Actions.CloseDarkGrey, null, 1.75f));
+        close.setIcon(AllIcons.Actions.CloseDarkGrey);
         pin.setActive(pinned);
         pin.setToolTipText(pinned ? "Unpin details" : "Pin details");
         pin.getAccessibleContext().setAccessibleName(pinned
@@ -691,8 +690,10 @@ final class CellDetailsPanel extends JPanel {
         }
         if (buttonFont != null) for (AbstractButton button : new AbstractButton[]{formattedTab, rawTab, wrap, edit, copy, setNull, emptyString, useDefault, revert, apply, cancel, editTable}) {
             button.setOpaque(false); button.setForeground(JBColor.foreground());
-            button.setFont(buttonFont); button.setIconTextGap(JBUI.scale(6));
-            if (!(button instanceof InspectorButton)) button.setMargin(JBUI.insets(2, 6));
+            button.setFont(buttonFont);
+            if (!(button instanceof InspectorButton)) {
+                button.setIconTextGap(JBUI.scale(5)); button.setMargin(JBUI.insets(2, 6));
+            }
             sizeControl(button);
         }
         int actionHeight = JBUI.scale(28);
@@ -707,7 +708,7 @@ final class CellDetailsPanel extends JPanel {
         copy.setForeground(JBColor.foreground());
         cancel.setForeground(JBColor.foreground());
         refreshTextToggle(formattedTab); refreshTextToggle(rawTab); refreshTextToggle(wrap);
-        edit.setIcon(IconUtil.filterIcon(IconUtil.scale(AllIcons.Actions.Edit, null, 1.5f),
+        edit.setIcon(IconUtil.filterIcon(AllIcons.Actions.Edit,
                 () -> new java.awt.image.RGBImageFilter() {
                     @Override public int filterRGB(int x, int y, int rgb) { return (rgb & 0xFF000000) | 0xFFFFFF; }
                 }, null));

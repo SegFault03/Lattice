@@ -78,19 +78,29 @@ public final class DatabaseUi {
         JButton button = new ActionButton(text, icon);
         button.setToolTipText(tooltip);
         button.getAccessibleContext().setAccessibleName(tooltip);
-        button.setBorder(JBUI.Borders.empty(4, 6));
-        // Darcula subtracts both border insets and the Swing button margin.
-        // The border supplies our explicit padding; do not count that margin twice.
-        button.setMargin(new Insets(0, 0, 0, 0));
+        configureActionSizing(button);
         button.setBorderPainted(false);
         button.setContentAreaFilled(false);
         button.setOpaque(false);
         button.setDefaultCapable(false);
         button.setFocusPainted(false); // The focus cue is painted with the native theme color.
         button.setRolloverEnabled(true);
-        button.setIconTextGap(JBUI.scale(5));
         installFocusVisibility(button);
         return button;
+    }
+
+    /** Shared geometry for table toolbar and inspector actions, independent of their paint. */
+    static void configureActionSizing(AbstractButton button) {
+        button.setBorder(JBUI.Borders.empty(4, 6));
+        // Darcula subtracts both border insets and the Swing button margin.
+        // The border supplies our explicit padding; do not count that margin twice.
+        button.setMargin(new Insets(0, 0, 0, 0));
+        button.setIconTextGap(JBUI.scale(5));
+    }
+
+    static Dimension actionPreferredSize(AbstractButton button) {
+        Dimension content = javax.swing.plaf.basic.BasicGraphicsUtils.getPreferredButtonSize(button, button.getIconTextGap());
+        return new Dimension(Math.max(JBUI.scale(28), content.width), Math.max(JBUI.scale(28), content.height));
     }
 
     /** Dialog actions include all padding required by the active native button UI. */
@@ -305,13 +315,13 @@ public final class DatabaseUi {
 
         @Override public Dimension getPreferredSize() {
             // Toolbar actions use compact content sizes; dialog actions are native JButtons.
-            Dimension content = javax.swing.plaf.basic.BasicGraphicsUtils.getPreferredButtonSize(this, getIconTextGap());
+            Dimension content = actionPreferredSize(this);
             if (nativeTextSizing) {
                 Dimension nativeSize = super.getPreferredSize();
                 content.width = Math.max(content.width, nativeSize.width);
                 content.height = Math.max(content.height, nativeSize.height);
             }
-            return new Dimension(Math.max(JBUI.scale(28), content.width), Math.max(JBUI.scale(28), content.height));
+            return content;
         }
 
         @Override public Dimension getMinimumSize() { return getPreferredSize(); }
