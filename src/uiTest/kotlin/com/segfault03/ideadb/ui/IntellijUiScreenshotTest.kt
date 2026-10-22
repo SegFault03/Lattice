@@ -1069,6 +1069,7 @@ class IntellijUiScreenshotTest {
                 }
                 ideFrame { invokeAction("HideAllWindows") }
                 dataGrid.clickCell(0, 3)
+                tableEditor.x { byAccessibleName("Toggle cell inspector (Alt+Enter)") }.waitFound().click()
                 val details = tableEditor.x { byJavaClass("com.segfault03.ideadb.ui.CellDetailsPanel") }.waitFound()
                 waitUntil("email inspector shows its value and cell coordinates") {
                     details.hasSubtext("amelia.brooks@example.com") &&
@@ -1167,7 +1168,7 @@ class IntellijUiScreenshotTest {
                 }
                 robot.waitForIdle()
                 waitUntil("double-clicking the value area enters edit mode") {
-                    details.x { byAccessibleName("Apply") }.waitFound().component.isVisible()
+                    details.x { byAccessibleName("Stage this value; Commit saves it to the database") }.waitFound().component.isVisible()
                 }
                 captureScreen(screenshotsDirectory.resolve("value-workspace-editing.png"))
 
@@ -1179,7 +1180,11 @@ class IntellijUiScreenshotTest {
                 closeDetails.click()
                 waitUntil("close control removes the inspector from the editor") { !liveDetails.isShowing() }
                 dataGrid.clickCell(0, 3)
-                waitUntil("cell selection reopens the inspector after closing it") {
+                check(!liveDetails.isShowing()) {
+                    "Ordinary cell selection must leave the inspector closed"
+                }
+                tableEditor.x { byAccessibleName("Toggle cell inspector (Alt+Enter)") }.waitFound().click()
+                waitUntil("Inspect explicitly reopens the inspector after closing it") {
                     details.component.isShowing() && details.hasSubtext("Row 1") && details.hasSubtext("Column 4")
                 }
 

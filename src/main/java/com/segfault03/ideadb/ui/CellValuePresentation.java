@@ -22,6 +22,17 @@ final class CellValuePresentation {
         return value == null || value == RowDefaults.Value.USE_DEFAULT ? "" : raw(value);
     }
 
+    static boolean isStructured(Object value) {
+        if (!(value instanceof String text)) return false;
+        String trimmed = text.trim();
+        if (trimmed.length() > 1_000_000 || !(trimmed.startsWith("{") || trimmed.startsWith("["))) return false;
+        try {
+            JsonFormatter formatter = new JsonFormatter(trimmed);
+            formatter.value(0); formatter.space();
+            return formatter.done();
+        } catch (IllegalArgumentException ignored) { return false; }
+    }
+
     static String formatted(Object value) {
         String raw = raw(value);
         String trimmed = raw.trim();

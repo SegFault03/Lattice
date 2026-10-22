@@ -436,6 +436,21 @@ public final class UiPreview {
         if (!(Boolean) invokeResult(details, "isEditing"))
             throw new AssertionError("Double-clicking the value must enable editing");
         render(editor, theme + "-cell-details-editing-1440", 1440, 900);
+        ((JButton)field(details, "close")).doClick(0);
+        grid.changeSelection(2, 2, false, false);
+        Rectangle target = grid.getCellRect(2, 2, true);
+        grid.dispatchEvent(new java.awt.event.MouseEvent(grid, java.awt.event.MouseEvent.MOUSE_CLICKED,
+                System.currentTimeMillis(), 0, target.x + 8, target.y + 8, 1, false, java.awt.event.MouseEvent.BUTTON1));
+        com.intellij.util.ui.UIUtil.dispatchAllInvocationEvents();
+        if ((Boolean)field(editor, "inspectorVisible"))
+            throw new AssertionError("Ordinary cell selection must keep a closed inspector closed");
+        invoke(editor, "toggleInspector", new Class<?>[0]);
+        var splitter = (com.intellij.ui.OnePixelSplitter)field(editor, "cellDetailsSplitter");
+        splitter.setProportion(0.58f);
+        invoke(editor, "toggleInspector", new Class<?>[0]);
+        invoke(editor, "toggleInspector", new Class<?>[0]);
+        if (Math.abs(splitter.getProportion() - 0.58f) > 0.01f)
+            throw new AssertionError("Reopening must keep the user's divider position");
     }
     static Object invokeResult(Object target, String name) throws Exception {
         Method method = target.getClass().getDeclaredMethod(name);

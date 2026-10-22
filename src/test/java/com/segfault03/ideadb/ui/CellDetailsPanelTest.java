@@ -90,4 +90,31 @@ class CellDetailsPanelTest {
             assertEquals("6 characters", field(panel, "summary", JLabel.class).getText());
         });
     }
+
+    @Test void scalarControlsStayQuietAndStructuredModesExposeToggleSemantics() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            CellDetailsPanel panel = new CellDetailsPanel(new RecordingActions());
+            panel.showCell(cell("amelia@example.com", 0));
+            assertFalse(field(panel, "formattedTab", JToggleButton.class).isVisible());
+            assertFalse(field(panel, "wrap", JToggleButton.class).isVisible());
+            panel.showCell(cell("{\"x\":1}", 0));
+            JToggleButton formatted = field(panel, "formattedTab", JToggleButton.class);
+            JToggleButton raw = field(panel, "rawTab", JToggleButton.class);
+            assertTrue(formatted.isVisible()); assertTrue(formatted.isSelected());
+            assertTrue(formatted.isFocusPainted()); assertTrue(raw.isFocusPainted());
+            raw.doClick(0); assertTrue(raw.isSelected()); assertFalse(formatted.isSelected());
+            assertEquals("{\"x\":1}", field(panel, "valueArea", JTextArea.class).getText());
+        });
+    }
+
+    @Test void emptyStringRequiresAnExplicitValueStateAction() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            RecordingActions actions = new RecordingActions(); CellDetailsPanel panel = new CellDetailsPanel(actions);
+            panel.showCell(cell(null, 0));
+            JPopupMenu menu = panel.createValueMenu();
+            for (java.awt.Component component : menu.getComponents())
+                if (component instanceof JMenuItem item && "Set empty string".equals(item.getText())) item.doClick(0);
+            assertEquals(List.of(""), actions.applied);
+        });
+    }
 }

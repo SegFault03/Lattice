@@ -83,6 +83,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     private OnePixelSplitter cellDetailsSplitter;
     private JPanel tableWorkspace;
     private boolean inspectorVisible;
+    private float inspectorProportion = 0.63f;
+    private JButton inspectBtn;
     private String inspectedHeaderName;
 
     private int currentPage = 1;
@@ -274,9 +276,12 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             Component invoker = (Component) e.getSource();
             options.show(invoker, 0, invoker.getHeight());
         });
+        inspectBtn = DatabaseUi.action("Inspect", AllIcons.Actions.Preview, "Show cell inspector (Alt+Enter)");
+        inspectBtn.getAccessibleContext().setAccessibleName("Toggle cell inspector (Alt+Enter)");
+        inspectBtn.addActionListener(e -> toggleInspector());
         JComponent toolbar = DatabaseActionToolbar.create(this, "Table actions",
                 refreshBtn, null, addRowBtn, delRowBtn, null, saveBtn, revertBtn, null,
-                exportBtn, consoleBtn, optionsBtn, null, autoRefreshCombo);
+                exportBtn, consoleBtn, optionsBtn, inspectBtn, null, autoRefreshCombo);
         operationControls.addAll(List.of(refreshBtn, filterBtn, clearFilterBtn, addRowBtn, delRowBtn, exportBtn,
                 consoleBtn, optionsBtn, autoRefreshCombo, whereField, orderField,
                 pageSizeCombo, prevPageBtn, nextPageBtn));
@@ -355,7 +360,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         add(cellDetailsSplitter, BorderLayout.CENTER);
         dataTable.addMouseListener(new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent event) {
-                if (!SwingUtilities.isLeftMouseButton(event)) return;
+                if (!SwingUtilities.isLeftMouseButton(event) || !inspectorVisible) return;
                 int row = dataTable.rowAtPoint(event.getPoint());
                 int col = dataTable.columnAtPoint(event.getPoint());
                 if (row < 0 || col < 0) return;
@@ -378,7 +383,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.ALT_DOWN_MASK), "openCellDetails");
         getActionMap().put("openCellDetails", new AbstractAction() {
             @Override public void actionPerformed(java.awt.event.ActionEvent event) {
-                openCellDetails(dataTable.getSelectedRow(), dataTable.getSelectedColumn());
+                toggleInspector();
             }
         });
         getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "closeCellDetails");
@@ -433,21 +438,34 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         inspectorVisible = visible;
         if (visible) {
             cellDetailsSplitter.setSecondComponent(cellDetails);
-            cellDetailsSplitter.setProportion(0.63f);
+            cellDetailsSplitter.setProportion(inspectorProportion);
             // A compact result set should span the available table side, as it does before
             // the inspector opens. Keep scrolling for genuinely wide tables.
-            int available = Math.round(cellDetailsSplitter.getWidth() * 0.63f);
+            int available = Math.round(cellDetailsSplitter.getWidth() * inspectorProportion);
             dataTable.setAutoResizeMode(dataTable.getColumnModel().getTotalColumnWidth() < available
                     ? JTable.AUTO_RESIZE_ALL_COLUMNS : JTable.AUTO_RESIZE_OFF);
         } else {
+            inspectorProportion = cellDetailsSplitter.getProportion();
             cellDetailsSplitter.setSecondComponent(null);
             dataTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
             cellDetails.clearPin();
             inspectedHeaderName = null;
         }
+        inspectBtn.setSelected(visible);
+        inspectBtn.setToolTipText((visible ? "Hide" : "Show") + " cell inspector (Alt+Enter)");
         cellDetailsSplitter.revalidate();
         cellDetailsSplitter.repaint();
         dataTable.repaint();
+    }
+
+    private void toggleInspector() {
+        if (inspectorVisible) { cellDetails.handleEscape(); return; }
+        if (dataTable.getRowCount() > 0 && dataTable.getColumnCount() > 0) {
+            int row = Math.max(0, dataTable.getSelectedRow());
+            int column = Math.max(0, dataTable.getSelectedColumn());
+            dataTable.changeSelection(row, column, false, false);
+            openCellDetails(row, column);
+        } else if (dataTable.getColumnCount() > 0) openColumnDetails(0);
     }
 
     private void openCellDetails(int viewRow, int viewColumn) {

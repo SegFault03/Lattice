@@ -65,9 +65,10 @@ final class CellDetailsPanel extends JPanel {
     private final JLabel footerLabel = new JLabel();
     private final HeaderIconButton pin = new HeaderIconButton(new HeaderGlyph(true, false));
     private final HeaderIconButton close = new HeaderIconButton(new HeaderGlyph(false, false));
-    private final JButton formattedTab = new JButton("Formatted");
-    private final JButton rawTab = new JButton("Raw");
+    private final JToggleButton formattedTab = new JToggleButton("Formatted");
+    private final JToggleButton rawTab = new JToggleButton("Raw");
     private final JToggleButton wrap = new JToggleButton("Wrap");
+    private final JToggleButton detailsToggle = new JToggleButton("Column details");
     private final JButton edit = DatabaseUi.dialogAction("Edit value", AllIcons.Actions.Edit, "Edit selected cell value");
     private final JButton copy = new JButton("Copy", AllIcons.Actions.Copy);
     private final JButton more = new JButton("More");
@@ -190,6 +191,15 @@ final class CellDetailsPanel extends JPanel {
         summary.setForeground(JBColor.namedColor("Label.infoForeground", JBColor.GRAY));
         JPanel tabs = new JPanel(new FlowLayout(FlowLayout.LEADING, 0, 0)); tabs.setOpaque(false);
         styleTextToggle(formattedTab); styleTextToggle(rawTab); styleTextToggle(wrap);
+        ButtonGroup presentation = new ButtonGroup(); presentation.add(formattedTab); presentation.add(rawTab);
+        formattedTab.setToolTipText("Pretty-print structured content"); rawTab.setToolTipText("Show the stored value without formatting");
+        wrap.setToolTipText("Wrap long lines");
+        detailsToggle.setAlignmentX(Component.LEFT_ALIGNMENT);
+        detailsToggle.addActionListener(e -> {
+            lower.setVisible(detailsToggle.isSelected());
+            detailsToggle.setText(detailsToggle.isSelected() ? "Hide column details" : "Column details");
+            resizeContentBlocks(); content.revalidate(); content.repaint();
+        });
         formattedTab.addActionListener(e -> { rawMode = false; if (!editing) renderValue(); updateTabs(); });
         rawTab.addActionListener(e -> { rawMode = true; if (!editing) renderValue(); updateTabs(); });
         wrap.addActionListener(e -> { valueArea.setLineWrap(wrap.isSelected()); valueArea.setWrapStyleWord(wrap.isSelected()); });
@@ -262,7 +272,7 @@ final class CellDetailsPanel extends JPanel {
         getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.CTRL_DOWN_MASK), "apply");
         getActionMap().put("apply", new AbstractAction() { public void actionPerformed(ActionEvent e) { if (editing) applyDraft(); } });
         valueArea.addMouseListener(new MouseAdapter() { public void mouseClicked(MouseEvent e) { if (e.getClickCount() == 2 && cell != null && cell.editable()) beginEdit(); } });
-        DatabaseUi.onTextChange(valueArea, () -> { if (editing) { summary.setText(valueSummary(valueArea.getText())); updateEnabled(); } });
+        DatabaseUi.onTextChange(valueArea, () -> { if (editing) { summary.setText(valueSummary(valueArea.getText())); updateValueTools(); updateEnabled(); } });
         renderEmpty();
         updatePin();
         lastLookAndFeel = UIManager.getLookAndFeel();
@@ -317,9 +327,8 @@ final class CellDetailsPanel extends JPanel {
         }
     }
     private static void styleTextToggle(AbstractButton button) {
-        button.setUI(new TextToggleUI()); button.setBorderPainted(false); button.setContentAreaFilled(false); button.setOpaque(false);
-        button.setFocusPainted(false); button.setMargin(new Insets(2, 5, 2, 5));
-        button.getModel().addChangeListener(e -> refreshTextToggle(button));
+        button.setOpaque(false); button.setFocusPainted(true);
+        button.setMargin(JBUI.insets(4, 8));
     }
     boolean showCell(Cell cell) {
         ensureCurrentTheme();
@@ -365,8 +374,9 @@ final class CellDetailsPanel extends JPanel {
 
     private void rebuild() {
         content.removeAll();
-        if (!columnMode) content.add(valueBlock);
+        if (!columnMode) { content.add(valueBlock); content.add(detailsToggle); }
         content.add(lower);
+        lower.setVisible(columnMode || detailsToggle.isSelected());
         metadata.removeAll();
         if (columnMode && column != null) buildColumn();
         else if (cell != null) buildCell();
@@ -393,12 +403,12 @@ final class CellDetailsPanel extends JPanel {
     }
     private void buildCell() {
         valueScroll.setVisible(true); edit.setVisible(true); more.setVisible(true);
-        valueBlock.setVisible(true); tableNote.setVisible(true);
+        valueBlock.setVisible(true); tableNote.setVisible(false);
         ColumnMetadata c = cell.column();
         eyebrow.setText(safe(cell.tableName()));
         title.setText(c == null ? "Cell value" : c.getName());
         title.setToolTipText(title.getText());
-        identity.setText(safe(cell.rowLabel()));
+        identity.setText(safe(cell.rowLabel()) + " · Column " + (cell.modelColumn() + 1));
         identity.setToolTipText(safe(cell.rowLabel()));
         summary.setText(valueSummary(editing ? valueArea.getText() : cell.value()));
         edit.setText("Edit value"); if (!editing) renderValue();
@@ -505,7 +515,16 @@ final class CellDetailsPanel extends JPanel {
         valueArea.setForeground(JBColor.foreground());
         valueArea.setCaretPosition(0); updateTabs();
     }
-    private void updateTabs() { formattedTab.setSelected(!rawMode); rawTab.setSelected(rawMode); wrap.setSelected(valueArea.getLineWrap()); }
+    private void updateTabs() { formattedTab.setSelected(!editing && !rawMode); rawTab.setSelected(editing || rawMode); wrap.setSelected(valueArea.getLineWrap()); }
+    private void updateValueTools() {
+        boolean structured = cell != null && CellValuePresentation.isStructured(cell.value());
+        String text = valueArea.getText();
+        boolean multiline = text.contains("\n");
+        formattedTab.setVisible(structured); rawTab.setVisible(structured);
+        wrap.setVisible(structured || multiline || text.length() > 80);
+        valueScroll.setRowHeaderView(multiline ? lineNumbers : null);
+        updateTabs();
+    }
     private void beginEdit() { if (cell == null || !cell.editable() || busy || editing) return; draft = CellValuePresentation.editable(cell.value()); editing = true; valueArea.setEditable(true); valueArea.setText(draft); summary.setText(valueSummary(draft)); valueArea.requestFocusInWindow(); valueArea.setCaretPosition(valueArea.getDocument().getLength()); updateEnabled(); }
     private void applyDraft() { if (!editing || busy || !hasDraftChange()) return; stageCurrentEdit(); }
     private void stageCurrentEdit() {
@@ -516,22 +535,40 @@ final class CellDetailsPanel extends JPanel {
     private void cancelEdit() { if (!editing) return; editing = false; draft = null; renderValue(); updateEnabled(); }
     private void copyText() { String text = editing ? valueArea.getText() : CellValuePresentation.raw(cell == null ? null : cell.value()); Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null); }
     private void showMore(Component at) {
+        JPopupMenu menu = createValueMenu();
+        menu.show(at, 0, at.getHeight());
+    }
+    JPopupMenu createValueMenu() {
         JPopupMenu menu = DatabaseUi.popupMenu(); JMenuItem nullItem = new JMenuItem("Set SQL NULL"); nullItem.setEnabled(cell != null && cell.editable() && !busy && cell.column() != null && cell.column().isNullable()); nullItem.addActionListener(e -> actions.setNull(cell)); menu.add(nullItem);
+        if (cell != null && cell.column() != null && switch (cell.column().getDataType()) {
+            case java.sql.Types.CHAR, java.sql.Types.VARCHAR, java.sql.Types.LONGVARCHAR,
+                    java.sql.Types.NCHAR, java.sql.Types.NVARCHAR, java.sql.Types.LONGNVARCHAR,
+                    java.sql.Types.CLOB, java.sql.Types.NCLOB -> true;
+            default -> false;
+        }) {
+            JMenuItem empty = new JMenuItem("Set empty string");
+            empty.setEnabled(cell.editable() && !busy); empty.addActionListener(e -> actions.apply(cell, "")); menu.add(empty);
+        }
         if (cell != null && cell.newRow() && cell.column() != null && (cell.column().getDefaultValue() != null || cell.column().isAutoIncrement())) { JMenuItem def = new JMenuItem("Use database default"); def.setEnabled(cell.editable() && !busy); def.addActionListener(e -> actions.useDefault(cell)); menu.add(def); }
         if (cell != null && cell.modified()) { JMenuItem rev = new JMenuItem("Revert value"); rev.setEnabled(cell.editable() && !busy); rev.addActionListener(e -> actions.revert(cell)); menu.add(rev); }
-        menu.show(at, 0, at.getHeight());
+        menu.addSeparator();
+        JMenuItem structure = new JMenuItem("Edit table…", Icons.TABLE);
+        structure.setEnabled(cell != null && !cell.view() && !busy);
+        structure.addActionListener(e -> actions.editTable()); menu.add(structure);
+        return menu;
     }
     private void updateMoreMenu() { more.setVisible(cell != null); }
     private void updateEnabled() {
         edit.setEnabled(cell != null && cell.editable() && !busy && !editing);
         edit.setVisible(cell != null && !columnMode && !editing);
         apply.setEnabled(hasDraftChange() && !busy); cancel.setEnabled(editing && !busy);
-        more.setEnabled(cell != null && cell.editable() && !busy && !editing);
+        more.setEnabled(cell != null && !busy && !editing);
         more.setVisible(cell != null && !columnMode && !editing);
         formattedTab.setEnabled(!editing); rawTab.setEnabled(!editing);
         staging.setVisible(editing && !columnMode);
         editTable.setEnabled(!busy && (cell != null && !cell.view() || column != null && !column.view()));
         refreshTextToggle(formattedTab); refreshTextToggle(rawTab); refreshTextToggle(wrap);
+        updateValueTools();
         updateFooter();
         resizeContentBlocks(); content.revalidate(); content.repaint();
     }
@@ -591,9 +628,6 @@ final class CellDetailsPanel extends JPanel {
         copy.setForeground(JBColor.foreground());
         more.setForeground(JBColor.foreground());
         cancel.setForeground(JBColor.foreground());
-        for (AbstractButton button : new AbstractButton[]{formattedTab, rawTab, wrap}) {
-            button.setUI(new TextToggleUI()); button.setBorderPainted(false); button.setContentAreaFilled(false); button.setOpaque(false);
-        }
         refreshTextToggle(formattedTab); refreshTextToggle(rawTab); refreshTextToggle(wrap);
         quiet(more);
         quiet(cancel);
@@ -620,14 +654,7 @@ final class CellDetailsPanel extends JPanel {
                 : BorderFactory.createMatteBorder(1, 0, 0, 0, separator));
     }
     private static void refreshTextToggle(AbstractButton button) {
-        Color accent = new JBColor(0x2F6DDB, 0x70A5FF);
-        button.setForeground(!button.isEnabled()
-                ? JBColor.namedColor("Label.infoForeground", new JBColor(0x657185, 0xABB3BE))
-                : button.isSelected() ? accent : JBColor.foreground());
-        if (button instanceof JToggleButton) button.setBorder(JBUI.Borders.empty(2, 5));
-        else button.setBorder(button.isSelected()
-                ? BorderFactory.createMatteBorder(0, 0, JBUI.scale(2), 0, accent)
-                : JBUI.Borders.empty(0, 0, 2, 0));
+        button.setForeground(JBColor.foreground());
     }
     private static void refreshMetadataColors(Component component) {
         if (component instanceof JLabel label) {

@@ -15,11 +15,11 @@ committed and pushed to the same branch after each completed phase.
 
 ## Phase 2 — predictable inspector interaction and accessibility
 
-- [ ] Add an explicit inspector toggle and retain the closed state during ordinary selection.
-- [ ] Remember the divider position and show stable primary-key row context.
-- [ ] Give presentation choices mutually exclusive selection semantics, visible keyboard focus and a recognizable Wrap toggle.
-- [ ] Show formatting, wrapping and line-number controls when relevant to the value.
-- [ ] Put secondary table-structure actions in column details/contextual actions.
+- [x] Add an explicit inspector toggle and retain the closed state during ordinary selection.
+- [x] Remember the divider position and show stable primary-key row context.
+- [x] Give presentation choices mutually exclusive selection semantics, visible keyboard focus and a recognizable Wrap toggle.
+- [x] Show formatting, wrapping and line-number controls when relevant to the value.
+- [x] Put secondary table-structure actions in column details/contextual actions.
 
 ## Phase 3 — responsive layout and visual finish
 
@@ -50,3 +50,8 @@ committed and pushed to the same branch after each completed phase.
   light/dark production inspector previews passed. Untouched sentinels stay unchanged,
   navigation retains the current draft, X/Escape cancel it, and tab disposal stores
   an unconfirmed draft separately for recovery.
+
+- Phase 2: expanded focused regressions passed (8 tests); both preview themes
+  verified closed-state retention and divider restoration. Inspect/Alt+Enter now
+  explicitly opens the panel; scalar values hide irrelevant presentation controls,
+  column metadata is expandable, and NULL/empty/default have explicit actions.
