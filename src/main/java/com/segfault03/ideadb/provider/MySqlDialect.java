@@ -117,11 +117,16 @@ final class MySqlDialect extends AbstractSqlDialect {
         int typeEnd = sqlTokenEnd(definition, typeStart);
         String oldType = definition.substring(typeStart, typeEnd);
         String suffix = definition.substring(typeEnd);
+        String requestedType = requested.getType().toUpperCase(Locale.ROOT);
+        boolean numeric = requestedType.matches("(?:TINYINT|SMALLINT|MEDIUMINT|INT|INTEGER|BIGINT|DECIMAL|NUMERIC|FLOAT|DOUBLE|REAL)\\b.*");
+        boolean text = requestedType.matches("(?:CHAR|VARCHAR|TINYTEXT|TEXT|MEDIUMTEXT|LONGTEXT|ENUM|SET|NCHAR|NVARCHAR)\\b.*");
         StringBuilder typeAttributes = new StringBuilder();
         java.util.regex.Pattern attributes = java.util.regex.Pattern.compile("(?i)^\\s+(UNSIGNED|ZEROFILL|BINARY|CHARACTER SET\\s+\\S+|COLLATE\\s+\\S+)");
         java.util.regex.Matcher typeAttribute;
         while ((typeAttribute = attributes.matcher(suffix)).find()) {
-            typeAttributes.append(typeAttribute.group());
+            String attribute = typeAttribute.group(1).toUpperCase(Locale.ROOT);
+            if (attribute.equals("UNSIGNED") || attribute.equals("ZEROFILL") ? numeric : text)
+                typeAttributes.append(typeAttribute.group());
             suffix = suffix.substring(typeAttribute.end());
         }
         if (suffix.contains("GENERATED ALWAYS")) throw new IllegalArgumentException("Generated column definitions must be changed in the SQL console");

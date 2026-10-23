@@ -1,5 +1,49 @@
 # Swing UI previews
 
+## Cell inspector interaction
+
+Use **Inspect** in the table toolbar or **Alt+Enter** to toggle the inspector.
+Closing it keeps it closed during ordinary cell selection. Clicking a column
+header opens column details; pinning retains the inspected value/column while
+the selection changes. Reopening restores the divider position.
+
+**Edit value** starts an unstaged draft. While editing, the inspector stays on
+that cell. **Stage change** explicitly adds the draft to the pending batch;
+**Commit** writes the batch to the database. Commit/reload cannot implicitly
+stage an inspector draft. Cancel, X and Escape discard the current inspector
+edit; X/Escape also close the inspector. Disposing the editor tab preserves an
+unconfirmed draft separately in the existing local project draft store and
+restores it in edit mode, outside the commit batch.
+
+Untouched values disable Stage change. SQL NULL, an empty string and a database
+default are distinct; direct value-state actions appear when applicable. Character
+counts follow the draft, and invalid values show feedback beside the editor.
+Presentation controls appear for structured/long values. Column metadata stays
+visible, with compact Edit table below the structure hint. The column name is
+the title; the subtitle contains only row and column coordinates. Fixed header
+actions use a filled gray pinned icon. Rounded inspector buttons retain Swing
+keyboard and accessibility behavior across themes and platforms. Body/value text
+uses the IDE label font size, and actions use its button font size; the inspector
+does not enlarge normal text. Header controls occupy real layout space so their
+complete hover targets fit at all scales. Action targets have a compact
+28-logical-pixel minimum with two-pixel vertical padding. The editor/action gap
+is eight pixels, metadata rows use four-pixel vertical padding, and the footer
+uses symmetric 12-pixel padding. Metadata and identifiers wrap and can
+be selected/copied.
+
+The focused `--cell-details-only` previews also exercise closed-state retention,
+divider restoration, compact JSON, long metadata, local validation and larger
+fonts in both themes. They also render the approved date fixture at 388 × 730
+and a narrow 320 × 650 viewport, including the close-hover state. The focused native flow captures the same
+WARMUP_ORDERS fixture in both themes and records its panel bounds for comparison.
+The native focused scenario checks the explicit toolbar toggle and leaves the inspector closed after an ordinary grid click. See the
+[prioritized implementation checklist](design/data-cell-refresh-plan.md).
+
+All preview modes assert inspector-only draft recovery through the production
+table-editor constructor, including initially missing metadata, metadata failure,
+close/reopen, explicit staging and cancellation. Unconfirmed recovered text must
+survive grid-state persistence without becoming eligible for Commit.
+
 Run the preview helper from the repository root on Windows, Linux or macOS:
 
 ```sh
@@ -79,9 +123,9 @@ alignment, metadata baselines, and larger UI fonts and list rows. Resizing check
 cover minimum, preferred and wide layouts. The previous combined source label
 and differently sized footer actions both fail the retained reproduction tests.
 
-Inspector actions reserve native text padding and show complete column-action
-labels. Their row moves below a long title when needed. Form rows measure wrapped
-content at the current viewport width; SQL preview takes the remaining height and
+Inspector actions reserve text padding and show complete action labels. Pin and
+close occupy a fixed header rail above the column name, including when it wraps.
+Form rows measure wrapped content at the current viewport width; SQL preview takes the remaining height and
 can shrink to three readable lines before the outer form needs to scroll. Resize
 checks cross this threshold in both directions. Inspector padding reserves the
 current native scrollbar width consistently, preventing IntelliJ's transparent
@@ -243,11 +287,23 @@ regression dispatches the production Swing button action on the IDE event thread
 and requires both the backend's failure status and its error dialog.
 
 For pull requests targeting `main`, Linux CI runs the dark functional review,
-light styling review, search reviews, PostgreSQL review, mixed alter/recovery
-and a 125% create/alter dialog audit as separate checks
+light styling review, search reviews, PostgreSQL review, mixed alter/recovery,
+a 125% create/alter dialog audit, and cell-inspector reviews at 100% and 125%
+as separate checks
 after their shared prerequisites pass. Each suite can
 fail the job independently, and a failure does not suppress the other suites'
 reports. The artifact also retains native IDE logs, thread dumps and screenshots.
+
+The cell-inspector jobs set `LATTICE_UI_CELL_DETAILS_ONLY=true` and require both
+light and dark theme checks. They close an editor with an unconfirmed inspector
+draft, refresh the explorer to replace its metadata, and reopen the editor.
+`inspector-recovered-draft.png` and the runtime report record recovery with Stage
+available after metadata loading and Commit disabled until explicit staging.
+Reproduce either job with:
+
+```bash
+LATTICE_UI_CELL_DETAILS_ONLY=true LATTICE_UI_SCALE=1.25 LATTICE_UI_REVIEW_OUTPUT=build/ui-review/cell-inspector-scaled ./scripts/linux/review-intellij-ui.sh ExperimentalDark
+```
 
 ## PostgreSQL end-to-end review
 

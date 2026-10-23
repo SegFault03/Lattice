@@ -30,6 +30,7 @@ public class TreeNodeData {
     private ColumnMetadata columnMetadata;
     private String errorDetail;
     private boolean connected;
+    private boolean cached;
     private boolean loaded;
     private boolean loading;
 
@@ -127,6 +128,8 @@ public class TreeNodeData {
     public TableMetadata getTableMetadata() { return tableMetadata; }
     public ColumnMetadata getColumnMetadata() { return columnMetadata; }
     public boolean isConnected() { return connected; }
+    public boolean isCached() { return cached; }
+    public void setCached(boolean cached) { this.cached = cached; }
     public void setConnected(boolean connected) { this.connected = connected; }
     public boolean isLoading() { return loading; }
     public void setLoading(boolean loading) { this.loading = loading; }

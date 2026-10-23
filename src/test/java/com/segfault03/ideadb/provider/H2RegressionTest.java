@@ -19,8 +19,32 @@ public class H2RegressionTest {
     @Test void identityGeneratedConstraintsAndNativeDdlReplay() throws Exception { catalogFlow(config()); }
     @Test void failedBatchAndAlterPreserveDataAndOuterTransaction() throws Exception { transactionFlow(config()); }
     @Test void cancellationTimeoutAndSessionRecovery() throws Exception { cancellationFlow(config()); }
+    @Test void columnEditsPreserveUpdateExpressionsAndIdentityState() throws Exception { alterationFlow(config()); }
     public static void regressionFlow(ConnectionConfig config) throws Exception {
-        valuesFlow(config); catalogFlow(config); transactionFlow(config); cancellationFlow(config);
+        valuesFlow(config); catalogFlow(config); transactionFlow(config); cancellationFlow(config); alterationFlow(config);
+    }
+    public static void alterationFlow(ConnectionConfig config) throws Exception {
+        scoped(config, (conn, schema) -> {
+            String target = DdlService.formatTable(config, schema, "alter_attributes");
+            sql(conn, "CREATE TABLE " + target + " (\"id\" BIGINT GENERATED ALWAYS AS IDENTITY (START WITH 100 INCREMENT BY 10) PRIMARY KEY, \"updated\" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, \"value\" INT)");
+            sql(conn, "INSERT INTO " + target + " (\"updated\") VALUES (TIMESTAMP '2000-01-01 00:00:00'), (TIMESTAMP '2000-01-01 00:00:00')");
+            var service = DdlService.getInstance();
+            var columns = MetadataService.getInstance().getColumns(conn, config, schema, "alter_attributes");
+            var updated = columns.get(1);
+            var nullable = TableAlteration.column(TableAlteration.Kind.MODIFY, updated, "updated", updated.getTypeName(), "", false, updated.getDefaultValue());
+            var preview = service.previewAlter(conn, config, schema, "alter_attributes", nullable);
+            assertEquals(1, preview.size(), "A nullability edit must not replace the complete definition");
+            service.applyAlter(conn, config, schema, "alter_attributes", nullable);
+            sql(conn, "UPDATE " + target + " SET \"value\"=1 WHERE \"id\"=100");
+            assertEquals(Boolean.TRUE, scalar(conn, "SELECT \"updated\">TIMESTAMP '2000-01-01 00:00:00' FROM " + target + " WHERE \"id\"=100"), "ON UPDATE must still execute");
+            var identity = columns.getFirst();
+            var integer = TableAlteration.column(TableAlteration.Kind.MODIFY, identity, "id", "INTEGER", "", false, "");
+            service.applyAlter(conn, config, schema, "alter_attributes", integer);
+            sql(conn, "INSERT INTO " + target + " (\"value\") VALUES (3)");
+            assertEquals(120, ((Number) scalar(conn, "SELECT \"id\" FROM " + target + " WHERE \"value\"=3")).intValue(), "Identity increment and next value must survive a type change");
+            assertThrows(SQLException.class, () -> sql(conn, "INSERT INTO " + target + " (\"id\") VALUES (500)"), "GENERATED ALWAYS must remain enforced");
+            assertEquals(Types.INTEGER, MetadataService.getInstance().getColumns(conn, config, schema, "alter_attributes").getFirst().getDataType());
+        });
     }
     public static void valuesFlow(ConnectionConfig config) throws Exception {
         scoped(config, (conn, schema) -> {

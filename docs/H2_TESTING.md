@@ -43,6 +43,13 @@ servers. The TLS test generates a temporary certificate with the JDK's keytool;
 only the test JVM's temporary trust configuration changes. Existing database
 servers, IDE profiles and host trust stores are not modified.
 
+The shared H2 regression flow also alters timestamp nullability while retaining
+its ON UPDATE expression, then changes an identity column's type and checks
+GENERATED ALWAYS enforcement, the next generated value and its increment.
+These checks run for embedded, file/TCP/TLS and selected-driver matrix cases.
+Column modifications use targeted ALTER operations rather than replacing the
+complete definition, so unrelated update expressions and identity options survive.
+
 ## Driver/runtime matrix
 
 The matrix uses drivers and servers **2.1.214**, **2.2.224** and **2.3.232**:

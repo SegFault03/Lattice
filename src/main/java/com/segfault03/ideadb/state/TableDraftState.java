@@ -13,6 +13,9 @@ public final class TableDraftState implements PersistentStateComponent<TableDraf
         public List<String> types = new ArrayList<>();
         public List<Row> originals = new ArrayList<>();
         public List<Row> rows = new ArrayList<>();
+        public int inspectorRow = -1;
+        public int inspectorColumn = -1;
+        public String inspectorText;
         public static Draft capture(List<String> columns, List<String> types, List<List<Object>> originals, List<List<Object>> rows) {
             Draft draft = new Draft();
             draft.columns.addAll(columns); draft.types.addAll(types);

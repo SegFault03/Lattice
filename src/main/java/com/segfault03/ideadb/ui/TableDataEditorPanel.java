@@ -7,13 +7,17 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.vfs.VirtualFileWrapper;
 import com.intellij.ui.JBColor;
+import com.intellij.ui.OnePixelSplitter;
 import com.intellij.util.ui.JBUI;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.components.JBTextField;
 import com.segfault03.ideadb.editor.DatabaseEditorManager;
+import com.segfault03.ideadb.dialog.AlterTableDialog;
 import com.segfault03.ideadb.model.ColumnMetadata;
 import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.model.DatabaseType;
@@ -75,6 +79,14 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     private DatabaseTable dataTable;
     private EditableTableModel tableModel;
     private WrappingLabel validationDetails;
+    private CellDetailsPanel cellDetails;
+    private OnePixelSplitter cellDetailsSplitter;
+    private JPanel tableWorkspace;
+    private boolean inspectorVisible;
+    private float inspectorProportion = 0.63f;
+    private boolean inspectorWidthInitialized;
+    private JButton inspectBtn;
+    private String inspectedHeaderName;
 
     private int currentPage = 1;
     private int pageSize = 100;
@@ -91,6 +103,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     private boolean wasModified;
     private boolean refreshPending, refreshScheduled;
     private boolean tableUnavailable;
+    private boolean restoringDraft;
     private com.intellij.util.messages.MessageBusConnection changeSubscription;
 
     public TableDataEditorPanel(Project project, ConnectionConfig config, String databaseName, TableMetadata tableMetadata) {
@@ -111,7 +124,18 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         TableDraftState.Draft draft = project == null ? null : TableDraftState.getInstance(project).get(draftKey());
         if (draft == null) loadData();
         else {
-            tableModel.restoreDraft(draft);
+            restoringDraft = true;
+            try {
+                tableModel.restoreDraft(draft);
+                if (draft.inspectorText != null) {
+                    CellDetailsPanel.Cell cell = cellSnapshot(draft.inspectorRow, draft.inspectorColumn);
+                    if (cell != null) {
+                        cellDetails.restoreDraft(cell, draft.inspectorText);
+                        setInspectorVisible(true);
+                    }
+                }
+            } finally { restoringDraft = false; }
+            updatePendingChangesState();
             setReadRunning(true);
             DatabaseUi.status(statusLabel, "Restoring draft · Loading columns…", DatabaseUi.Tone.BUSY);
             tasks.submit(() -> {
@@ -121,6 +145,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     SwingUtilities.invokeLater(() -> {
                         if (disposed) return;
                         tableMetadata.setColumns(columns);
+                        DatabaseUi.status(statusLabel, "Draft restored · Review changes before committing", DatabaseUi.Tone.NORMAL);
                         tableModel.refreshColumnMetadata();
                         setReadRunning(false);
                     });
@@ -137,6 +162,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     }
 
     private void initUI() {
+        tableWorkspace = new JPanel(new BorderLayout());
         JPanel heading = new JPanel(new WidthAwareBorderLayout());
 
         JButton refreshBtn = DatabaseUi.action("", AllIcons.Actions.Refresh, "Refresh table data");
@@ -225,6 +251,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         revertBtn.setEnabled(false);
         revertBtn.addActionListener(e -> {
             if (isBusy()) return;
+            if (cellDetails != null) cellDetails.cancelEditing();
             if (dataTable.isEditing()) dataTable.getCellEditor().cancelCellEditing();
             tableModel.setData(tableModel.columns, tableModel.types, tableModel.originalRows);
             updatePendingChangesState();
@@ -256,18 +283,23 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             Component invoker = (Component) e.getSource();
             options.show(invoker, 0, invoker.getHeight());
         });
+        inspectBtn = DatabaseUi.action("Inspect", AllIcons.Actions.Preview, "Show cell inspector (Alt+Enter)");
+        inspectBtn.getAccessibleContext().setAccessibleName("Toggle cell inspector (Alt+Enter)");
+        inspectBtn.addActionListener(e -> toggleInspector());
         JComponent toolbar = DatabaseActionToolbar.create(this, "Table actions",
                 refreshBtn, null, addRowBtn, delRowBtn, null, saveBtn, revertBtn, null,
-                exportBtn, consoleBtn, optionsBtn, null, autoRefreshCombo);
+                exportBtn, consoleBtn, optionsBtn, inspectBtn, null, autoRefreshCombo);
         operationControls.addAll(List.of(refreshBtn, filterBtn, clearFilterBtn, addRowBtn, delRowBtn, exportBtn,
                 consoleBtn, optionsBtn, autoRefreshCombo, whereField, orderField,
                 pageSizeCombo, prevPageBtn, nextPageBtn));
         heading.add(toolbar, BorderLayout.NORTH);
         heading.add(filters, BorderLayout.CENTER);
-        add(heading, BorderLayout.NORTH);
+        tableWorkspace.add(heading, BorderLayout.NORTH);
 
         tableModel = new EditableTableModel();
         dataTable = new DatabaseTable(tableModel);
+        dataTable.putClientProperty("lattice.showColumnIcons", Boolean.TRUE);
+        dataTable.setCellSelectionEnabled(true);
         dataTable.setDefaultRenderer(Object.class, new CellHighlightRenderer());
         JPopupMenu cellMenu = DatabaseUi.popupMenu();
         cellMenu.add(nullBtn);
@@ -304,7 +336,68 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             @Override public void popupMenuCanceled(javax.swing.event.PopupMenuEvent event) {}
         });
         JBScrollPane scroll = dataTable.createScrollPane();
-        add(scroll, BorderLayout.CENTER);
+        tableWorkspace.add(scroll, BorderLayout.CENTER);
+        cellDetails = new CellDetailsPanel(new CellDetailsPanel.Actions() {
+            @Override public void apply(CellDetailsPanel.Cell cell, String text) { changeInspectedCell(cell, text); }
+            @Override public void setNull(CellDetailsPanel.Cell cell) { changeInspectedCell(cell, null); }
+            @Override public void useDefault(CellDetailsPanel.Cell cell) {
+                if (cell != null && cell.newRow() && cell.column() != null
+                        && (cell.column().getDefaultValue() != null || cell.column().isAutoIncrement()))
+                    changeInspectedCell(cell, RowDefaults.Value.USE_DEFAULT);
+            }
+            @Override public void revert(CellDetailsPanel.Cell cell) {
+                if (!validInspectedCell(cell) || !finishGridCellEditing()) return;
+                Object original = cell.newRow() ? RowDefaults.initialValue(cell.column())
+                        : tableModel.getOriginalValue(cell.modelRow(), cell.modelColumn());
+                tableModel.setValueAt(original, cell.modelRow(), cell.modelColumn());
+                refreshInspector();
+            }
+            @Override public void editTable() {
+                if (!isBusy() && !tableMetadata.isView())
+                    new AlterTableDialog(project, config, databaseName, tableMetadata).showAndGet();
+            }
+            @Override public void close() { setInspectorVisible(false); }
+            @Override public void unpin() { followGridSelection(); }
+            @Override public void draftChanged() { updatePendingChangesState(); }
+        });
+        cellDetailsSplitter = new OnePixelSplitter(false, 0.63f);
+        cellDetailsSplitter.setFirstComponent(tableWorkspace);
+        cellDetailsSplitter.setSecondComponent(null);
+        add(cellDetailsSplitter, BorderLayout.CENTER);
+        dataTable.addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent event) {
+                if (!SwingUtilities.isLeftMouseButton(event) || !inspectorVisible) return;
+                int row = dataTable.rowAtPoint(event.getPoint());
+                int col = dataTable.columnAtPoint(event.getPoint());
+                if (row < 0 || col < 0) return;
+                SwingUtilities.invokeLater(() -> openCellDetails(row, col));
+            }
+        });
+        dataTable.getTableHeader().addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent event) {
+                if (!SwingUtilities.isLeftMouseButton(event) || cellDetails.isPinned()) return;
+                int viewCol = dataTable.getTableHeader().columnAtPoint(event.getPoint());
+                if (viewCol < 0) return;
+                Rectangle bounds = dataTable.getTableHeader().getHeaderRect(viewCol);
+                int resizeZone = JBUI.scale(4);
+                if (event.getX() - bounds.x <= resizeZone && viewCol > 0
+                        || bounds.x + bounds.width - event.getX() <= resizeZone) return;
+                openColumnDetails(viewCol);
+            }
+        });
+        getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(
+                KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.ALT_DOWN_MASK), "openCellDetails");
+        getActionMap().put("openCellDetails", new AbstractAction() {
+            @Override public void actionPerformed(java.awt.event.ActionEvent event) {
+                toggleInspector();
+            }
+        });
+        getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "closeCellDetails");
+        getActionMap().put("closeCellDetails", new AbstractAction() {
+            @Override public void actionPerformed(java.awt.event.ActionEvent event) {
+                if (inspectorVisible) cellDetails.handleEscape();
+            }
+        });
 
         JPanel footer = new JPanel(new WidthAwareBorderLayout(0, JBUI.scale(4)));
         footer.setBorder(BorderFactory.createCompoundBorder(
@@ -324,18 +417,165 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         detailsAndNavigation.add(validationDetails, BorderLayout.NORTH);
         detailsAndNavigation.add(navigation, BorderLayout.CENTER);
         footer.add(detailsAndNavigation, BorderLayout.CENTER);
-        add(footer, BorderLayout.SOUTH);
+        tableWorkspace.add(footer, BorderLayout.SOUTH);
         dataTable.getSelectionModel().addListSelectionListener(event -> {
             if (!event.getValueIsAdjusting()) {
                 updateValidationDetails(tableModel.getValidationErrors());
                 updateContextActions();
+                if (inspectorVisible && !cellDetails.isPinned()) followGridSelection();
             }
         });
         dataTable.getColumnModel().getSelectionModel().addListSelectionListener(event -> {
-            if (!event.getValueIsAdjusting()) updateValidationDetails(tableModel.getValidationErrors());
+            if (!event.getValueIsAdjusting()) {
+                updateValidationDetails(tableModel.getValidationErrors());
+                if (inspectorVisible && !cellDetails.isPinned()) followGridSelection();
+            }
         });
-        tableModel.addTableModelListener(event -> updateContextActions());
+        tableModel.addTableModelListener(event -> {
+            updateContextActions();
+            if (inspectorVisible) SwingUtilities.invokeLater(this::refreshInspector);
+        });
         updateContextActions();
+    }
+
+    private void setInspectorVisible(boolean visible) {
+        if (cellDetails == null || inspectorVisible == visible) return;
+        if (!visible && cellDetails.isEditing() && !cellDetails.finishEditing()) return;
+        inspectorVisible = visible;
+        if (visible) {
+            if (!inspectorWidthInitialized && cellDetailsSplitter.getWidth() > 0) {
+                inspectorProportion = Math.max(0.3f, Math.min(0.8f,
+                        1f - (float)cellDetails.getPreferredSize().width / cellDetailsSplitter.getWidth()));
+                inspectorWidthInitialized = true;
+            }
+            cellDetailsSplitter.setSecondComponent(cellDetails);
+            cellDetailsSplitter.setProportion(inspectorProportion);
+            // A compact result set should span the available table side, as it does before
+            // the inspector opens. Keep scrolling for genuinely wide tables.
+            int available = Math.round(cellDetailsSplitter.getWidth() * inspectorProportion);
+            dataTable.setAutoResizeMode(dataTable.getColumnModel().getTotalColumnWidth() < available
+                    ? JTable.AUTO_RESIZE_ALL_COLUMNS : JTable.AUTO_RESIZE_OFF);
+        } else {
+            inspectorProportion = cellDetailsSplitter.getProportion();
+            cellDetailsSplitter.setSecondComponent(null);
+            dataTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+            cellDetails.clearPin();
+            inspectedHeaderName = null;
+        }
+        inspectBtn.setSelected(visible);
+        inspectBtn.setToolTipText((visible ? "Hide" : "Show") + " cell inspector (Alt+Enter)");
+        cellDetailsSplitter.revalidate();
+        cellDetailsSplitter.repaint();
+        dataTable.repaint();
+    }
+
+    private void toggleInspector() {
+        if (inspectorVisible) { cellDetails.handleEscape(); return; }
+        if (dataTable.getRowCount() > 0 && dataTable.getColumnCount() > 0) {
+            int row = Math.max(0, dataTable.getSelectedRow());
+            int column = Math.max(0, dataTable.getSelectedColumn());
+            dataTable.changeSelection(row, column, false, false);
+            openCellDetails(row, column);
+        } else if (dataTable.getColumnCount() > 0) openColumnDetails(0);
+    }
+
+    private void openCellDetails(int viewRow, int viewColumn) {
+        if (cellDetails == null || cellDetails.isPinned() || viewRow < 0 || viewColumn < 0
+                || viewRow >= dataTable.getRowCount() || viewColumn >= dataTable.getColumnCount()) return;
+        int row = dataTable.convertRowIndexToModel(viewRow);
+        int col = dataTable.convertColumnIndexToModel(viewColumn);
+        CellDetailsPanel.Cell cell = cellSnapshot(row, col);
+        if (cell == null) return;
+        if (!cellDetails.showCell(cell)) return;
+        inspectedHeaderName = null;
+        setInspectorVisible(true);
+        dataTable.repaint();
+    }
+
+    private void openColumnDetails(int viewColumn) {
+        if (cellDetails == null || cellDetails.isPinned() || viewColumn < 0
+                || viewColumn >= dataTable.getColumnCount()) return;
+        int col = dataTable.convertColumnIndexToModel(viewColumn);
+        if (!cellDetails.showColumn(columnSnapshot(col))) return;
+        inspectedHeaderName = tableModel.getRawColumnName(col);
+        setInspectorVisible(true);
+        dataTable.repaint();
+    }
+
+    private CellDetailsPanel.Cell cellSnapshot(int row, int col) {
+        if (row < 0 || col < 0 || row >= tableModel.getRowCount() || col >= tableModel.getColumnCount()) return null;
+        ColumnMetadata column = tableModel.getColumnMeta(col);
+        boolean newRow = tableModel.isRowNew(row);
+        boolean editable = tableModel.isCellEditable(row, col)
+                && (newRow || !tableMetadata.getPrimaryKeyColumnNames().isEmpty());
+        String hint = tableMetadata.isView() ? "Views are read-only"
+                : column != null && column.isGenerated() ? "Generated columns are read-only"
+                : isBusy() ? "Wait for the current table operation to finish"
+                : !newRow && tableMetadata.getPrimaryKeyColumnNames().isEmpty()
+                    ? "A primary key is required to update this row" : "";
+        StringBuilder rowLabel = new StringBuilder(newRow ? "New row" : "Row " + (row + 1));
+        for (String key : tableMetadata.getPrimaryKeyColumnNames()) {
+            int keyColumn = tableModel.getColumnIndex(key);
+            if (keyColumn >= 0) {
+                String value = CellValuePresentation.raw(tableModel.getValueAt(row, keyColumn));
+                rowLabel.append(" · ").append(key).append(" = ")
+                        .append(value.length() > 36 ? value.substring(0, 33) + "…" : value);
+            }
+        }
+        return new CellDetailsPanel.Cell(tableMetadata.getName(), row, col, column, tableModel.getValueAt(row, col),
+                newRow, tableModel.isCellModified(row, col), editable, tableMetadata.isView(),
+                tableModel.getValidationError(new CellCoord(row, col)), rowLabel.toString(), hint);
+    }
+
+    private CellDetailsPanel.Column columnSnapshot(int col) {
+        return new CellDetailsPanel.Column(tableMetadata.getName(), col, tableModel.getColumnMeta(col), tableMetadata.isView());
+    }
+
+    private boolean validInspectedCell(CellDetailsPanel.Cell cell) {
+        return cell != null && !disposed && !isBusy() && cell.modelRow() >= 0 && cell.modelColumn() >= 0
+                && cell.modelRow() < tableModel.getRowCount() && cell.modelColumn() < tableModel.getColumnCount()
+                && cell.editable() && cell.newRow() == tableModel.isRowNew(cell.modelRow())
+                && Objects.equals(cell.tableName(), tableMetadata.getName())
+                && (cell.column() == null || tableModel.getRawColumnName(cell.modelColumn()).equalsIgnoreCase(cell.column().getName()))
+                && tableModel.isCellEditable(cell.modelRow(), cell.modelColumn());
+    }
+
+    private void changeInspectedCell(CellDetailsPanel.Cell cell, Object value) {
+        if (!validInspectedCell(cell) || !finishGridCellEditing()) return;
+        if (value == null && cell.column() != null && !cell.column().isNullable()) return;
+        tableModel.setValueAt(value, cell.modelRow(), cell.modelColumn());
+        refreshInspector();
+    }
+
+    private void followGridSelection() {
+        if (!inspectorVisible || cellDetails.isPinned()) return;
+        int viewRow = dataTable.getSelectedRow();
+        int viewColumn = dataTable.getSelectedColumn();
+        if (viewRow >= 0 && viewColumn >= 0) openCellDetails(viewRow, viewColumn);
+    }
+
+    private void refreshInspector() {
+        if (!inspectorVisible || cellDetails == null || disposed) return;
+        int col = cellDetails.inspectedColumn();
+        if (cellDetails.isColumnMode()) {
+            if (inspectedHeaderName != null) col = tableModel.getColumnIndex(inspectedHeaderName);
+            if (col < 0 || col >= tableModel.getColumnCount()) { setInspectorVisible(false); return; }
+            cellDetails.showColumn(columnSnapshot(col));
+        } else {
+            int row = cellDetails.inspectedRow();
+            if (!cellDetails.isPinned()) {
+                int selectedRow = dataTable.getSelectedRow(), selectedColumn = dataTable.getSelectedColumn();
+                if (selectedRow >= 0 && selectedColumn >= 0) {
+                    row = dataTable.convertRowIndexToModel(selectedRow);
+                    col = dataTable.convertColumnIndexToModel(selectedColumn);
+                }
+            }
+            CellDetailsPanel.Cell snapshot = cellSnapshot(row, col);
+            if (snapshot == null) { setInspectorVisible(false); return; }
+            cellDetails.showCell(snapshot);
+        }
+        cellDetails.setBusy(isBusy());
+        dataTable.repaint();
     }
 
     private void updateContextActions() {
@@ -537,17 +777,20 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             firePropertyChange("pendingChanges", wasModified, hasPending);
             wasModified = hasPending;
         }
-        if (project != null) {
-            if (hasPending) TableDraftState.getInstance(project).put(draftKey(), tableModel.captureDraft());
+        if (project != null && !restoringDraft) {
+            TableDraftState.Draft recovery = tableModel.captureDraft();
+            if (cellDetails != null && cellDetails.hasDraftChange()) {
+                recovery.inspectorRow = cellDetails.inspectedRow();
+                recovery.inspectorColumn = cellDetails.inspectedColumn();
+                recovery.inspectorText = cellDetails.draftText();
+            }
+            if (hasPending || recovery.inspectorText != null) TableDraftState.getInstance(project).put(draftKey(), recovery);
             else TableDraftState.getInstance(project).remove(draftKey());
         }
         Map<CellCoord, String> errors = tableModel.getValidationErrors();
         boolean hasErrors = !errors.isEmpty();
         revertBtn.setEnabled(hasPending && !isBusy());
-        DatabaseUi.setActionEmphasis(
-                revertBtn,
-                revertBtn.isEnabled() ? DatabaseUi.DESTRUCTIVE_ACTION_COLOR : null
-        );
+        DatabaseUi.setActionEmphasis(revertBtn, null);
 
         if (isBusy()) {
             saveBtn.setEnabled(false);
@@ -859,13 +1102,19 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     }
 
     private boolean finishCellEditing() {
+        return (cellDetails == null || cellDetails.finishEditing()) && finishGridCellEditing();
+    }
+
+    private boolean finishGridCellEditing() {
         return !dataTable.isEditing() || dataTable.getCellEditor().stopCellEditing();
     }
 
     private String draftKey() { return "table:" + config.getId() + ":" + databaseName + ":" + tableMetadata.getName(); }
-    public boolean hasPendingChanges() { return tableModel.hasPendingChanges() || dataTable.isEditing(); }
+    public boolean hasPendingChanges() {
+        return tableModel.hasPendingChanges() || dataTable.isEditing() || cellDetails != null && cellDetails.isEditing();
+    }
     @Override public void close() {
-        finishCellEditing();
+        finishGridCellEditing();
         updatePendingChangesState();
         disposed = true; loadGeneration++;
         if (changeSubscription != null) changeSubscription.disconnect();
@@ -879,6 +1128,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     private void setReadRunning(boolean running) {
         readRunning = running;
         updateOperationControls();
+        if (cellDetails != null) cellDetails.setBusy(isBusy());
         if (!running) scheduleRefresh();
     }
 
@@ -886,6 +1136,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         if (running) loadGeneration++;
         mutationRunning = running;
         updateOperationControls();
+        if (cellDetails != null) cellDetails.setBusy(isBusy());
         if (!running) scheduleRefresh();
     }
 
@@ -1329,6 +1580,9 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         private final JBColor errorSelBg = new JBColor(new Color(255, 200, 200), new Color(115, 35, 40));
 
         private final JBColor autoFg = new JBColor(new Color(120, 120, 120), new Color(155, 155, 155));
+        private final JBColor inspectedBg = new JBColor(new Color(232, 241, 255), new Color(40, 52, 71));
+        private final JBColor inspectedRowBg = new JBColor(new Color(246, 249, 253), new Color(37, 42, 50));
+        private final JBColor inspectedBorder = new JBColor(new Color(56, 104, 204), new Color(110, 163, 255));
 
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
@@ -1387,7 +1641,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     c.setForeground(table.getSelectionForeground());
                     setFont(getFont().deriveFont(Font.PLAIN));
                 } else {
-                    c.setBackground(table.getBackground());
+                    c.setBackground(inspectorVisible && cellDetails != null && !cellDetails.isColumnMode()
+                            && modelRow == cellDetails.inspectedRow() ? inspectedRowBg : table.getBackground());
                     if (value == null) {
                         c.setForeground(table.getForeground());
                         setFont(getFont().deriveFont(Font.ITALIC));
@@ -1405,6 +1660,16 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 setBorder(BorderFactory.createCompoundBorder(
                         JBUI.Borders.customLine(JBColor.namedColor("Component.focusColor", new JBColor(0x3574F0, 0x548AF7))),
                         JBUI.Borders.empty(0, 7)));
+            }
+            if (inspectorVisible && cellDetails != null && !cellDetails.isColumnMode()
+                    && modelRow == cellDetails.inspectedRow() && modelCol == cellDetails.inspectedColumn()
+                    && errorMsg == null) {
+                if (!isModified && !isNewRow) {
+                    setBackground(inspectedBg);
+                    setForeground(table.getForeground());
+                }
+                setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(inspectedBorder, JBUI.scale(2)), JBUI.Borders.empty(0, 6)));
             }
             if (value == null) {
                 setText("NULL");

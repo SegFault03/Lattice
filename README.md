@@ -26,7 +26,7 @@ Built with help from **Gemini 3.8**, **GPT-6 Luna** and **GPT-6.1 Sol**.
 
 - **JDBC drivers:** Reuse verified downloads across IDE restarts, discover Maven-cached drivers and project defaults, and report missing or corrupt drivers. Discovery runs in the background and preserves manual selections.
 - **UI and themes:** Native toolbars, compact connection forms, responsive filters and schema dialogs, improved light/dark palettes, clearer loading feedback and refreshed previews. Disabled icons match labels; mouse clicks no longer leave focus outlines, while keyboard focus stays visible.
-- **Tables and SQL:** State-aware row, export, Apply, Run and Clear actions; Clear for table filters; headers bounded to columns; typed edit validation and editable auto-generated columns. Cancellation has neutral feedback, and session changes retire old connections.
+- **Tables and SQL:** Click a table cell for the integrated Value Workspace, or a header for column type and constraint details. Inspect formatted/raw values, pin a cell or column, edit by double-clicking the value, and stage NULL/default/revert actions alongside grid edits. State-aware row, export, Apply, Run and Clear actions; Clear for table filters; headers bounded to columns; typed edit validation and editable auto-generated columns. Cancellation has neutral feedback, and session changes retire old connections.
 - **Development tools:** Shared dependency reuse and cleanup, tracked child processes, portable Windows MySQL fixtures, local IDE deployment, and consolidated Linux/Windows commands and documentation.
 - **Build and validation:** Updated Gradle, IntelliJ build tooling, JDBC drivers and protobuf runtime; migrated the Java namespace to `com.segfault03`. Cross-platform CI now includes production Swing assertions, real-IDE theme/action reviews and compatibility checks against the PR merge build.
 - **Releases:** Signed ZIPs with verified signatures, formatted What's New notes, and automatic publication to GitHub and submission to JetBrains Marketplace after validation.
@@ -94,6 +94,16 @@ Select MySQL, HSQLDB, PostgreSQL or H2, enter connection details, and choose a d
 For H2, select Memory for a named database that lasts until its last connection closes, File for a persistent database path, or Server for TCP (default port 9092). File mode accepts the database base path or an existing `.mv.db` file. The bundled driver is H2 2.3.232 (Java 11+ bytecode, tested on Java 21); H2 2.1.214 and 2.2.224 also pass Java 8 probes. Custom URLs preserve options such as `IFEXISTS` and SSL settings. Service workflows also run in H2 MySQL/PostgreSQL compatibility modes; this does not establish complete SQL emulation. H2 1.x file migration is not validated. H2 DDL can commit an open transaction, so finish console transactions before schema changes.
 
 Generated MySQL URLs currently disable TLS and use UTC for the driver/server session. For remote or TLS-required servers, use a custom JDBC URL with your required security options. Custom URLs retain your options.
+
+## Inspect and edit data
+
+Select a table cell and click **Inspect** (Alt+Enter) to open its value and column details. Click a column header for its definition, or pin the inspector to keep it on a particular cell or column. Structured values offer formatted/raw views; Copy uses raw text rather than formatted output.
+
+Choose **Edit value**, then **Stage change** to add the edit to the grid's pending batch. **Commit** saves that batch to the database. Set NULL, Empty string and Use default are separate actions. Cancel discards the current inspector edit; X or Escape cancels it and closes the inspector. Closing the table tab preserves unconfirmed text for recovery, without staging or committing it. Recovered text stays available while metadata loads; staging requires an editable column and valid row identity.
+
+Create/alter table dialogs retain changes across the column navigator and show the complete SQL before applying. Batched alterations can rename the table and add, modify, rename or drop columns. PostgreSQL batches use a transaction; MySQL, HSQLDB and H2 may commit DDL incrementally. After a failure, review the refreshed schema and remaining changes before retrying.
+
+Database changes automatically refresh the explorer and affected editors. Pending edits defer a grid reload until Commit or Revert. The explorer also retains the last successful metadata for offline browsing and SQL generation; cached metadata can be stale and contains no table rows. Connect or refresh for current definitions and live operations. Generating an INSERT on a connected table loads its columns when needed.
 
 ## Build from source
 

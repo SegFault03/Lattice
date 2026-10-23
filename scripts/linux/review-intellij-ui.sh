@@ -67,6 +67,9 @@ for theme in "${themes[@]}"; do
     if [[ "${LATTICE_UI_CREATE_TABLE_ONLY:-false}" == true ]]; then
         version_args+=("-Plattice.ui.createTableOnly=true")
     fi
+    if [[ "${LATTICE_UI_CELL_DETAILS_ONLY:-false}" == true ]]; then
+        version_args+=("-Plattice.ui.cellDetailsOnly=true")
+    fi
     if [[ "${LATTICE_UI_DIALOG_AUDIT:-false}" == true ]]; then
         version_args+=("-Plattice.ui.dialogAudit=true")
     fi

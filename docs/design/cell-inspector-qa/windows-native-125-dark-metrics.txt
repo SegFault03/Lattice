@@ -1,0 +1,9 @@
+UI scale: 1.25
+Native label: 13.0
+Inspector subtitle: 13.0
+Value: 13.0
+Native button: 13.0
+Edit button: 13.0
+Edit bounds: 125x36
+Inspect height: 35
+Header targets fully visible: true
