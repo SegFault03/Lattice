@@ -39,6 +39,11 @@ WARMUP_ORDERS fixture in both themes and records its panel bounds for comparison
 The native focused scenario checks the explicit toolbar toggle and leaves the inspector closed after an ordinary grid click. See the
 [prioritized implementation checklist](design/data-cell-refresh-plan.md).
 
+All preview modes assert inspector-only draft recovery through the production
+table-editor constructor, including initially missing metadata, metadata failure,
+close/reopen, explicit staging and cancellation. Unconfirmed recovered text must
+survive grid-state persistence without becoming eligible for Commit.
+
 Run the preview helper from the repository root on Windows, Linux or macOS:
 
 ```sh
@@ -282,11 +287,23 @@ regression dispatches the production Swing button action on the IDE event thread
 and requires both the backend's failure status and its error dialog.
 
 For pull requests targeting `main`, Linux CI runs the dark functional review,
-light styling review, search reviews, PostgreSQL review, mixed alter/recovery
-and a 125% create/alter dialog audit as separate checks
+light styling review, search reviews, PostgreSQL review, mixed alter/recovery,
+a 125% create/alter dialog audit, and cell-inspector reviews at 100% and 125%
+as separate checks
 after their shared prerequisites pass. Each suite can
 fail the job independently, and a failure does not suppress the other suites'
 reports. The artifact also retains native IDE logs, thread dumps and screenshots.
+
+The cell-inspector jobs set `LATTICE_UI_CELL_DETAILS_ONLY=true` and require both
+light and dark theme checks. They close an editor with an unconfirmed inspector
+draft, refresh the explorer to replace its metadata, and reopen the editor.
+`inspector-recovered-draft.png` and the runtime report record recovery with Stage
+available after metadata loading and Commit disabled until explicit staging.
+Reproduce either job with:
+
+```bash
+LATTICE_UI_CELL_DETAILS_ONLY=true LATTICE_UI_SCALE=1.25 LATTICE_UI_REVIEW_OUTPUT=build/ui-review/cell-inspector-scaled ./scripts/linux/review-intellij-ui.sh ExperimentalDark
+```
 
 ## PostgreSQL end-to-end review
 

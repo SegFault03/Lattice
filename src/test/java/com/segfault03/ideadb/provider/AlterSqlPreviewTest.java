@@ -10,6 +10,12 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Metadata-only connections reject every write, including accidental preview execution. */
 class AlterSqlPreviewTest {
+    @Test void mysqlCharacterAttributesDoNotFollowAConversionToNumeric() throws Exception {
+        var config = new ConnectionConfig(DatabaseType.MYSQL, "preview");
+        var requested = new ColumnDefinition("email", "BIGINT", 0, true, false, false, "");
+        String sql = new MySqlDialect().buildModifyColumnSql(metadataOnly(false, 8), config, "shop", "customers", requested).getFirst();
+        assertEquals("ALTER TABLE `shop`.`customers` MODIFY COLUMN `email` BIGINT COMMENT 'Keep me';", sql);
+    }
     @Test void mysqlModificationPreservesCollationCommentAndTheExistingDefault() throws Exception {
         var config=new ConnectionConfig(DatabaseType.MYSQL,"preview");
         var requested=new ColumnDefinition("email","VARCHAR",255,true,false,false,"old");

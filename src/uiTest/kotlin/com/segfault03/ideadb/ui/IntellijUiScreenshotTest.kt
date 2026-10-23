@@ -1123,7 +1123,8 @@ class IntellijUiScreenshotTest {
                 val alternateTheme = oppositeThemes.firstOrNull { candidate ->
                     laf.getInstalledLookAndFeels().any { it.getName() == candidate }
                 }
-                if (alternateTheme != null) {
+                check(alternateTheme != null) { "The inspector scenario requires an opposite light/dark theme" }
+                run {
                     withContext(OnDispatcher.EDT) {
                         laf.setCurrentLookAndFeel(laf.findLaf(alternateTheme), true)
                         laf.updateUI()
@@ -1304,8 +1305,54 @@ class IntellijUiScreenshotTest {
                     appendLine("Column header details: $headerDetailsVerified")
                     appendLine("Double-click edit mode: verified")
                     appendLine("Close and reopen controls: verified")
-                    appendLine("Opposite theme switch: ${alternateTheme ?: "no supported opposite theme found; skipped"}")
+                    appendLine("Opposite theme switch: $alternateTheme")
                 })
+                // Rebuild explorer metadata between closing and reopening, so recovery
+                // cannot rely on the original editor's populated TableMetadata object.
+                val recoveryPath = publicSchemaPath + "Tables (2)" + "LATTICE_PEOPLE"
+                ideFrame { invokeAction("com.segfault03.lattice.open") }
+                databaseTree.fixture.rightClickPath(recoveryPath.joinToString(databaseTree.fixture.separator()))
+                frame.x { byVisibleText("Open data editor") }.waitFound().click()
+                ideFrame { invokeAction("HideAllWindows") }
+                val recoveryEditor = frame.x { byJavaClass("com.segfault03.ideadb.ui.TableDataEditorPanel") }.waitFound()
+                val recoveryDetails = recoveryEditor.x { byJavaClass("com.segfault03.ideadb.ui.CellDetailsPanel") }.waitFound()
+                recoveryDetails.x { byVisibleText("Edit value") }.waitFound().click()
+                val recoveredText = "unconfirmed-recovery@example.com"
+                withContext(OnDispatcher.EDT) {
+                    cast(recoveryDetails.x { byAccessibleName("Cell value") }.waitFound().component, JTextComponent::class).setText(recoveredText)
+                }
+                val closingComponent = recoveryEditor.component
+                ideFrame { invokeAction("CloseContent") }
+                waitUntil("table editor closes with an unconfirmed inspector draft") { !closingComponent.isShowing() }
+                ideFrame { invokeAction("com.segfault03.lattice.open") }
+                val refreshedExplorerStatus = cast(frame.x { byAccessibleName("Database explorer status") }.waitFound().component, LiveLabel::class)
+                databaseTree.fixture.rightClickPath(publicSchemaPathText)
+                frame.x { byVisibleText("Refresh tables") }.waitFound().click()
+                waitUntil("fresh table metadata available after closing the editor") {
+                    databaseTree.component.isEnabled() && refreshedExplorerStatus.getText().startsWith("Loaded ") &&
+                        databaseTree.pathExists(*recoveryPath)
+                }
+                databaseTree.fixture.rightClickPath(recoveryPath.joinToString(databaseTree.fixture.separator()))
+                frame.x { byVisibleText("Open data editor") }.waitFound().click()
+                ideFrame { invokeAction("HideAllWindows") }
+                val reopened = frame.x { byJavaClass("com.segfault03.ideadb.ui.TableDataEditorPanel") }.waitFound()
+                val recoveredDetails = reopened.x { byJavaClass("com.segfault03.ideadb.ui.CellDetailsPanel") }.waitFound()
+                waitUntil("unconfirmed inspector text restored and stage enabled after metadata") {
+                    reopened.hasSubtext("Draft restored") && recoveredDetails.hasSubtext(recoveredText) &&
+                        recoveredDetails.x { byAccessibleName("Stage this value; Commit saves it to the database") }.waitFound().component.isEnabled()
+                }
+                check(!reopened.x { byAccessibleName("Commit pending changes to the database") }.waitFound().component.isEnabled()) {
+                    "Recovery must not silently stage an unconfirmed value"
+                }
+                captureScreen(screenshotsDirectory.resolve("inspector-recovered-draft.png"))
+                val recoveredValue = cast(recoveredDetails.x { byAccessibleName("Cell value") }.waitFound().component, JTextComponent::class)
+                withContext(OnDispatcher.EDT) {
+                    cast(recoveredDetails.x { byAccessibleName("Cancel") }.waitFound().component, LiveToolbarButton::class).doClick()
+                }
+                waitUntil("Cancel restores the original value after draft recovery") { recoveredValue.getText() == "amelia.brooks@example.com" }
+                Files.writeString(screenshotsDirectory.resolve("runtime-evidence.txt"),
+                    "Inspector-only draft close/reopen with refreshed metadata: verified; recovery remains unstaged\n",
+                    java.nio.file.StandardOpenOption.APPEND)
                 println("Focused native Value Workspace flow completed")
                 return@useDriverAndCloseIde
             }

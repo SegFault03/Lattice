@@ -18,6 +18,10 @@ class UiReviewTests(unittest.TestCase):
     def test_inspector_mode_routes_both_themes_and_preserves_each_report(self):
         self.check_mode('LATTICE_UI_ALTER_TABLE_ONLY', '-Plattice.ui.alterTableOnly=true', 'alter-table')
 
+    def test_cell_inspector_mode_routes_scaled_runs_and_preserves_each_report(self):
+        self.check_mode('LATTICE_UI_CELL_DETAILS_ONLY', '-Plattice.ui.cellDetailsOnly=true', 'cell-inspector-scaled',
+                        {'LATTICE_UI_SCALE': '1.25'}, ('-Plattice.ui.scale=1.25',))
+
     def test_composer_mode_routes_both_themes_and_preserves_each_report(self):
         self.check_mode('LATTICE_UI_CREATE_TABLE_ONLY', '-Plattice.ui.createTableOnly=true', 'create-table',
                         {'LATTICE_UI_DIALOG_AUDIT': 'true', 'LATTICE_UI_SCALE': '1.25'},

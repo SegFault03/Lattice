@@ -33,8 +33,36 @@ final class H2Dialect extends AbstractSqlDialect {
     }
 
     public List<String> buildModifyColumnSql(Connection conn, ConnectionConfig config, String schema, String table, ColumnDefinition column) throws Exception {
-        var sql = new StringBuilder("ALTER TABLE " + formatTable(config, schema, table) + " ALTER COLUMN ");
-        appendColumn(sql, column); return List.of(sql + ";");
+        ColumnMetadata original = MetadataService.getInstance().getColumns(conn, config, schema, table).stream()
+                .filter(c -> c.getName().equals(column.getName())).findFirst().orElseThrow();
+        if (original.isGenerated()) throw new IllegalArgumentException("Change a generated expression in the SQL console");
+        if (original.isPrimaryKey() && column.isNullable()) throw new IllegalArgumentException("A primary-key column cannot allow NULL");
+        String requestedDefault = Objects.toString(column.getDefaultValue(), "");
+        if (original.isAutoIncrement() && !requestedDefault.isBlank())
+            throw new IllegalArgumentException("An identity column cannot have another default");
+        String prefix = "ALTER TABLE " + formatTable(config, schema, table) + " ALTER COLUMN " + quoteIdentifier(column.getName());
+        List<String> statements = new ArrayList<>();
+        String beforeDefault = Objects.toString(original.getDefaultValue(), "");
+        if (!original.isAutoIncrement() && !requestedDefault.equals(beforeDefault))
+            statements.add(prefix + (requestedDefault.isBlank() ? " DROP DEFAULT;" : " SET DEFAULT " + formatDefault(column) + ";"));
+        String type = columnType(column);
+        String beforeType = ddlType(original);
+        if (beforeType.matches("(?i)(?:TIMESTAMP|TIME)(?: WITH(?:OUT)? TIME ZONE)?"))
+            beforeType = beforeType.replaceFirst("(?i)^(TIMESTAMP|TIME)", "$1(" + original.getDecimalDigits() + ")");
+        if (!type.equalsIgnoreCase(beforeType)) statements.add(prefix + " SET DATA TYPE " + type + ";");
+        if (column.isNullable() != original.isNullable())
+            statements.add(prefix + (column.isNullable() ? " DROP NOT NULL;" : " SET NOT NULL;"));
+        // Targeted ALTERs retain ON UPDATE, comments, identity mode and sequence options/state.
+        return List.copyOf(statements);
+    }
+    private String columnType(ColumnDefinition column) {
+        String type = column.getType();
+        if (column.getSize() > 0 && !type.contains("(")) {
+            if (needsSize(type)) type += "(" + column.getSize() + ")";
+            else if (type.equalsIgnoreCase("DECIMAL") || type.equalsIgnoreCase("NUMERIC"))
+                type += "(" + column.getSize() + "," + Math.max(0, column.getDecimalDigits()) + ")";
+        }
+        return type;
     }
     public void alterTableModifyColumn(Connection conn, ConnectionConfig config, String schema, String table, ColumnDefinition column) throws Exception {
         for (String sql : buildModifyColumnSql(conn, config, schema, table, column)) executeSql(conn, sql);

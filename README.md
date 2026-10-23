@@ -95,6 +95,16 @@ For H2, select Memory for a named database that lasts until its last connection 
 
 Generated MySQL URLs currently disable TLS and use UTC for the driver/server session. For remote or TLS-required servers, use a custom JDBC URL with your required security options. Custom URLs retain your options.
 
+## Inspect and edit data
+
+Select a table cell and click **Inspect** (Alt+Enter) to open its value and column details. Click a column header for its definition, or pin the inspector to keep it on a particular cell or column. Structured values offer formatted/raw views; Copy uses raw text rather than formatted output.
+
+Choose **Edit value**, then **Stage change** to add the edit to the grid's pending batch. **Commit** saves that batch to the database. Set NULL, Empty string and Use default are separate actions. Cancel discards the current inspector edit; X or Escape cancels it and closes the inspector. Closing the table tab preserves unconfirmed text for recovery, without staging or committing it. Recovered text stays available while metadata loads; staging requires an editable column and valid row identity.
+
+Create/alter table dialogs retain changes across the column navigator and show the complete SQL before applying. Batched alterations can rename the table and add, modify, rename or drop columns. PostgreSQL batches use a transaction; MySQL, HSQLDB and H2 may commit DDL incrementally. After a failure, review the refreshed schema and remaining changes before retrying.
+
+Database changes automatically refresh the explorer and affected editors. Pending edits defer a grid reload until Commit or Revert. The explorer also retains the last successful metadata for offline browsing and SQL generation; cached metadata can be stale and contains no table rows. Connect or refresh for current definitions and live operations. Generating an INSERT on a connected table loads its columns when needed.
+
 ## Build from source
 
 Install **JDK 21**, then clone this repository. The Gradle wrapper downloads the pinned Gradle distribution, IntelliJ SDK and dependencies; a preinstalled IntelliJ or database is not required for ordinary builds and pure tests.

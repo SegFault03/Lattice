@@ -72,7 +72,7 @@ class WorkflowPolicyTests(unittest.TestCase):
     def test_ui_suites_have_independent_theme_jobs_and_retained_evidence(self):
         ui = job(CI, 'ui-tests')
         self.assertIn('fail-fast: false', ui)
-        for suite in ('previews', 'hsqldb', 'alter-table', 'table-dialogs', 'styling', 'search', 'postgres', 'h2'):
+        for suite in ('previews', 'hsqldb', 'alter-table', 'table-dialogs', 'cell-inspector', 'cell-inspector-scaled', 'styling', 'search', 'postgres', 'h2'):
             self.assertIn(f'- suite: {suite}', ui)
         for suite in ('search', 'h2'):
             themes = re.findall(rf'- suite: {suite}\n            theme: (.+)', ui)
@@ -84,7 +84,12 @@ class WorkflowPolicyTests(unittest.TestCase):
                                 ('DIALOG_AUDIT', 'table-dialogs')):
             self.assertIn(f"LATTICE_UI_{variable}: ${{{{ matrix.suite == '{suite}' }}}}", ui)
             self.assertIn(f"|| matrix.suite == '{suite}'", ui)
-        self.assertIn("LATTICE_UI_SCALE: ${{ matrix.suite == 'table-dialogs' && '1.25' || '1.0' }}", ui)
+        self.assertIn("LATTICE_UI_CELL_DETAILS_ONLY: ${{ matrix.suite == 'cell-inspector' || matrix.suite == 'cell-inspector-scaled' }}", ui)
+        for suite in ('cell-inspector', 'cell-inspector-scaled'):
+            self.assertIn(f"|| matrix.suite == '{suite}'", ui)
+            self.assertEqual(['ExperimentalDark'], re.findall(rf'- suite: {suite}\n            theme: (.+)', ui))
+        self.assertIn("LATTICE_UI_SCALE: ${{ (matrix.suite == 'table-dialogs' || matrix.suite == 'cell-inspector-scaled') && '1.25' || '1.0' }}", ui)
+        self.assertIn('name: ui-${{ matrix.suite }}-${{ matrix.theme }}', ui)
         self.assertIn('scripts/h2-test.py --ui-only', ui)
         self.assertIn('scripts/postgres-ui-review.py', ui)
         self.assertIn('scripts/ui-preview.py --all-previews', ui)

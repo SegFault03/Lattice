@@ -455,6 +455,57 @@ public final class UiPreview {
         renderAdversarialCellDetails(editor, theme);
     }
 
+    static void verifyInspectorDraftRecovery() throws Exception {
+        for (boolean metadataArrives : new boolean[]{false, true}) {
+            var config = config(DatabaseType.HSQLDB);
+            var store = new com.segfault03.ideadb.state.TableDraftState();
+            var project = (com.intellij.openapi.project.Project)Proxy.newProxyInstance(
+                    com.intellij.openapi.project.Project.class.getClassLoader(), new Class<?>[]{com.intellij.openapi.project.Project.class},
+                    (proxy, method, args) -> switch (method.getName()) {
+                        case "getService" -> args[0] == com.segfault03.ideadb.state.TableDraftState.class ? store : null;
+                        case "isDisposed", "isDefault", "isInitialized" -> false;
+                        case "hashCode" -> System.identityHashCode(proxy);
+                        case "equals" -> proxy == args[0];
+                        case "getName", "toString" -> "Draft recovery preview";
+                        default -> null;
+                    });
+            String key = "table:" + config.getId() + ":PUBLIC:items";
+            var saved = com.segfault03.ideadb.state.TableDraftState.Draft.capture(List.of("id", "email"), List.of("INTEGER", "VARCHAR"),
+                    List.of(List.of(1, "original")), List.of(List.of(1, "original")));
+            saved.inspectorRow = 0; saved.inspectorColumn = 1; saved.inspectorText = "recovered text"; store.put(key, saved);
+            var metadata = new TableMetadata(null, "PUBLIC", "items", "TABLE");
+            TableDataEditorPanel editor = new TableDataEditorPanel(project, config, "PUBLIC", metadata);
+            Object details = field(editor, "cellDetails");
+            if (!"recovered text".equals(invokeResult(details, "draftText")) || store.get(key) == null)
+                throw new AssertionError("Restoring an inspector-only draft before metadata must retain its text and persistence");
+            invoke(editor, "setReadRunning", new Class<?>[]{boolean.class}, false);
+            ((JButton)field(details, "apply")).doClick(0);
+            if (store.get(key).hasChanges()) throw new AssertionError("Recovered text must not stage without column metadata");
+            editor.close();
+            if (!"recovered text".equals(store.get(key).inspectorText)) throw new AssertionError("Closing before metadata must preserve recovery");
+            editor = new TableDataEditorPanel(project, config, "PUBLIC", metadata);
+            details = field(editor, "cellDetails");
+            if (metadataArrives) {
+                metadata.setColumns(List.of(new ColumnMetadata("id", "INTEGER", java.sql.Types.INTEGER, 10, 0, false, true, false, null),
+                        new ColumnMetadata("email", "VARCHAR", java.sql.Types.VARCHAR, 180, 0, true, false, false, null)));
+                invoke(field(editor, "tableModel"), "refreshColumnMetadata", new Class<?>[0]);
+            }
+            invoke(editor, "setReadRunning", new Class<?>[]{boolean.class}, false);
+            invoke(editor, "refreshInspector", new Class<?>[0]);
+            if (!"recovered text".equals(invokeResult(details, "draftText"))) throw new AssertionError("Metadata completion/failure must preserve text");
+            if (metadataArrives) {
+                ((JButton)field(details, "apply")).doClick(0);
+                if (!store.get(key).hasChanges() || store.get(key).inspectorText != null)
+                    throw new AssertionError("Only explicit Stage may transfer recovered text into the pending batch");
+            } else {
+                invoke(details, "cancelEditing", new Class<?>[0]);
+                if (store.get(key) != null) throw new AssertionError("Explicit Cancel must discard an inspector-only draft");
+            }
+            editor.close();
+        }
+        System.out.println("Inspector-only draft recovery, unavailable metadata, close/reopen, explicit stage and cancellation verified");
+    }
+
     /** Exact approved fixture and viewport, independent of the surrounding table width. */
     static void renderApprovedInspector(String theme) throws Exception {
         Class<?> panelType = Class.forName("com.segfault03.ideadb.ui.CellDetailsPanel");
@@ -996,6 +1047,10 @@ public final class UiPreview {
             com.intellij.ui.IconManager.Companion.activate(new com.intellij.ui.icons.CoreIconManager());
             IconLoader.activate();
             IconLoader.setUseDarkIcons(theme.equals("dark"));
+            SwingUtilities.invokeAndWait(() -> {
+                try { verifyInspectorDraftRecovery(); }
+                catch (Exception exception) { throw new RuntimeException(exception); }
+            });
             if (sourceFilterOnly || searchOnly || tabIconsOnly || cellDetailsOnly) {
                 SwingUtilities.invokeAndWait(() -> {
                     try { if (cellDetailsOnly) renderCellDetails(theme); else if (tabIconsOnly) renderTableTabIcons(theme); else if (searchOnly) renderExplorerSearch(theme); else renderSourceFilter(theme); }

@@ -42,6 +42,30 @@ class CellDetailsPanelTest {
     }
     static void click(CellDetailsPanel panel, String name) { field(panel, name, JButton.class).doClick(0); }
 
+    @Test void recoveredTextSurvivesUnavailableMetadataAndCannotStageUntilEditable() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            var actions = new RecordingActions();
+            var panel = new CellDetailsPanel(actions);
+            var known = cell("original", 0);
+            var unavailable = new CellDetailsPanel.Cell(known.tableName(), 0, 0, null, "original",
+                    false, false, false, false, null, "Row 1", "Loading columns");
+            panel.restoreDraft(unavailable, "recovered text");
+            assertTrue(panel.isEditing()); assertEquals("recovered text", panel.draftText());
+            assertFalse(field(panel, "apply", JButton.class).isEnabled());
+            panel.getActionMap().get("apply").actionPerformed(null);
+            assertTrue(actions.applied.isEmpty(), "Keyboard staging must also require metadata");
+            panel.setBusy(true); panel.showCell(known);
+            assertEquals("recovered text", panel.draftText());
+            assertFalse(field(panel, "apply", JButton.class).isEnabled());
+            panel.setBusy(false); click(panel, "cancel");
+            assertFalse(panel.isEditing()); assertFalse(panel.hasDraftChange());
+            assertEquals("original", field(panel, "valueArea", JTextArea.class).getText());
+            panel.restoreDraft(known, "recovered text"); click(panel, "apply");
+            assertEquals(List.of("recovered text"), actions.applied);
+            assertFalse(panel.isEditing());
+        });
+    }
+
     @Test void inspectorUsesNativeTextSizesAtEveryUiScale() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             float previousScale = com.intellij.ui.scale.JBUIScale.scale(1f);

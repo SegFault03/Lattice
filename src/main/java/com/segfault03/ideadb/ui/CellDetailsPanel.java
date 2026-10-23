@@ -25,6 +25,7 @@ final class CellDetailsPanel extends JPanel {
     interface Actions {
         void apply(Cell cell, String text); void setNull(Cell cell); void useDefault(Cell cell);
         void revert(Cell cell); void editTable(); void close(); void unpin();
+        default void draftChanged() {}
     }
 
     private final Actions actions;
@@ -388,7 +389,7 @@ final class CellDetailsPanel extends JPanel {
         getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.CTRL_DOWN_MASK), "apply");
         getActionMap().put("apply", new AbstractAction() { public void actionPerformed(ActionEvent e) { if (editing) applyDraft(); } });
         valueArea.addMouseListener(new MouseAdapter() { public void mouseClicked(MouseEvent e) { if (e.getClickCount() == 2 && cell != null && cell.editable()) beginEdit(); } });
-        DatabaseUi.onTextChange(valueArea, () -> { if (editing) { summary.setText(valueSummary(valueArea.getText())); updateValueTools(); updateEnabled(); } });
+        DatabaseUi.onTextChange(valueArea, () -> { if (editing) { summary.setText(valueSummary(valueArea.getText())); updateValueTools(); updateEnabled(); actions.draftChanged(); } });
         renderEmpty();
         updatePin();
         lastLookAndFeel = UIManager.getLookAndFeel();
@@ -461,7 +462,13 @@ final class CellDetailsPanel extends JPanel {
     }
     boolean hasDraftChange() { return editing && !Objects.equals(draft, valueArea.getText()); }
     String draftText() { return hasDraftChange() ? valueArea.getText() : null; }
-    void restoreDraft(Cell cell, String text) { showCell(cell); beginEdit(); valueArea.setText(text); }
+    void restoreDraft(Cell cell, String text) {
+        showCell(cell);
+        // Recovery must not depend on metadata being available yet. Staging still
+        // requires a fresh editable snapshot, so recovered text cannot bypass validation.
+        draft = CellValuePresentation.editable(cell.value());
+        editing = true; valueArea.setEditable(true); valueArea.setText(text); updateEnabled();
+    }
     void cancelEditing() { cancelEdit(); }
     int inspectedRow() { return cell == null ? -1 : cell.modelRow(); }
     int inspectedColumn() { return cell != null ? cell.modelColumn() : column == null ? -1 : column.modelColumn(); }
@@ -589,13 +596,13 @@ final class CellDetailsPanel extends JPanel {
         tabs.setVisible(structured || wrap.isVisible());
     }
     private void beginEdit() { if (cell == null || !cell.editable() || busy || editing) return; draft = CellValuePresentation.editable(cell.value()); editing = true; valueArea.setEditable(true); valueArea.setText(draft); summary.setText(valueSummary(draft)); valueArea.requestFocusInWindow(); valueArea.setCaretPosition(valueArea.getDocument().getLength()); updateEnabled(); }
-    private void applyDraft() { if (!editing || busy || !hasDraftChange()) return; stageCurrentEdit(); }
+    private void applyDraft() { if (!editing || busy || cell == null || !cell.editable() || !hasDraftChange()) return; stageCurrentEdit(); }
     private void stageCurrentEdit() {
         String text = valueArea.getText(); Cell target = cell;
         editing = false; draft = null; valueArea.setEditable(false); updateEnabled();
         if (target != null) actions.apply(target, text);
     }
-    private void cancelEdit() { if (!editing) return; editing = false; draft = null; renderValue(); updateEnabled(); }
+    private void cancelEdit() { if (!editing) return; editing = false; draft = null; renderValue(); updateEnabled(); actions.draftChanged(); }
     private void copyText() { String text = editing ? valueArea.getText() : CellValuePresentation.raw(cell == null ? null : cell.value()); Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null); }
     private boolean isTextColumn() {
         return cell != null && cell.column() != null && switch (cell.column().getDataType()) {
@@ -618,7 +625,7 @@ final class CellDetailsPanel extends JPanel {
     private void updateEnabled() {
         edit.setEnabled(cell != null && cell.editable() && !busy && !editing);
         edit.setVisible(cell != null && !columnMode && !editing);
-        apply.setEnabled(hasDraftChange() && !busy); cancel.setEnabled(editing && !busy);
+        apply.setEnabled(hasDraftChange() && !busy && cell != null && cell.editable()); cancel.setEnabled(editing && !busy);
         updateValueStates();
         formattedTab.setEnabled(!editing); rawTab.setEnabled(!editing);
         staging.setVisible(editing && !columnMode);

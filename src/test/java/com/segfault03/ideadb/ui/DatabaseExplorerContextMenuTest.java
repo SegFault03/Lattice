@@ -13,6 +13,18 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DatabaseExplorerContextMenuTest {
+    @Test void insertTemplatesRequireLoadedColumnsAndIncludeThemForEveryProvider() {
+        for (var type : DatabaseType.values()) {
+            var config = new ConnectionConfig(type, "Template source");
+            var metadata = new TableMetadata(null, "PUBLIC", "products", "TABLE");
+            var data = TreeNodeData.table(config, "PUBLIC", metadata);
+            assertThrows(IllegalStateException.class, () -> DatabaseMainPanel.generatedSql(data, DatabaseExplorerContextMenu.Action.GENERATE_INSERT));
+            assertTrue(DatabaseMainPanel.generatedSql(data, DatabaseExplorerContextMenu.Action.GENERATE_SELECT).startsWith("SELECT *"));
+            metadata.setColumns(List.of(new ColumnMetadata("id", "INTEGER", java.sql.Types.INTEGER, 10, 0, false, true, false, null)));
+            String sql = DatabaseMainPanel.generatedSql(data, DatabaseExplorerContextMenu.Action.GENERATE_INSERT);
+            assertTrue(sql.contains(type == DatabaseType.MYSQL ? "(`id`) VALUES (?)" : "(\"id\") VALUES (?)"), sql);
+        }
+    }
     @Test void disconnectedSourceAndSchemaMenusKeepSettingsAndReconnectButDisableLiveOperations() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             for (var type : DatabaseType.values()) {

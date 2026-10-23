@@ -455,13 +455,31 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
             case TRUNCATE_TABLE -> doTruncateTable(cfg, db, table.getName());
             case DROP_TABLE -> doDropTable(cfg, db, table.getName());
             case GENERATE_SELECT, GENERATE_INSERT -> {
-                var columns = table.getColumns().stream().map(ColumnMetadata::getName).toList();
-                var sql = action == DatabaseExplorerContextMenu.Action.GENERATE_SELECT
-                        ? DdlService.getInstance().buildSelectSql(cfg, db, table.getName(), columns)
-                        : DdlService.getInstance().buildInsertSql(cfg, db, table.getName(), columns);
-                if (connectionAvailable(node)) DatabaseEditorManager.getInstance(project).openConsole(cfg, db, sql);
-                else new GeneratedSqlDialog(project, sql).show();
+                if (action == DatabaseExplorerContextMenu.Action.GENERATE_INSERT && table.getColumns().isEmpty())
+                    loadColumnsForTableNode(node, data, () -> showGeneratedSql(node, data, action));
+                else showGeneratedSql(node, data, action);
             }
+        }
+    }
+
+    static String generatedSql(TreeNodeData data, DatabaseExplorerContextMenu.Action action) {
+        var table = data.getTableMetadata();
+        var columns = table.getColumns().stream().map(ColumnMetadata::getName).toList();
+        if (action == DatabaseExplorerContextMenu.Action.GENERATE_INSERT && columns.isEmpty())
+            throw new IllegalStateException("Column metadata is unavailable. Refresh the table before generating an INSERT statement.");
+        return action == DatabaseExplorerContextMenu.Action.GENERATE_SELECT
+                ? DdlService.getInstance().buildSelectSql(data.getConnectionConfig(), data.getDatabaseName(), table.getName(), columns)
+                : DdlService.getInstance().buildInsertSql(data.getConnectionConfig(), data.getDatabaseName(), table.getName(), columns);
+    }
+
+    private void showGeneratedSql(DefaultMutableTreeNode node, TreeNodeData data, DatabaseExplorerContextMenu.Action action) {
+        try {
+            String sql = generatedSql(data, action);
+            if (connectionAvailable(node)) DatabaseEditorManager.getInstance(project).openConsole(data.getConnectionConfig(), data.getDatabaseName(), sql);
+            else new GeneratedSqlDialog(project, sql).show();
+        } catch (IllegalStateException error) {
+            updateExplorerStatus("Could not generate SQL · Refresh the table", DatabaseUi.Tone.ERROR);
+            Messages.showErrorDialog(project, error.getMessage(), "Could not generate SQL");
         }
     }
 
@@ -683,6 +701,10 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     }
 
     private void loadColumnsForTableNode(DefaultMutableTreeNode tableNode, TreeNodeData data) {
+        loadColumnsForTableNode(tableNode, data, () -> {});
+    }
+
+    private void loadColumnsForTableNode(DefaultMutableTreeNode tableNode, TreeNodeData data, Runnable onLoaded) {
         ConnectionConfig cfg = data.getConnectionConfig();
         String dbName = data.getDatabaseName();
         TableMetadata tm = data.getTableMetadata();
@@ -709,6 +731,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
 
                     treeModel.nodeStructureChanged(tableNode);
                     if (expanded) databaseTree.expandPath(new TreePath(colsFolder.getPath()));
+                    onLoaded.run();
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
