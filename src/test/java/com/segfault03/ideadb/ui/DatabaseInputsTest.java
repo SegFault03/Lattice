@@ -7,25 +7,6 @@ import java.awt.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DatabaseInputsTest {
-    @Test void naturalComboWidthIncludesTheCaptionArrowAndThemePadding() throws Exception {
-        SwingUtilities.invokeAndWait(() -> {
-            Object previous = UIManager.get("ComboBox.padding");
-            try {
-                UIManager.put("ComboBox.padding", new Insets(0, 8, 0, 12));
-                JComboBox<String> combo = DatabaseInputs.comboBox(new String[]{"Auto: Off", "10s"});
-                for (int fontSize : new int[]{13, 22}) {
-                    combo.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, fontSize));
-                    int arrow = java.util.Arrays.stream(combo.getComponents()).filter(JButton.class::isInstance)
-                            .mapToInt(child -> child.getPreferredSize().width).max().orElse(DatabaseInputs.height(combo));
-                    int text = combo.getFontMetrics(combo.getFont()).stringWidth("Auto: Off");
-                    Insets border = combo.getInsets();
-                    assertTrue(combo.getPreferredSize().width >= text + arrow + border.left + border.right + 20);
-                    assertEquals(combo.getPreferredSize(), combo.getMinimumSize(), "Move the control to overflow instead of squeezing its caption");
-                }
-            } finally { UIManager.put("ComboBox.padding", previous); }
-        });
-    }
-
     @Test void overflowPickerUsesTheRealSelectionAndDetachesItsModelWhenClosed() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             JComboBox<String> source = DatabaseInputs.comboBox(new String[]{"Auto: Off", "10s"});
@@ -68,24 +49,6 @@ class DatabaseInputsTest {
             assertEquals("42", table.getValueAt(0, 0));
         });
     }
-    @Test void nativeTextAndPasswordDelegatesHaveTheSameTextOrigin() throws Exception {
-        SwingUtilities.invokeAndWait(() -> {
-            JTextField text = DatabaseInputs.textField("sample");
-            JPasswordField password = DatabaseInputs.passwordField();
-            password.setText("sample");
-            text.setUI(new com.intellij.ide.ui.laf.darcula.ui.DarculaTextFieldUI());
-            password.setUI(new com.intellij.ide.ui.laf.darcula.ui.DarculaPasswordFieldUI());
-            for (JTextField field : new JTextField[]{text, password}) {
-                field.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
-                field.setSize(220, field.getPreferredSize().height);
-            }
-            try {
-                assertEquals(password.modelToView2D(0).getX(), text.modelToView2D(0).getX(), 0.01);
-                assertEquals(text.getInsets().left, text.modelToView2D(0).getX(), 0.01);
-            } catch (javax.swing.text.BadLocationException error) { throw new AssertionError(error); }
-        });
-    }
-
     @Test void browseButtonIsDistinctAndPreservesItsActionAndDisabledState() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             com.intellij.openapi.ui.TextFieldWithBrowseButton browse = DatabaseInputs.browseField();
@@ -104,26 +67,6 @@ class DatabaseInputsTest {
             assertFalse(browse.getTextField().isEnabled());
         });
     }
-    @Test void fontGrowthAndLookAndFeelRefreshKeepInputsConsistentWithoutClipping() throws Exception {
-        SwingUtilities.invokeAndWait(() -> {
-            JComponent[] fields = {DatabaseInputs.textField("Connection"), DatabaseInputs.passwordField(),
-                    DatabaseInputs.comboBox(new String[]{"Auto: Off"}), DatabaseInputs.browseField()};
-            for (int fontSize : new int[]{13, 22}) {
-                Font font = new Font(Font.SANS_SERIF, Font.PLAIN, fontSize);
-                for (JComponent field : fields) {
-                    field.setFont(font);
-                    field.updateUI();
-                    Dimension size = field.getPreferredSize();
-                    assertEquals(DatabaseInputs.height(field), size.height);
-                    assertEquals(fields[0].getPreferredSize().height, size.height);
-                    Insets insets = field.getInsets();
-                    assertEquals(insets.top, insets.bottom);
-                    assertTrue(size.height - insets.top - insets.bottom >= field.getFontMetrics(font).getHeight());
-                }
-            }
-        });
-    }
-
     @Test void tableEditorsPreserveTypedValidationCommitAndCancellation() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             DefaultTableModel model = new DefaultTableModel(new Object[][]{{7}}, new Object[]{"size"}) {

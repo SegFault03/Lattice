@@ -4,6 +4,7 @@ Patch notes are selected by the exact release version, including prerelease suff
 
 ## [Unreleased]
 
+- Trim release validation to distinct safety contracts: remove cosmetic-only checks and duplicate CRUD/theme runs, and sample JDBC compatibility at documented version/feature boundaries.
 - Restore the normal table-header pointer after UI/theme refreshes; show the resize cursor only at column boundaries.
 - Add PostgreSQL connections with bundled pgJDBC, schema browsing, SQL consoles, grid editing, DDL and exports; validate current and legacy server/driver combinations.
 - Inspect cell values and column definitions beside the grid, with formatted/raw views, pinning, copying, explicit staging, and recovery of unconfirmed edits. Restored inspector text remains separate from the pending database batch and survives delayed or failed metadata loading.
@@ -11,7 +12,7 @@ Patch notes are selected by the exact release version, including prerelease suff
 - Refresh explorer metadata and affected editors after database mutations, preserving unsaved edits until they are committed or reverted.
 - Retain the last successful metadata for offline browsing and cached SQL generation. Connected INSERT generation loads unknown columns before creating its template.
 - Preserve H2 ON UPDATE expressions and identity mode, increment and sequence state when altering other column properties. Keep MySQL type attributes only when compatible with the target type.
-- Run focused native cell-inspector interaction and draft-recovery checks at 100% and 125% UI scale on main-targeted PRs, with both-theme assertions and separate evidence.
+- Run focused native cell-inspector interaction and draft-recovery checks once at 125% UI scale on main-targeted PRs, with both-theme behavior checks and retained evidence.
 - Integrate H2 with the staging source picker, explorer grouping/search/filter and table-tab badges; cover aliased/composite primary and foreign keys with packaged and selected drivers.
 - Add H2 2.x provider and bundled 2.3.232 driver, memory/file/TCP connection forms, schema/table operations, generated-column metadata and native table DDL exports. Add file/TCP/TLS functional and data regression suites, a driver/server/runtime compatibility matrix, and full dark/light real-IDE H2 scenarios. H2 2.3 requires Java 11+; H2 2.1/2.2 also pass real Java 8 probes.
 

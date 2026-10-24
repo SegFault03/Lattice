@@ -9,7 +9,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import static org.junit.jupiter.api.Assertions.*;
 
-/** Real database regressions; also reused for every selected server/driver matrix case. */
+/** Real database safety regressions; shared by embedded drivers, compatibility modes and bundled TCP/TLS. */
 public class H2RegressionTest {
     private static ConnectionConfig config() {
         var config = new ConnectionConfig(DatabaseType.H2, "regression");

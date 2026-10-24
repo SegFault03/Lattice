@@ -73,6 +73,8 @@ def run():
                         help='Gallery/build directory; screenshots/ keeps only the five featured images')
     parser.add_argument('--all-previews', action='store_true',
                         help='Generate the full light/dark preview gallery; by default only the five featured screens are rendered')
+    parser.add_argument('--checks-only', action='store_true',
+                        help='Run editor recovery assertions without rendering screenshots or updating the gallery')
     parser.add_argument('--source-filter-only', action='store_true',
                         help='Render only the source filter in light/dark themes, without updating screenshots/')
     parser.add_argument('--search-only', action='store_true',
@@ -133,13 +135,13 @@ def render(args, deps, parser):
     java_args(javac, ['--release', '21', '-encoding', 'UTF-8', '-cp', os.pathsep.join([str(production), str(flatlaf), cp]), '-d', str(preview)] + list(map(str, preview_sources)), output / 'compile-preview.args')
     runtime = os.pathsep.join([str(preview), str(production), str(ROOT / 'src/main/resources'), str(flatlaf), cp])
     # A reused output directory should represent this invocation only.
-    for theme in ('light', 'dark'):
+    for theme in (() if args.checks_only else ('light', 'dark')):
         for path in output.glob(f'{theme}-*.png'):
             path.unlink()
         manifest = output / f'{theme}-manifest.txt'
         if manifest.exists():
             manifest.unlink()
-    mode = 'cell-details' if args.cell_details_only else 'tab-icons' if args.tab_icons_only else 'search' if args.search_only else 'source-filter' if args.source_filter_only else 'all' if args.all_previews else 'featured'
+    mode = 'checks' if args.checks_only else 'cell-details' if args.cell_details_only else 'tab-icons' if args.tab_icons_only else 'search' if args.search_only else 'source-filter' if args.source_filter_only else 'all' if args.all_previews else 'featured'
     themes = ('light', 'dark') if args.all_previews or args.source_filter_only or args.search_only or args.tab_icons_only or args.cell_details_only else ('light',)
     for theme in themes:
         system_path = output / f'idea-system-{os.getpid()}-{theme}'
@@ -168,6 +170,8 @@ def render(args, deps, parser):
         finally:
             shutil.rmtree(system_path, ignore_errors=True)
             shutil.rmtree(config_path, ignore_errors=True)
+    if args.checks_only:
+        return
     if len(themes) == 1:
         (output / 'dark-manifest.txt').write_text('', encoding='utf-8')
     if not args.source_filter_only and not args.search_only and not args.tab_icons_only and not args.cell_details_only:

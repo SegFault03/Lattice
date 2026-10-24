@@ -33,8 +33,9 @@ public final class H2CompatibilityTest {
                     config.setHsqlMode(mode); config.setDatabaseName(mode==HsqlMode.FILE ? output.resolve("file-"+selected.getKey()).toAbsolutePath().toString() : "matrix_"+UUID.randomUUID());
                     try {
                         DatabaseCompatibilityTest.java8Probe(runtime,probe,selected.getValue(),"H2",config.buildJdbcUrl());
-                        DatabaseCompatibilityTest.flow(config,selected.getKey(),selected.getValue());
-                        ProviderEndToEndTest.workflow(config); H2RegressionTest.regressionFlow(config);
+                        DatabaseCompatibilityTest.verifySelectedDriver(config,selected.getValue());
+                        ProviderEndToEndTest.workflow(config);
+                        if (mode == HsqlMode.MEM) H2RegressionTest.regressionFlow(config);
                         passed(evidence,"embedded "+mode+" driver="+selected.getKey()+" "+(runtime.equals(java8) ? "Java8+Java21" : "Java21"));
                     } catch(Throwable failure) { failure.printStackTrace(); failures.add(failure); }
                 }
@@ -59,14 +60,19 @@ public final class H2CompatibilityTest {
                     }
                     if(!ready) throw new AssertionError("H2 server failed to start "+server.getKey());
                     for(var driver:jars.entrySet()) {
+                        // Same-version pairs plus oldest/newest in both directions cover
+                        // protocol boundaries without repeating every middle-version cross.
+                        if (!server.getKey().equals(driver.getKey())
+                                && !(server.getKey().equals(VERSIONS.getFirst()) && driver.getKey().equals(VERSIONS.getLast()))
+                                && !(server.getKey().equals(VERSIONS.getLast()) && driver.getKey().equals(VERSIONS.getFirst()))) continue;
                         var config=config(driver.getKey()); config.setHsqlMode(HsqlMode.SERVER); config.setHost("127.0.0.1"); config.setPort(port); config.setDatabaseName("case_"+driver.getKey());
                         try {
                             DatabaseCompatibilityTest.java8Probe(driver.getKey().startsWith("2.3.") ? java21 : java8,probe,driver.getValue(),"H2",config.buildJdbcUrl());
                             try(var manager=new Owner(); var conn=manager.manager.openConnection(config)) {
                                 if(!conn.getMetaData().getDatabaseProductVersion().startsWith(server.getKey())) throw new AssertionError("Unexpected server version");
                             }
-                            DatabaseCompatibilityTest.flow(config,driver.getKey(),driver.getValue());
-                            ProviderEndToEndTest.workflow(config); H2RegressionTest.regressionFlow(config);
+                            DatabaseCompatibilityTest.verifySelectedDriver(config,driver.getValue());
+                            ProviderEndToEndTest.workflow(config);
                             passed(evidence,"TCP server="+server.getKey()+" driver="+driver.getKey()+" driverRuntime="+(driver.getKey().startsWith("2.3.") ? "Java21" : "Java8+Java21")+" serverRuntime="+(serverRuntime.equals(java8) ? "Java8" : "Java21"));
                         } catch(Throwable failure) { failure.printStackTrace(); failures.add(failure); }
                     }

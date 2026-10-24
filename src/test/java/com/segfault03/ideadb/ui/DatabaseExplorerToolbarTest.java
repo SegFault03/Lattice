@@ -136,54 +136,6 @@ class DatabaseExplorerToolbarTest {
         });
     }
 
-    @Test
-    void hoverAndPressUseNativeThemeColorsWithoutRecoloringGlyphs() throws Exception {
-        SwingUtilities.invokeAndWait(() -> {
-            Object previousHover = UIManager.get("ActionButton.hoverBackground");
-            Object previousPressed = UIManager.get("ActionButton.pressedBackground");
-            Color glyph = new Color(0x2878A0);
-            try {
-                for (Color[] palette : new Color[][]{
-                        {new Color(0xD6D6D6), new Color(0xC0C0C0)},
-                        {new Color(0x44464A), new Color(0x53565B)}}) {
-                    UIManager.put("ActionButton.hoverBackground", palette[0]);
-                    UIManager.put("ActionButton.pressedBackground", palette[1]);
-                    Runnable noop = () -> {};
-                    DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(component -> {}, noop, noop, noop, noop, component -> {}, noop, noop);
-                    JButton button = buttons(toolbar).get(3);
-                    button.setIcon(new Icon() {
-                        public int getIconWidth() { return JBUI.scale(8); }
-                        public int getIconHeight() { return JBUI.scale(8); }
-                        public void paintIcon(Component component, Graphics graphics, int x, int y) {
-                            graphics.setColor(glyph);
-                            graphics.fillRect(x, y, getIconWidth(), getIconHeight());
-                        }
-                    });
-                    toolbar.setHasConnections(true);
-                    button.setSize(button.getPreferredSize());
-                    int normal = pixel(button);
-                    int centerX = button.getWidth() / 2, centerY = button.getHeight() / 2;
-                    assertEquals(glyph.getRGB(), pixel(button, centerX, centerY));
-                    button.getModel().setRollover(true);
-                    assertEquals(palette[0].getRGB(), pixel(button), "Hover follows the IDE theme's action background");
-                    assertEquals(glyph.getRGB(), pixel(button, centerX, centerY), "Hover keeps the icon's original colors");
-                    button.getModel().setArmed(true);
-                    button.getModel().setPressed(true);
-                    assertEquals(palette[1].getRGB(), pixel(button));
-                    assertEquals(glyph.getRGB(), pixel(button, centerX, centerY));
-                    button.getModel().setPressed(false);
-                    button.getModel().setArmed(false);
-                    button.setEnabled(false);
-                    button.getModel().setRollover(true);
-                    assertEquals(normal, pixel(button), "Unavailable actions have no hover or pressed background");
-                }
-            } finally {
-                UIManager.put("ActionButton.hoverBackground", previousHover);
-                UIManager.put("ActionButton.pressedBackground", previousPressed);
-            }
-        });
-    }
-
     @Test void filterIndicatorAndOverflowStayActiveUntilAllSourcesAreRestored() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             Runnable noop = () -> {};

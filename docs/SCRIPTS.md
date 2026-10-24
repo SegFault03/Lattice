@@ -107,6 +107,8 @@ python scripts/ui-preview.py
 
 This renders production Swing components with fixture data and a headless IntelliJ test application that supplies platform services such as the native Action System. It opens no IDE window. It discovers local JDK 21, IntelliJ 2025.1 and JUnit/Hamcrest jars, downloading missing inputs plus checksum-verified FlatLaf under `--download-dir`. Supply `--flatlaf-jar`, `--junit-jar` and `--hamcrest-jar` to override individual jars. `--all-previews` adds light/dark gallery variants; `--output` selects another gallery directory; `--compare-with` adds a before/after view. The default run refreshes only the five tracked PNGs under `screenshots/`. See [UI preview instructions](UI_PREVIEW.md).
 
+Main PR CI uses `python scripts/ui-preview.py --checks-only` for production editor recovery assertions without rendering screenshots or updating the gallery.
+
 Use `python scripts/ui-preview.py --cell-details-only` for focused light and dark renders of the integrated cell and column details panel, including pinned and editing states. These renders stay under `build/ui-preview/` and do not update the tracked screenshots.
 
 For screenshots and interactions inside a real test IDE under Xvfb, run:
@@ -130,7 +132,7 @@ Set `LATTICE_UI_IDE_HOME` to an installed Linux IDEA directory to launch another
 
 For a faster review of connection-dialog spacing, explorer overflow, table editor/menu surfaces, auto-refresh sizing and active glyph colors, set `LATTICE_UI_STYLE_ONLY=true` (direct Gradle: `-Plattice.ui.styleOnly=true`). This still opens and edits the production UI inside the full IDE, then stops after those checks; omit it for the complete review.
 
-For a focused native cell inspector capture, set `LATTICE_UI_CELL_DETAILS_ONLY=true` with the Linux review wrapper (direct Gradle: `-Plattice.ui.review=true -Plattice.ui.cellDetailsOnly=true`). It opens a populated 12-row fixture in the real IDE, captures cell and header details, verifies both pin states while selecting another cell, double-clicks the value area into edit mode, checks close/reopen, and requires an opposite theme. It also closes a tab with unconfirmed text, refreshes explorer metadata, and verifies that reopening restores that text without staging it. Screenshots and `runtime-evidence.txt` are written to the selected review output directory; the focused flow exits before the longer table review. Main PR CI enables it at 100% and 125% scale in separate jobs; use `LATTICE_UI_SCALE=1.25` to reproduce the scaled case.
+For a focused native cell inspector capture, set `LATTICE_UI_CELL_DETAILS_ONLY=true` with the Linux review wrapper (direct Gradle: `-Plattice.ui.review=true -Plattice.ui.cellDetailsOnly=true`). It opens a populated 12-row fixture in the real IDE, captures cell and header details, verifies both pin states while selecting another cell, double-clicks the value area into edit mode, checks close/reopen, and requires an opposite theme. It also closes a tab with unconfirmed text, refreshes explorer metadata, and verifies that reopening restores that text without staging it. Screenshots and `runtime-evidence.txt` are written to the selected review output directory; the focused flow exits before the longer table review. Main PR CI enables it once at 125% scale with both-theme behavior checks; use `LATTICE_UI_SCALE=1.25` to reproduce the scaled case.
 
 Direct Gradle/capture reviews accept `-Plattice.ui.scale=1.25` or `1.5` for
 larger IDE UI sizes. The default remains 100%; this changes IDE UI scaling
@@ -157,8 +159,8 @@ when calling the Linux review wrapper. Direct capture users pass
 `-Plattice.ui.review=true -Plattice.ui.createTableOnly=true`. The owned HSQLDB
 fixture checks creation, column order, keys, identity, precision, defaults,
 validation, draft retention, failure/retry, native busy animation and automatic
-explorer/grid refresh after DML and DDL. Main PR CI runs this scenario with the
-125% dialog audit, plus a separate mixed alter/recovery scenario. See
+explorer/grid refresh after DML and DDL. Main PR CI runs this scenario at
+125% scale, plus a separate mixed alter/recovery scenario; the multi-theme design audit is manual. See
 [Column Composer validation](UI_PREVIEW.md#column-composer).
 
 Main-targeted PRs run the grouped production Swing and real-IDE scenarios as independent matrix jobs. Only embedded functional checks and plugin packaging run on every push/PR. The SDK path written by `./gradlew writeUiIdeHome` is reused for UI fixtures. Release tags run functional/package checks before signing. The newer-IDE/theme override remains available for local reviews.

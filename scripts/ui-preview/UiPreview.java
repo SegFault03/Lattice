@@ -1051,6 +1051,7 @@ public final class UiPreview {
                 try { verifyInspectorDraftRecovery(); }
                 catch (Exception exception) { throw new RuntimeException(exception); }
             });
+            if (args.length >= 3 && args[2].equals("checks")) return;
             if (sourceFilterOnly || searchOnly || tabIconsOnly || cellDetailsOnly) {
                 SwingUtilities.invokeAndWait(() -> {
                     try { if (cellDetailsOnly) renderCellDetails(theme); else if (tabIconsOnly) renderTableTabIcons(theme); else if (searchOnly) renderExplorerSearch(theme); else renderSourceFilter(theme); }

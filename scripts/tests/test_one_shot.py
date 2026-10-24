@@ -29,11 +29,11 @@ class OneShotTests(unittest.TestCase):
             skip_compatibility=False, compatibility_only=False, database_compatibility_only=True)),
             (False, False, True, 5 + int(sys.platform == "linux")))
 
-    def test_declared_matrix_covers_four_mysql_servers_and_ten_hsqldb_drivers(self):
+    def test_declared_matrix_covers_server_floors_driver_generations_and_current_versions(self):
         self.assertEqual(tuple(server for server, _ in one_shot.MYSQL_MATRIX),
                          ("5.5.62", "5.6.51", "5.7.44", "8.4.2"))
-        self.assertEqual(sum(len(drivers) for _, drivers in one_shot.MYSQL_MATRIX), 13)
-        self.assertEqual(len(one_shot.HSQL_VERSIONS), 10)
+        self.assertEqual(sum(len(drivers) for _, drivers in one_shot.MYSQL_MATRIX), 7)
+        self.assertEqual(len(one_shot.HSQL_VERSIONS), 6)
         self.assertEqual(one_shot.IDE_VERSIONS, ("2025.1", "2025.2", "2025.3"))
 
     def test_isolated_source_copy_excludes_generated_ide_installations(self):

@@ -8,10 +8,10 @@ import postgres
 
 class PostgresFixtureTests(unittest.TestCase):
     def test_matrix_uses_java8_drivers_with_explicit_legacy_server_boundary(self):
-        self.assertEqual(len(postgres.POSTGRES_VERSIONS),17)
+        self.assertEqual(len(postgres.POSTGRES_VERSIONS),7)
         self.assertEqual(postgres.POSTGRES_VERSIONS[0],'8.4.22')
         self.assertEqual(postgres.POSTGRES_VERSIONS[-1],'18.6')
-        self.assertEqual(sum(len(postgres.matrix_drivers(v)) for v in postgres.POSTGRES_VERSIONS),34)
+        self.assertEqual(sum(len(postgres.matrix_drivers(v)) for v in postgres.POSTGRES_VERSIONS),14)
         for version in postgres.POSTGRES_VERSIONS:
             self.assertEqual(postgres.matrix_drivers(version),('42.2.27','42.7.3' if version in ('8.4.22','9.0.23') else '42.7.14'))
         for digest in postgres.LEGACY_SOURCES.values(): self.assertRegex(digest,r'^[0-9a-f]{64}$')

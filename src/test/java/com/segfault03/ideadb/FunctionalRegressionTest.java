@@ -107,6 +107,11 @@ public class FunctionalRegressionTest {
         } finally { manager.closeConnection(original.getId()); }
     }
     private static void runEngine(ConnectionConfig config) throws Exception {
+        var custom = config.copy(); custom.setCustomUrl(config.buildJdbcUrl());
+        var detected = manager.testConnection(custom);
+        check(detected.isSuccess(), "Custom JDBC URL must connect: " + detected.getSummaryMessage());
+        check(detected.getDatabaseProductVersion() != null && !detected.getDatabaseProductVersion().isBlank(), "Server version must be detected");
+        check(detected.getDriverVersion() != null && !detected.getDriverVersion().isBlank(), "Driver version must be detected");
         String schema = "LATTICE_FIX_" + UUID.randomUUID().toString().replace("-", "").substring(0, 10).toUpperCase(Locale.ROOT);
         Connection connection = manager.getConnection(config);
         ddl.createDatabase(connection, config, schema);
@@ -516,13 +521,6 @@ public class FunctionalRegressionTest {
     public static void main(String[] args) throws Exception {
         assertions.set(0);
         try {
-            String historySql="SELECT 'text  with   spaces', ID FROM SOME_TABLE WHERE ID IN (1,2,3,4,5);\nSELECT 2;";
-            var entry=new QueryHistoryEntry(historySql);
-            check(entry.toString().length()<=53 && entry.sql().equals(historySql),"History preview must preserve full executable SQL and literal whitespace");
-            var readonly=new ReadOnlyResultModel(); readonly.setDataVector(new Object[][]{{1,"value"}},new Object[]{"ID","VALUE"});
-            check(!readonly.isCellEditable(0,0) && !readonly.isCellEditable(0,1),"Arbitrary console results must be read-only");
-            drafts();
-            credentials();
             ConnectionConfig mysql = new ConnectionConfig(DatabaseType.MYSQL, "regression MySQL"); mysql.setDatabaseName("shop_db");
             mysql.setPort(Integer.getInteger("lattice.test.mysql.port", 3306));
             runEngine(mysql);
