@@ -69,29 +69,31 @@ class WorkflowPolicyTests(unittest.TestCase):
         self.assertIn('plugin-under-test', job(CI, 'ide-compatibility'))
         self.assertIn('needs: functional-build', job(CI, 'ide-compatibility'))
 
-    def test_ui_suites_have_independent_theme_jobs_and_retained_evidence(self):
+    def test_ui_suites_cover_distinct_blockers_without_repeating_themes(self):
         ui = job(CI, 'ui-tests')
         self.assertIn('fail-fast: false', ui)
-        for suite in ('previews', 'hsqldb', 'alter-table', 'table-dialogs', 'styling', 'search', 'postgres', 'h2'):
-            self.assertIn(f'- suite: {suite}', ui)
-        for suite in ('search', 'h2'):
-            themes = re.findall(rf'- suite: {suite}\n            theme: (.+)', ui)
-            self.assertEqual(['ExperimentalDark', 'ExperimentalLight'], themes)
-        self.assertIn('LATTICE_UI_EXPLORER_SEARCH_ONLY:', ui)
-        self.assertIn('LATTICE_UI_STYLE_ONLY:', ui)
-        for variable, suite in (('ALTER_TABLE_ONLY', 'alter-table'),
-                                ('CREATE_TABLE_ONLY', 'table-dialogs'),
-                                ('DIALOG_AUDIT', 'table-dialogs')):
+        cases = re.findall(r'- suite: ([^\n]+)\n            theme: ([^\n]+)', ui)
+        self.assertEqual([
+            ('previews', 'headless'), ('hsqldb', 'ExperimentalDark'),
+            ('alter-table', 'ExperimentalDark'), ('table-dialogs', 'ExperimentalLight'),
+            ('cell-inspector-scaled', 'ExperimentalDark'), ('search', 'ExperimentalDark'),
+            ('postgres', 'ExperimentalDark'), ('h2', 'ExperimentalDark')], cases)
+        self.assertIn("LATTICE_UI_CELL_DETAILS_ONLY: ${{ matrix.suite == 'cell-inspector-scaled' }}", ui)
+        self.assertIn("LATTICE_UI_SCALE: ${{ (matrix.suite == 'table-dialogs' || matrix.suite == 'cell-inspector-scaled') && '1.25' || '1.0' }}", ui)
+        self.assertNotIn('LATTICE_UI_STYLE_ONLY:', ui)
+        self.assertNotIn('LATTICE_UI_DIALOG_AUDIT:', ui)
+        self.assertIn('scripts/ui-preview.py --checks-only', ui)
+        self.assertNotIn('--all-previews', ui)
+        for variable, suite in (('ALTER_TABLE_ONLY', 'alter-table'), ('CREATE_TABLE_ONLY', 'table-dialogs'),
+                                ('EXPLORER_SEARCH_ONLY', 'search')):
             self.assertIn(f"LATTICE_UI_{variable}: ${{{{ matrix.suite == '{suite}' }}}}", ui)
             self.assertIn(f"|| matrix.suite == '{suite}'", ui)
-        self.assertIn("LATTICE_UI_SCALE: ${{ matrix.suite == 'table-dialogs' && '1.25' || '1.0' }}", ui)
         self.assertIn('scripts/h2-test.py --ui-only', ui)
         self.assertIn('scripts/postgres-ui-review.py', ui)
-        self.assertIn('scripts/ui-preview.py --all-previews', ui)
+        self.assertIn('name: ui-${{ matrix.suite }}-${{ matrix.theme }}', ui)
         self.assertIn('if: always()', ui)
         self.assertIn('out/ide-tests/tests/**/log/idea.log', ui)
         self.assertIn('out/ide-tests/tests/**/log/screenshots/', ui)
-        self.assertIn('build/ui-review/', ui)
         self.assertNotIn('continue-on-error', CI)
 
     def test_main_pr_gate_requires_every_suite_even_if_skipped_or_cancelled(self):

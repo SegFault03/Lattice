@@ -57,9 +57,9 @@ LEGACY_SOURCES = {
     '8.4.22': '5c1d56ce77448706d9dd03b2896af19d9ab1b9b8dcdb96c39707c74675ca3826',
     '9.0.23': '3dbcbe19c814139a3f4be8bc6b49db804753cbc49979f345083e835c52b4d7de',
 }
-POSTGRES_VERSIONS = ('8.4.22', '9.0.23', '9.1.24', '9.2.24', '9.3.25', '9.4.26',
-                     '9.5.25', '9.6.24', '10.23', '11.22', '12.22', '13.23', '14.24',
-                     '15.19', '16.15', '17.11', '18.6')
+# Server floor, pre/post driver-policy floor, JSONB, identity, generated columns,
+# and current server. Intermediate releases exercise the same production branches.
+POSTGRES_VERSIONS = ('8.4.22', '9.0.23', '9.1.24', '9.4.26', '10.23', '12.22', '18.6')
 
 def matrix_drivers(version):
     return ('42.2.27', '42.7.3' if version in ('8.4.22', '9.0.23') else '42.7.14')

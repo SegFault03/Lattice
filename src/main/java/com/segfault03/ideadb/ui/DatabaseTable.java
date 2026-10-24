@@ -56,6 +56,10 @@ public final class DatabaseTable extends JBTable {
                 } finally { copy.dispose(); }
             }
             @Override public void updateUI() {
+                // A replacement BasicTableHeaderUI starts with a resize cursor in
+                // its swap slot. Retaining the old resize cursor poisons both slots,
+                // so moving back into a column can never restore the normal pointer.
+                setCursor(Cursor.getDefaultCursor());
                 super.updateUI();
                 if (getParent() instanceof JViewport viewport) viewport.setBackground(DatabaseTable.this.getBackground());
             }
@@ -108,10 +112,11 @@ public final class DatabaseTable extends JBTable {
                     && keys.isForeignKeyColumn(table.convertColumnIndexToModel(column));
             Color normal = table.getTableHeader().getBackground();
             boolean light = normal.getRed() + normal.getGreen() + normal.getBlue() > 384;
-            setBackground(primaryKey ? new Color(light ? 0xFFF0C2 : 0x544525)
-                    : foreignKey ? new Color(light ? 0xEDE3FA : 0x463453) : normal);
+            setBackground(primaryKey ? new Color(light ? 0xF5EFDE : 0x423D30)
+                    : foreignKey ? new Color(light ? 0xEEEAF4 : 0x3E3648) : normal);
             setIcon(primaryKey ? foreignKey ? Icons.PRIMARY_FOREIGN_KEY : Icons.KEY
-                    : foreignKey ? Icons.FOREIGN_KEY : null);
+                    : foreignKey ? Icons.FOREIGN_KEY
+                    : Boolean.TRUE.equals(table.getClientProperty("lattice.showColumnIcons")) ? Icons.COLUMN : null);
             setIconTextGap(JBUI.scale(6));
             getAccessibleContext().setAccessibleDescription(primaryKey
                     ? foreignKey ? "Primary and foreign key column" : "Primary key column"

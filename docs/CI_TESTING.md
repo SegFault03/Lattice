@@ -65,7 +65,7 @@ in the PR. Repository agent instructions are in [AGENTS.md](../AGENTS.md).
 | `functional-build` | Provider registration, URLs, defaults, driver selection, embedded H2/HSQLDB schema and table operations, CRUD, exports and key metadata; plugin ZIP drivers, licenses and bytecode | Every commit; Linux, Windows, macOS |
 | `tooling-tests` | Python runners, fixture ownership, Windows launcher execution, archive/release tooling, workflow event routing and release ancestry | Main PR only; Linux, Windows, macOS |
 | `backend-tests` | Remaining model/service/Swing regressions; transactions, validation, cancellation and recovery; H2 file/TCP/TLS and isolated drivers; owned MySQL/HSQLDB/PostgreSQL integration on Linux | Main PR only; three hosts, live external-engine fixtures on Linux |
-| `ui-tests` | Production Swing previews, HSQLDB dark full flow, focused mixed alter/recovery, 125% create/alter geometry and mutation refresh, focused light styling, dark/light explorer search, PostgreSQL dark full flow, H2 dark/light full flows | Main PR only; independent Linux matrix jobs |
+| `ui-tests` | Headless editor recovery assertions; HSQLDB full flow; mixed alter/recovery; create/mutation refresh at 125%; inspector recovery at 125% with both themes; one search, PostgreSQL and H2 flow | Main PR only; independent Linux matrix jobs |
 | `ide-compatibility` | Plugin Verifier against IDEA 2025.1, 2025.2 and 2025.3 using the exact ZIP from `functional-build` | Main PR only; one Linux job per IDE |
 | `database-compatibility` | MySQL, HSQLDB, PostgreSQL and H2 server/JDBC matrices with real Java 8/21 probes and explicit unsupported-runtime checks | Main PR only; Linux |
 | `full-validation` | Requires all preceding groups to succeed; failures, cancellations and unexpected skipped groups fail the gate | Main PR only |
@@ -87,14 +87,18 @@ H2 2.3's expected Java 8 rejection is part of that matrix.
   the isolated H2-only driver check.
 - Backend CI does not call the standalone H2 all-in-one runner, rebuild the
   plugin, or repeat the ordinary `test` task.
-- UI scenarios are separate matrix jobs with `fail-fast: false`, unique
-  artifacts and failure diagnostics. A shared JDBC service contract cannot
-  replace real IDE interaction/painting checks. Conversely, only focused styling
-  and search scenarios repeat the provider-independent UI checks in light mode.
-  H2 retains its complete dark/light scenarios.
+- UI scenarios are eight independent jobs with `fail-fast: false`, unique
+  artifacts and failure diagnostics. The headless job uses `--checks-only` for
+  constructor-level draft recovery without screenshot generation. Each provider
+  has one native database flow. Inspector recovery runs once at 125% and switches
+  themes; search runs once in dark mode. Create/alter controls retain native
+  reachability checks at 125%. Exact colors, icon dimensions, text baselines,
+  rounded-corner pixels and approved-design captures are not release gates.
 - The JDBC compatibility runner uses `--database-compatibility-only`; Plugin
-  Verifier runs separately against the built ZIP. Compatibility cases reuse the
-  production service contracts to detect driver/server differences.
+  Verifier runs separately against the built ZIP. Compatibility cases retain artifact identity, Java-runtime and real SQL
+  behavior checks at the boundaries listed in [compatibility](compatibility.md).
+  A provider workflow is not rerun alongside another full CRUD contract.
+  [The suite audit](TEST_SUITE_AUDIT.md) records removed coverage and owners.
 
 Representative local commands:
 

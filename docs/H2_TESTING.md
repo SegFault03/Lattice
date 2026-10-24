@@ -36,19 +36,26 @@ is supported; otherwise the Linux capture script starts and cleans up Xvfb.
 | `H2RegressionTest` | Unicode, quotes, binary/temporal/decimal/boolean/NULL values; CSV/JSON/SQL exports and SQL replay; identity state, computed columns, constraints, indexes and view DDL replay; rejection of batches inside existing transactions; failed alterations; cancellation races, timeouts and session recovery |
 | `H2FunctionalIntegrationTest` / `h2IntegrationTest` | Reuses the production and regression flows over file, standard TCP URLs and TLS; validates failed authentication redaction and subsequent recovery |
 | `h2FallbackDriverTest` | A separate JVM without JDBC JARs on its parent classpath loads the packaged H2 driver, queries, verifies caching, deregisters and disposes it |
-| `H2CompatibilityTest` | Downloads validated, isolated H2 drivers and executes the service/regression flows for each matrix case, including native view reconstruction |
+| `H2CompatibilityTest` | Downloads validated, isolated H2 drivers and checks selected artifacts and service workflows; embedded/mode cases own full regressions |
 
 TCP and TLS fixtures use temporary databases and free ports, and stop their owned
 servers. The TLS test generates a temporary certificate with the JDK's keytool;
 only the test JVM's temporary trust configuration changes. Existing database
 servers, IDE profiles and host trust stores are not modified.
 
+The shared H2 regression flow also alters timestamp nullability while retaining
+its ON UPDATE expression, then changes an identity column's type and checks
+GENERATED ALWAYS enforcement, the next generated value and its increment.
+These checks run for embedded and bundled TCP/TLS, and for selected embedded drivers and compatibility modes. File and selected TCP matrix cases retain the provider workflow without repeating the full regression suite.
+Column modifications use targeted ALTER operations rather than replacing the
+complete definition, so unrelated update expressions and identity options survive.
+
 ## Driver/runtime matrix
 
 The matrix uses drivers and servers **2.1.214**, **2.2.224** and **2.3.232**:
 
 - Six embedded cases: memory and file mode with each selected driver.
-- Nine TCP cases: every selected driver against every selected server.
+- Five TCP cases: each matching driver/server, plus oldest/newest in both directions.
 - Six mode cases: MySQL and PostgreSQL compatibility modes with each driver.
 - A negative runtime check: 2.3.232 must reject Java 8 with `UnsupportedClassVersionError`.
 
@@ -76,7 +83,7 @@ result under `build/h2-validation/ui/`. UI checks assert component state and
 persisted data; screenshots are supporting evidence.
 
 H2 embedded functional checks and plugin packaging run on every branch. Only
-PRs targeting `main` run TCP/TLS suites on all three host platforms, complete UI
+PRs targeting `main` run TCP/TLS suites on all three host platforms, one dark provider UI flow
 on Linux and the H2 compatibility matrix. Tag releases run functional/build
 checks before signing. See [CI test groups](CI_TESTING.md).
 

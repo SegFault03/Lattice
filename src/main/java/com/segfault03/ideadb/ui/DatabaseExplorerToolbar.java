@@ -21,6 +21,7 @@ final class DatabaseExplorerToolbar extends JPanel {
     private boolean hasConnections;
     private boolean busy;
     private TreeNodeData selection;
+    private boolean connectionAvailable;
 
     DatabaseExplorerToolbar(Consumer<Component> addConnection, Runnable editConnection,
                             Runnable removeConnection, Runnable refreshConnection,
@@ -56,7 +57,13 @@ final class DatabaseExplorerToolbar extends JPanel {
     }
 
     void setSelection(TreeNodeData selection) {
+        setSelection(selection, selection != null && selection.getConnectionConfig() != null && !selection.isCached()
+                && (selection.getType() != TreeNodeData.NodeType.CONNECTION || selection.isConnected()));
+    }
+
+    void setSelection(TreeNodeData selection, boolean connectionAvailable) {
         this.selection = selection;
+        this.connectionAvailable = connectionAvailable;
         updateActions();
     }
 
@@ -85,7 +92,8 @@ final class DatabaseExplorerToolbar extends JPanel {
             case ROOT, CONNECTION, DATABASE, TABLE, VIEW -> true;
             default -> false;
         }));
-        console.setEnabled(!busy && hasConnections);
+        console.setEnabled(!busy && hasConnections && connectionAvailable);
+        console.setToolTipText(connectionAvailable ? "Open SQL Console" : "Open SQL Console · Connect to a database first");
         viewOnly.setEnabled(!busy && hasConnections);
     }
 

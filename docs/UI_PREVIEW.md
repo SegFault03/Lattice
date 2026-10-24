@@ -1,5 +1,47 @@
 # Swing UI previews
 
+## Cell inspector interaction
+
+Use **Inspect** in the table toolbar or **Alt+Enter** to toggle the inspector.
+Closing it keeps it closed during ordinary cell selection. Clicking a column
+header opens column details; pinning retains the inspected value/column while
+the selection changes. Reopening restores the divider position.
+
+**Edit value** starts an unstaged draft. While editing, the inspector stays on
+that cell. **Stage change** explicitly adds the draft to the pending batch;
+**Commit** writes the batch to the database. Commit/reload cannot implicitly
+stage an inspector draft. Cancel, X and Escape discard the current inspector
+edit; X/Escape also close the inspector. Disposing the editor tab preserves an
+unconfirmed draft separately in the existing local project draft store and
+restores it in edit mode, outside the commit batch.
+
+Untouched values disable Stage change. SQL NULL, an empty string and a database
+default are distinct; direct value-state actions appear when applicable. Character
+counts follow the draft, and invalid values show feedback beside the editor.
+Presentation controls appear for structured/long values. Column metadata stays
+visible, with compact Edit table below the structure hint. The column name is
+the title; the subtitle contains only row and column coordinates. Fixed header
+actions use a filled gray pinned icon. Rounded inspector buttons retain Swing
+keyboard and accessibility behavior across themes and platforms. Body/value text
+uses the IDE label font size, and actions use its button font size; the inspector
+does not enlarge normal text. Header controls occupy real layout space so their
+complete hover targets fit at all scales. Action targets have a compact
+28-logical-pixel minimum with two-pixel vertical padding. The editor/action gap
+is eight pixels, metadata rows use four-pixel vertical padding, and the footer
+uses symmetric 12-pixel padding. Metadata and identifiers wrap and can
+be selected/copied.
+
+The focused `--cell-details-only` previews also exercise closed-state retention,
+divider restoration, compact JSON, long metadata, local validation and larger
+fonts in both themes. The manual gallery includes approved date fixtures and narrow viewports.
+The native focused scenario checks the explicit toolbar toggle and leaves the inspector closed after an ordinary grid click. See the
+[prioritized implementation checklist](design/data-cell-refresh-plan.md).
+
+All preview modes assert inspector-only draft recovery through the production
+table-editor constructor, including initially missing metadata, metadata failure,
+close/reopen, explicit staging and cancellation. Unconfirmed recovered text must
+survive grid-state persistence without becoming eligible for Commit.
+
 Run the preview helper from the repository root on Windows, Linux or macOS:
 
 ```sh
@@ -53,55 +95,25 @@ For a focused palette review, pass `-StyleOnly -GradleArgs @('-Plattice.ui.light
 
 Dependency paths and cleanup are described in the [script reference](SCRIPTS.md#binary-paths-downloads-and-cleanup). Windows capture/review accepts `-DownloadDir`, `-BinariesDir`, `-GradleUserHome`, `-BuildIdeHome`, `-Cleanup` and `-NoCleanup`; missing JDK/SDK/JDBC fixtures are provisioned automatically. Standalone previews accept `--download-dir`, `--cleanup`, `--no-cleanup`, `--flatlaf-jar`, `--junit-jar` and `--hamcrest-jar`.
 
-## UI regression coverage
+## UI release coverage
 
-Completed table operations publish a refresh to every open explorer and affected
-table editor. Refreshes re-read columns and data and invalidate cached row counts;
-metadata reads use auto-commit independently of a console's transaction setting.
-Busy views retain the request, and unsaved row drafts defer the grid reload until
-commit or revert. SQL console execution refreshes the connection because scripts,
-procedures and DML returning rows can affect objects outside the selected schema.
-The focused Composer scenario exercises grid insert/update/delete, alter-table,
-console DML/DDL, a hidden editor, draft preservation, explorer truncate/drop, and
-table counts without pressing Refresh.
+Release gates check whether users can reach controls and safely connect, create,
+alter, edit, commit, revert, export, cancel and recover work. They retain native
+checks for clipped action labels and inaccessible controls, including 125% scale.
+Exact colors, pixel padding, font sizes, rounded corners, icon dimensions and
+approved-prototype comparisons are not release blockers. Screenshot galleries
+remain available for manual design reviews.
 
-Both table dialogs share their header, fixed icon slots, adjacent captions and
-footer layout. Provider artwork and its text occupy separate components, so an
-SVG that resolves after layout cannot take width from the database name. Primary
-and secondary footer actions use native Swing button borders, painting and
-sizing; the shared row aligns both heights and text baselines with an 8-pixel
-logical gap. Theme color properties preserve green/red emphasis without painting
-outside the native rounded surface. SQL document colors follow theme changes.
+`python scripts/ui-preview.py --checks-only` exercises production-constructor
+recovery before metadata arrives, failed metadata loading, close/reopen, explicit
+staging and cancellation. It does not generate screenshots or update the gallery.
+Main PR CI uses this mode instead of the full light/dark gallery.
 
-Regression checks cover late icon loading for every provider, enabled/disabled
-and default/non-default actions, matched button edges and baselines, field/title
-alignment, metadata baselines, and larger UI fonts and list rows. Resizing checks
-cover minimum, preferred and wide layouts. The previous combined source label
-and differently sized footer actions both fail the retained reproduction tests.
-
-Inspector actions reserve native text padding and show complete column-action
-labels. Their row moves below a long title when needed. Form rows measure wrapped
-content at the current viewport width; SQL preview takes the remaining height and
-can shrink to three readable lines before the outer form needs to scroll. Resize
-checks cross this threshold in both directions. Inspector padding reserves the
-current native scrollbar width consistently, preventing IntelliJ's transparent
-scrollbar insets from creating a persistent extra line of wrapped text.
-Native dialog audits also capture
-an 8-logical-pixel height reduction at each width and assert that no outer scrollbar
-appears while the form fits.
-
-Focused native reviews accept `-Plattice.ui.scale=1.25` (or `1.5`). Java2D device
-scaling stays at 100% so Driver and screenshot coordinates agree. Add
-`-Plattice.ui.dialogAudit=true` to the focused create/alter scenario to switch the
-live modal through Light/Dark and available Islands counterparts at three widths,
-assert its geometry and SQL palette, and retain 12 or 24 additional captures per
-dialog (including compact heights). The focused create scenario audits both
-create and alter dialogs. The original theme and bounds are
-restored before the database scenario continues. For example:
-
-```bash
-./scripts/linux/capture-intellij-ui.sh -Plattice.ui.review=true -Plattice.ui.createTableOnly=true -Plattice.ui.dialogAudit=true -Plattice.ui.ide.home=/path/to/idea-2026.2.3 -Plattice.ui.scale=1.25
-```
+The native inspector case runs once at 125%, switches through both themes, and
+checks navigation, pinning, explicit editing and unconfirmed draft recovery.
+The standalone 100% duplicate and styling-only CI case have been removed. H2 and
+search each run once in dark mode. Create/alter and partial-DDL recovery retain
+separate cases because they exercise different destructive-operation paths.
 
 ### Column Composer
 
@@ -183,10 +195,7 @@ If the host restricts home-directory writes, point the Java preferences and
 runtime caches to writable directories using JVM `java.util.prefs.userRoot`,
 `java.util.prefs.systemRoot`, and the platform's cache settings before running.
 
-Table tab source badges are included in the full light/dark preview gallery used
-by CI. Rendering checks the standard 16 × 16 icon size, bottom-left placement and
-opaque brand colors that hide the table grid. Provider unit tests cover every
-configured database type, tables and views, caching, and unrelated file icons.
+Table tab source badges can be inspected in the manual preview gallery.
 For a focused review without updating README images:
 
 ```bash
@@ -203,29 +212,19 @@ LATTICE_UI_EXPLORER_SEARCH_ONLY=true LATTICE_UI_REVIEW_OUTPUT=build/ui-review/ex
 The focused preview leaves the tracked README images untouched. The IDE test
 checks connected sources only, unexpanded column discovery, exclusive All and
 combined filters, highlighted matches, refresh, expansion restoration, and both
-narrow drawer and wide inline layouts. CI runs each theme independently and
+narrow drawer and wide inline layouts. CI runs the dark theme once and
 retains its screenshots, runtime evidence and JUnit result under
 `build/ui-review/explorer-search/<theme>`. Search matcher, metadata, controller,
 renderer and widget unit tests also run in the standard test task on every OS.
 
-The live IDE reviews verify the compact left-hand source picker, SVG sizes and
-provider-specific default ports. They create real foreign-key relationships
-through the SQL console, then check primary, foreign and combined key badges
-and painted header colors in both SQL results and the table editor. Aliased
-queries and later ordinary queries verify that key markers follow source columns
-and clear when results or schema metadata change.
+The live IDE reviews verify source switching and provider-specific default
+ports. Composite key and alias metadata contracts are covered by backend/JDBC
+tests; native badge colors and exact icon dimensions are no longer release gates.
 
-Busy-state checks hold a real JDBC response at the fixture gate. After priming
-the display once (Xvfb can leave a footer unpainted when a modal closes) and
-dismissing IDE notification balloons that can cover the footer, they
-require natural spinner pixel changes within five seconds. A static spinner
-still fails. The capture tracks the live footer bounds after layout; moving the
-footer resets its baseline and does not count as animation. First/last samples
-and a full display capture are saved on failure, with the small samples and
-complete exception details also available in the job log.
-The connection scenario deliberately shows a native IDE balloon and verifies
-that it is dismissed before checking the explorer's live animation. Balloon
-fade-out finishes before the baseline and cannot count as spinner movement.
+Busy-state checks hold a real JDBC response at the fixture gate, require visible
+operation feedback and verify that grid mutation controls are disabled until the
+response is released. Screenshots remain failure diagnostics. Spinner class,
+pixel animation and simulated IDE-notification overlays are not tested.
 
 The console also recovers a session that closes after cancellation validation:
 if preparation fails before user SQL is submitted, it reconnects once. SQL that
@@ -243,11 +242,23 @@ regression dispatches the production Swing button action on the IDE event thread
 and requires both the backend's failure status and its error dialog.
 
 For pull requests targeting `main`, Linux CI runs the dark functional review,
-light styling review, search reviews, PostgreSQL review, mixed alter/recovery
-and a 125% create/alter dialog audit as separate checks
+search review, PostgreSQL review, mixed alter/recovery,
+a 125% create/alter flow, and one cell-inspector review at 125%
+as separate checks
 after their shared prerequisites pass. Each suite can
 fail the job independently, and a failure does not suppress the other suites'
 reports. The artifact also retains native IDE logs, thread dumps and screenshots.
+
+The cell-inspector job sets `LATTICE_UI_CELL_DETAILS_ONLY=true` and requires both
+light and dark theme checks. It closes an editor with an unconfirmed inspector
+draft, refreshes the explorer to replace its metadata, and reopens the editor.
+`inspector-recovered-draft.png` and the runtime report record recovery with Stage
+available after metadata loading and Commit disabled until explicit staging.
+Reproduce the inspector job with:
+
+```bash
+LATTICE_UI_CELL_DETAILS_ONLY=true LATTICE_UI_SCALE=1.25 LATTICE_UI_REVIEW_OUTPUT=build/ui-review/cell-inspector-scaled ./scripts/linux/review-intellij-ui.sh ExperimentalDark
+```
 
 ## PostgreSQL end-to-end review
 

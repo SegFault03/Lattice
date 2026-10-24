@@ -47,6 +47,7 @@
         <fileIconProvider implementation="com.segfault03.ideadb.editor.DatabaseTableIconProvider"/>
 
         <applicationService serviceImplementation="com.segfault03.ideadb.state.DatabaseSettingsState"/>
+        <applicationService serviceImplementation="com.segfault03.ideadb.state.MetadataCacheState"/>
         <projectService serviceImplementation="com.segfault03.ideadb.state.TableDraftState"/>
         <applicationService serviceImplementation="com.segfault03.ideadb.service.DatabaseTaskService"/>
         <applicationService serviceImplementation="com.segfault03.ideadb.service.DatabaseConnectionManager"/>

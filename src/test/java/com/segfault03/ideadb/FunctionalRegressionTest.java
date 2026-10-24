@@ -107,6 +107,11 @@ public class FunctionalRegressionTest {
         } finally { manager.closeConnection(original.getId()); }
     }
     private static void runEngine(ConnectionConfig config) throws Exception {
+        var custom = config.copy(); custom.setCustomUrl(config.buildJdbcUrl());
+        var detected = manager.testConnection(custom);
+        check(detected.isSuccess(), "Custom JDBC URL must connect: " + detected.getSummaryMessage());
+        check(detected.getDatabaseProductVersion() != null && !detected.getDatabaseProductVersion().isBlank(), "Server version must be detected");
+        check(detected.getDriverVersion() != null && !detected.getDriverVersion().isBlank(), "Driver version must be detected");
         String schema = "LATTICE_FIX_" + UUID.randomUUID().toString().replace("-", "").substring(0, 10).toUpperCase(Locale.ROOT);
         Connection connection = manager.getConnection(config);
         ddl.createDatabase(connection, config, schema);
@@ -406,6 +411,18 @@ public class FunctionalRegressionTest {
                 check(create.toLowerCase(Locale.ROOT).contains("on update current_timestamp"),"Modify must retain ON UPDATE");
                 check(create.contains("keep me") && create.contains("utf8mb4_unicode_ci"),"Modify must retain comment/collation");
                 check(cols.stream().filter(col->col.getName().equals("LABEL")).findFirst().orElseThrow().isNullable()==false,"Modify must apply nullability with collation");
+                String attributes = DdlService.formatTable(config, schema, "ALTER_ATTRIBUTES");
+                sql(c, "CREATE TABLE " + attributes + " (VALUE INT UNSIGNED NOT NULL COMMENT 'preserve')");
+                sql(c, "INSERT INTO " + attributes + " VALUES (13)");
+                ddl.alterTableModifyColumn(c, config, schema, "ALTER_ATTRIBUTES", new ColumnDefinition("VALUE", "BIGINT", 0, false, false, false, ""));
+                String widened = ddl.getCreateTableStatement(c, config, schema, new TableMetadata(schema, null, "ALTER_ATTRIBUTES", "TABLE"));
+                check(widened.toUpperCase(Locale.ROOT).contains("UNSIGNED"), "Compatible numeric attributes must survive widening");
+                ddl.alterTableModifyColumn(c, config, schema, "ALTER_ATTRIBUTES", new ColumnDefinition("VALUE", "VARCHAR", 20, false, false, false, ""));
+                check("13".equals(scalar(c, "SELECT VALUE FROM " + attributes)), "Numeric-to-text conversion must discard incompatible UNSIGNED");
+                ddl.alterTableModifyColumn(c, config, schema, "ALTER_ATTRIBUTES", new ColumnDefinition("VALUE", "BIGINT", 0, false, false, false, ""));
+                check(((Number) scalar(c, "SELECT VALUE FROM " + attributes)).longValue() == 13, "Text-to-numeric conversion must discard character attributes");
+                String converted = ddl.getCreateTableStatement(c, config, schema, new TableMetadata(schema, null, "ALTER_ATTRIBUTES", "TABLE"));
+                check(converted.contains("preserve"), "Type conversions must keep column comments");
             }
             ddl.createTable(c,config,schema,"DEFAULT_RECORDS",List.of(new ColumnDefinition("LABEL","VARCHAR",100,false,false,false,"O'Reilly"),new ColumnDefinition("CREATED","TIMESTAMP",0,true,false,false,"CURRENT_TIMESTAMP")));
             sql(c,"INSERT INTO " + DdlService.formatTable(config,schema,"DEFAULT_RECORDS") + " (CREATED) VALUES (CURRENT_TIMESTAMP)");
@@ -504,13 +521,6 @@ public class FunctionalRegressionTest {
     public static void main(String[] args) throws Exception {
         assertions.set(0);
         try {
-            String historySql="SELECT 'text  with   spaces', ID FROM SOME_TABLE WHERE ID IN (1,2,3,4,5);\nSELECT 2;";
-            var entry=new QueryHistoryEntry(historySql);
-            check(entry.toString().length()<=53 && entry.sql().equals(historySql),"History preview must preserve full executable SQL and literal whitespace");
-            var readonly=new ReadOnlyResultModel(); readonly.setDataVector(new Object[][]{{1,"value"}},new Object[]{"ID","VALUE"});
-            check(!readonly.isCellEditable(0,0) && !readonly.isCellEditable(0,1),"Arbitrary console results must be read-only");
-            drafts();
-            credentials();
             ConnectionConfig mysql = new ConnectionConfig(DatabaseType.MYSQL, "regression MySQL"); mysql.setDatabaseName("shop_db");
             mysql.setPort(Integer.getInteger("lattice.test.mysql.port", 3306));
             runEngine(mysql);

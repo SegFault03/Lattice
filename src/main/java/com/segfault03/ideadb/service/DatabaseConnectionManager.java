@@ -210,6 +210,12 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
         }
     }
 
+    /** A failed explorer read must not discard a console's transaction. */
+    public void closeBrowserConnections(String connectionId) {
+        closeSession(connectionId, "browser");
+        closeSession(connectionId, "browser-metadata");
+    }
+
     public void closeAll() {
         for (String id : activeConnections.keySet()) {
             closeConnection(id);

@@ -1,0 +1,13 @@
+UI scale: 1.25
+Native label: 13.0
+Inspector subtitle: 13.0
+Value: 13.0
+Native button: 13.0
+Edit button: 13.0
+Inspect height: 35; icon 20x20; gap 5
+Edit selected cell value: 102x35; icon 20x20; gap 5
+Copy: 73x35; icon 20x20; gap 5
+Edit table: 100x35; icon 20x20; gap 5
+Unpin cell details: 36x35; icon 20x20; gap 5
+Close details panel: 36x35; icon 20x20; gap 5
+Header targets fully visible: true

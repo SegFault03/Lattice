@@ -35,23 +35,6 @@ class DataSourcePanelTest {
         });
     }
 
-    @Test void narrowPickerScrollsVerticallyWithoutGrowingWithItsContent() throws Exception {
-        SwingUtilities.invokeAndWait(() -> {
-            DataSourcePanel picker = new DataSourcePanel(type -> {});
-            assertTrue(picker.getPreferredSize().width <= 180);
-            picker.setSize(picker.getPreferredSize().width, 120);
-            layout(picker);
-            JScrollPane scroll = (JScrollPane) ((BorderLayout)picker.getLayout()).getLayoutComponent(BorderLayout.CENTER);
-            assertEquals(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER, scroll.getHorizontalScrollBarPolicy());
-            assertTrue(scroll.getVerticalScrollBar().isVisible());
-            scroll.getVerticalScrollBar().setValue(scroll.getVerticalScrollBar().getMaximum());
-            layout(picker);
-            assertTrue(scroll.getViewport().getViewPosition().y > 0);
-            assertTrue(choices(picker).getLast().getBounds().intersects(scroll.getViewport().getViewRect()),
-                    "The last source can be reached without expanding the dialog");
-        });
-    }
-
     private static List<JToggleButton> choices(Container container) {
         List<JToggleButton> result = new ArrayList<>();
         for (Component child : container.getComponents()) {

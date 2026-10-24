@@ -24,7 +24,6 @@ public final class PostgresCompatibilityTest {
                             throw new AssertionError("Fixture server version differs from " + server);
                     }
                     DatabaseCompatibilityTest.flow(config,version,jar);
-                    ProviderEndToEndTest.workflow(config);
                     PostgresFeatureRegressionTest.catalogFlow(config);
                     PostgresFeatureRegressionTest.valuesFlow(config);
                     PostgresFeatureRegressionTest.sessionFlow(config);

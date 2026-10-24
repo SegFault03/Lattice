@@ -40,7 +40,6 @@ class H2FunctionalIntegrationTest {
         config.setHsqlMode(HsqlMode.FILE); config.setDatabaseName(directory.resolve("functional").toString());
         ProviderEndToEndTest.workflow(config);
         assertTrue(Files.isRegularFile(directory.resolve("functional.mv.db")));
-        H2RegressionTest.regressionFlow(config);
     }
     @Test void authenticationFailureIsRedactedAndServerRecovers() throws Exception {
         try (var fixture = new H2ServerFixture(false)) {

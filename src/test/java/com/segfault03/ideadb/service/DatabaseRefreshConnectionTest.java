@@ -34,6 +34,13 @@ class DatabaseRefreshConnectionTest {
                 }
                 assertEquals(2, count(manager, config), "A repeated refresh must see the latest committed rows");
                 assertFalse(manual.getAutoCommit(), "Refreshing must preserve the console's transaction mode");
+                Connection browser = manager.executeBrowser(config, connection -> connection);
+                try (var statement = manual.createStatement()) { statement.execute("INSERT INTO refresh_data VALUES (3)"); }
+                manager.closeBrowserConnections(config.getId());
+                assertTrue(browser.isClosed(), "An explorer retry must replace its failed JDBC session");
+                assertFalse(manual.isClosed(), "An explorer failure must preserve console transactions");
+                manual.rollback();
+                assertEquals(2, count(manager, config), "Discarding browser sessions must not commit pending console writes");
             } finally { manager.dispose(); }
         }
     }
