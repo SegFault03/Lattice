@@ -440,7 +440,8 @@ def build_plugin(java_home, version):
     if sys.platform == "win32" and any(c in str(ROOT) for c in '\"&|<>^%!\r\n'):
         raise ValueError("Windows checkout paths must not contain batch shell metacharacters")
     environment = {**os.environ, "JAVA_HOME": str(java_home)}
-    build_args = ["--console=plain", "--no-daemon", "test", "buildPlugin", f"-PreleaseVersion={version}"]
+    build_args = ["--console=plain", "--no-daemon", "functionalTest", "regressionTest",
+                  "buildPlugin", f"-PreleaseVersion={version}"]
     if os.environ.get('LATTICE_BUILD_IDE'):
         sdk = os.environ['LATTICE_BUILD_IDE']
         if sys.platform == 'win32' and any(c in sdk for c in '\"&|<>^%!\r\n'):

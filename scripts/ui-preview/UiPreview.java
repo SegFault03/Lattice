@@ -403,33 +403,33 @@ public final class UiPreview {
         TableDataEditorPanel editor = table(false);
         JTable grid = (JTable) field(editor, "dataTable");
         grid.changeSelection(0, 2, false, false);
-        invoke(editor, "openCellDetails", new Class<?>[]{int.class, int.class}, 0, 2);
-        JComponent details = (JComponent) field(editor, "cellDetails");
+        clickColumnHeader(grid, 3);
+        if ((Boolean)field(editor, "inspectorVisible"))
+            throw new AssertionError("A column header must not open the inspector while Inspect is off");
+        invoke(editor, "toggleInspector", new Class<?>[0]);
+        JComponent details = (JComponent)field(editor, "cellDetails");
+        if ((Integer)invokeResult(details, "inspectedRow") != 0 ||
+                (Integer)invokeResult(details, "inspectedColumn") != 2)
+            throw new AssertionError("Inspect must open the currently selected cell");
         render(editor, theme + "-cell-details-1440", 1440, 900);
-        JButton pin = (JButton) field(details, "pin");
-        pin.doClick();
-        grid.changeSelection(1, 1, false, false);
-        if (!(Boolean) invokeResult(details, "isPinned") ||
-                (Integer) invokeResult(details, "inspectedRow") != 0 ||
-                (Integer) invokeResult(details, "inspectedColumn") != 2)
-            throw new AssertionError("Pinned cell details must stay on the original cell");
-        render(editor, theme + "-cell-details-pinned-1440", 1440, 900);
-        pin.doClick();
-        invoke(editor, "openColumnDetails", new Class<?>[]{int.class}, 3);
-        if (!(Boolean) invokeResult(details, "isColumnMode"))
-            throw new AssertionError("Column click must open column details");
-        pin.doClick();
+        clickColumnHeader(grid, 3);
+        if (!(Boolean)invokeResult(details, "isColumnMode"))
+            throw new AssertionError("A column header must open column details while Inspect is on");
         grid.changeSelection(2, 2, false, false);
-        if (!(Boolean) invokeResult(details, "isColumnMode") ||
-                (Integer) invokeResult(details, "inspectedColumn") != 3)
-            throw new AssertionError("Pinned column details must stay on the header");
-        render(editor, theme + "-column-details-pinned-1440", 1440, 900);
+        if ((Boolean)invokeResult(details, "isColumnMode") ||
+                (Integer)invokeResult(details, "inspectedRow") != 2 ||
+                (Integer)invokeResult(details, "inspectedColumn") != 2)
+            throw new AssertionError("Column details must follow the next selected data cell");
+        render(editor, theme + "-cell-details-follow-selection-1440", 1440, 900);
+        clickColumnHeader(grid, 3);
+        if (!(Boolean)invokeResult(details, "isColumnMode"))
+            throw new AssertionError("Column click must open column details");
+        render(editor, theme + "-column-details-1440", 1440, 900);
         JPanel metadata = (JPanel) field(details, "metadata");
         JComponent title = (JComponent) field(details, "title");
         if (metadata.getComponentCount() < 7 || title.getWidth() < title.getPreferredSize().width)
             throw new AssertionError("Column details were clipped: rows=" + metadata.getComponentCount()
                     + ", title=" + title.getWidth() + "/" + title.getPreferredSize().width);
-        pin.doClick();
         invoke(editor, "openCellDetails", new Class<?>[]{int.class, int.class}, 1, 1);
         JTextArea value = (JTextArea) field(details, "valueArea");
         value.dispatchEvent(new java.awt.event.MouseEvent(value, java.awt.event.MouseEvent.MOUSE_CLICKED,
@@ -453,6 +453,21 @@ public final class UiPreview {
         if (Math.abs(splitter.getProportion() - 0.58f) > 0.01f)
             throw new AssertionError("Reopening must keep the user's divider position");
         renderAdversarialCellDetails(editor, theme);
+    }
+
+    private static void clickColumnHeader(JTable grid, int viewColumn) {
+        var header = grid.getTableHeader();
+        if (header.getWidth() <= 0 || header.getHeight() <= 0) {
+            Dimension preferred = header.getPreferredSize();
+            header.setSize(Math.max(preferred.width, grid.getColumnModel().getTotalColumnWidth()),
+                    Math.max(1, preferred.height));
+        }
+        Rectangle bounds = header.getHeaderRect(viewColumn);
+        header.dispatchEvent(new java.awt.event.MouseEvent(header,
+                java.awt.event.MouseEvent.MOUSE_CLICKED, System.currentTimeMillis(), 0,
+                bounds.x + bounds.width / 2, Math.max(1, header.getHeight() / 2),
+                1, false, java.awt.event.MouseEvent.BUTTON1));
+        com.intellij.util.ui.UIUtil.dispatchAllInvocationEvents();
     }
 
     static void verifyInspectorDraftRecovery() throws Exception {
@@ -520,7 +535,6 @@ public final class UiPreview {
                 new ColumnMetadata("ORDER_DATE", "DATE", java.sql.Types.DATE, 10, 0, false, false, false, null),
                 "2026-09-18", false, false, true, false, null, "Row 2 · ID = 2", "");
         invoke(panel, "showCell", new Class<?>[]{cellType}, cell);
-        ((JButton)field(panel, "pin")).doClick(0);
         render(panel, theme + "-approved-inspector", 388, 730);
         if (!"Row 2 · Column 4".equals(((JTextArea)field(panel, "identity")).getText()))
             throw new AssertionError("Subtitle must contain only row and column coordinates");
@@ -529,8 +543,6 @@ public final class UiPreview {
         render(panel, theme + "-approved-inspector-close-hover", 388, 730);
         close.getModel().setRollover(false);
         render(panel, theme + "-approved-inspector-narrow", 320, 650);
-        invoke(panel, "clearPin", new Class<?>[0]);
-        render(panel, theme + "-approved-inspector-unpinned", 388, 730);
     }
 
     static void renderAdversarialCellDetails(TableDataEditorPanel editor, String theme) throws Exception {

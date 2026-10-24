@@ -118,6 +118,20 @@ python -m unittest discover -s scripts/tests -v
 python scripts/one-shot-test.py --database-compatibility-only
 ```
 
+For the full CI-supported Windows scope, use the Windows one-shot runner with
+`--windows-ui` and the shared asset/cache options. It runs the functional and
+regression tasks, tooling suite, packaging/archive validation, native MySQL and
+HSQLDB plus H2 backend checks, IDEA/JDBC compatibility checks, and the five
+interactive UI scenarios supported on Windows. Linux-only PostgreSQL and H2 UI
+fixtures remain in Linux CI. `--binaries-dir` retains compatibility JARs in
+`jdbc-cache/`; the UI fixture Maven repository is retained beside it.
+
+```powershell
+.\scripts\windows\one-shot-test.ps1 --windows-ui `
+  --binaries-dir $assets --download-dir "$assets\downloads" `
+  --gradle-user-home "$env:USERPROFILE\.gradle" --cleanup
+```
+
 The two backend examples can be used independently; CI chooses the isolated H2
 fallback on Windows/macOS and the all-provider fallback on Linux. When combining
 local commands, omit a repeated `h2IntegrationTest` task if the live runner has

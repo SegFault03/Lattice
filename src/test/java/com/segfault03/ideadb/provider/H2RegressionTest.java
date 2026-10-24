@@ -151,7 +151,9 @@ public class H2RegressionTest {
                 } while (!running && !task.isDone() && System.nanoTime() < deadline);
                 assertTrue(running, "The fixture server must be executing the query before cancellation");
                 execution.cancel();
-                assertTrue(task.get(10, TimeUnit.SECONDS).isCancelled());
+                // QueryOptions sets a 15-second server-side safety timeout. Allow it to
+                // return if the remote TLS cancellation request is delayed.
+                assertTrue(task.get(20, TimeUnit.SECONDS).isCancelled());
             }
             var recovered = session.execute(c -> DataService.getInstance().executeQuery(c, "PUBLIC", "SELECT 1"));
             assertFalse(recovered.hasError(), recovered.getError());

@@ -42,6 +42,17 @@ MYSQL_MATRIX = (
 HSQL_VERSIONS = (
     "2.2.9", "2.3.6", "2.4.1", "2.5.2", "2.6.1-jdk8", "2.7.4-jdk8",
 )
+WINDOWS_UI_SCENARIOS = (
+    ("hsqldb", "ExperimentalDark", {}),
+    ("alter-table", "ExperimentalDark", {"LATTICE_UI_ALTER_TABLE_ONLY": "true"}),
+    ("table-dialogs", "ExperimentalLight", {
+        "LATTICE_UI_CREATE_TABLE_ONLY": "true", "LATTICE_UI_SCALE": "1.25",
+    }),
+    ("cell-inspector-scaled", "ExperimentalDark", {
+        "LATTICE_UI_CELL_DETAILS_ONLY": "true", "LATTICE_UI_SCALE": "1.25",
+    }),
+    ("search", "ExperimentalDark", {"LATTICE_UI_EXPLORER_SEARCH_ONLY": "true"}),
+)
 TOTAL_STEPS = 8
 
 
@@ -263,6 +274,54 @@ def run_plugin_verifier(runner: CommandRunner, source: Path, env: dict[str, str]
     runner.run(command, cwd=source, env=env, name=f"plugin-verifier-{version}", timeout=900)
 
 
+def run_windows_ui(runner: CommandRunner, progress: Progress, source: Path, java_home: Path,
+                   ide_home: Path, args: argparse.Namespace, gradle_home: str,
+                   temp: Path, env: dict[str, str]) -> None:
+    """Run the Windows-capable subset of main-PR UI checks on an interactive desktop."""
+    if os.name != "nt":
+        raise RunnerError("--windows-ui requires Windows")
+
+    with progress.step("Run production editor recovery assertions"):
+        runner.run([sys.executable, str(source / "scripts/ui-preview.py"), "--checks-only",
+                    "--java-home", str(java_home), "--ide-home", str(ide_home)],
+                   cwd=source, name="ui-production-editor-checks", timeout=900, env=env)
+
+    stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
+    output_root = ROOT / "build/ui-review/windows-ci" / stamp
+    fixture_cache = args.binaries_dir / "jdbc" if args.binaries_dir else None
+    maven_repository = (args.binaries_dir / "ui-maven-repository" if args.binaries_dir
+                        else temp / "ui-maven-repository")
+    review_script = source / "scripts/windows/review-intellij-ui.ps1"
+
+    for name, theme, overrides in WINDOWS_UI_SCENARIOS:
+        with progress.step(f"Run Windows real-IDE UI scenario: {name}"):
+            output = output_root / name
+            environment = dict(env)
+            environment.update({
+                "LATTICE_UI_REVIEW_OUTPUT": str(output),
+                "LATTICE_UI_SCALE": "1.0",
+                "LATTICE_UI_ALTER_TABLE_ONLY": "false",
+                "LATTICE_UI_CREATE_TABLE_ONLY": "false",
+                "LATTICE_UI_CELL_DETAILS_ONLY": "false",
+                "LATTICE_UI_EXPLORER_SEARCH_ONLY": "false",
+                "LATTICE_UI_H2": "false",
+                "LATTICE_UI_POSTGRES_PORT": "0",
+                "UI_THEME": theme,
+            })
+            environment.update(overrides)
+            command = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+                       str(review_script), "-Themes", theme, "-OutputRoot", str(output),
+                       "-IdeHome", str(ide_home), "-BuildIdeHome", str(ide_home),
+                       "-JavaHome", str(java_home), "-DownloadDir", str(args.download_dir or temp),
+                       "-GradleUserHome", gradle_home, "-MavenRepository", str(maven_repository),
+                       "-Cleanup"]
+            if args.binaries_dir:
+                command += ["-BinariesDir", str(args.binaries_dir)]
+            if fixture_cache and fixture_cache.is_dir():
+                command += ["-FixtureCache", str(fixture_cache)]
+            runner.run(command, cwd=source, name=f"ui-{name}", timeout=1500, env=environment)
+
+
 def docker_image_exists(image: str, docker=None) -> bool:
     return subprocess.run([docker or "docker", "image", "inspect", image], stdout=subprocess.DEVNULL,
                           stderr=subprocess.DEVNULL, check=False).returncode == 0
@@ -365,6 +424,8 @@ def validation_plan(args: argparse.Namespace) -> tuple[bool, bool, bool, int]:
         step_count += 1
     if run_database_compatibility:
         step_count += 3 + int(sys.platform == "linux")
+    if getattr(args, "windows_ui", False):
+        step_count += 1 + len(WINDOWS_UI_SCENARIOS)
     return run_base, run_ide_compatibility, run_database_compatibility, step_count
 
 
@@ -382,6 +443,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--java-home", type=Path,
                         help="Use this full JDK 21; otherwise use JAVA_HOME/PATH, then download a temporary JDK 21")
+    parser.add_argument("--windows-ui", action="store_true",
+                        help="Also run Windows-supported CI UI scenarios on an interactive 1440x800+ desktop")
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--skip-compatibility", action="store_true",
                        help="Run tooling, build and live functional tests only; real IDE UI checks run separately")
@@ -402,6 +465,10 @@ def main() -> int:
     parser.add_argument('--hsqldb-port', type=port_number, help='Owned live HSQLDB fixture port; default: automatic free port')
     add_dependency_options(parser, cleanup=True)
     args = parser.parse_args()
+    if args.windows_ui and os.name != 'nt':
+        parser.error('--windows-ui is available only on Windows')
+    if args.windows_ui and (args.skip_compatibility or args.compatibility_only or args.database_compatibility_only):
+        parser.error('--windows-ui requires the full one-shot suite')
     try:
         args.ide_homes = path_mapping(args.ide_sdk, IDE_VERSIONS)
         args.mysql_homes = path_mapping(args.mysql_home, tuple(v for v, _ in MYSQL_MATRIX))
@@ -449,7 +516,11 @@ def main() -> int:
             java8_home: Path
             probe_classes = temp_path / "java8-probe"
             development_cache = temp_path / "lattice-cache"
-            jdbc_cache = temp_path / "jdbc-cache"
+            # Compatibility JARs have independent versions from the build's bundled drivers.
+            # Keep them under the caller's asset collection so --cleanup can remove scratch
+            # without causing the next full Windows run to download the matrix again.
+            jdbc_cache = ((args.binaries_dir / "jdbc-cache").resolve()
+                          if args.binaries_dir else temp_path / "jdbc-cache")
 
             with progress.step("Create temporary tool, Gradle and JDBC caches"):
                 active = progress.active
@@ -473,7 +544,9 @@ def main() -> int:
                     if seed:
                         if not seed.is_dir():
                             raise RunnerError('--jdbc-dir must be a directory of cached drivers')
-                        shutil.copytree(seed, jdbc_cache, dirs_exist_ok=True)
+                        if seed.resolve() != jdbc_cache.resolve():
+                            shutil.copytree(seed, jdbc_cache, dirs_exist_ok=True)
+                    jdbc_cache.mkdir(parents=True, exist_ok=True)
                     prepare_java8_probe(source, java_home, probe_classes, runner, progress_runner_env)
                     print(f"  JDK 21: {java_home}\n  Java 8 runtime: {java8_home}", flush=True)
                 else:
@@ -487,7 +560,7 @@ def main() -> int:
 
                 with progress.step("Gradle unit tests and plugin build"):
                     active = progress.active
-                    run_gradle(runner, source, "clean", "test", "buildPlugin",
+                    run_gradle(runner, source, "clean", "functionalTest", "regressionTest", "buildPlugin",
                                name="gradle-build-and-unit-tests", timeout=1200)
                     version = project_version(source)
                     archive = source / "build/distributions" / f"Lattice-{version}.zip"
@@ -561,7 +634,7 @@ def main() -> int:
                                 f"-Plattice.compatibility.java8={executable(java8_home, 'java')}",
                                 f"-Plattice.compatibility.probe={probe_classes}",
                                 f"-Plattice.compatibility.cache={jdbc_cache}",
-                                f"-Plattice.compatibility.cleanup={str(args.cleanup and os.name != 'nt').lower()}",
+                                f"-Plattice.compatibility.cleanup={str(args.cleanup and not args.binaries_dir and os.name != 'nt').lower()}",
                                 f"-Plattice.compatibility.output={source / 'build/compatibility'}",
                             ]
                             run_gradle(runner, source, "databaseCompatibilityTest", properties=properties,
@@ -574,7 +647,7 @@ def main() -> int:
                         f"-Plattice.compatibility.java8={executable(java8_home, 'java')}",
                         f"-Plattice.compatibility.probe={probe_classes}",
                         f"-Plattice.compatibility.cache={jdbc_cache}",
-                                f"-Plattice.compatibility.cleanup={str(args.cleanup and os.name != 'nt').lower()}",
+                                f"-Plattice.compatibility.cleanup={str(args.cleanup and not args.binaries_dir and os.name != 'nt').lower()}",
                         f"-Plattice.compatibility.output={source / 'build/compatibility'}",
                     ]
                     run_gradle(runner, source, "databaseCompatibilityTest", properties=properties,
@@ -586,6 +659,7 @@ def main() -> int:
                         f"-Plattice.compatibility.java8={executable(java8_home, 'java')}",
                         f"-Plattice.compatibility.probe={probe_classes}",
                         f"-Plattice.compatibility.cache={jdbc_cache}",
+                        f"-Plattice.compatibility.cleanup={str(args.cleanup and not args.binaries_dir).lower()}",
                         f"-Plattice.compatibility.output={source / 'build/compatibility/h2'}"]
                     run_gradle(runner, source, "databaseCompatibilityTest", properties=properties,
                                name="h2-matrix", timeout=900)
@@ -607,6 +681,13 @@ def main() -> int:
                                 run_gradle(runner, source, "databaseCompatibilityTest", properties=properties,
                                            name=f"postgres-matrix-{server_version}", timeout=900)
 
+            if args.windows_ui:
+                active = "Windows interactive UI suite"
+                ui_ide_home = deps.ide(args.ide_home)
+                run_windows_ui(runner, progress, source, java_home, ui_ide_home, args,
+                               progress_runner_env["GRADLE_USER_HOME"], temp_path,
+                               progress_runner_env)
+
         if args.skip_compatibility:
             scope = "Linux/Windows build and live functional checks (real IDE UI checks run separately)"
         elif args.compatibility_only:
@@ -615,6 +696,8 @@ def main() -> int:
             scope = "Linux/Windows JDBC/Java 8 compatibility matrix"
         else:
             scope = "all Linux/Windows one-shot validation steps"
+        if args.windows_ui:
+            scope += " plus the Windows-supported interactive UI scenarios"
         print(f"\nPASS: {scope} passed; dependencies {'cleaned' if args.cleanup else 'retained'}.", flush=True)
         if diagnostics:
             shutil.rmtree(diagnostics, ignore_errors=True)

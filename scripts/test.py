@@ -165,7 +165,13 @@ def command(args):
     if os.name == "nt" and any(character in str(ROOT) for character in '\"&|<>^%!\r\n'):
         raise ValueError("Windows checkout paths must not contain shell metacharacters")
     integration_only = getattr(args, "integration_only", False)
-    tasks = [] if integration_only else ["functionalTest" if getattr(args, "functional_only", False) else "test"]
+    if integration_only:
+        tasks = []
+    elif getattr(args, "functional_only", False):
+        tasks = ["functionalTest"]
+    else:
+        # Match CI's disjoint functional and IntelliJ-hosted regression tiers.
+        tasks = ["functionalTest", "regressionTest"]
     if args.live:
         tasks += ["integrationTest", "h2IntegrationTest", "fallbackDriverTest"]
     if args.build:

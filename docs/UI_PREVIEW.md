@@ -4,8 +4,8 @@
 
 Use **Inspect** in the table toolbar or **Alt+Enter** to toggle the inspector.
 Closing it keeps it closed during ordinary cell selection. Clicking a column
-header opens column details; pinning retains the inspected value/column while
-the selection changes. Reopening restores the divider position.
+header opens column details only while Inspect is on; selecting a data cell
+returns the panel to that cell. Reopening restores the divider position.
 
 **Edit value** starts an unstaged draft. While editing, the inspector stays on
 that cell. **Stage change** explicitly adds the draft to the pending batch;
@@ -21,7 +21,7 @@ counts follow the draft, and invalid values show feedback beside the editor.
 Presentation controls appear for structured/long values. Column metadata stays
 visible, with compact Edit table below the structure hint. The column name is
 the title; the subtitle contains only row and column coordinates. Fixed header
-actions use a filled gray pinned icon. Rounded inspector buttons retain Swing
+actions keep the close target in a fixed rail. Rounded inspector buttons retain Swing
 keyboard and accessibility behavior across themes and platforms. Body/value text
 uses the IDE label font size, and actions use its button font size; the inspector
 does not enlarge normal text. Header controls occupy real layout space so their
@@ -34,7 +34,7 @@ be selected/copied.
 The focused `--cell-details-only` previews also exercise closed-state retention,
 divider restoration, compact JSON, long metadata, local validation and larger
 fonts in both themes. The manual gallery includes approved date fixtures and narrow viewports.
-The native focused scenario checks the explicit toolbar toggle and leaves the inspector closed after an ordinary grid click. See the
+The native focused scenario checks that header and cell clicks leave the inspector closed when Inspect is off, then exercises header details while it is on. See the
 [prioritized implementation checklist](design/data-cell-refresh-plan.md).
 
 All preview modes assert inspector-only draft recovery through the production
@@ -110,7 +110,7 @@ staging and cancellation. It does not generate screenshots or update the gallery
 Main PR CI uses this mode instead of the full light/dark gallery.
 
 The native inspector case runs once at 125%, switches through both themes, and
-checks navigation, pinning, explicit editing and unconfirmed draft recovery.
+checks selection following, explicit editing and unconfirmed draft recovery.
 The standalone 100% duplicate and styling-only CI case have been removed. H2 and
 search each run once in dark mode. Create/alter and partial-DDL recovery retain
 separate cases because they exercise different destructive-operation paths.

@@ -111,6 +111,26 @@ public class ProviderEndToEndTest {
         }
     }
 
+    private static boolean mysqlStoresIdentifiersLowercase(Connection connection, ConnectionConfig config) throws Exception {
+        if (config.getType() != DatabaseType.MYSQL) return false;
+        try (var statement = connection.createStatement();
+             var result = statement.executeQuery("SELECT @@lower_case_table_names")) {
+            return result.next() && result.getInt(1) == 1;
+        }
+    }
+
+    private static boolean sameIdentifier(String expected, String actual, boolean mysqlLowercasesIdentifiers) {
+        return mysqlLowercasesIdentifiers ? expected.equalsIgnoreCase(actual) : Objects.equals(expected, actual);
+    }
+
+    private static void assertIdentifierEquals(String expected, String actual, boolean mysqlLowercasesIdentifiers) {
+        if (mysqlLowercasesIdentifiers) {
+            assertTrue(sameIdentifier(expected, actual, true), "Expected identifier " + expected + " but was " + actual);
+        } else {
+            assertEquals(expected, actual);
+        }
+    }
+
     public static void workflow(ConnectionConfig config) throws Exception {
         var manager = new DatabaseConnectionManager();
         var ddl = DdlService.getInstance(); var data = DataService.getInstance();
@@ -118,15 +138,19 @@ public class ProviderEndToEndTest {
         String namespace = "PROVIDER_" + UUID.randomUUID().toString().replace("-", "").toUpperCase(Locale.ROOT);
         var export = Files.createTempFile("provider-export", ".sql");
         try (Connection browser = manager.getConnection(config)) {
+            boolean mysqlLowercasesIdentifiers = mysqlStoresIdentifiersLowercase(browser, config);
             assertSame(provider, DatabaseProviders.forConnection(browser));
             ddl.createDatabase(browser, config, namespace);
             try {
                 ddl.createTable(browser, config, namespace, "ITEMS", List.of(
                         new ColumnDefinition("ID", "INTEGER", 0, false, true, false, ""),
                         new ColumnDefinition("PAYLOAD", "VARCHAR", 100, true, false, false, "")));
-                assertTrue(MetadataService.getInstance().getDatabases(browser, config).contains(namespace));
-                var table = MetadataService.getInstance().getTables(browser, config, namespace).stream().filter(t -> t.getName().equals("ITEMS")).findFirst().orElseThrow();
-                assertEquals(provider.namespace(namespace).catalog(), table.getCatalog());
+                var databases = MetadataService.getInstance().getDatabases(browser, config);
+                assertTrue(databases.stream().anyMatch(name -> sameIdentifier(namespace, name, mysqlLowercasesIdentifiers)),
+                        () -> "Created database " + namespace + " is missing from " + databases);
+                var table = MetadataService.getInstance().getTables(browser, config, namespace).stream()
+                        .filter(t -> sameIdentifier("ITEMS", t.getName(), mysqlLowercasesIdentifiers)).findFirst().orElseThrow();
+                assertIdentifierEquals(provider.namespace(namespace).catalog(), table.getCatalog(), mysqlLowercasesIdentifiers);
                 assertEquals(provider.namespace(namespace).schema(), table.getSchema());
                 assertEquals(2, MetadataService.getInstance().getColumns(browser, config, namespace, "ITEMS").size());
                 verifyKeyMetadata(browser, config, namespace);
@@ -161,7 +185,7 @@ public class ProviderEndToEndTest {
                 ddl.alterTableRenameColumn(browser, config, namespace, "ITEMS", "NOTE", "RENAMED_NOTE");
                 ddl.alterTableDropColumn(browser, config, namespace, "ITEMS", "RENAMED_NOTE");
                 var renamed = ddl.alterTableRename(browser, config, namespace, "ITEMS", "RENAMED_ITEMS");
-                assertEquals("RENAMED_ITEMS", renamed.getName());
+                assertIdentifierEquals("RENAMED_ITEMS", renamed.getName(), mysqlLowercasesIdentifiers);
                 ddl.dropTable(browser, config, namespace, renamed.getName());
             } finally { ddl.dropDatabase(browser, config, namespace); }
         } finally { manager.dispose(); Files.deleteIfExists(export); }

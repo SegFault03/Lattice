@@ -1,10 +1,9 @@
 package com.segfault03.ideadb.ui;
 
 import com.intellij.icons.AllIcons;
-import com.intellij.openapi.util.IconLoader;
 import com.intellij.ui.JBColor;
-import com.intellij.util.ui.JBUI;
 import com.intellij.util.IconUtil;
+import com.intellij.util.ui.JBUI;
 import com.segfault03.ideadb.model.ColumnMetadata;
 import com.segfault03.ideadb.model.RowDefaults;
 
@@ -24,7 +23,7 @@ final class CellDetailsPanel extends JPanel {
     record Column(String tableName, int modelColumn, ColumnMetadata column, boolean view) {}
     interface Actions {
         void apply(Cell cell, String text); void setNull(Cell cell); void useDefault(Cell cell);
-        void revert(Cell cell); void editTable(); void close(); void unpin();
+        void revert(Cell cell); void editTable(); void close();
         default void draftChanged() {}
     }
 
@@ -67,7 +66,6 @@ final class CellDetailsPanel extends JPanel {
     private final JPanel footer = new JPanel(new BorderLayout());
     private final JPanel bottomDock = new JPanel(new BorderLayout());
     private final WrappingLabel footerLabel = new WrappingLabel("");
-    private final HeaderIconButton pin = new HeaderIconButton(AllIcons.General.Pin_tab);
     private final HeaderIconButton close = new HeaderIconButton(AllIcons.Actions.CloseDarkGrey);
     private final JToggleButton formattedTab = new JToggleButton("Formatted");
     private final JToggleButton rawTab = new JToggleButton("Raw");
@@ -84,11 +82,11 @@ final class CellDetailsPanel extends JPanel {
     private final JButton editTable = new InspectorButton("Edit table", null, ButtonStyle.SECONDARY);
     private Cell cell;
     private Column column;
-    private boolean pinned, columnMode, editing, busy, rawMode;
+    private boolean columnMode, editing, busy, rawMode;
     private String draft;
     private final WrappingLabel validation = new WrappingLabel("");
     private final JPanel tabs = new JPanel(new ActionLayout());
-    private final JPanel controls = new JPanel(new GridLayout(1, 2, JBUI.scale(4), 0));
+    private final JPanel controls = new JPanel(new GridLayout(1, 1));
     private LookAndFeel lastLookAndFeel;
     private boolean structuredValue;
 
@@ -247,7 +245,6 @@ final class CellDetailsPanel extends JPanel {
             setRolloverEnabled(true); setFocusable(true); DatabaseUi.configureActionSizing(this);
             getModel().addChangeListener(e -> repaint());
         }
-        void setActive(boolean active) { setSelected(active); repaint(); }
         @Override public void updateUI() {
             setUI(new BasicButtonUI()); setOpaque(false); setContentAreaFilled(false); setBorderPainted(false);
             DatabaseUi.configureActionSizing(this);
@@ -255,9 +252,9 @@ final class CellDetailsPanel extends JPanel {
         @Override protected void paintComponent(Graphics graphics) {
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            if (isSelected() || getModel().isRollover() || getModel().isPressed() || isFocusOwner()) {
+            if (getModel().isRollover() || getModel().isPressed() || isFocusOwner()) {
                 g.setColor(getModel().isPressed() ? new JBColor(0xD3D7DF, 0x42454C)
-                        : isSelected() ? new JBColor(0xE3E6EC, 0x35383F) : new JBColor(0xE9ECF1, 0x303339));
+                        : new JBColor(0xE9ECF1, 0x303339));
                 g.fillRoundRect(0, 0, getWidth(), getHeight(), JBUI.scale(6), JBUI.scale(6));
             }
             g.dispose(); super.paintComponent(graphics);
@@ -287,12 +284,10 @@ final class CellDetailsPanel extends JPanel {
         header.add(title, labelConstraints);
         labelConstraints.gridy = 2; labelConstraints.gridwidth = 2; labelConstraints.insets = JBUI.insetsTop(8);
         header.add(identity, labelConstraints);
-        pin.setToolTipText("Pin details"); pin.getAccessibleContext().setAccessibleName("Pin cell details");
-        pin.addActionListener(e -> { pinned = !pinned; updatePin(); if (!pinned) actions.unpin(); });
         close.setToolTipText("Close details"); close.getAccessibleContext().setAccessibleName("Close details panel");
         close.addActionListener(e -> { cancelEdit(); actions.close(); });
         controls.setOpaque(false);
-        controls.add(pin); controls.add(close);
+        controls.add(close);
         GridBagConstraints actionsConstraints = new GridBagConstraints();
         actionsConstraints.gridx = 1; actionsConstraints.gridy = 0;
         actionsConstraints.anchor = GridBagConstraints.NORTHEAST; actionsConstraints.insets = JBUI.insetsLeft(12);
@@ -391,7 +386,6 @@ final class CellDetailsPanel extends JPanel {
         valueArea.addMouseListener(new MouseAdapter() { public void mouseClicked(MouseEvent e) { if (e.getClickCount() == 2 && cell != null && cell.editable()) beginEdit(); } });
         DatabaseUi.onTextChange(valueArea, () -> { if (editing) { summary.setText(valueSummary(valueArea.getText())); updateValueTools(); updateEnabled(); actions.draftChanged(); } });
         renderEmpty();
-        updatePin();
         lastLookAndFeel = UIManager.getLookAndFeel();
         refreshTheme();
     }
@@ -450,8 +444,6 @@ final class CellDetailsPanel extends JPanel {
             refreshTheme();
         }
     }
-    void clearPin() { pinned = false; updatePin(); updateFooter(); }
-    boolean isPinned() { return pinned; }
     boolean isColumnMode() { return columnMode; }
     boolean isEditing() { return editing; }
     boolean finishEditing() {
@@ -486,7 +478,6 @@ final class CellDetailsPanel extends JPanel {
         else renderEmpty();
         refreshSectionBorder();
         refreshMetadataColors(metadata);
-        updatePin();
         metadata.revalidate(); lower.revalidate(); content.revalidate();
         resizeContentBlocks();
         content.repaint(); updateEnabled();
@@ -498,9 +489,7 @@ final class CellDetailsPanel extends JPanel {
         footerLabel.setText(editing ? "Editing this cell · Stage change or Cancel · Esc cancels and closes"
                 : cell != null && cell.validationError() != null && !cell.validationError().isBlank() ? "Invalid value · Fix before committing"
                 : cell != null && cell.modified() ? "Pending change · Commit to save to database"
-                : pinned ? columnMode ? "Pinned to this column · Esc to close"
-                : "Pinned to this cell · Esc to close"
-                : columnMode ? "Follows column selection · Esc to close" : "Follows cell selection · Esc to close");
+                : columnMode ? "Inspecting column · Esc to close" : "Follows cell selection · Esc to close");
         footer.revalidate(); footer.repaint();
     }
     private void buildCell() {
@@ -638,20 +627,6 @@ final class CellDetailsPanel extends JPanel {
         updateFooter();
         resizeContentBlocks(); content.revalidate(); content.repaint();
     }
-    private void updatePin() {
-        Color glyph = new JBColor(0x657185, 0xADB5C2);
-        pin.setIcon(IconUtil.filterIcon(pinned ? IconLoader.getIcon("/icons/inspector-pinned.svg", CellDetailsPanel.class) : AllIcons.General.Pin_tab,
-                () -> new java.awt.image.RGBImageFilter() {
-                    @Override public int filterRGB(int x, int y, int rgb) { return (rgb & 0xFF000000) | (glyph.getRGB() & 0xFFFFFF); }
-                }, null));
-        close.setIcon(AllIcons.Actions.CloseDarkGrey);
-        pin.setActive(pinned);
-        pin.setToolTipText(pinned ? "Unpin details" : "Pin details");
-        pin.getAccessibleContext().setAccessibleName(pinned
-                ? columnMode ? "Unpin column details" : "Unpin cell details"
-                : columnMode ? "Pin column details" : "Pin cell details");
-        updateFooter();
-    }
     private void refreshTheme() {
         if (valueArea == null) return;
         lastLookAndFeel = UIManager.getLookAndFeel();
@@ -719,7 +694,6 @@ final class CellDetailsPanel extends JPanel {
                 () -> new java.awt.image.RGBImageFilter() {
                     @Override public int filterRGB(int x, int y, int rgb) { return (rgb & 0xFF000000) | 0xFFFFFF; }
                 }, null));
-        updatePin();
         resizeContentBlocks();
         revalidate(); repaint();
     }

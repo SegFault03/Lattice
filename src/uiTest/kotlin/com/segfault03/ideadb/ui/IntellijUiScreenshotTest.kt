@@ -35,6 +35,7 @@ import java.awt.Rectangle
 import java.awt.Point
 import java.awt.Robot
 import java.awt.Toolkit
+import java.awt.datatransfer.StringSelection
 import java.awt.image.BufferedImage
 import java.nio.file.Files
 import java.nio.file.Path
@@ -1061,6 +1062,7 @@ class IntellijUiScreenshotTest {
             if (cellDetailsOnly) {
                 check(review && jdbcFixture != null) { "The focused Value Workspace capture requires the real IDE review and its owned HSQLDB fixture" }
                 waitUntil("populated Value Workspace fixture") { dataGrid.rowCount() == 12 }
+                val firstId = tableCellText(dataGrid, 0, 0)
                 withContext(OnDispatcher.EDT) {
                     cast(frame.component, Window::class).setBounds(16, 32, displayBounds.width - 32, displayBounds.height - 64)
                 }
@@ -1073,15 +1075,14 @@ class IntellijUiScreenshotTest {
                         details.hasSubtext("Row 1") && details.hasSubtext("Column 4")
                 }
                 captureScreen(screenshotsDirectory.resolve("value-workspace.png"))
-
-                details.x { byAccessibleName("Pin cell details") }.waitFound().click()
-                waitUntil("cell details are pinned") { details.hasSubtext("Pinned to this cell") }
-                dataGrid.clickCell(0, 0)
-                waitUntil("pinned details retain Amelia email after another cell is selected") {
-                    details.hasSubtext("amelia.brooks@example.com") && details.hasSubtext("Pinned to this cell")
+                check(details.xx { byAccessibleName("Pin cell details") }.list().isEmpty()) {
+                    "The value inspector must not expose a pin action"
                 }
-                captureScreen(screenshotsDirectory.resolve("value-workspace-pinned.png"))
-                details.x { byAccessibleName("Unpin cell details") }.waitFound().click()
+                dataGrid.clickCell(0, 0)
+                waitUntil("cell details follow the selected ID cell") {
+                    details.hasSubtext(firstId) && details.hasSubtext("Column 1")
+                }
+                captureScreen(screenshotsDirectory.resolve("value-workspace-selection-following.png"))
 
                 val headerPoint = withContext(OnDispatcher.EDT) {
                     val table = cast(dataGrid.component, LiveTableEditor::class)
@@ -1102,14 +1103,11 @@ class IntellijUiScreenshotTest {
                 }
                 captureScreen(screenshotsDirectory.resolve("value-workspace-header-details.png"))
                 val headerDetailsVerified = details.hasSubtext("Column 4") && details.hasSubtext("Structure")
-                details.x { byAccessibleName("Pin column details") }.waitFound().click()
-                waitUntil("column details are pinned") { details.hasSubtext("Pinned to this column") }
                 dataGrid.clickCell(0, 0)
-                waitUntil("pinned column details survive a cell selection") {
-                    details.hasSubtext("Column 4") && details.hasSubtext("Pinned to this column")
+                waitUntil("selecting a cell returns the inspector to that cell") {
+                    details.hasSubtext(firstId) && details.hasSubtext("Column 1")
                 }
-                captureScreen(screenshotsDirectory.resolve("value-workspace-header-pinned.png"))
-                details.x { byAccessibleName("Unpin column details") }.waitFound().click()
+                captureScreen(screenshotsDirectory.resolve("value-workspace-header-selection-following.png"))
 
                 dataGrid.clickCell(0, 3)
                 waitUntil("Amelia email details reopened") { details.hasSubtext("amelia.brooks@example.com") }
@@ -1177,6 +1175,23 @@ class IntellijUiScreenshotTest {
                 val liveDetails = details.component
                 closeDetails.click()
                 waitUntil("close control removes the inspector from the editor") { !liveDetails.isShowing() }
+                val closedHeaderPoint = withContext(OnDispatcher.EDT) {
+                    val table = cast(dataGrid.component, LiveTableEditor::class)
+                    val header = table.getTableHeader()
+                    val location = header.getLocationOnScreen()
+                    val x = (0 until 3).sumOf { table.getColumnModel().getColumn(it).getWidth() }
+                    Point(location.x + x + table.getColumnModel().getColumn(3).getWidth() / 2,
+                        location.y + header.getHeight() / 2)
+                }
+                Robot().also { closedRobot ->
+                    closedRobot.mouseMove(closedHeaderPoint.x, closedHeaderPoint.y)
+                    closedRobot.mousePress(InputEvent.BUTTON1_DOWN_MASK)
+                    closedRobot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
+                    closedRobot.waitForIdle()
+                }
+                check(!liveDetails.isShowing()) {
+                    "Clicking a column header with Inspect off must leave the inspector closed"
+                }
                 dataGrid.clickCell(0, 3)
                 check(!liveDetails.isShowing()) {
                     "Ordinary cell selection must leave the inspector closed"
@@ -1194,9 +1209,9 @@ class IntellijUiScreenshotTest {
                     appendLine("Requested theme: $themeId")
                     appendLine("UI scale: $inspectorReviewScale; display: ${displayBounds.width}x${displayBounds.height}")
                     appendLine("IDE Java runtime: ${utility(LiveJavaSystem::class).getProperty("java.runtime.version")}")
-                    appendLine("Cell and column inspection, pinning and editing: verified")
+                    appendLine("Cell and column inspection, selection following and editing: verified")
                     appendLine("Loaded cell: ${tableCellText(dataGrid, 0, 3)}")
-                    appendLine("Pin selection persistence: verified after selecting ID cell")
+                    appendLine("Inspector pin action: absent")
                     appendLine("Column header details: $headerDetailsVerified")
                     appendLine("Double-click edit mode: verified")
                     appendLine("Close and reopen controls: verified")
@@ -1528,14 +1543,22 @@ class IntellijUiScreenshotTest {
                     }
                 }
                 csvAction.click()
-                val saveExport = frame.x(DialogUiComponent::class.java) { byTitle("Export All Persisted Rows") }.waitFound()
                 val exportFile = screenshotsDirectory.resolve("persisted-rows.csv").toAbsolutePath()
-                val filename = saveExport.xx(JTextFieldUI::class.java) { byType(javax.swing.JTextField::class.java) }
-                    .list().single { it.text.endsWith(".csv") }
-                filename.text = exportFile.toString()
+                val windowsFileChooser = System.getProperty("os.name").startsWith("Windows", ignoreCase = true)
+                val saveExport = if (windowsFileChooser) {
+                    pasteNativeFileChooserPath(exportFile.toString())
+                    null
+                } else {
+                    frame.x(DialogUiComponent::class.java) { byTitle("Export All Persisted Rows") }.waitFound().also { dialog ->
+                        val filename = dialog.xx(JTextFieldUI::class.java) { byType(javax.swing.JTextField::class.java) }
+                            .list().single { it.text.endsWith(".csv") }
+                        filename.text = exportFile.toString()
+                    }
+                }
                 captureScreen(screenshotsDirectory.resolve("table-export-file-chooser.png"))
                 captureBusyState(jdbcFixture, tableEditor, "Exporting persisted rows…", "table-exporting-rows.png", screenshotsDirectory) {
-                    saveExport.pressButton("OK")
+                    if (windowsFileChooser) acceptNativeFileChooser()
+                    else requireNotNull(saveExport).pressButton("OK")
                 }
                 frame.x(DialogUiComponent::class.java) { byTitle("Export Complete") }.waitFound().pressButton("OK")
                 check(Files.readString(exportFile).contains("Ada Lovelace")) { "Real persisted-row export must contain the saved database value" }
@@ -2107,12 +2130,14 @@ class IntellijUiScreenshotTest {
         val explorerStatus = frame.driver.cast(frame.x { byAccessibleName("Database explorer status") }.waitFound().component, LiveLabel::class)
         fun menu(label: String) {
             // pathExists uses substring matching: customers also matches customers_archive.
+            var targetRow: Int? = null
             waitUntil("refresh target present and metadata read finished") {
-                !explorerStatus.getText().startsWith("Loading") && tree.component.isEnabled() &&
-                    tree.collectExpandedPaths().any { it.path == tablePath.toList() }
+                val ready = !explorerStatus.getText().startsWith("Loading") && tree.component.isEnabled()
+                val row = if (ready) tree.collectExpandedPaths().firstOrNull { it.path == tablePath.toList() }?.row else null
+                targetRow = row
+                row != null
             }
-            val row = tree.collectExpandedPaths().single { it.path == tablePath.toList() }.row
-            tree.fixture.rightClickRow(row)
+            tree.fixture.rightClickRow(requireNotNull(targetRow) { "Refresh target disappeared: ${tablePath.joinToString(" / ")}" })
             frame.x { byVisibleText(label) }.waitFound().click()
         }
         menu("Open data editor")
@@ -2497,6 +2522,39 @@ class IntellijUiScreenshotTest {
         val robot = Robot()
         robot.keyPress(KeyEvent.VK_ESCAPE)
         robot.keyRelease(KeyEvent.VK_ESCAPE)
+        robot.waitForIdle()
+    }
+
+    private fun pasteNativeFileChooserPath(path: String) {
+        val clipboard = Toolkit.getDefaultToolkit().systemClipboard
+        val previousContents = runCatching { clipboard.getContents(null) }.getOrNull()
+        try {
+            clipboard.setContents(StringSelection(path), null)
+            val robot = Robot().apply { autoDelay = 60 }
+            // Windows' common file dialog exposes no Swing text field to the IDE driver.
+            // Focus the File name control, replace its default name, and paste the full path.
+            robot.keyPress(KeyEvent.VK_ALT)
+            robot.keyPress(KeyEvent.VK_N)
+            robot.keyRelease(KeyEvent.VK_N)
+            robot.keyRelease(KeyEvent.VK_ALT)
+            robot.keyPress(KeyEvent.VK_CONTROL)
+            robot.keyPress(KeyEvent.VK_A)
+            robot.keyRelease(KeyEvent.VK_A)
+            robot.keyRelease(KeyEvent.VK_CONTROL)
+            robot.keyPress(KeyEvent.VK_CONTROL)
+            robot.keyPress(KeyEvent.VK_V)
+            robot.keyRelease(KeyEvent.VK_V)
+            robot.keyRelease(KeyEvent.VK_CONTROL)
+            robot.waitForIdle()
+        } finally {
+            previousContents?.let { old -> runCatching { clipboard.setContents(old, null) } }
+        }
+    }
+
+    private fun acceptNativeFileChooser() {
+        val robot = Robot()
+        robot.keyPress(KeyEvent.VK_ENTER)
+        robot.keyRelease(KeyEvent.VK_ENTER)
         robot.waitForIdle()
     }
 

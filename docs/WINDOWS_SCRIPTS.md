@@ -20,7 +20,7 @@ If execution policy blocks a launcher, invoke it explicitly with `powershell.exe
 | `--binaries-dir PATH` | Existing reusable assets; omitted inputs are searched here. An invalid supplied directory fails. |
 | `--download-dir PATH` | Parent for an owned lattice-run-* workspace. Default: OS user cache or LATTICE_DEV_CACHE. |
 | `--gradle-user-home PATH` | Reuse a Gradle distribution/Maven cache; takes precedence over GRADLE_USER_HOME. With neither configured, the script creates a run-owned cache. Builds always use the committed wrapper. |
-| `--cleanup` | Delete only the owned downloaded/scratch workspace, including after failure. Explicit assets, shared Gradle cache and final reports remain. |
+| `--cleanup` | Delete only the owned downloaded/scratch workspace, including after failure. Explicit assets, the one-shot compatibility JAR cache, shared Gradle cache and final reports remain. |
 | `--no-cleanup` | Keep downloaded/scratch assets for later reuse. Owned servers are still stopped. |
 | `-Python PATH` | PowerShell launcher option selecting Python (default: python). |
 
@@ -36,7 +36,7 @@ The reusable asset tree contains ides/<version>/, mysql/<version>/, runtimes/jav
 
 ## test.ps1
 
-Run Gradle unit tests, optional packaging and live database/fallback-driver checks.
+Run the CI functional and IntelliJ-hosted regression tasks, optional packaging and live database/fallback-driver checks.
 
 ```powershell
 .\scripts\windows\test.ps1 --live --mysql --hsqldb --build @deps
@@ -47,7 +47,7 @@ Run Gradle unit tests, optional packaging and live database/fallback-driver chec
 Complete options (forwarded unchanged to Python):
 
 ```text
-usage: test.py [-h] [--live] [--hsqldb] [--mysql] [--build]
+usage: test.py [-h] [--live] [--hsqldb] [--mysql] [--build] [--functional-only]
                [--integration-only] [--ide-home IDE_HOME]
                [--java-home JAVA_HOME] [--version VERSION]
                [--notes-file NOTES_FILE] [--mysql-home MYSQL_HOME]
@@ -67,6 +67,7 @@ options:
   --mysql               Own a MySQL fixture (native 8.4.2 on Windows; Docker
                         8.4 on Linux/macOS)
   --build               Also package the plugin ZIP
+  --functional-only     Run only the embedded provider commit-tier checks
   --integration-only    With --live, run only the integration and fallback-
                         driver suites
   --ide-home IDE_HOME   Optional local IntelliJ 2025.1 SDK; otherwise Gradle
@@ -108,18 +109,24 @@ options:
 
 ## one-shot-test.ps1
 
-Run isolated tooling, build, live fixtures, three IDE verifier checks and the full JDBC/Java 8 matrix.
+Run isolated tooling, CI functional/regression tasks, build, live fixtures, three IDE verifier checks and the Windows-supported JDBC/Java 8 matrix.
 
 ```powershell
 .\scripts\windows\one-shot-test.ps1 @deps
 ```
 
-The three mode flags are mutually exclusive: `--skip-compatibility` runs routine build/live checks; `--compatibility-only` runs packaging, IDE verification and database matrices; `--database-compatibility-only` runs just the database matrices. Repeat `--ide-sdk VERSION=PATH` for 2025.1/2025.2/2025.3 and `--mysql-home VERSION=PATH` for 5.5.62/5.6.51/5.7.44/8.4.2. `--jdbc-dir` contains mysql/ and hsqldb/ subfolders; `--java8-home` is the legacy runtime. Failures save logs under build/one-shot-test/. Fixtures choose free loopback ports automatically, including each matrix server. `--mysql-port PORT` / `--hsqldb-port PORT` request fixed free ports for MySQL and the live HSQLDB fixture. Allow at least 10 GiB free workspace space.
+Add `--windows-ui` for the Windows-supported UI cases:
+
+```powershell
+.\scripts\windows\one-shot-test.ps1 --windows-ui @deps
+```
+
+The three mode flags are mutually exclusive: `--skip-compatibility` runs routine build/live checks; `--compatibility-only` runs packaging, IDE verification and database matrices; `--database-compatibility-only` runs just the database matrices. `--windows-ui` is available only with the full suite and requires an interactive 1440x800+ desktop. It runs editor recovery assertions plus HSQLDB, alter-table, table-dialogs, scaled cell-inspector and search UI scenarios; PostgreSQL and H2 real-IDE flows require Linux fixtures. With `--binaries-dir`, matrix JARs and prepared UI fixtures are retained under `jdbc-cache/` and `ui-maven-repository/` even when `--cleanup` is set. Repeat `--ide-sdk VERSION=PATH` for 2025.1/2025.2/2025.3 and `--mysql-home VERSION=PATH` for 5.5.62/5.6.51/5.7.44/8.4.2. `--jdbc-dir` contains mysql/ and hsqldb/ subfolders; `--java8-home` is the legacy runtime. Failures save logs under build/one-shot-test/. Fixtures choose free loopback ports automatically, including each matrix server. `--mysql-port PORT` / `--hsqldb-port PORT` request fixed free ports for MySQL and the live HSQLDB fixture. Allow at least 10 GiB free workspace space.
 
 Complete options (forwarded unchanged to Python):
 
 ```text
-usage: one-shot-test.py [-h] [--java-home JAVA_HOME]
+usage: one-shot-test.py [-h] [--java-home JAVA_HOME] [--windows-ui]
                         [--skip-compatibility | --compatibility-only | --database-compatibility-only]
                         [--java8-home JAVA8_HOME] [--ide-home IDE_HOME]
                         [--ide-sdk VERSION=PATH] [--mysql-home VERSION=PATH]
@@ -131,18 +138,23 @@ usage: one-shot-test.py [-h] [--java-home JAVA_HOME]
                         [--no-cleanup] [--binaries-dir BINARIES_DIR]
                         [--gradle-user-home GRADLE_USER_HOME]
 
-Run Lattice's headless Linux/Windows validation in disposable tool/cache
-directories. The runner checks tooling, Java unit tests, package integrity,
-live database behavior, all supported IntelliJ targets, and the documented
-Java 8/JDBC compatibility matrix. It never starts an IDE; use review-intellij-
-ui.sh for real UI validation. Downloaded assets are removed by default; --no-
-cleanup retains them for reuse.
+Run Lattice's Linux/Windows validation in disposable tool/cache directories.
+The runner checks tooling, CI functional/regression tasks, package integrity,
+live database behavior, supported IntelliJ targets, and the Windows-supported
+Java 8/JDBC compatibility matrix. By default it does not start an IDE. On
+Windows, --windows-ui additionally runs the production editor checks and the
+HSQLDB, alter-table, table-dialogs, scaled cell-inspector and search scenarios.
+PostgreSQL and H2 real-IDE UI flows are Linux-only. Downloaded scratch is
+removed by default; compatibility JAR and prepared UI fixture caches remain in
+the supplied binaries directory.
 
 options:
   -h, --help            show this help message and exit
   --java-home JAVA_HOME
                         Use this full JDK 21; otherwise use JAVA_HOME/PATH,
                         then download a temporary JDK 21
+  --windows-ui          Run Windows-supported UI CI scenarios on an
+                        interactive 1440x800+ desktop
   --skip-compatibility  Run tooling, build and live functional tests only;
                         real IDE UI checks run separately
   --compatibility-only  Run the IDE verifier and JDBC compatibility matrices;
@@ -533,6 +545,7 @@ Build/load the plugin in a real test IDEA and capture its tool window. This uses
 | `-Review` | Exercise complete review flows as well as capture. |
 | `-InputsOnly` | Focus on connection-dialog input alignment; also accepts LATTICE_UI_INPUTS_ONLY=true. |
 | `-StyleOnly` | Focus on styling, toolbar/action glyphs and editing surfaces; also accepts LATTICE_UI_STYLE_ONLY=true. |
+| CI scenario environment | `LATTICE_UI_EXPLORER_SEARCH_ONLY`, `LATTICE_UI_ALTER_TABLE_ONLY`, `LATTICE_UI_CREATE_TABLE_ONLY`, `LATTICE_UI_CELL_DETAILS_ONLY` and `LATTICE_UI_SCALE` select the matching focused test and UI scale. |
 | `-GradleArgs @(...)` | Additional individual Gradle arguments, e.g. @("--stacktrace"). |
 | `-BinariesDir PATH` | Reusable asset collection. |
 | `-DownloadDir PATH` | Owned dependency workspace parent. |

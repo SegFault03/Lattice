@@ -357,7 +357,6 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     new AlterTableDialog(project, config, databaseName, tableMetadata).showAndGet();
             }
             @Override public void close() { setInspectorVisible(false); }
-            @Override public void unpin() { followGridSelection(); }
             @Override public void draftChanged() { updatePendingChangesState(); }
         });
         cellDetailsSplitter = new OnePixelSplitter(false, 0.63f);
@@ -375,7 +374,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         });
         dataTable.getTableHeader().addMouseListener(new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent event) {
-                if (!SwingUtilities.isLeftMouseButton(event) || cellDetails.isPinned()) return;
+                if (!SwingUtilities.isLeftMouseButton(event) || !inspectorVisible) return;
                 int viewCol = dataTable.getTableHeader().columnAtPoint(event.getPoint());
                 if (viewCol < 0) return;
                 Rectangle bounds = dataTable.getTableHeader().getHeaderRect(viewCol);
@@ -422,13 +421,13 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             if (!event.getValueIsAdjusting()) {
                 updateValidationDetails(tableModel.getValidationErrors());
                 updateContextActions();
-                if (inspectorVisible && !cellDetails.isPinned()) followGridSelection();
+                if (inspectorVisible) followGridSelection();
             }
         });
         dataTable.getColumnModel().getSelectionModel().addListSelectionListener(event -> {
             if (!event.getValueIsAdjusting()) {
                 updateValidationDetails(tableModel.getValidationErrors());
-                if (inspectorVisible && !cellDetails.isPinned()) followGridSelection();
+                if (inspectorVisible) followGridSelection();
             }
         });
         tableModel.addTableModelListener(event -> {
@@ -459,7 +458,6 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             inspectorProportion = cellDetailsSplitter.getProportion();
             cellDetailsSplitter.setSecondComponent(null);
             dataTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
-            cellDetails.clearPin();
             inspectedHeaderName = null;
         }
         inspectBtn.setSelected(visible);
@@ -480,7 +478,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     }
 
     private void openCellDetails(int viewRow, int viewColumn) {
-        if (cellDetails == null || cellDetails.isPinned() || viewRow < 0 || viewColumn < 0
+        if (cellDetails == null || viewRow < 0 || viewColumn < 0
                 || viewRow >= dataTable.getRowCount() || viewColumn >= dataTable.getColumnCount()) return;
         int row = dataTable.convertRowIndexToModel(viewRow);
         int col = dataTable.convertColumnIndexToModel(viewColumn);
@@ -493,7 +491,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     }
 
     private void openColumnDetails(int viewColumn) {
-        if (cellDetails == null || cellDetails.isPinned() || viewColumn < 0
+        if (cellDetails == null || viewColumn < 0
                 || viewColumn >= dataTable.getColumnCount()) return;
         int col = dataTable.convertColumnIndexToModel(viewColumn);
         if (!cellDetails.showColumn(columnSnapshot(col))) return;
@@ -548,7 +546,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     }
 
     private void followGridSelection() {
-        if (!inspectorVisible || cellDetails.isPinned()) return;
+        if (!inspectorVisible) return;
         int viewRow = dataTable.getSelectedRow();
         int viewColumn = dataTable.getSelectedColumn();
         if (viewRow >= 0 && viewColumn >= 0) openCellDetails(viewRow, viewColumn);
@@ -563,12 +561,10 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             cellDetails.showColumn(columnSnapshot(col));
         } else {
             int row = cellDetails.inspectedRow();
-            if (!cellDetails.isPinned()) {
-                int selectedRow = dataTable.getSelectedRow(), selectedColumn = dataTable.getSelectedColumn();
-                if (selectedRow >= 0 && selectedColumn >= 0) {
-                    row = dataTable.convertRowIndexToModel(selectedRow);
-                    col = dataTable.convertColumnIndexToModel(selectedColumn);
-                }
+            int selectedRow = dataTable.getSelectedRow(), selectedColumn = dataTable.getSelectedColumn();
+            if (selectedRow >= 0 && selectedColumn >= 0) {
+                row = dataTable.convertRowIndexToModel(selectedRow);
+                col = dataTable.convertColumnIndexToModel(selectedColumn);
             }
             CellDetailsPanel.Cell snapshot = cellSnapshot(row, col);
             if (snapshot == null) { setInspectorVisible(false); return; }

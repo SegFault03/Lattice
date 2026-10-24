@@ -1,5 +1,8 @@
 # Cell inspector: table-matched controls
 
+> Historical QA record: these captures and pin-state checks predate removal of
+> the inspector pin control. See [current inspector behavior](docs/UI_PREVIEW.md).
+
 final result: passed
 
 The inspector now uses the table viewer's standard icon canvases, action heights, padding and icon-to-text spacing. The final native Light/Islands Dark comparisons and exact geometry assertions pass. No actionable P0/P1/P2 findings remain for this sizing correction.

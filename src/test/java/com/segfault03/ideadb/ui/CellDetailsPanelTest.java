@@ -29,7 +29,6 @@ class CellDetailsPanelTest {
         public void revert(CellDetailsPanel.Cell cell) {}
         public void editTable() {}
         public void close() { closes++; }
-        public void unpin() {}
     }
     static CellDetailsPanel.Cell cell(Object value, int row) {
         return new CellDetailsPanel.Cell("customers", row, 0,
@@ -113,6 +112,17 @@ class CellDetailsPanelTest {
                 assertTrue(actions.applied.isEmpty()); assertEquals(1, actions.closes);
                 assertFalse(panel.isEditing());
             }
+        });
+    }
+
+    @Test void inspectorHeaderOffersOnlyCloseAndHasNoPinAction() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            CellDetailsPanel panel = new CellDetailsPanel(new RecordingActions());
+            panel.showCell(cell("value", 0));
+            JPanel controls = field(panel, "controls", JPanel.class);
+            assertEquals(1, controls.getComponentCount());
+            assertSame(field(panel, "close", JButton.class), controls.getComponent(0));
+            assertEquals("Close details panel", controls.getComponent(0).getAccessibleContext().getAccessibleName());
         });
     }
 

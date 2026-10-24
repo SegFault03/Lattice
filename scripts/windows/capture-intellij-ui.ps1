@@ -129,6 +129,11 @@ try {
     if ($Review) { $gradleArguments += '-Plattice.ui.review=true' }
     if ($InputsOnly -or $env:LATTICE_UI_INPUTS_ONLY -eq 'true') { $gradleArguments += '-Plattice.ui.inputsOnly=true' }
     if ($StyleOnly -or $env:LATTICE_UI_STYLE_ONLY -eq 'true') { $gradleArguments += '-Plattice.ui.styleOnly=true' }
+    if ($env:LATTICE_UI_EXPLORER_SEARCH_ONLY -eq 'true') { $gradleArguments += '-Plattice.ui.explorerSearchOnly=true' }
+    if ($env:LATTICE_UI_ALTER_TABLE_ONLY -eq 'true') { $gradleArguments += '-Plattice.ui.alterTableOnly=true' }
+    if ($env:LATTICE_UI_CREATE_TABLE_ONLY -eq 'true') { $gradleArguments += '-Plattice.ui.createTableOnly=true' }
+    if ($env:LATTICE_UI_CELL_DETAILS_ONLY -eq 'true') { $gradleArguments += '-Plattice.ui.cellDetailsOnly=true' }
+    if ($env:LATTICE_UI_SCALE) { $gradleArguments += "-Plattice.ui.scale=$env:LATTICE_UI_SCALE" }
     if ($Output) {
         $outputPath = [IO.Path]::GetFullPath($Output)
         $gradleArguments += "-Plattice.ui.output=$outputPath"

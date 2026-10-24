@@ -29,6 +29,15 @@ class OneShotTests(unittest.TestCase):
             skip_compatibility=False, compatibility_only=False, database_compatibility_only=True)),
             (False, False, True, 5 + int(sys.platform == "linux")))
 
+    def test_windows_full_plan_adds_each_windows_supported_ui_scenario(self):
+        with patch.object(one_shot.sys, "platform", "win32"):
+            plan = one_shot.validation_plan(Namespace(
+                skip_compatibility=False, compatibility_only=False,
+                database_compatibility_only=False, windows_ui=True))
+        self.assertEqual((True, True, True, 15), plan)
+        self.assertEqual(tuple(suite for suite, _, _ in one_shot.WINDOWS_UI_SCENARIOS),
+                         ("hsqldb", "alter-table", "table-dialogs", "cell-inspector-scaled", "search"))
+
     def test_declared_matrix_covers_server_floors_driver_generations_and_current_versions(self):
         self.assertEqual(tuple(server for server, _ in one_shot.MYSQL_MATRIX),
                          ("5.5.62", "5.6.51", "5.7.44", "8.4.2"))
