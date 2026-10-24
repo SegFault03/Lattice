@@ -10,6 +10,25 @@ import java.awt.image.BufferedImage;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DatabaseTableTest {
+    @Test void headerResizeCursorDoesNotBecomeTheDefaultAfterUiRefresh() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            var table = new DatabaseTable(new DefaultTableModel(new Object[]{"id", "name"}, 0));
+            var header = table.getTableHeader();
+            table.getColumnModel().getColumn(0).setWidth(100);
+            table.getColumnModel().getColumn(1).setWidth(100);
+            header.setSize(300, 32);
+            for (int refresh = 0; refresh < 2; refresh++) {
+                header.dispatchEvent(new MouseEvent(header, MouseEvent.MOUSE_MOVED, 0, 0, 99, 16, 0, false));
+                assertEquals(Cursor.E_RESIZE_CURSOR, header.getCursor().getType());
+                header.updateUI();
+                for (int x : new int[]{50, 150, 250}) {
+                    header.dispatchEvent(new MouseEvent(header, MouseEvent.MOUSE_MOVED, 0, 0, x, 16, 0, false));
+                    assertEquals(Cursor.DEFAULT_CURSOR, header.getCursor().getType(), "Only column boundaries should show resize");
+                }
+            }
+        });
+    }
+
     @Test void primaryKeyHeadersHaveDistinctPaintedColorsAndFollowModelColumnIndices() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             var model = new com.segfault03.ideadb.model.ReadOnlyResultModel();

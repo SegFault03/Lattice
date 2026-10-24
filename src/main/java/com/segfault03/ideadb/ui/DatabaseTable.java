@@ -56,6 +56,10 @@ public final class DatabaseTable extends JBTable {
                 } finally { copy.dispose(); }
             }
             @Override public void updateUI() {
+                // A replacement BasicTableHeaderUI starts with a resize cursor in
+                // its swap slot. Retaining the old resize cursor poisons both slots,
+                // so moving back into a column can never restore the normal pointer.
+                setCursor(Cursor.getDefaultCursor());
                 super.updateUI();
                 if (getParent() instanceof JViewport viewport) viewport.setBackground(DatabaseTable.this.getBackground());
             }

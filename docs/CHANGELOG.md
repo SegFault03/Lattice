@@ -4,6 +4,7 @@ Patch notes are selected by the exact release version, including prerelease suff
 
 ## [Unreleased]
 
+- Restore the normal table-header pointer after UI/theme refreshes; show the resize cursor only at column boundaries.
 - Add PostgreSQL connections with bundled pgJDBC, schema browsing, SQL consoles, grid editing, DDL and exports; validate current and legacy server/driver combinations.
 - Inspect cell values and column definitions beside the grid, with formatted/raw views, pinning, copying, explicit staging, and recovery of unconfirmed edits. Restored inspector text remains separate from the pending database batch and survives delayed or failed metadata loading.
 - Redesign create/alter table dialogs with a column navigator and complete SQL preview. Apply additions, property changes, renames and drops in a batch, with validation and recovery after partially committed DDL.
