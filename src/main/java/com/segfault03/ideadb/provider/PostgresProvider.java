@@ -44,7 +44,44 @@ final class PostgresProvider implements DatabaseProvider {
         }
     }
     public void beforeQuery(Connection connection, String selected, String sql) throws SQLException {
-        if (!sql.matches("(?is)^(?:\\s|--[^\\r\\n]*(?:\\r?\\n|$)|/\\*.*?\\*/)*(?:ROLLBACK|COMMIT|END|ABORT)\\b.*")) DatabaseProvider.super.beforeQuery(connection,selected,sql);
+        if (!isTransactionEnd(sql)) DatabaseProvider.super.beforeQuery(connection,selected,sql);
+    }
+    /** Scan once: nested PostgreSQL comments must not cause regex backtracking. */
+    static boolean isTransactionEnd(String sql) {
+        int position = 0, length = sql.length();
+        while (position < length) {
+            char current = sql.charAt(position);
+            if (Character.isWhitespace(current)) { position++; continue; }
+            if (sql.startsWith("--", position)) {
+                position += 2;
+                while (position < length && sql.charAt(position) != '\r' && sql.charAt(position) != '\n') position++;
+                continue;
+            }
+            if (sql.startsWith("/*", position)) {
+                int depth = 1;
+                position += 2;
+                while (position < length && depth > 0) {
+                    if (sql.startsWith("/*", position)) { depth++; position += 2; }
+                    else if (sql.startsWith("*/", position)) { depth--; position += 2; }
+                    else position++;
+                }
+                if (depth != 0) return false;
+                continue;
+            }
+            break;
+        }
+        int start = position;
+        while (position < length) {
+            char current = sql.charAt(position);
+            if (!Character.isLetterOrDigit(current) && current != '_' && current != '$') break;
+            position++;
+        }
+        // Bound allocations even for very long non-keyword identifiers.
+        if (position - start > 8) return false;
+        return switch (sql.substring(start, position).toUpperCase(Locale.ROOT)) {
+            case "ROLLBACK", "COMMIT", "END", "ABORT" -> true;
+            default -> false;
+        };
     }
     public boolean supportsCustomTypes() { return true; }
     public int fetchSize(int requested) { return requested; }

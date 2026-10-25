@@ -69,6 +69,10 @@ catalog queries, with identity from 10 and computed columns from 12. Generated
 columns remain read-only in the grid and are omitted from INSERT exports. Schema
 DDL and column alterations use PostgreSQL's transactional semantics, preserving
 outer transactions through savepoints.
+Transaction-end commands bypass namespace selection so COMMIT/ROLLBACK can
+recover a failed transaction. A linear scanner recognizes the leading keyword
+after whitespace, line comments and nested block comments; malformed comments
+and longer identifiers are not treated as transaction-end commands.
 
 ## Connection ownership
 

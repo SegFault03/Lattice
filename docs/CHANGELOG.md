@@ -20,6 +20,7 @@ Patch notes are selected by the exact release version, including prerelease suff
 - Keep NULL and database-default choices in the inspector draft until Stage change is clicked; support column defaults on existing rows. Show only Revert after staging and keep Copy inside the value box, visible on hover.
 - Redesign create/alter dialogs around column navigation and complete SQL previews. Apply changes in batches and retain uncompleted edits after partial DDL failure.
 - Improve cancellation and session recovery, preserve generated/default values during schema changes, and keep table actions available as the selection and editor state change.
+- Detect PostgreSQL transaction-end commands with a linear comment scanner, avoiding regex backtracking on crafted SQL input and supporting nested block comments.
 
 ### Drivers and interface
 
