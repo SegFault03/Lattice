@@ -15,6 +15,17 @@ final class DatabaseSourceTreeModel extends DefaultTreeModel {
 
     Set<DatabaseType> getVisibleTypes() { return Set.copyOf(visibleTypes); }
 
+    java.util.List<DefaultMutableTreeNode> connectionNodes() {
+        var connections = new java.util.ArrayList<DefaultMutableTreeNode>();
+        var nodes = ((DefaultMutableTreeNode)getRoot()).depthFirstEnumeration();
+        while (nodes.hasMoreElements()) {
+            var node = (DefaultMutableTreeNode)nodes.nextElement();
+            if (node.getUserObject() instanceof TreeNodeData data
+                    && data.getType() == TreeNodeData.NodeType.CONNECTION) connections.add(node);
+        }
+        return java.util.List.copyOf(connections);
+    }
+
     void setVisibleTypes(Set<DatabaseType> types) {
         if (types.isEmpty()) throw new IllegalArgumentException("Select at least one data source");
         visibleTypes = EnumSet.copyOf(types);

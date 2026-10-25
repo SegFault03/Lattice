@@ -109,7 +109,7 @@ Choose **Edit value**, then **Stage change** to add the edit to the grid's pendi
 
 Create/alter table dialogs retain changes across the column navigator and show the complete SQL before applying. Batched alterations can rename the table and add, modify, rename or drop columns. PostgreSQL batches use a transaction; MySQL, HSQLDB and H2 may commit DDL incrementally. After a failure, review the refreshed schema and remaining changes before retrying.
 
-Database changes automatically refresh the explorer and affected editors. Pending edits defer a grid reload until Commit or Revert. The explorer also retains the last successful metadata for offline browsing and SQL generation; cached metadata can be stale and contains no table rows. Connect or refresh for current definitions and live operations. Generating an INSERT on a connected table loads its columns when needed.
+Database changes automatically refresh the explorer and affected editors. Pending edits defer a grid reload until Commit or Revert. When Lattice first opens in each IDE project session, it attempts to refresh every saved connection in the background, including cached connections. Unavailable servers retain their cached metadata and show a retry status without startup error dialogs. The explorer also retains the last successful metadata for offline browsing and SQL generation; cached metadata can be stale and contains no table rows. Connect or refresh for current definitions and live operations. Generating an INSERT on a connected table loads its columns when needed.
 
 ## Build from source
 

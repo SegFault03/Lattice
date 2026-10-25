@@ -70,6 +70,15 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                     if (!disposed && !project.isDisposed()) loadConnectionsFromState();
                 }));
         loadConnectionsFromState();
+        SwingUtilities.invokeLater(this::refreshConnectionsOnOpen);
+    }
+
+    private void refreshConnectionsOnOpen() {
+        if (disposed || project.isDisposed()) return;
+        // Snapshot all saved sources, including cached and filtered-out connections.
+        // Loading a node replaces its children, so do not traverse during loading.
+        for (DefaultMutableTreeNode node : treeModel.connectionNodes())
+            loadDatabasesForConnectionNode(node, (TreeNodeData) node.getUserObject(), false);
     }
 
     public boolean isDisposed() { return disposed; }
@@ -575,6 +584,10 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     }
 
     private void loadDatabasesForConnectionNode(DefaultMutableTreeNode connNode, TreeNodeData data) {
+        loadDatabasesForConnectionNode(connNode, data, true);
+    }
+
+    private void loadDatabasesForConnectionNode(DefaultMutableTreeNode connNode, TreeNodeData data, boolean showErrorDialog) {
         ConnectionConfig cfg = data.getConnectionConfig();
         var existing = existingNodes(connNode, TreeNodeData.NodeType.DATABASE);
         var view = captureTreeView(connNode);
@@ -616,7 +629,8 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                         connNode.add(new DefaultMutableTreeNode(TreeNodeData.error("Connection failed · Refresh to retry", ex.getMessage())));
                         treeModel.nodeStructureChanged(connNode);
                     }
-                    Messages.showErrorDialog(project, "Failed to connect: " + ex.getMessage(), "Connection Error");
+                    if (showErrorDialog)
+                        Messages.showErrorDialog(project, "Failed to connect: " + ex.getMessage(), "Connection Error");
                 });
             }
         });

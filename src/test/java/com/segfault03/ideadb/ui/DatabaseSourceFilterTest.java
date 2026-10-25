@@ -16,6 +16,30 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DatabaseSourceFilterTest {
+    @Test void startupRefreshIncludesEverySavedConnectionRegardlessOfCacheOrSourceFilter() {
+        var root = new DefaultMutableTreeNode(TreeNodeData.root());
+        var expected = new ArrayList<DefaultMutableTreeNode>();
+        for (DatabaseType type : DatabaseType.values()) {
+            var group = new DefaultMutableTreeNode(TreeNodeData.sourceType(type));
+            root.add(group);
+            var config = new ConnectionConfig(type, type.getDisplayName());
+            var data = TreeNodeData.connection(config, type == DatabaseType.MYSQL);
+            data.setLoaded(true); data.setCached(type != DatabaseType.MYSQL);
+            var connection = new DefaultMutableTreeNode(data);
+            connection.add(new DefaultMutableTreeNode(TreeNodeData.database(config, "sample")));
+            group.add(connection); expected.add(connection);
+        }
+        var model = new DatabaseSourceTreeModel(root);
+        model.setVisibleTypes(EnumSet.of(DatabaseType.MYSQL));
+        assertEquals(expected, model.connectionNodes());
+        // A startup load replaces each connection's children; iteration must remain stable.
+        var targets = model.connectionNodes();
+        for (var connection : targets) connection.removeAllChildren();
+        assertEquals(expected, targets);
+        assertEquals(expected, model.connectionNodes());
+        assertTrue(new DatabaseSourceTreeModel(new DefaultMutableTreeNode(TreeNodeData.root())).connectionNodes().isEmpty());
+    }
+
     @Test void selectingATypeWithoutConnectionsDoesNotCreateAnEmptySection() {
         DefaultMutableTreeNode root = new DefaultMutableTreeNode(TreeNodeData.root());
         root.add(new DefaultMutableTreeNode(TreeNodeData.sourceType(DatabaseType.MYSQL)));
