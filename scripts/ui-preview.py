@@ -4,7 +4,7 @@
 Requires JDK 21 and an IntelliJ 2025.1 SDK (Gradle's cached SDK is discovered).
 The IntelliJ test application supplies native action-system services; preview-only
 service shadows block database work and FlatLaf approximates IDE themes.
-Refreshes the five featured screenshots/ PNGs and a local gallery under ignored build/ui-preview/.
+Refreshes the seven featured screenshots/ PNGs and a local gallery under ignored build/ui-preview/.
 """
 import argparse
 import hashlib
@@ -20,8 +20,10 @@ from common import ROOT, java_command
 from dependencies import Dependencies, add_dependency_options, executable
 
 FEATURED_SCREENSHOTS = {
-    'side-panel.png': 'light-side-panel-340.png',
-    'connection-dialog.png': 'light-connection-mysql-600.png',
+    'side-panel.png': 'light-cell-details-1440.png',
+    'welcome.png': 'light-welcome-900.png',
+    'connection-dialog.png': 'light-connection-mysql-740.png',
+    'alter-table-dialog.png': 'light-schema-alter-table-800.png',
     'table-view.png': 'light-table-1100.png',
     'table-editing.png': 'light-table-new-row-1100.png',
     'sql-console.png': 'light-sql-console-1100.png',
@@ -70,9 +72,19 @@ def run():
     parser.add_argument('--java-home', type=Path, help='JDK 21 installation directory')
     parser.add_argument('--compare-with', type=Path, help='Previous output directory for before/after comparison')
     parser.add_argument('--output', type=Path, default=ROOT / 'build/ui-preview',
-                        help='Gallery/build directory; screenshots/ keeps only the five featured images')
+                        help='Gallery/build directory; screenshots/ keeps only the seven featured images')
     parser.add_argument('--all-previews', action='store_true',
-                        help='Generate the full light/dark preview gallery; by default only the five featured screens are rendered')
+                        help='Generate the full light/dark preview gallery; by default only the seven featured screens are rendered')
+    parser.add_argument('--checks-only', action='store_true',
+                        help='Run editor recovery assertions without rendering screenshots or updating the gallery')
+    parser.add_argument('--source-filter-only', action='store_true',
+                        help='Render only the source filter in light/dark themes, without updating screenshots/')
+    parser.add_argument('--search-only', action='store_true',
+                        help='Render the explorer search in light/dark themes, without updating screenshots/')
+    parser.add_argument('--tab-icons-only', action='store_true',
+                        help='Render table tab source badges in light/dark themes, without updating screenshots/')
+    parser.add_argument('--cell-details-only', action='store_true',
+                        help='Render focused cell and column details in both themes, without updating tracked screenshots')
     parser.add_argument('--flatlaf-jar', type=Path, help='Existing FlatLaf 3.7.2 JAR')
     parser.add_argument('--junit-jar', type=Path, help='Existing JUnit 4.13.2 JAR')
     parser.add_argument('--hamcrest-jar', type=Path, help='Existing Hamcrest Core 1.3 JAR')
@@ -125,14 +137,14 @@ def render(args, deps, parser):
     java_args(javac, ['--release', '21', '-encoding', 'UTF-8', '-cp', os.pathsep.join([str(production), str(flatlaf), cp]), '-d', str(preview)] + list(map(str, preview_sources)), output / 'compile-preview.args')
     runtime = os.pathsep.join([str(preview), str(production), str(ROOT / 'src/main/resources'), str(flatlaf), cp])
     # A reused output directory should represent this invocation only.
-    for theme in ('light', 'dark'):
+    for theme in (() if args.checks_only else ('light', 'dark')):
         for path in output.glob(f'{theme}-*.png'):
             path.unlink()
         manifest = output / f'{theme}-manifest.txt'
         if manifest.exists():
             manifest.unlink()
-    mode = 'all' if args.all_previews else 'featured'
-    themes = ('light', 'dark') if args.all_previews else ('light',)
+    mode = 'checks' if args.checks_only else 'cell-details' if args.cell_details_only else 'tab-icons' if args.tab_icons_only else 'search' if args.search_only else 'source-filter' if args.source_filter_only else 'all' if args.all_previews else 'featured'
+    themes = ('light', 'dark') if args.all_previews or args.source_filter_only or args.search_only or args.tab_icons_only or args.cell_details_only else ('light',)
     for theme in themes:
         system_path = output / f'idea-system-{os.getpid()}-{theme}'
         config_path = output / f'idea-config-{os.getpid()}-{theme}'
@@ -160,9 +172,12 @@ def render(args, deps, parser):
         finally:
             shutil.rmtree(system_path, ignore_errors=True)
             shutil.rmtree(config_path, ignore_errors=True)
-    if not args.all_previews:
+    if args.checks_only:
+        return
+    if len(themes) == 1:
         (output / 'dark-manifest.txt').write_text('', encoding='utf-8')
-    publish_screenshots(output, screenshots)
+    if not args.source_filter_only and not args.search_only and not args.tab_icons_only and not args.cell_details_only:
+        publish_screenshots(output, screenshots)
     render_gallery(output, baseline)
 
 
@@ -204,7 +219,7 @@ def render_gallery(output, baseline=None):
     for filename in light:
         path = output / filename
         name = path.stem.removeprefix('light-')
-        screen = next((kind for kind in ('connection', 'side-panel', 'sql-console', 'schema', 'inputs', 'welcome') if name.startswith(kind)), 'table')
+        screen = 'side-panel' if name.startswith('explorer-search') else next((kind for kind in ('connection', 'side-panel', 'sql-console', 'schema', 'inputs', 'welcome') if name.startswith(kind)), 'table')
         shots = []
         if baseline and (baseline / filename).is_file() and (baseline / filename.replace('light-', 'dark-', 1)).is_file():
             (output / 'before').mkdir(exist_ok=True)

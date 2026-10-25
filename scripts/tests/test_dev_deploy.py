@@ -60,7 +60,7 @@ class DeploymentTests(unittest.TestCase):
         with zipfile.ZipFile(contents, "w") as jar:
             jar.writestr("META-INF/plugin.xml", f"<idea-plugin><id>{deploy.PLUGIN_ID}</id><version>{version}</version><idea-version since-build='251'/></idea-plugin>")
             for name in ("LICENSE", "THIRD_PARTY_NOTICES.md", "licenses/mysql-connector-j-26.7.0-LICENSE.txt",
-                         "licenses/hsqldb-LICENSE.txt", "licenses/protobuf-LICENSE.txt"):
+                         "licenses/hsqldb-LICENSE.txt", "licenses/postgresql-LICENSE.txt", "licenses/h2-LICENSE.txt", "licenses/protobuf-LICENSE.txt"):
                 jar.writestr(name, "notice")
             jar.writestr("sample.class", b"\xca\xfe\xba\xbe\x00\x00\x00\x41")
         path = self.root / "new plugin.zip"
@@ -68,6 +68,8 @@ class DeploymentTests(unittest.TestCase):
             archive.writestr("Lattice/lib/Lattice.jar", contents.getvalue())
             archive.writestr("Lattice/lib/mysql-connector-j-26.7.0.jar", "driver")
             archive.writestr("Lattice/lib/hsqldb-2.7.4.jar", "driver")
+            archive.writestr("Lattice/lib/postgresql-42.7.14.jar", "driver")
+            archive.writestr("Lattice/lib/h2-2.3.232.jar", "driver")
             archive.writestr("Lattice/lib/protobuf-java-4.36.2.jar", "runtime")
             if extra:
                 archive.writestr(extra, "bad")
@@ -86,6 +88,16 @@ class DeploymentTests(unittest.TestCase):
     def cli_args(self, ide):
         return ["--ide-home", str(ide.home), "--java-home", str(ide.home / "jbr"),
                 "--plugins-dir", str(self.root / "user/plugins"), "--no-color"]
+
+    def test_deploy_build_uses_the_ci_functional_and_regression_tasks(self):
+        with patch.object(deploy, "gradle_command", return_value=["gradle"]), \
+             patch.object(deploy.subprocess, "run") as run:
+            deploy.build_plugin(self.root / "jdk", "1.2.3")
+        command = run.call_args.args[0]
+        self.assertIn("functionalTest", command)
+        self.assertIn("regressionTest", command)
+        self.assertIn("buildPlugin", command)
+        self.assertNotIn("test", command)
 
     def test_metadata_windows_linux_and_macos_app_layouts_and_compatibility(self):
         for system in ("Windows", "Linux", "macOS"):

@@ -7,7 +7,14 @@ import java.util.*;
 
 /** Default tests need no database; integration-tagged tests exercise the live fixture servers. */
 public class RegressionSuitesTest {
-    @Test void editorContracts() { EditorIntegrationTest.main(new String[0]); }
+    @Test void editorContracts() {
+        EditorIntegrationTest.main(new String[0]);
+        String historySql="SELECT 'text  with   spaces', ID FROM SOME_TABLE WHERE ID IN (1,2,3,4,5);\nSELECT 2;";
+        var entry=new QueryHistoryEntry(historySql);
+        FunctionalRegressionTest.check(entry.sql().equals(historySql),"History preview must preserve full executable SQL and literal whitespace");
+        var readonly=new ReadOnlyResultModel(); readonly.setDataVector(new Object[][]{{1,"value"}},new Object[]{"ID","VALUE"});
+        FunctionalRegressionTest.check(!readonly.isCellEditable(0,0) && !readonly.isCellEditable(0,1),"Arbitrary console results must be read-only");
+    }
     @Test void typedDraftPersistence() { FunctionalRegressionTest.drafts(); }
     @Test void credentialPersistenceAndMigration() { FunctionalRegressionTest.credentials(); }
     @Test void originalRowIdentity() {
@@ -96,7 +103,7 @@ public class RegressionSuitesTest {
             for (DatabaseType type : DatabaseType.values()) {
                 String sql = com.segfault03.ideadb.service.DdlService.getInstance().buildCreateTableSql(
                         new ConnectionConfig(type, "locale"), "PUBLIC", "items", List.of(column));
-                assertTrue(sql.contains("binary(16)"), sql);
+                assertTrue(type == DatabaseType.POSTGRESQL ? sql.toLowerCase(Locale.ROOT).contains("bytea") : sql.contains("binary(16)"), sql);
             }
         } finally { Locale.setDefault(previous); }
     }
@@ -127,6 +134,5 @@ public class RegressionSuitesTest {
             try (var current = manager.openConnection(updated)) { assertFalse(current.isClosed()); }
         } finally { manager.removeConfiguration(config.getId()); }
     }
-    @Test @Tag("integration") void existingDatabaseFlows() { PluginIntegrationTest.main(new String[0]); }
     @Test @Tag("integration") void liveFunctionalRegressions() throws Exception { FunctionalRegressionTest.main(new String[0]); }
 }

@@ -2,11 +2,13 @@ package com.segfault03.ideadb.ui;
 
 import com.segfault03.ideadb.model.ColumnMetadata;
 import com.segfault03.ideadb.model.ConnectionConfig;
+import com.segfault03.ideadb.model.DatabaseType;
 import com.segfault03.ideadb.model.TableMetadata;
 
 public class TreeNodeData {
     public enum NodeType {
         ROOT,
+        SOURCE_TYPE,
         CONNECTION,
         DATABASE,
         TABLES_FOLDER,
@@ -22,11 +24,13 @@ public class TreeNodeData {
     private final NodeType type;
     private String name;
     private ConnectionConfig connectionConfig;
+    private DatabaseType databaseType;
     private String databaseName;
     private TableMetadata tableMetadata;
     private ColumnMetadata columnMetadata;
     private String errorDetail;
     private boolean connected;
+    private boolean cached;
     private boolean loaded;
     private boolean loading;
 
@@ -37,6 +41,12 @@ public class TreeNodeData {
 
     public static TreeNodeData root() {
         return new TreeNodeData(NodeType.ROOT, "Data Sources");
+    }
+
+    public static TreeNodeData sourceType(DatabaseType type) {
+        TreeNodeData data = new TreeNodeData(NodeType.SOURCE_TYPE, type.getDisplayName());
+        data.databaseType = type;
+        return data;
     }
 
     public static TreeNodeData connection(ConnectionConfig config, boolean connected) {
@@ -112,11 +122,14 @@ public class TreeNodeData {
     public void setName(String name) { this.name = name; }
     public ConnectionConfig getConnectionConfig() { return connectionConfig; }
     public void setConnectionConfig(ConnectionConfig config) { this.connectionConfig = config; }
+    public DatabaseType getDatabaseType() { return databaseType; }
     public String getDatabaseName() { return databaseName; }
     public void setDatabaseName(String databaseName) { this.databaseName = databaseName; }
     public TableMetadata getTableMetadata() { return tableMetadata; }
     public ColumnMetadata getColumnMetadata() { return columnMetadata; }
     public boolean isConnected() { return connected; }
+    public boolean isCached() { return cached; }
+    public void setCached(boolean cached) { this.cached = cached; }
     public void setConnected(boolean connected) { this.connected = connected; }
     public boolean isLoading() { return loading; }
     public void setLoading(boolean loading) { this.loading = loading; }

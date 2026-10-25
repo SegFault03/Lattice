@@ -12,7 +12,23 @@ import unittest
 SCRIPTS = Path(__file__).resolve().parents[1]
 
 
+def python_launchers():
+    return sorted(path for path in (SCRIPTS / 'windows').glob('*.ps1')
+                  if path.name not in ('capture-intellij-ui.ps1', 'review-intellij-ui.ps1', 'windows-common.ps1'))
+
+
 class ScriptLayoutTests(unittest.TestCase):
+    def test_windows_python_launcher_inventory(self):
+        expected = {
+            'check-release-archive', 'dev-deploy', 'h2-compatibility', 'h2-test',
+            'one-shot-test', 'prepare-source-asset', 'probe-hsqldb-cancellation',
+            'release', 'test', 'ui-preview', 'verify-plugin',
+        }
+        self.assertEqual(expected, {path.stem for path in python_launchers()})
+        for command in python_launchers():
+            with self.subTest(command=command.name):
+                self.assertTrue((SCRIPTS / (command.stem + '.py')).is_file())
+
     def test_public_scripts_and_docs_do_not_embed_workstation_paths(self):
         pattern = re.compile(r'(?i)[A-Z]:[\\/](?:code|Users)[\\/]|/(?:home|Users)/[^/\\\s<]+')
         for folder in (SCRIPTS, SCRIPTS.parent / 'docs'):
@@ -38,7 +54,7 @@ class ScriptLayoutTests(unittest.TestCase):
                    'scratch/runtime.dll', 'scratch/source.tar.gz', 'scripts/__pycache__/common.pyc']
         allowed = ['screenshots/side-panel.png', 'screenshots/connection-dialog.png',
                    'screenshots/table-view.png', 'screenshots/table-editing.png', 'screenshots/sql-console.png',
-                   'gradle/wrapper/gradle-wrapper.jar', 'assets/icon.png',
+                   'gradle/wrapper/gradle-wrapper.jar', 'assets/icon.png', 'AGENTS.md',
                    'src/main/resources/META-INF/pluginIcon.png', 'scripts/windows/test.ps1']
         # One-shot validation deliberately copies source without .git metadata.
         with tempfile.TemporaryDirectory() as directory:
@@ -56,13 +72,24 @@ class ScriptLayoutTests(unittest.TestCase):
         self.assertTrue((SCRIPTS / 'windows/native_mysql.py').is_file())
         self.assertTrue((SCRIPTS / 'windows/windows-script-dependencies.py').is_file())
 
+    def test_windows_ui_capture_routes_ci_focused_scenarios(self):
+        capture = (SCRIPTS / 'windows/capture-intellij-ui.ps1').read_text(encoding='utf-8-sig')
+        for variable, gradle_property in (
+            ('LATTICE_UI_EXPLORER_SEARCH_ONLY', 'explorerSearchOnly'),
+            ('LATTICE_UI_ALTER_TABLE_ONLY', 'alterTableOnly'),
+            ('LATTICE_UI_CREATE_TABLE_ONLY', 'createTableOnly'),
+            ('LATTICE_UI_CELL_DETAILS_ONLY', 'cellDetailsOnly'),
+        ):
+            with self.subTest(variable=variable):
+                self.assertIn(f'$env:{variable} -eq \'true\'', capture)
+                self.assertIn(f'-Plattice.ui.{gradle_property}=true', capture)
+        self.assertIn('$env:LATTICE_UI_SCALE', capture)
+        self.assertIn('-Plattice.ui.scale=$env:LATTICE_UI_SCALE', capture)
+
     @unittest.skipUnless(os.name == 'nt', 'Windows launcher execution')
     def test_python_launchers_work_from_an_unrelated_directory(self):
-        commands = sorted(path for path in (SCRIPTS / 'windows').glob('*.ps1')
-                          if path.name not in ('capture-intellij-ui.ps1', 'review-intellij-ui.ps1', 'windows-common.ps1'))
-        self.assertEqual(9, len(commands))
         with tempfile.TemporaryDirectory(prefix='lattice launcher ') as directory:
-            for command in commands:
+            for command in python_launchers():
                 for interpreter in ([], ['-Python', sys.executable]):
                     with self.subTest(command=command.name, interpreter=interpreter):
                         result = subprocess.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass',

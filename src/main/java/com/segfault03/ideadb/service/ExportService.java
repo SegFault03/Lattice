@@ -1,5 +1,7 @@
 package com.segfault03.ideadb.service;
 
+import com.segfault03.ideadb.provider.DatabaseProviders;
+
 import com.segfault03.ideadb.model.*;
 
 import java.io.BufferedWriter;
@@ -74,16 +76,17 @@ public class ExportService {
     }
     public void exportToSqlInsert(ConnectionConfig config,String schema,String tableName,QueryResult result,File file) throws Exception {
         try(BufferedWriter writer=new BufferedWriter(new FileWriter(file,StandardCharsets.UTF_8))) {
-            for(List<Object> row:result.getRows()) writeInsert(writer,config,schema,tableName,result.getColumnNames(),result.getColumnTypes(),row);
+            for(List<Object> row:result.getRows()) writeInsert(writer,config,schema,tableName,result.getColumnNames(),result.getColumnTypes(),row,result.getInsertOverride(),result.getOmittedInsertColumns());
         }
     }
-    private void writeInsert(BufferedWriter writer, ConnectionConfig config,String schema,String table,List<String> columns,List<String> types,List<Object> row) throws Exception {
-        writer.write("INSERT INTO " + DdlService.formatTable(config,schema,table) + " (");
-        for(int col=0;col<columns.size();col++) {
-            if(col>0) writer.write(", "); writer.write(DdlService.quoteIdentifier(config,columns.get(col)));
-        }
-        writer.write(") VALUES (");
-        for(int col=0;col<row.size();col++) { if(col>0) writer.write(", "); writer.write(sqlLiteral(config,row.get(col),types.get(col))); }
+    private void writeInsert(BufferedWriter writer, ConnectionConfig config,String schema,String table,List<String> columns,List<String> types,List<Object> row,String override,java.util.Set<String> omitted) throws Exception {
+        String target = DdlService.formatTable(config,schema,table);
+        List<Integer> included = java.util.stream.IntStream.range(0,columns.size()).filter(i -> !omitted.contains(columns.get(i))).boxed().toList();
+        if (included.isEmpty()) { writer.write(DatabaseProviders.get(config.getType()).dialect().defaultInsert(target) + ";\n"); return; }
+        writer.write("INSERT INTO " + target + " (");
+        for (int i=0;i<included.size();i++) { if(i>0) writer.write(", "); writer.write(DdlService.quoteIdentifier(config,columns.get(included.get(i)))); }
+        writer.write(")" + override + " VALUES (");
+        for (int i=0;i<included.size();i++) { if(i>0) writer.write(", "); int index=included.get(i); writer.write(sqlLiteral(config,row.get(index),types.get(index))); }
         writer.write(");\n");
     }
     private static boolean finite(Object value) {
@@ -93,29 +96,20 @@ public class ExportService {
         return value instanceof byte[] bytes ? "base64:" + java.util.Base64.getEncoder().encodeToString(bytes) : value.toString();
     }
     private static String sqlLiteral(ConnectionConfig config,Object value,String type) {
-        if(value==null) return "NULL";
-        if(value instanceof byte[] bytes) return "X'" + java.util.HexFormat.of().formatHex(bytes) + "'";
-        if(value instanceof Boolean bool) return bool ? "TRUE" : "FALSE";
-        if(value instanceof Number) { if(!finite(value)) throw new IllegalArgumentException("Non-finite numbers cannot be exported as SQL literals"); return value.toString(); }
-        if(config.getType()==DatabaseType.MYSQL && value instanceof java.sql.Timestamp timestamp && type.toUpperCase(java.util.Locale.ROOT).contains("TIMESTAMP")) {
-            java.time.Instant instant=timestamp.toInstant();
-            java.math.BigDecimal seconds=java.math.BigDecimal.valueOf(instant.getEpochSecond()).add(java.math.BigDecimal.valueOf(instant.getNano(),9));
-            return "FROM_UNIXTIME(" + seconds.toPlainString() + ")";
-        }
-        String text=value.toString();
-        if(config.getType()==DatabaseType.MYSQL) return "CONVERT(X'" + java.util.HexFormat.of().formatHex(text.getBytes(StandardCharsets.UTF_8)) + "' USING utf8mb4)";
-        return "'" + text.replace("'","''") + "'";
+        return DatabaseProviders.get(config.getType()).sqlLiteral(value,type);
     }
 
     /** A fresh persisted query streams all matching rows; page size and dirty grid values do not participate. */
     public long exportPersisted(java.sql.Connection connection,ConnectionConfig config,String schema,String table,String where,String format,File file) throws Exception {
+        var omitted = MetadataService.getInstance().getColumns(connection,config,schema,table).stream().filter(com.segfault03.ideadb.model.ColumnMetadata::isGenerated).map(com.segfault03.ideadb.model.ColumnMetadata::getName).collect(java.util.stream.Collectors.toSet());
+        String override = DatabaseProviders.get(config.getType()).insertOverride(connection);
         String query="SELECT * FROM " + DdlService.formatTable(config,schema,table) + (where==null || where.isBlank() ? "" : " WHERE " + where);
         java.nio.file.Path target=file.toPath().toAbsolutePath();
         java.nio.file.Path temporary=java.nio.file.Files.createTempFile(target.getParent(),".lattice-export-",".part");
         long count=0;
         try {
-            try(java.sql.Statement statement=connection.createStatement()) {
-                statement.setQueryTimeout(60); statement.setFetchSize(config.getType()==DatabaseType.MYSQL ? Integer.MIN_VALUE : 100);
+            try(var readScope = DatabaseProviders.get(config.getType()).readScope(connection); java.sql.Statement statement=connection.createStatement()) {
+                statement.setQueryTimeout(60); statement.setFetchSize(DatabaseProviders.get(config.getType()).fetchSize(100));
                 try(java.sql.ResultSet rows=statement.executeQuery(query); BufferedWriter writer=java.nio.file.Files.newBufferedWriter(temporary,StandardCharsets.UTF_8)) {
                     var metadata=rows.getMetaData(); List<String> columns=new java.util.ArrayList<>(), types=new java.util.ArrayList<>();
                     for(int col=1;col<=metadata.getColumnCount();col++) { columns.add(metadata.getColumnLabel(col)); types.add(metadata.getColumnTypeName(col)); }
@@ -125,8 +119,8 @@ public class ExportService {
                     while(rows.next()) {
                         if(Thread.currentThread().isInterrupted()) throw new java.io.InterruptedIOException("Export cancelled");
                         List<Object> row=new java.util.ArrayList<>();
-                        for(int col=1;col<=columns.size();col++) row.add(DataService.detachValue(rows.getObject(col)));
-                        if("sql".equals(format)) writeInsert(writer,config,schema,table,columns,types,row);
+                        for(int col=1;col<=columns.size();col++) row.add(DataService.detachValue(DatabaseProviders.get(config.getType()).readValue(rows,metadata,col)));
+                        if("sql".equals(format)) writeInsert(writer,config,schema,table,columns,types,row,override,omitted);
                         else if("csv".equals(format)) {
                             for(int col=0;col<row.size();col++) { if(col>0) writer.write(","); writer.write(escapeCsv(row.get(col)==null ? "" : textValue(row.get(col)))); } writer.newLine();
                         } else {

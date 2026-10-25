@@ -15,6 +15,31 @@ public class QueryResult {
     private final String error;
     private final boolean cancelled;
     private boolean truncated;
+    private java.util.Set<String> omittedInsertColumns = java.util.Set.of();
+    private java.util.Set<Integer> primaryKeyColumns = java.util.Set.of();
+    private java.util.Set<Integer> foreignKeyColumns = java.util.Set.of();
+    public java.util.Set<Integer> getForeignKeyColumns() { return foreignKeyColumns; }
+    public QueryResult withForeignKeyColumns(java.util.Set<Integer> columns) {
+        QueryResult copy = withInsertPolicy(omittedInsertColumns, insertOverride);
+        copy.foreignKeyColumns = java.util.Set.copyOf(columns);
+        return copy;
+    }
+    public java.util.Set<Integer> getPrimaryKeyColumns() { return primaryKeyColumns; }
+    public QueryResult withPrimaryKeyColumns(java.util.Set<Integer> columns) {
+        QueryResult copy = withInsertPolicy(omittedInsertColumns, insertOverride);
+        copy.primaryKeyColumns = java.util.Set.copyOf(columns);
+        return copy;
+    }
+    private String insertOverride = "";
+    public QueryResult withInsertPolicy(java.util.Set<String> omitted, String override) {
+        QueryResult copy = new QueryResult(resultSet,columnNames,columnTypes,rows,affectedRows,executionTimeMs,message,error,cancelled);
+        copy.primaryKeyColumns = primaryKeyColumns;
+        copy.foreignKeyColumns = foreignKeyColumns;
+        copy.truncated = truncated; copy.omittedInsertColumns = java.util.Set.copyOf(omitted); copy.insertOverride = override;
+        return copy;
+    }
+    public java.util.Set<String> getOmittedInsertColumns() { return omittedInsertColumns; }
+    public String getInsertOverride() { return insertOverride; }
 
     private QueryResult(boolean resultSet, List<String> columnNames, List<String> columnTypes,
                         List<List<Object>> rows, int affectedRows, long executionTimeMs,

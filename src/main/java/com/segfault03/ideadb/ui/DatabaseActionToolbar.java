@@ -52,6 +52,7 @@ public final class DatabaseActionToolbar {
 
         void updatePresentation(Presentation presentation) {
             presentation.setEnabled(source.isEnabled());
+            presentation.setDescription(source.getToolTipText());
             if (source instanceof JButton button) {
                 presentation.setIcon(button.getIcon());
                 presentation.setDisabledIcon(button.getDisabledIcon());

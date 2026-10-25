@@ -1,5 +1,7 @@
 package com.segfault03.ideadb.model;
 
+import com.segfault03.ideadb.provider.DatabaseProviders;
+
 import java.util.Objects;
 import java.util.UUID;
 
@@ -25,46 +27,16 @@ public class ConnectionConfig {
     public ConnectionConfig(DatabaseType type, String name) {
         this.type = type;
         this.name = name;
-        if (type == DatabaseType.HSQLDB) {
-            this.hsqlMode = HsqlMode.SERVER;
-            this.host = "localhost";
-            this.port = 9001;
-            this.user = "SA";
-            this.password = "";
-            this.databaseName = "testdb";
-        } else {
-            this.host = "localhost";
-            this.port = 3306;
-            this.user = "root";
-            this.databaseName = "";
-        }
+        var provider = DatabaseProviders.get(type);
+        this.port = provider.defaultPort();
+        this.user = provider.defaultUser();
+        this.databaseName = provider.defaultDatabase();
+        provider.configureDefaults(this);
     }
 
     public String buildJdbcUrl() {
-        if (customUrl != null && !customUrl.trim().isEmpty()) {
-            return customUrl.trim();
-        }
-
-        if (type == DatabaseType.MYSQL) {
-            String db = (databaseName != null && !databaseName.trim().isEmpty()) ? databaseName.trim() : "";
-            String h = (host != null && !host.trim().isEmpty()) ? host.trim() : "localhost";
-            int p = port > 0 ? port : 3306;
-            return "jdbc:mysql://" + h + ":" + p + "/" + db + "?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&useLegacyDatetimeCode=false&forceConnectionTimeZoneToSession=true&characterEncoding=utf8";
-        } else if (type == DatabaseType.HSQLDB) {
-            String db = (databaseName != null && !databaseName.trim().isEmpty()) ? databaseName.trim() : "testdb";
-            if (hsqlMode == HsqlMode.MEM) {
-                return "jdbc:hsqldb:mem:" + db + ";shutdown=true";
-            } else if (hsqlMode == HsqlMode.FILE) {
-                // normalize backslashes for JDBC url
-                String normalizedPath = db.replace("\\", "/");
-                return "jdbc:hsqldb:file:" + normalizedPath + ";shutdown=true";
-            } else { // SERVER
-                String h = (host != null && !host.trim().isEmpty()) ? host.trim() : "localhost";
-                int p = port > 0 ? port : 9001;
-                return "jdbc:hsqldb:hsql://" + h + ":" + p + "/" + db;
-            }
-        }
-        return "";
+        if (customUrl != null && !customUrl.isBlank()) return customUrl.trim();
+        return DatabaseProviders.get(type).buildJdbcUrl(this);
     }
 
     public ConnectionConfig copy() {

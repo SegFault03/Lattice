@@ -4,11 +4,25 @@ Install Python 3.11+ for Python entry points; use `python3` where appropriate. P
 
 See [Running Windows scripts locally](WINDOWS_SCRIPTS.md) for every Windows command, complete options, examples and defaults.
 
+Before changing a runner used by CI, read the
+[CI maintenance conventions](CI_TESTING.md#before-changing-ci) and the relevant
+platform, command and cleanup sections of this guide. Keep runner options,
+workflow invocations, portability tests and documentation aligned.
+
+CI and local validation share `scripts/test-suites.json` and the execution
+adapters in `one-shot-test.py`. Register suites there rather than copying commands
+into workflow YAML or another Windows list. The `suite-plan` CI guard checks this
+contract on every branch/PR. See [suite maintenance](CI_TESTING.md#shared-ci-and-local-suite-contract).
+Use `one-shot-test.py --list-suites --platform windows --windows-ui` to inspect
+the full Windows plan without downloads, and `--check-workflow` to check routing.
+CI uses `--ci-group GROUP --in-place` or `--suite ID --in-place`; verifier suites
+also receive `--archive PATH` to consume the exact built ZIP.
+
 ## Binary paths, downloads and cleanup
 
 Every dependency-using Python CLI supports `--download-dir PATH`, `--cleanup` / `--no-cleanup`, `--binaries-dir PATH` and `--gradle-user-home PATH`. Supply individual paths to avoid downloads; invalid explicit paths fail with an error. Omitted dependencies are discovered in the environment/PATH or the supplied asset collection, then downloaded when needed. Python 3.11+ and PowerShell on Windows are entry-point prerequisites. The build always uses the committed Gradle wrapper, whose distribution and Maven dependencies go to the selected Gradle cache.
 
-Each run creates a unique `lattice-run-*` directory under the download parent (default OS user cache, or `LATTICE_DEV_CACHE`). Cleanup removes only that directory, including on failure; it leaves the parent, preexisting assets, explicit Gradle/Maven caches and final output/report files intact. Retained dependency workspaces are searched on later runs so `--no-cleanup` allows offline reuse. Supply `--gradle-user-home` or set `GRADLE_USER_HOME` for an ongoing shared cache; otherwise the Gradle cache is private to its run. `test.py`, `one-shot-test.py` and the cancellation probe default to cleanup; other helpers default to retention. Legacy `--cache` is still supported by source/verifier helpers: it is searched for existing assets; with cleanup enabled new downloads go into the owned workspace. Custom IDE homes are SDK directories, not installers.
+Each run creates a unique `lattice-run-*` directory under the download parent (default OS user cache, or `LATTICE_DEV_CACHE`). Cleanup removes only that directory, including on failure; it leaves the parent, preexisting assets, explicit Gradle/Maven caches and final output/report files intact. Retained dependency workspaces are searched on later runs so `--no-cleanup` allows offline reuse. Supply `--gradle-user-home` or set `GRADLE_USER_HOME` for an ongoing shared cache; otherwise the Gradle cache is private to its run. `test.py`, `one-shot-test.py` and the cancellation probe default to cleanup; other helpers default to retention. With `one-shot-test.py --binaries-dir PATH`, versioned compatibility JDBC jars are retained in `PATH/jdbc-cache` even when scratch cleanup is enabled. Its Windows UI mode also keeps prepared UI fixture jars in `PATH/ui-maven-repository`. Legacy `--cache` is still supported by source/verifier helpers: it is searched for existing assets; with cleanup enabled new downloads go into the owned workspace. Custom IDE homes are SDK directories, not installers.
 
 On Windows, helpers add `-Djava.net.preferIPv4Stack=true` to `JAVA_TOOL_OPTIONS` before launching Java, including the Gradle wrapper download. This avoids socket timeouts seen with Java's default dual-stack mode. Existing Java options are preserved; an explicitly configured `-Djava.net.preferIPv4Stack=` value takes precedence.
 
@@ -16,7 +30,7 @@ Dependency/cache paths expand environment variables before resolution. CMD expan
 
 Temporary commands use `processes.py`, which owns whole process trees and closes their handles on success, failure, timeout or interruption. Windows uses kill-on-close jobs; PowerShell launchers also supervise their Python runner if the PowerShell parent is killed. Unix commands use isolated process groups with a separate lifeline guardian for runner death; Linux UI launchers include Xvfb, window managers, Gradle and test IDEs in this supervision. A successful `dev-deploy` IDE restart is an explicit application handoff and remains open for use. `--no-cleanup` retains files, not temporary processes.
 
-The optional asset collection layout is `ides/<version>/` (product-info.json at the IDE home, or one extracted subdirectory), `mysql/<version>/` (root or nested bin/mysqld.exe), `runtimes/java-8/` (an extracted runtime), `runtimes/vc2010/`, `runtimes/vc2013/`, `jdbc/mysql/`, `jdbc/hsqldb/`, `tools/verifier/verifier-cli-1.410-all.jar`, `tools/junit/`, and `sources/`. No machine-specific location is hardcoded. `prepare-source-asset.py --source-archive PATH` reuses the pinned Connector/J 26.7.0 source; `release.py --git PATH` selects Git, with portable MinGit download on Windows if Git is missing. `check-release-archive.py` needs only Python and input files, so it has no download/cleanup options. Deployment still requires an installed target IDE; `dev-deploy.py --build-ide-home PATH` selects its build SDK. Dry-run/list modes never download or install tools.
+The optional asset collection layout is `ides/<version>/` (product-info.json at the IDE home, or one extracted subdirectory), `mysql/<version>/` (root or nested bin/mysqld.exe), `runtimes/java-8/` (an extracted runtime), `runtimes/vc2010/`, `runtimes/vc2013/`, `jdbc/mysql/`, `jdbc/hsqldb/`, `jdbc/postgresql/`, `jdbc-cache/` (retained compatibility-matrix JARs), `ui-maven-repository/` (prepared UI fixtures), `tools/verifier/verifier-cli-1.410-all.jar`, `tools/junit/`, and `sources/`. No machine-specific location is hardcoded. `prepare-source-asset.py --source-archive PATH` reuses the pinned Connector/J 26.7.0 source; `release.py --git PATH` selects Git, with portable MinGit download on Windows if Git is missing. `check-release-archive.py` needs only Python and input files, so it has no download/cleanup options. Deployment still requires an installed target IDE; `dev-deploy.py --build-ide-home PATH` selects its build SDK. Dry-run/list modes never download or install tools.
 
 All public Python commands have 1:1 PowerShell launchers. Their Python options are forwarded unchanged, including `--help`; `-Python PATH` selects the interpreter:
 
@@ -39,7 +53,7 @@ The two Windows UI scripts use native PowerShell flags: `-JavaHome`, `-IdeHome` 
 |---|---|---|
 | Windows, Linux and macOS | `test.py`, `dev-deploy.py`, `release.py`, `check-release-archive.py`, `prepare-source-asset.py`, `verify-plugin.py`, `ui-preview.py` | Python entry points use the standard library. `test.py`, `dev-deploy.py`, `prepare-source-asset.py`, `verify-plugin.py` and `ui-preview.py` reuse `common.py`; `test.py` and `dev-deploy.py` reuse release helpers, and deployment imports the archive checker. `ui-preview.py` compiles the production Swing UI and finds or downloads missing SDK/runtime jars. Every public Python CLI has a matching `.ps1` launcher. |
 | Windows, Linux and macOS (imported module) | `common.py` | Shared cache paths, Java discovery and Gradle wrapper selection; it is not a command-line entry point. |
-| Linux and Windows | `one-shot-test.py` / `one-shot-test.ps1` | Same isolated build, live and compatibility matrix. Windows uses native ZIP MySQL servers by default; Linux uses Docker. |
+| Linux and Windows (aggregate); catalog-supported hosts (individual suites) | `one-shot-test.py` / `one-shot-test.ps1` | Shared CI/local execution; isolated locally, `--in-place` in CI. Windows uses native ZIP MySQL servers by default; Linux uses Docker. `--windows-ui` includes the interactive Windows suites. Metadata/list modes do not download tools. |
 | Linux with X11/Xvfb | `capture-intellij-ui.sh`, `review-intellij-ui.sh` | Bash launchers for the real IDE UI suite. Headless mode needs Xvfb and X11 tools; review also uses `curl` and Python. They share the Gradle UI test but currently duplicate theme and JDBC fixture metadata with the PowerShell wrappers. |
 | Windows interactive desktop | `capture-intellij-ui.ps1`, `review-intellij-ui.ps1` | PowerShell launchers for the same real IDE UI suite. The primary display must be at least 1440×800 and the test IDE must remain in the foreground. |
 | Windows, Linux and macOS | `probe-hsqldb-cancellation.py` / `.ps1` / `.sh` | One bounded diagnostic JVM; Python handles the timeout, with no GNU coreutils requirement. |
@@ -50,9 +64,11 @@ Common Python commands stay at the root of `scripts/`. PowerShell commands and h
 | Script | Purpose | Additional requirements |
 |---|---|---|
 | `test.py` / `.ps1` | Gradle tests and optional packaging; owns optional database fixtures | JDK 21 is found/downloaded; native MySQL on Windows, Docker on Linux/macOS |
-| `one-shot-test.py` | Headless Linux/Windows validation runner with full, routine-check and compatibility-only modes; real IDE UI checks run separately | Linux or Windows, Python 3.11+, network for missing assets, at least 10 GiB free; Docker required only for Docker fixtures |
-| `ui-preview.py` | Render production Swing screens and refresh the five README screenshots; optionally build a light/dark gallery | Windows, Linux or macOS; JDK 21; local/cached IntelliJ 2025.1 SDK, JUnit, Hamcrest and FlatLaf, or network to download missing assets |
-| `dev-deploy.py` | Test, build, discover a local IDEA, deploy Lattice and restart a running IDE | Installed IntelliJ IDEA 2025.1+; JDK 21; Git for tooling tests |
+| `postgres-compatibility.py` | PostgreSQL 8.4–18 / Java 8 driver feature matrix, with selectable server cases | Linux Docker; optional GCC 14+/make host compiler for VFS storage |
+| `postgres-ui-review.py` | Full real-IDE UI flow against an owned PostgreSQL 18 fixture | Linux Docker/X11; same UI dependencies as the native review runner |
+| `one-shot-test.py` | Shared CI/local suite runner with full, routine-check, compatibility-only and focused suite/group modes; `--windows-ui` includes real IDE validation | Aggregate on Linux or Windows; individual suites on catalog-supported hosts; Python 3.11+, network for missing assets, at least 10 GiB free for isolated runs; Docker required only for Docker fixtures |
+| `ui-preview.py` | Render production Swing screens and refresh the seven README screenshots; optionally build a light/dark gallery | Windows, Linux or macOS; JDK 21; local/cached IntelliJ 2025.1 SDK, JUnit, Hamcrest and FlatLaf, or network to download missing assets |
+| `dev-deploy.py` | Build, discover a local IDEA, deploy Lattice and restart a running IDE | Installed IntelliJ IDEA 2025.1+; JDK 21; Git for full tooling tests |
 | `release.py` | Validate a version/tag and generate Markdown GitHub notes plus HTML Marketplace headings/bullets, paragraphs and inline code; `--marketplace-smoke` requires an explicit prerelease version without a tag | Git |
 | `check-release-archive.py` | Check ZIP layout, descriptor, bytecode, licenses; generate checksums | Built plugin ZIP |
 | `prepare-source-asset.py` | Download/check the pinned corresponding MySQL source archive | Network on first use |
@@ -66,7 +82,7 @@ Common Python commands stay at the root of `scripts/`. PowerShell commands and h
 ```text
 python scripts/test.py --build
 python scripts/dev-deploy.py
-python scripts/test.py --live --mysql --hsqldb --build
+python scripts/test.py --live --mysql --hsqldb --postgres --build
 python scripts/one-shot-test.py
 python scripts/release.py --version 1.0.1
 python scripts/prepare-source-asset.py
@@ -74,31 +90,35 @@ python scripts/check-release-archive.py build/distributions/Lattice-1.0.1.zip --
 python scripts/verify-plugin.py build/distributions/Lattice-1.0.1.zip --ide-version 2025.1
 ```
 
-`test.py` accepts `--java-home` to select a JDK 21 explicitly, plus `--ide-home`, `--version` and `--notes-file`. `--integration-only` runs only the live integration and fallback-driver suites; it requires `--live`. Gradle downloads its SDK unless an override is provided. Fixture options require `--live`; omit them to use your own isolated test servers. Tests must never run against production data.
+`test.py` accepts `--java-home` to select a JDK 21 explicitly, plus `--ide-home`, `--version` and `--notes-file`. By default it runs the disjoint `functionalTest` and IntelliJ-hosted `regressionTest` tasks, matching CI's ordinary test selection; `--functional-only` runs just the commit-tier functional group. `--integration-only` runs only the live integration and fallback-driver suites; it requires `--live`. Gradle downloads its SDK unless an override is provided. Fixture options require `--live`; omit them to use your own isolated test servers. Tests must never run against production data.
 
 Owned fixtures choose free loopback ports automatically, so an existing MySQL on 3306 or HSQLDB on 9001 does not block validation. Use `--mysql-port PORT` / `--hsqldb-port PORT` to request fixed free ports; `0` requests automatic selection. Without an owned fixture flag, these options select an external test server, defaulting to 3306/9001. Direct Gradle runs accept `LATTICE_TEST_MYSQL_PORT` / `LATTICE_TEST_HSQLDB_PORT` environment variables. Windows jobs stop owned fixture process trees even if the supervising runner is killed.
 
 ## Linux and Windows one-shot validation
 
-Run `python scripts/one-shot-test.py` (or `powershell -File scripts/windows/one-shot-test.ps1`) for the same eight steps on either host: tooling tests, Gradle unit tests/package validation, live MySQL/HSQLDB and fallback-driver tests, IntelliJ 2025.1–2025.3 verification, thirteen Connector/J/server combinations across MySQL 5.5.62/5.6.51/5.7.44/8.4.2, and ten HSQLDB/Java 8 combinations. This runner does not open an IDE; use the separate UI review entry point.
+Run `python scripts/one-shot-test.py` (or `powershell -File scripts/windows/one-shot-test.ps1`) for tooling tests, the CI functional and regression tasks, package validation, live database and fallback-driver tests, IntelliJ 2025.1–2025.3 verification, MySQL and HSQLDB Java 8 matrices, and the H2 driver/server/runtime matrix. Linux also runs the PostgreSQL/Java 8 matrix. On Windows, add `--windows-ui` to run the production editor checks and the five main-PR UI scenarios supported by the Windows desktop: HSQLDB, alter-table, table-dialogs, scaled cell-inspector and search. The PostgreSQL and H2 real-IDE UI jobs use Linux-only fixtures. The Windows UI mode requires an interactive 1440×800+ desktop and stores screenshots, runtime evidence and JUnit results under `build/ui-review/windows-ci/`. The runner prints its step count for the selected mode and host.
 
 Windows uses portable native MySQL servers, initialized with fresh data under the run's workspace. Existing installation data and `fixture-data` are never used. Missing Windows servers come from Oracle's ZIP archives with published MD5 checksums; missing Microsoft CRT files are extracted from signature-verified redistributables into a private PATH, with a checksum-pinned portable 7-Zip extractor. No server service or system runtime is installed. Linux uses Docker; a running Docker daemon is a prerequisite. `--docker PATH` selects an explicit CLI and also opts Windows into Docker. Containers/processes owned by the run are always stopped, even with `--no-cleanup`. Downloaded Docker images are retained with `--no-cleanup`; existing images are always retained. Docker's image storage is controlled by its daemon, independently of `--download-dir`.
 
 Use `--java-home PATH`, `--java8-home PATH`, `--ide-home PATH` for the build baseline, repeated `--ide-sdk VERSION=PATH`, repeated `--mysql-home VERSION=PATH`, `--verifier-jar PATH`, `--jdbc-dir PATH` (containing `mysql/` and `hsqldb/`), `--runtime-dir PATH`, or `--sevenzip PATH`. A MySQL home can be an installation root, a version folder containing an extracted ZIP, or `mysqld.exe`. `--binaries-dir PATH` discovers these inputs from the reusable layout described below. JDBC inputs are copied into the owned cache before testing.
 
-`--skip-compatibility` runs tooling, build and live checks; `--compatibility-only` builds the ZIP and runs both compatibility matrices; `--database-compatibility-only` runs only the JDBC/Java 8 matrix. Existing Git/IDE/build caches are excluded from the source copy. Every failure returns nonzero and saves command logs plus a summary under `build/one-shot-test/failure-<UTC timestamp>/`. Cleanup defaults on; use `--no-cleanup` to retain source, downloads and scratch for investigation. A retained matrix also keeps its JDBC jars. On Windows, JAR deletion waits until the diagnostic JVM has exited, because legacy drivers can keep JAR handles open even after class-loader disposal. The runner prints its owned workspace location. MySQL and HSQLDB fixtures use automatically selected free loopback ports, including each compatibility server. `--mysql-port PORT` / `--hsqldb-port PORT` request fixed ports for MySQL and the live HSQLDB fixture; explicit ports must be free.
+`--skip-compatibility` runs tooling, build and live checks; `--compatibility-only` builds the ZIP and runs the IDE and database compatibility matrices; `--database-compatibility-only` runs only the JDBC/Java 8 matrix. Existing Git/IDE/build caches are excluded from the source copy. Every failure returns nonzero and saves command logs plus a summary under `build/one-shot-test/failure-<UTC timestamp>/`. Cleanup defaults on; use `--no-cleanup` to retain source, downloads and scratch for investigation. A retained matrix also keeps its JDBC jars. On Windows, JAR deletion waits until the diagnostic JVM has exited, because legacy drivers can keep JAR handles open even after class-loader disposal. The runner prints its owned workspace location. Database fixtures use automatically selected free loopback ports, including each compatibility server. `--mysql-port PORT` / `--hsqldb-port PORT` request fixed ports for MySQL and the live HSQLDB fixture; explicit ports must be free.
 
 ## UI previews and screenshots
 
-The five featured PNGs are rendered at higher pixel density to meet Marketplace's 1200 × 760 recommendation while retaining their aspect ratios. README display widths remain unchanged. These files can be uploaded directly to Marketplace.
+The seven featured PNGs are rendered at higher pixel density to meet Marketplace's 1200 × 760 recommendation while retaining their aspect ratios. README display widths remain unchanged. These files can be uploaded directly to Marketplace.
 
-For quick component layout feedback and the five README images, run:
+For quick component layout feedback and the seven README images, run:
 
 ```sh
 python scripts/ui-preview.py
 ```
 
-This renders production Swing components with fixture data and a headless IntelliJ test application that supplies platform services such as the native Action System. It opens no IDE window. It discovers local JDK 21, IntelliJ 2025.1 and JUnit/Hamcrest jars, downloading missing inputs plus checksum-verified FlatLaf under `--download-dir`. Supply `--flatlaf-jar`, `--junit-jar` and `--hamcrest-jar` to override individual jars. `--all-previews` adds light/dark gallery variants; `--output` selects another gallery directory; `--compare-with` adds a before/after view. The default run refreshes only the five tracked PNGs under `screenshots/`. See [UI preview instructions](UI_PREVIEW.md).
+This renders production Swing components with fixture data and a headless IntelliJ test application that supplies platform services such as the native Action System. It opens no IDE window. It discovers local JDK 21, IntelliJ 2025.1 and JUnit/Hamcrest jars, downloading missing inputs plus checksum-verified FlatLaf under `--download-dir`. Supply `--flatlaf-jar`, `--junit-jar` and `--hamcrest-jar` to override individual jars. `--all-previews` adds light/dark gallery variants; `--output` selects another gallery directory; `--compare-with` adds a before/after view. The default run refreshes only the seven tracked PNGs under `screenshots/`. See [UI preview instructions](UI_PREVIEW.md).
+
+Main PR CI uses `python scripts/ui-preview.py --checks-only` for production editor recovery assertions without rendering screenshots or updating the gallery.
+
+Use `python scripts/ui-preview.py --cell-details-only` for focused light and dark renders of the integrated cell and column details panel, including selection-following and editing states. These renders stay under `build/ui-preview/` and do not update the tracked screenshots.
 
 For screenshots and interactions inside a real test IDE under Xvfb, run:
 
@@ -121,7 +141,38 @@ Set `LATTICE_UI_IDE_HOME` to an installed Linux IDEA directory to launch another
 
 For a faster review of connection-dialog spacing, explorer overflow, table editor/menu surfaces, auto-refresh sizing and active glyph colors, set `LATTICE_UI_STYLE_ONLY=true` (direct Gradle: `-Plattice.ui.styleOnly=true`). This still opens and edits the production UI inside the full IDE, then stops after those checks; omit it for the complete review.
 
-Linux commit and release CI run the complete Dark-theme review followed by the focused Light-theme review on the pinned IDE. Java and script tests continue to run on Linux, Windows and macOS. The newer-IDE/theme override is available for local compatibility reviews.
+For a focused native cell inspector capture, set `LATTICE_UI_CELL_DETAILS_ONLY=true` with the Linux review wrapper (direct Gradle: `-Plattice.ui.review=true -Plattice.ui.cellDetailsOnly=true`). It opens a populated 12-row fixture in the real IDE, captures cell and header details, verifies selection following, confirms header clicks leave the inspector closed when Inspect is off, double-clicks the value area into edit mode, checks close/reopen, and requires an opposite theme. It also closes a tab with unconfirmed text, refreshes explorer metadata, and verifies that reopening restores that text without staging it. Screenshots and `runtime-evidence.txt` are written to the selected review output directory; the focused flow exits before the longer table review. Main PR CI enables it once at 125% scale with both-theme behavior checks; use `LATTICE_UI_SCALE=1.25` to reproduce the scaled case.
+
+Direct Gradle/capture reviews accept `-Plattice.ui.scale=1.25` or `1.5` for
+larger IDE UI sizes. The default remains 100%; this changes IDE UI scaling
+without changing Driver/desktop device coordinates. The Linux review wrapper accepts
+`LATTICE_UI_SCALE=1.25` and `LATTICE_UI_DIALOG_AUDIT=true` for these same options.
+
+`-Plattice.ui.dialogAudit=true` adds a native table-dialog geometry/palette review
+to either focused create/alter scenario. It captures classic and available Islands Light/Dark themes at minimum,
+preferred and wide widths and slightly reduced heights, checks source text, full
+column actions, matched footer bounds/baselines and unnecessary inspector scrollbars,
+and restores the requested theme and dialog size. Use
+`-Plattice.ui.ide.home=/path/to/idea-2026.2.3` to review that platform's native UI.
+
+For the focused Column Inspector scenario, set `LATTICE_UI_ALTER_TABLE_ONLY=true`
+when calling the Linux review wrapper. Direct capture users pass
+`-Plattice.ui.review=true -Plattice.ui.alterTableOnly=true`. It owns an HSQLDB
+fixture and verifies add/modify/rename/drop/table-rename operations, SQL previews,
+validation, discard/confirmation decisions and failure recovery. Full IDE captures,
+a crop of the live dialog and runtime evidence are retained per theme. See
+[Column Inspector validation](UI_PREVIEW.md#column-inspector).
+
+For the focused Column Composer scenario, set `LATTICE_UI_CREATE_TABLE_ONLY=true`
+when calling the Linux review wrapper. Direct capture users pass
+`-Plattice.ui.review=true -Plattice.ui.createTableOnly=true`. The owned HSQLDB
+fixture checks creation, column order, keys, identity, precision, defaults,
+validation, draft retention, failure/retry, native busy animation and automatic
+explorer/grid refresh after DML and DDL. Main PR CI runs this scenario at
+125% scale, plus a separate mixed alter/recovery scenario; the multi-theme design audit is manual. See
+[Column Composer validation](UI_PREVIEW.md#column-composer).
+
+Main-targeted PRs run the grouped production Swing and real-IDE scenarios as independent matrix jobs. Only embedded functional checks and plugin packaging run on every push/PR. The SDK path written by `./gradlew writeUiIdeHome` is reused for UI fixtures. Release tags run functional/package checks before signing. The newer-IDE/theme override remains available for local reviews.
 
 ```bash
 LATTICE_UI_IDE_HOME=/path/to/idea-2026.2.3 ./scripts/linux/review-intellij-ui.sh ExperimentalLight ExperimentalLightWithLightHeader IntelliJ JetBrainsLightTheme "Islands Light" ExperimentalDark Darcula JetBrainsHighContrastTheme "Islands Dark" "Islands Darcula"
@@ -135,9 +186,9 @@ From PowerShell, cmd, bash or zsh, run:
 python scripts/dev-deploy.py
 ```
 
-The helper prints seven numbered steps, elapsed times, success/failure statuses and subprocess output. Colors are enabled in supported terminals; `--no-color` or `NO_COLOR` disables them. It discovers installed IDEA editions from standard installation directories, JetBrains Toolbox, Windows uninstall metadata, PATH and running IDEA processes. It prefers a running installation; otherwise it selects the newest compatible installation. Multiple running installations require `--ide-home` so the target is explicit.
+The helper prints numbered steps, elapsed times, success/failure statuses and subprocess output. Colors are enabled in supported terminals; `--no-color` or `NO_COLOR` disables them. It discovers installed IDEA editions from standard installation directories, JetBrains Toolbox, Windows uninstall metadata, PATH and running IDEA processes. It prefers a running installation; otherwise it selects the newest compatible installation. Multiple running installations require `--ide-home` so the target is explicit.
 
-It runs the development tooling tests, then the pure Java tests and `buildPlugin` through the committed Gradle wrapper. Compilation still uses the pinned IntelliJ 2025.1 SDK resolved by Gradle; the deployment target does not change that baseline. Java 21 is found through `JAVA_HOME`, PATH, the selected IDE's bundled runtime and standard JDK installation directories. `--java-home` overrides that search. Downloads may be needed on the first build. Live database suites and Plugin Verifier are separate checks.
+By default it runs the development tooling tests, then the pure Java tests and `buildPlugin` through the committed Gradle wrapper. Pass `--min` to skip both test groups and run only `buildPlugin`; ZIP validation, deployment and the existing IDE close/restart behavior remain. Compilation still uses the pinned IntelliJ 2025.1 SDK resolved by Gradle; the deployment target does not change that baseline. Java 21 is found through `JAVA_HOME`, PATH, the selected IDE's bundled runtime and standard JDK installation directories. `--java-home` overrides that search. Downloads may be needed on the first build. Live database suites and Plugin Verifier are separate checks.
 
 The exact ZIP for the version in `gradle.properties` is checked for packaging, licenses and Java bytecode before extraction. Staging happens outside the plugins directory. Only an installation whose descriptor ID is `com.segfault03.lattice` is replaced; other plugins and IDE settings are preserved. Replacement failures restore the previous plugin. Linked installations, duplicate Lattice installations and unrelated folders named `Lattice` are rejected.
 
@@ -151,6 +202,7 @@ python scripts/dev-deploy.py --list-ides
 python scripts/dev-deploy.py --ide-home "/path/to/IntelliJ IDEA" --java-home "/path/to/jdk-21"
 python scripts/dev-deploy.py --ide-home "/Applications/IntelliJ IDEA.app" --project "/path/to/project"
 python scripts/dev-deploy.py --plugins-dir "/path/to/custom/IDE/plugins" --shutdown-timeout 180
+python scripts/dev-deploy.py --min --build-ide-home "/path/to/IntelliJ 2025.1"
 ```
 
 `--dry-run` only inspects the target and prints the planned steps: it does not run tests/builds, change plugin files or restart the IDE. `--list-ides` lists compatible installations without requiring Java 21. `--startup-timeout` controls how long to wait for the restarted IDE (default 60 seconds); `--shutdown-timeout` defaults to 120 seconds. `--project` opens an explicit project after restart; otherwise IDEA's reopen-project setting applies. Launcher output is saved under ignored `build/dev-deploy/`.
@@ -161,4 +213,28 @@ Default user plugin locations follow [JetBrains' IDE directory documentation](ht
 
 Downloaded development assets use the OS user-cache directory: LocalAppData on Windows, Library/Caches on macOS, XDG_CACHE_HOME or ~/.cache on Linux. Set `LATTICE_DEV_CACHE` or pass a script's `--cache` override to relocate downloads. Build outputs remain in ignored `build/`.
 
-The root `gradlew` / `gradlew.bat` are the standard Gradle wrapper launchers. Public Python helpers live in `scripts/`; platform launchers live in `scripts/windows/` and `scripts/linux/`. Keep workstation-specific instructions and private tools outside the repository. SDKs and native test binaries stay outside this repository. The five README screenshots remain tracked; other generated screenshots and build outputs are ignored. See the [documentation index](README.md) for the project layout.
+The root `gradlew` / `gradlew.bat` are the standard Gradle wrapper launchers. Public Python helpers live in `scripts/`; platform launchers live in `scripts/windows/` and `scripts/linux/`. Keep workstation-specific instructions and private tools outside the repository. SDKs and native test binaries stay outside this repository. The seven README screenshots and the design-concept renders under `design/` are tracked references; other generated screenshots and build outputs are ignored. See the [documentation index](README.md) for the project layout.
+
+## GitHub Actions policy
+
+| Event | Functional/build/archive | Regression/integration/UI/tooling | JDBC/Java/IDE | Release/sign/publish |
+| --- | --- | --- | --- | --- |
+| Push to any branch | Linux, Windows, macOS | No | No | No |
+| PR targeting `main` | Same checks on merge commit | Grouped main PR suites | All four databases and IDEA 2025.1–2025.3 | No |
+| PR targeting `staging` or any other branch | Same checks on merge commit | No | No | No |
+| Manual CI run | Linux, Windows, macOS | No | No | No |
+| New `v*` tag reachable from `main` | Release functional/build checks | No | No | Yes |
+| Tag outside `main`, changed/deleted tag, other tag | No publication | No | No | No |
+
+[CI test groups](CI_TESTING.md) lists every suite and command. Branch names are
+case-sensitive. The release ancestry guard runs before every downstream release
+job. Manual release dispatch is disabled. Main PR UI artifacts are named by
+scenario/theme and retain native IDE logs, screenshots and JUnit reports.
+
+## H2 end-to-end validation
+
+`python scripts/h2-test.py` runs build/unit/regression, owned file/TCP/TLS,
+packaging, driver/runtime compatibility and full dark/light IntelliJ UI checks.
+Use `scripts/h2-compatibility.py` for just the version matrix and `--ui-only` for
+just the complete UI flow. See [H2 validation](H2_TESTING.md) for prerequisites,
+options, suite coverage and report paths.

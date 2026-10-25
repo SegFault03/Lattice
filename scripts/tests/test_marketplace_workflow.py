@@ -24,7 +24,7 @@ def upload_script():
 @unittest.skipUnless(BASH, "Bash required to exercise GitHub's upload step")
 class MarketplaceWorkflowTests(unittest.TestCase):
     def run_upload(self, token="test-token", corrupt=False, transport_status=0,
-                   channel="smoke", hidden="true", version=None, errexit=True):
+                   channel="", hidden="false", version=None, errexit=True):
         version = version or ("0.0.2-smoke.1" if channel else "0.0.2-alpha")
         with tempfile.TemporaryDirectory(prefix="lattice-marketplace-test-") as directory:
             root = Path(directory)
@@ -54,28 +54,19 @@ class MarketplaceWorkflowTests(unittest.TestCase):
                 return path.read_text() if path.exists() else None
             return result, read("curl-args.txt"), read("curl-header.txt"), read("summary.md")
 
-    def test_upload_is_hidden_custom_channel_and_token_not_in_arguments(self):
-        result, args, header, summary = self.run_upload()
+    def test_tagged_release_uses_public_stable_channel(self):
+        result, args, header, summary = self.run_upload(channel="", hidden="false")
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIn("channel=smoke", args)
-        self.assertIn("isHidden=true", args)
-        self.assertIn("xmlId=com.segfault03.lattice", args)
-        self.assertIn("file=@build/distributions/Lattice-0.0.2-smoke.1.zip", args)
         self.assertNotIn("test-token", args)
         self.assertIn("Authorization: Bearer test-token", header)
-        self.assertIn("channel `smoke`, with `isHidden=true`", summary)
-
-    def test_tagged_release_uses_public_stable_channel(self):
-        result, args, _, summary = self.run_upload(channel="", hidden="false")
-        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("xmlId=com.segfault03.lattice", args)
         self.assertIn("channel=\n", args)
         self.assertIn("isHidden=false", args)
         self.assertIn("file=@build/distributions/Lattice-0.0.2-alpha.zip", args)
         self.assertIn("channel `Stable`, with `isHidden=false`", summary)
 
     def test_invalid_channel_visibility_combination_prevents_upload(self):
-        for options in ({"hidden": "false"}, {"channel": "", "hidden": "true"},
-                        {"channel": "unknown"}, {"version": "0.0.2"}):
+        for options in ({"hidden": "true"}, {"channel": "smoke"}, {"channel": "unknown"}):
             with self.subTest(options=options):
                 result, args, _, summary = self.run_upload(**options)
                 self.assertNotEqual(0, result.returncode)
@@ -84,8 +75,7 @@ class MarketplaceWorkflowTests(unittest.TestCase):
 
     def test_invalid_uploads_stop_even_without_shell_errexit(self):
         # macOS Bash 3.2 does not apply -e to failed [[ ... ]] conditional commands.
-        for options in ({"hidden": "false"}, {"channel": "", "hidden": "true"},
-                        {"channel": "unknown"}, {"version": "0.0.2"}):
+        for options in ({"hidden": "true"}, {"channel": "smoke"}, {"channel": "unknown"}):
             with self.subTest(options=options):
                 result, args, _, summary = self.run_upload(errexit=False, **options)
                 self.assertEqual(1, result.returncode)
@@ -106,16 +96,12 @@ class MarketplaceWorkflowTests(unittest.TestCase):
         self.assertIsNotNone(args)
         self.assertIsNone(summary)
 
-    def test_submission_requires_release_gates_and_successful_github_publish_or_smoke_opt_in(self):
+    def test_submission_requires_main_guard_build_checks_and_github_publish(self):
         job = WORKFLOW.split("  marketplace:\n", 1)[1]
-        self.assertIn("needs: [build, cross-platform-checks, verify, database-compatibility, publish]", job)
-        self.assertIn("always()", job)
-        for gate in ("build", "cross-platform-checks", "verify", "database-compatibility", "publish"):
-            self.assertIn(f"needs.{gate}.result == 'success'", job)
-        self.assertIn("github.event_name == 'workflow_dispatch' && inputs.marketplace_smoke", job)
+        self.assertIn("needs: [release-ref, build, cross-platform-checks, publish]", job)
+        self.assertNotIn("always()", job.split("    steps:", 1)[0])
         self.assertIn("github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')", job)
-        self.assertIn("MARKETPLACE_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && 'smoke' || '' }}", job)
-        self.assertIn("MARKETPLACE_HIDDEN: ${{ github.event_name == 'workflow_dispatch' }}", job)
+        self.assertIn("MARKETPLACE_CHANNEL: ''", job)
+        self.assertIn("MARKETPLACE_HIDDEN: 'false'", job)
         self.assertNotIn("gh release", job)
-        publish = WORKFLOW.split("  publish:\n", 1)[1].split("  marketplace:\n", 1)[0]
-        self.assertIn("github.event_name == 'push'", publish)
+        self.assertNotIn("workflow_dispatch", WORKFLOW)

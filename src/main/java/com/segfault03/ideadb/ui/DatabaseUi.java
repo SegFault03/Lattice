@@ -20,7 +20,26 @@ public final class DatabaseUi {
     private DatabaseUi() {}
 
     /** Native IDEA popup painting, palette, borders and window handling in every theme. */
-    public static JPopupMenu popupMenu() { return new com.intellij.openapi.ui.JBPopupMenu(); }
+    public static JPopupMenu popupMenu() { return configurePopup(new com.intellij.openapi.ui.JBPopupMenu()); }
+
+    private static JPopupMenu configurePopup(JPopupMenu popup) {
+        popup.setOpaque(false);
+        popup.setLightWeightPopupEnabled(false);
+        if (!Boolean.TRUE.equals(popup.getClientProperty("lattice.popupThemeRefresh"))) {
+            popup.putClientProperty("lattice.popupThemeRefresh", Boolean.TRUE);
+            popup.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
+                @Override public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent event) {
+                    // Cached popup menus live outside the editor's component tree, so IDE
+                    // theme switches do not necessarily update their UI or child items.
+                    SwingUtilities.updateComponentTreeUI(popup);
+                    popup.setOpaque(false); popup.setLightWeightPopupEnabled(false);
+                }
+                @Override public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent event) {}
+                @Override public void popupMenuCanceled(javax.swing.event.PopupMenuEvent event) {}
+            });
+        }
+        return popup;
+    }
 
     /** Match JBPopupMenu's surface/window settings for Swing's internally owned submenus. */
     public static JMenu submenu(String text) {
@@ -29,9 +48,7 @@ public final class DatabaseUi {
                 JPopupMenu popup = super.getPopupMenu();
                 // IDEA's popup UI paints the theme surface; Swing's opaque fill can
                 // cover it with a black rectangle in native light themes.
-                popup.setOpaque(false);
-                popup.setLightWeightPopupEnabled(false);
-                return popup;
+                return configurePopup(popup);
             }
         };
     }
@@ -40,7 +57,7 @@ public final class DatabaseUi {
     public static JPopupMenu connectionMenu(Consumer<DatabaseType> choose) {
         JPopupMenu menu = popupMenu();
         for (DatabaseType type : DatabaseType.values()) {
-            JMenuItem item = new JMenuItem(type.getDisplayName() + "…");
+            JMenuItem item = new JMenuItem(type.getDisplayName() + "…", Icons.dataSource(type, 16));
             item.addActionListener(event -> choose.accept(type));
             menu.add(item);
         }
@@ -78,15 +95,45 @@ public final class DatabaseUi {
         JButton button = new ActionButton(text, icon);
         button.setToolTipText(tooltip);
         button.getAccessibleContext().setAccessibleName(tooltip);
-        button.setBorder(JBUI.Borders.empty(4, 6));
+        configureActionSizing(button);
         button.setBorderPainted(false);
         button.setContentAreaFilled(false);
         button.setOpaque(false);
         button.setDefaultCapable(false);
         button.setFocusPainted(false); // The focus cue is painted with the native theme color.
         button.setRolloverEnabled(true);
-        button.setIconTextGap(JBUI.scale(5));
         installFocusVisibility(button);
+        return button;
+    }
+
+    /** Shared geometry for table toolbar and inspector actions, independent of their paint. */
+    static void configureActionSizing(AbstractButton button) {
+        button.setBorder(JBUI.Borders.empty(4, 6));
+        // Darcula subtracts both border insets and the Swing button margin.
+        // The border supplies our explicit padding; do not count that margin twice.
+        button.setMargin(new Insets(0, 0, 0, 0));
+        // IDEA reapplies its native four-pixel gap on every theme change.
+        button.setIconTextGap(JBUI.scale(4));
+    }
+
+    static Dimension actionPreferredSize(AbstractButton button) {
+        Dimension content = javax.swing.plaf.basic.BasicGraphicsUtils.getPreferredButtonSize(button, button.getIconTextGap());
+        return new Dimension(Math.max(JBUI.scale(28), content.width), Math.max(JBUI.scale(28), content.height));
+    }
+
+    /** Dialog actions include all padding required by the active native button UI. */
+    public static JButton dialogAction(String text, Icon icon, String tooltip) {
+        JButton button = new DialogButton(text, icon);
+        button.setToolTipText(tooltip);
+        button.getAccessibleContext().setAccessibleName(tooltip);
+        button.setIconTextGap(JBUI.scale(5));
+        return button;
+    }
+
+    /** Quiet inspector actions still reserve the text area required by the native painter. */
+    public static JButton inspectorAction(String text, Icon icon, String tooltip) {
+        ActionButton button = (ActionButton) action(text, icon, tooltip);
+        button.nativeTextSizing = true;
         return button;
     }
 
@@ -142,6 +189,43 @@ public final class DatabaseUi {
     /** Highlights an enabled toolbar action while leaving disabled actions in the native quiet style. */
     public static void setActionEmphasis(JButton button, Color color) {
         if (button instanceof ActionButton actionButton) actionButton.setEmphasisColor(color);
+        if (button instanceof DialogButton dialogButton) dialogButton.setEmphasisColor(color);
+    }
+
+    /** Native sizing, focus ring, border and surface geometry shared with Cancel/Close. */
+    private static final class DialogButton extends JButton {
+        private Icon plainIcon, emphasizedIcon;
+        private Color emphasisColor;
+
+        DialogButton(String text, Icon icon) { super(text, icon); plainIcon = icon; setOpaque(false); }
+
+        private void setEmphasisColor(Color color) {
+            if (Objects.equals(emphasisColor, color)) return;
+            emphasisColor = color;
+            emphasizedIcon = color == null || plainIcon == null ? plainIcon : IconUtil.filterIcon(plainIcon,
+                    () -> new java.awt.image.RGBImageFilter() {
+                        @Override public int filterRGB(int x, int y, int rgb) { return (rgb & 0xFF000000) | 0x00FFFFFF; }
+                    }, null);
+            putClientProperty("lattice.action.emphasis", color);
+            refreshAppearance();
+        }
+
+        @Override public void setEnabled(boolean enabled) { super.setEnabled(enabled); refreshAppearance(); }
+        @Override public void updateUI() { super.updateUI(); refreshAppearance(); }
+        @Override public Color getForeground() {
+            return isEnabled() && emphasisColor != null ? Color.WHITE : super.getForeground();
+        }
+
+        private void refreshAppearance() {
+            setOpaque(false); // The native UI paints the rounded surface inside its focus-ring bounds.
+            boolean emphasized = isEnabled() && emphasisColor != null;
+            // Supported native theme properties preserve the same painted bounds as Cancel.
+            putClientProperty("JButton.backgroundColor", emphasized ? emphasisColor : null);
+            putClientProperty("JButton.borderColor", emphasized ? emphasisColor.darker() : null);
+            setBackground(emphasized ? emphasisColor : UIManager.getColor("Button.background"));
+            if (plainIcon != null) setIcon(emphasized ? emphasizedIcon : plainIcon);
+            repaint();
+        }
     }
 
     /** A popup view of an existing action; state and callbacks still belong to that action. */
@@ -164,6 +248,7 @@ public final class DatabaseUi {
         private Color emphasisColor;
         private JButton source;
         private boolean iconOnly;
+        private boolean nativeTextSizing;
         private Icon disabledGlyph;
         private Icon disabledSource;
         private Color disabledColor;
@@ -207,6 +292,7 @@ public final class DatabaseUi {
             if (source == null) return;
             setText(iconOnly ? "" : source.getText());
             setEnabled(source.isEnabled());
+            setSelected(source.isSelected());
             setBorder(iconOnly ? JBUI.Borders.empty(4, 6) : source.getBorder());
             setIconTextGap(source.getIconTextGap());
             setToolTipText(source.getToolTipText());
@@ -246,17 +332,14 @@ public final class DatabaseUi {
         }
 
         @Override public Dimension getPreferredSize() {
-            // Size toolbar actions to content, bypassing native dialog-button minimum widths.
-            Insets padding = getInsets();
-            FontMetrics font = getFontMetrics(getFont());
-            String label = getText();
-            Icon glyph = getIcon();
-            int textWidth = label == null || label.isEmpty() ? 0 : font.stringWidth(label);
-            int iconWidth = glyph == null ? 0 : glyph.getIconWidth();
-            int gap = textWidth > 0 && iconWidth > 0 ? getIconTextGap() : 0;
-            return new Dimension(Math.max(JBUI.scale(28), padding.left + padding.right + textWidth + iconWidth + gap),
-                    Math.max(JBUI.scale(28), padding.top + padding.bottom
-                            + Math.max(textWidth > 0 ? font.getHeight() : 0, glyph == null ? 0 : glyph.getIconHeight())));
+            // Toolbar actions use compact content sizes; dialog actions are native JButtons.
+            Dimension content = actionPreferredSize(this);
+            if (nativeTextSizing) {
+                Dimension nativeSize = super.getPreferredSize();
+                content.width = Math.max(content.width, nativeSize.width);
+                content.height = Math.max(content.height, nativeSize.height);
+            }
+            return content;
         }
 
         @Override public Dimension getMinimumSize() { return getPreferredSize(); }
@@ -264,7 +347,7 @@ public final class DatabaseUi {
         @Override protected void paintComponent(Graphics graphics) {
             ButtonModel model = getModel();
             boolean emphasized = isEnabled() && emphasisColor != null;
-            boolean interactive = isEnabled() && (model.isRollover() || model.isPressed() && model.isArmed());
+            boolean interactive = isEnabled() && (model.isSelected() || model.isRollover() || model.isPressed() && model.isArmed());
             boolean focusVisible = hasFocus() && isFocusVisible(this);
             if (emphasized || interactive || isEnabled() && focusVisible) {
                 Graphics2D g = (Graphics2D) graphics.create();

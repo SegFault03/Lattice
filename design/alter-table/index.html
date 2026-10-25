@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lattice · Edit table concepts</title>
+<style>
+  :root { color-scheme:light; --bg:#f4f5f7; --panel:#fff; --ink:#25282e; --muted:#636b78; --line:#dce0e6; --blue:#3574f0; --select:#eaf1ff; }
+  :root[data-theme=dark] { color-scheme:dark; --bg:#202226; --panel:#2b2d30; --ink:#e0e3e9; --muted:#a8b0be; --line:#45494f; --blue:#92b7ff; --select:#334760; }
+  * { box-sizing:border-box; } body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 system-ui,sans-serif; }
+  main { max-width:1136px; margin:auto; padding:36px 32px 60px; }
+  .eyebrow { font-size:12px; color:var(--muted); letter-spacing:.1em; text-transform:uppercase; }
+  h1 { font-size:32px; letter-spacing:-.025em; margin:8px 0; } p { color:var(--muted); margin:0; }
+  .top { display:flex; justify-content:space-between; gap:24px; align-items:center; }
+  .themes { display:flex; gap:4px; padding:4px; background:var(--panel); border:1px solid var(--line); border-radius:8px; }
+  button { font:inherit; cursor:pointer; color:var(--ink); } button:focus-visible,a:focus-visible { outline:3px solid var(--blue); outline-offset:3px; }
+  .themes button { border:0; background:transparent; border-radius:5px; padding:6px 14px; font-size:13px; }
+  .themes [aria-pressed=true] { background:var(--select); color:var(--blue); }
+  .scope { margin:24px 0; padding:12px 16px; border:1px solid var(--line); border-radius:8px; font-size:13px; background:var(--panel); color:var(--muted); }
+  .choices { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:26px 0; }
+  .choice { padding:16px; text-align:left; border:1px solid var(--line); background:var(--panel); border-radius:8px; }
+  .choice[aria-pressed=true] { border:2px solid var(--blue); padding:15px; background:var(--select); }
+  .choice strong { display:block; font-size:15px; margin-bottom:6px; } .choice span { color:var(--muted); font-size:12px; }
+  .choice img { display:block; width:100%; margin-top:14px; border:1px solid var(--line); }
+  .description { display:flex; gap:24px; justify-content:space-between; align-items:start; margin-bottom:18px; }
+  h2 { margin:0 0 6px; font-size:21px; } .description p { max-width:740px; font-size:14px; }
+  a { color:var(--blue); text-underline-offset:3px; } .full { white-space:nowrap; font-size:13px; }
+  .render { display:block; width:100%; height:auto; border-radius:7px; border:1px solid var(--line); box-shadow:0 8px 28px #0000000d; }
+  .tradeoff { display:grid; grid-template-columns:1fr 1fr; gap:24px; margin:20px 0 28px; font-size:13px; }
+  .tradeoff strong { display:block; margin-bottom:5px; }
+  details { margin:24px 0; padding:18px 20px; background:var(--panel); border:1px solid var(--line); border-radius:8px; }
+  summary { cursor:pointer; font-size:14px; font-weight:600; } details img { width:min(100%,800px); margin:18px auto 0; display:block; }
+  footer { color:var(--muted); font-size:12px; margin-top:28px; }
+  @media(max-width:700px) { main {padding:24px 16px;} .top {align-items:start;} h1 {font-size:26px;} .choices {grid-template-columns:1fr;} .choice img {display:none;} .tradeoff {grid-template-columns:1fr; gap:12px;} .description {display:block;} .full {display:inline-block;margin-top:12px;} }
+</style>
+<main>
+  <div class="top">
+    <div><div class="eyebrow">Lattice / Design study</div><h1>Edit table, reimagined</h1><p>Three directions. The same change, rendered in Swing.</p></div>
+    <div class="themes" role="group" aria-label="Preview theme"><button data-theme="light" aria-pressed="true">Light</button><button data-theme="dark" aria-pressed="false">Dark</button></div>
+  </div>
+  <div class="scope">Visual prototypes only. The example changes <code>customers.email</code> from <code>VARCHAR(180)</code> to <code>VARCHAR(255)</code>. Controls, SQL and change indicators are illustrative.</div>
+  <nav class="choices" aria-label="Choose a concept">
+    <button class="choice" data-concept="0" aria-pressed="true"><strong>01 · Column Inspector</strong><span>Navigate by column. Edit in context.</span><img data-image="01-column-inspector" alt="Column Inspector thumbnail"></button>
+    <button class="choice" data-concept="1" aria-pressed="false"><strong>02 · Structure Grid</strong><span>The whole schema in one view.</span><img data-image="02-structure-grid" alt="Structure Grid thumbnail"></button>
+    <button class="choice" data-concept="2" aria-pressed="false"><strong>03 · Operation Studio</strong><span>One operation, one focused workspace.</span><img data-image="03-operation-studio" alt="Operation Studio thumbnail"></button>
+  </nav>
+  <section aria-live="polite">
+    <div class="description"><div><h2 id="title"></h2><p id="description"></p></div><a id="full" class="full" target="_blank" rel="noopener">Open full resolution ↗</a></div>
+    <img id="render" class="render" width="2000" height="1440" alt="">
+    <div class="tradeoff"><div><strong>Best for</strong><p id="best"></p></div><div><strong>Trade-off</strong><p id="tradeoff"></p></div></div>
+  </section>
+  <p><strong>Suggested direction: 01.</strong> It makes column editing feel like a cohesive workspace and borrows the connection dialog’s split layout. Choose 02 for schema comparison, or 03 for explicit task navigation.</p>
+  <details><summary>Compare with the current production dialog</summary><img data-image="00-current-dialog" alt="Current AlterTableDialog painted with fixture data"></details>
+  <footer>Actual Swing painting at 2× density · IntelliJ 2025.1 test application · FlatLaf theme approximation · Shared Lattice inputs, grid, toolbars and SVGs. <a href="README.md">Source and render instructions</a></footer>
+</main>
+<script>
+const concepts = [
+  {file:'01-column-inspector', title:'01 · Column Inspector', description:'A column navigator anchors the left side. Properties and the SQL preview share a calm, consistent editor on the right. Rename and drop stay close to the selected column.', best:'Moving between individual columns without losing table context.', tradeoff:'You see fewer column properties at once than in a schema grid.'},
+  {file:'02-structure-grid', title:'02 · Structure Grid', description:'A schema grid uses Lattice’s existing table styling and key icons. The selected row opens a compact property editor below, with its change reflected in the overview.', best:'Comparing types, defaults and nullability across the entire schema.', tradeoff:'The grid, editor and SQL compete for vertical space.'},
+  {file:'03-operation-studio', title:'03 · Operation Studio', description:'A task rail mirrors the connection dialog’s source picker. The active operation has a dedicated form, a before/after card and an explicit action in the footer.', best:'Discovering the available operations and focusing on one change.', tradeoff:'Moving between operations requires an extra navigation step.'}
+];
+let current=0, theme='light';
+function update() {
+  document.documentElement.dataset.theme=theme;
+  document.querySelectorAll('[data-image]').forEach(img=>img.src=`renders/${img.dataset.image}-${theme}.png`);
+  document.querySelectorAll('[data-theme]').forEach(b=>{if(b.tagName==='BUTTON')b.setAttribute('aria-pressed',b.dataset.theme===theme);});
+  document.querySelectorAll('[data-concept]').forEach(b=>b.setAttribute('aria-pressed',Number(b.dataset.concept)===current));
+  const c=concepts[current]; for(const key of ['title','description','best','tradeoff'])document.getElementById(key).textContent=c[key];
+  const path=`renders/${c.file}-${theme}.png`; document.getElementById('render').src=path;document.getElementById('render').alt=`${c.title}, ${theme} theme`; document.getElementById('full').href=path;
+}
+document.querySelectorAll('button[data-theme]').forEach(b=>b.addEventListener('click',()=>{theme=b.dataset.theme;update();}));
+document.querySelectorAll('[data-concept]').forEach(b=>b.addEventListener('click',()=>{current=Number(b.dataset.concept);update();}));
+update();
+</script>
+</html>

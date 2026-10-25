@@ -1,8 +1,14 @@
 # Signing and Marketplace publishing
 
+Before changing signing or publication automation, read the
+[CI maintenance conventions](CI_TESTING.md#before-changing-ci),
+[Releasing](RELEASING.md) and the relevant sections below. Keep workflow guards,
+credential handling, artifact validation and their tests consistent with those
+guides.
+
 ## Signing setup
 
-Tagged GitHub releases and manual Marketplace smoke submissions require author signing. Ordinary local builds and manual dry runs remain unsigned and need no secrets. The build signs the ZIP with the pinned Marketplace ZIP Signer 0.1.24, verifies its signature, then checks its contents and computes checksums. Compatibility jobs and publication consume that exact signed ZIP. Missing signing secrets or a failed signature check block publication.
+Tagged GitHub releases require author signing. Ordinary local builds and local dry runs remain unsigned and need no secrets. The build signs the ZIP with the pinned Marketplace ZIP Signer 0.1.24, verifies its signature, then checks its contents and computes checksums. Publication consumes that exact signed ZIP; PR compatibility jobs check the unsigned PR build before merge. Missing signing secrets or a failed signature check block publication.
 
 The Marketplace publishing token authenticates uploads; it is separate from your signing key. Generate an encrypted RSA key and a self-signed certificate once, outside this repository. Git for Windows includes OpenSSL at `C:/Program Files/Git/usr/bin/openssl.exe`; Linux/macOS can use `openssl` directly. For example, in PowerShell:
 
@@ -36,22 +42,14 @@ On Windows use `gradlew.bat`, Java 21 and your shared Gradle cache; quote `-P` a
 
 Author signing and Marketplace signing are distinct. Marketplace adds its own signature during delivery. A self-signed ZIP installed directly from GitHub may require trusting `chain.crt` under **Settings → Plugins → Manage Plugin Certificates**. See [JetBrains signing documentation](https://plugins.jetbrains.com/docs/intellij/plugin-signing.html).
 
-## Hidden smoke test without a GitHub Release
+## Local preparation
 
-1. Push the workflow and signing configuration to the default branch so the manual workflow controls are available. Configure the four secrets above before running it.
-2. Choose an unused prerelease version, for example `0.0.2-smoke.1`. Add its patch notes to a matching section in `docs/CHANGELOG.md` (recommended), or populate Unreleased. `scripts/release.py` embeds those notes in the ZIP's `plugin.xml`; uploading the ZIP submits them to Marketplace along with the version. GitHub's longer release description and commit history are separate.
-3. Open **Actions → Build, test and release → Run workflow**, select the intended branch, enter the version, and check **marketplace_smoke**. Do not create a tag. A missing version or stable version is rejected.
-4. The normal release validation gates run, including Windows/macOS tests, live database checks, real-IDE UI checks, signature verification and three IDE compatibility checks. Only after every gate succeeds, the workflow submits the signed ZIP to XML ID `com.segfault03.lattice`, fixed channel `smoke`, with `isHidden=true`. The GitHub Release job is skipped. The `release-candidate` artifact contains the signed ZIP, notes, source archive and checksums; `marketplace-response` contains the upload API response. Both expire after seven days.
-5. Inspect the submitted version, channel, hidden flag and change notes in your Marketplace listing's Versions administration view. JetBrains still reviews every update; upload success is not approval. After approval, open the hidden version's direct link, download its Marketplace-delivered ZIP and install it with **Settings → Plugins → Install Plugin from Disk**. Check the installed version and patch notes, and exercise your normal connection/query/table-editing smoke flows.
+The hosted release workflow has no manual trigger or hidden-channel upload. Use the [local dry-run commands](RELEASING.md#local-dry-run) to review the ZIP, rendered patch notes, source and checksums without publishing. `release.py --marketplace-smoke` remains a local notes/version preparation helper; it does not submit an update.
 
-A custom channel alone is not hidden: channels are displayed on the Marketplace plugin page. This workflow adds the hidden flag to keep the test update from becoming publicly listed after approval. Hidden versions are accessible by direct link, so this is not private access control. Keep the version hidden. If you later deliberately unhide it, channel subscribers can use `https://plugins.jetbrains.com/plugins/smoke/list` as a custom IDE repository; ordinary Stable-channel users will not receive it. See [channels](https://plugins.jetbrains.com/docs/marketplace/custom-release-channels.html) and [hidden updates](https://plugins.jetbrains.com/docs/marketplace/hidden-plugin.html).
-
-Screenshots are maintained separately in Marketplace's Media section. Change notes are part of the submitted archive and cannot be edited in place after submission; Marketplace allows compatibility-range edits only. Finalize notes before running. The original smoke version's monospace notes remain as submitted; future uploads render changelog headings, flat bullets, paragraphs and inline code as HTML. See [plugin updates](https://plugins.jetbrains.com/docs/marketplace/plugin-updates.html).
-
-There is no automatic upload retry: a connection error can occur after Marketplace accepts the file. Before rerunning a failed upload job, check whether the version already exists. If accepted, do not resubmit it. If absent, rerun only the failed job while its candidate artifact is available. Use a new prerelease version for changed code or notes. Never reuse a smoke version for a different build.
+Screenshots are maintained separately in Marketplace's Media section. Change notes are part of the submitted archive and cannot be edited in place after submission. Finalize notes before tagging.
 
 ## Public releases
 
-Create and push an annotated release tag only when the release is approved by the maintainer. A tag such as `v0.0.2-alpha` runs the full validation and signing flow, publishes GitHub assets and notes, then submits the exact same ZIP to Marketplace's public Stable channel (`channel` empty, `isHidden=false`). Alpha/RC versions remain GitHub prereleases but are deliberately available to ordinary Marketplace users after JetBrains approval. No tag or release is created by pushing preparation commits to main.
+Create and push an annotated release tag only when the release is approved by the maintainer. A tag such as `v0.1.0-alpha` runs functional/package checks and signing, publishes GitHub assets and notes, then submits the exact same ZIP to Marketplace's public Stable channel (`channel` empty, `isHidden=false`). The remaining validation suites run on the preceding main-targeted PR, as defined in [CI policy](CI_TESTING.md). Alpha/RC versions remain GitHub prereleases but are deliberately available to ordinary Marketplace users after JetBrains approval. No tag or release is created by pushing preparation commits to main.
 
-The Marketplace job requires successful GitHub publication for tag runs. A failed upload leaves the GitHub Release available and can be retried independently after checking for an existing Marketplace version. Never rerun an upload that Marketplace already accepted. The manual hidden smoke mode remains available for future publishing checks, and unselected manual runs publish nothing. See [Releasing](RELEASING.md).
+The Marketplace job requires successful GitHub publication for tag runs. A failed upload leaves the GitHub Release available and can be retried independently after checking for an existing Marketplace version. Never rerun an upload that Marketplace already accepted. Only new version tags whose commits are reachable from `main` can publish; branch pushes and manual CI checks publish nothing. See [Releasing](RELEASING.md).

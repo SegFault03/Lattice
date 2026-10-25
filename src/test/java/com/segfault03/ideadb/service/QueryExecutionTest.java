@@ -8,6 +8,26 @@ import java.util.concurrent.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class QueryExecutionTest {
+    @Test void preparationRecoveryKeepsTheSameCancellationHandle() throws Exception {
+        QueryExecution execution = new QueryExecution();
+        execution.detach();
+        assertTrue(execution.prepareRetryBeforeSql());
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        execution.attach(statement(() -> { calls.incrementAndGet(); execution.detach(); }));
+        execution.cancel();
+        assertEquals(1, calls.get());
+        assertTrue(execution.isCancellationRequested());
+        assertFalse(execution.prepareRetryBeforeSql(), "A cancellation request must prevent reconnecting and submitting SQL");
+    }
+
+    @Test void submittedSqlCanNeverBeRetriedAfterAnError() {
+        QueryExecution execution = new QueryExecution();
+        execution.markSqlStarted();
+        execution.detach();
+        assertTrue(execution.hasStartedSql());
+        assertFalse(execution.prepareRetryBeforeSql(), "A submitted write must never be repeated after an ambiguous failure");
+    }
+
     @Test void aRequestBeforeAttachmentStopsExecutionAndIsIdempotent() {
         QueryExecution execution = new QueryExecution();
         assertTrue(execution.requestCancellation());
@@ -45,6 +65,30 @@ class QueryExecutionTest {
             detached.get(2, TimeUnit.SECONDS);
             assertFalse(execution.isRunning());
         } finally { release.countDown(); worker.shutdownNow(); }
+    }
+
+    @Test void cancellationIgnoredDuringStartupIsRetriedOnlyUntilThisExecutionFinishes() throws Exception {
+        QueryExecution execution = new QueryExecution();
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        execution.attach(statement(() -> { if (calls.incrementAndGet() == 2) execution.detach(); }));
+        execution.cancel();
+        assertEquals(2,calls.get()); assertFalse(execution.isRunning());
+        execution.cancel(); assertEquals(2,calls.get(),"A completed statement must never be cancelled again");
+    }
+
+    @Test void cancellationSurvivesASlowRemoteStatementStartup() throws Exception {
+        QueryExecution execution = new QueryExecution();
+        CountDownLatch serverExecuting = new CountDownLatch(1);
+        var server = Executors.newSingleThreadScheduledExecutor();
+        execution.attach(statement(() -> {
+            if (serverExecuting.getCount() == 0) execution.detach();
+        }));
+        try {
+            server.schedule(serverExecuting::countDown, 300, TimeUnit.MILLISECONDS);
+            execution.cancel();
+            assertTrue(execution.isCancellationRequested());
+            assertFalse(execution.isRunning(), "Cancellation must reach a remote statement after startup");
+        } finally { server.shutdownNow(); execution.detach(); }
     }
 
     private static Statement statement(Runnable cancel) {

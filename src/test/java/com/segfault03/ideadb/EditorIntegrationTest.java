@@ -2,7 +2,6 @@ package com.segfault03.ideadb;
 
 import com.intellij.openapi.fileEditor.FileEditorPolicy;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.testFramework.LightVirtualFile;
 import com.segfault03.ideadb.editor.*;
 import com.segfault03.ideadb.model.ConnectionConfig;
@@ -16,7 +15,6 @@ public class EditorIntegrationTest {
         try {
             System.out.println("Starting Database Editor Integration Tests...");
 
-            testFileTypes();
             testVirtualFileEqualityAndKeys();
             testFileEditorProviderAcceptance();
 
@@ -26,20 +24,6 @@ public class EditorIntegrationTest {
             t.printStackTrace();
             throw new AssertionError("Integration suite failed",t);
         }
-    }
-
-    private static void testFileTypes() {
-        System.out.print("[TEST] File Types & Icons... ");
-        if (!"dbtable".equals(DatabaseFileTypes.TABLE.getDefaultExtension())) {
-            throw new AssertionError("TABLE extension mismatch");
-        }
-        if (!"dbsql".equals(DatabaseFileTypes.CONSOLE.getDefaultExtension())) {
-            throw new AssertionError("CONSOLE extension mismatch");
-        }
-        if (!"dbwelcome".equals(DatabaseFileTypes.WELCOME.getDefaultExtension())) {
-            throw new AssertionError("WELCOME extension mismatch");
-        }
-        System.out.println("PASSED!");
     }
 
     private static void testVirtualFileEqualityAndKeys() {

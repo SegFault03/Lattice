@@ -27,7 +27,8 @@ public final class UiPreview {
     static Path output;
     static final List<String> snapshots = new ArrayList<>();
     static final Set<String> FEATURED_PREVIEWS = Set.of(
-            "side-panel-340", "connection-mysql-600", "table-1100", "table-new-row-1100", "sql-console-1100");
+            "cell-details-1440", "welcome-900", "connection-mysql-740", "schema-alter-table-800", "table-1100",
+            "table-new-row-1100", "sql-console-1100");
     static boolean featuredOnly;
     private static Font previewFont() {
         Set<String> available = Set.of(GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames());
@@ -54,6 +55,26 @@ public final class UiPreview {
         for (Component component : container.getComponents())
             if (component instanceof Container nested) layout(nested);
     }
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    static void prepareListRenderers(Container container) {
+        if (container instanceof JList list && !Boolean.TRUE.equals(list.getClientProperty("lattice.preview.rendererLayout"))) {
+            ListCellRenderer renderer = list.getCellRenderer();
+            list.setCellRenderer((owner, value, index, selected, focus) -> {
+                Component cell = renderer.getListCellRendererComponent(owner, value, index, selected, focus);
+                if (cell instanceof Container nested) {
+                    Dimension preferred = cell.getPreferredSize();
+                    int width = owner.getWidth() > 0 ? owner.getWidth() : preferred.width;
+                    int height = owner.getFixedCellHeight() > 0 ? owner.getFixedCellHeight() : preferred.height;
+                    cell.setBounds(0, 0, width, height);
+                    layout(nested);
+                }
+                return cell;
+            });
+            list.putClientProperty("lattice.preview.rendererLayout", true);
+        }
+        for (Component component : container.getComponents())
+            if (component instanceof Container nested) prepareListRenderers(nested);
+    }
     static void updateToolbars(Container container) throws Exception {
         if (container instanceof com.intellij.openapi.actionSystem.impl.ActionToolbarImpl toolbar) {
             // Native action expansion can finish asynchronously, especially for the
@@ -79,6 +100,7 @@ public final class UiPreview {
         component.setSize(width, height);
         updateToolbars(component);
         for (int pass = 0; pass < 4; pass++) layout(component);
+        prepareListRenderers(component);
         verifyInputs(component);
         boolean featured = FEATURED_PREVIEWS.contains(name.replaceFirst("^(light|dark)-", ""));
         if (featuredOnly && !featured) return;
@@ -95,12 +117,37 @@ public final class UiPreview {
         snapshots.add(name + ".png");
         System.out.println(name + ": " + image.getWidth() + " x " + image.getHeight());
     }
+    private static void desktopTextHints(Component component) {
+        if (component instanceof JComponent swing) {
+            swing.putClientProperty(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_LCD_HRGB);
+            swing.putClientProperty(RenderingHints.KEY_TEXT_LCD_CONTRAST, 140);
+        }
+        if (component instanceof Container container)
+            for (Component child : container.getComponents()) desktopTextHints(child);
+    }
+    private static void renderDesktopText(JComponent component, String name) throws Exception {
+        component.setSize(388, 730);
+        for (int pass = 0; pass < 4; pass++) layout(component);
+        desktopTextHints(component);
+        double scale = 1.25;
+        BufferedImage image = new BufferedImage((int)Math.ceil(component.getWidth() * scale),
+                (int)Math.ceil(component.getHeight() * scale), BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = image.createGraphics();
+        graphics.scale(scale, scale);
+        // Match a desktop host that supplies text AA on Swing components, not on Graphics.
+        graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
+        component.printAll(graphics);
+        graphics.dispose();
+        ImageIO.write(image, "png", output.resolve(name + ".png").toFile());
+        snapshots.add(name + ".png");
+        System.out.println(name + ": " + image.getWidth() + " x " + image.getHeight());
+    }
     static ConnectionConfig config(DatabaseType type) {
         ConnectionConfig config = new ConnectionConfig(type, type == DatabaseType.MYSQL ? "Local development" : "Scratch database");
         config.setHost("localhost");
-        config.setPort(type == DatabaseType.MYSQL ? 3306 : 9001);
+        config.setPort(type.getDefaultPort());
         config.setDatabaseName("shop");
-        config.setUser(type == DatabaseType.MYSQL ? "developer" : "SA");
+        config.setUser(type == DatabaseType.MYSQL ? "developer" : type.getDefaultUser());
         return config;
     }
     static ConnectionDialog connectionDialog(ConnectionConfig config, boolean newConnection) throws Exception {
@@ -127,6 +174,7 @@ public final class UiPreview {
             if (child instanceof JComponent input && (input instanceof JTextField || input instanceof JComboBox<?>
                     || input instanceof com.intellij.openapi.ui.TextFieldWithBrowseButton)) {
                 boolean embedded = SwingUtilities.getAncestorOfClass(JComboBox.class, input) != null
+                        || SwingUtilities.getAncestorOfClass(com.intellij.ui.SearchTextField.class, input) != null
                         || SwingUtilities.getAncestorOfClass(com.intellij.openapi.ui.TextFieldWithBrowseButton.class, input) != null
                         || SwingUtilities.getAncestorOfClass(CellRendererPane.class, input) != null;
                 if (!embedded) {
@@ -187,17 +235,24 @@ public final class UiPreview {
         render(database.previewPanel(), theme + "-schema-create-database-600", 600, database.previewPanel().getPreferredSize().height);
         CreateTableDialog create = new CreateTableDialog(null, config(DatabaseType.MYSQL), "shop");
         JPanel createPanel = create.previewPanel();
-        JTable columns = (JTable)field(create, "columnsTable");
-        ((JScrollPane)columns.getParent().getParent()).setColumnHeaderView(columns.getTableHeader());
-        render(createPanel, theme + "-schema-create-table-740", 740, createPanel.getPreferredSize().height);
-        TableMetadata metadata = (TableMetadata)field(table(false), "tableMetadata");
-        AlterTableDialog alter = new AlterTableDialog(null, config(DatabaseType.MYSQL), "shop", metadata);
+        render(createPanel, theme + "-schema-create-table-1040", 1040, createPanel.getPreferredSize().height);
+        AlterTableDialog alter = alterTableDialog();
+        com.segfault03.ideadb.dialog.AlterTablePanel inspector = (com.segfault03.ideadb.dialog.AlterTablePanel)field(alter, "editor");
         render(alter.previewPanel(), theme + "-schema-alter-table-800", 800, alter.previewPanel().getPreferredSize().height);
         findButton(alter.previewPanel(), "Drop column").doClick(0);
+        inspector.showPreview(inspector.batch(), com.segfault03.ideadb.service.DdlService.getInstance()
+                .previewAlterBatch(null, config(DatabaseType.MYSQL), "shop", inspector.batch()));
         render(alter.previewPanel(), theme + "-schema-drop-column-800", 800, alter.previewPanel().getPreferredSize().height);
     }
+    static AlterTableDialog alterTableDialog() throws Exception {
+        TableMetadata metadata = (TableMetadata)field(table(false), "tableMetadata");
+        AlterTableDialog alter = new AlterTableDialog(null, config(DatabaseType.MYSQL), "shop", metadata);
+        com.segfault03.ideadb.dialog.AlterTablePanel inspector = (com.segfault03.ideadb.dialog.AlterTablePanel)field(alter, "editor");
+        inspector.columnList().setSelectedIndex(2);
+        return alter;
+    }
     static void connection(String theme, String variant, int width) throws Exception {
-        ConnectionConfig config = config(variant.contains("hsql") ? DatabaseType.HSQLDB : DatabaseType.MYSQL);
+        ConnectionConfig config = config(variant.contains("hsql") ? DatabaseType.HSQLDB : variant.equals("postgresql") ? DatabaseType.POSTGRESQL : DatabaseType.MYSQL);
         if (variant.startsWith("hsql-memory")) { config.setHsqlMode(HsqlMode.MEM); config.setDatabaseName("scratch"); }
         if (variant.startsWith("hsql-file")) { config.setHsqlMode(HsqlMode.FILE); config.setDatabaseName("/home/developer/data/shop"); }
         if (variant.equals("jdbc-url")) config.setCustomUrl("jdbc:mysql://localhost:3306/shop?useSSL=true");
@@ -221,7 +276,7 @@ public final class UiPreview {
         if (variant.equals("driver-local")) { config.setDriverSource(DriverSource.LOCAL_JAR); config.setDriverJarPath("/home/developer/drivers/mysql-connector-j.jar"); }
         if (variant.equals("mysql-incomplete")) config.setUser("");
         if (variant.equals("hsql-incomplete")) config.setDatabaseName("");
-        ConnectionDialog dialog = connectionDialog(config, variant.equals("new"));
+        ConnectionDialog dialog = connectionDialog(config, (variant.equals("new") || variant.equals("postgresql")));
         if (variant.endsWith("bundled-expanded") || variant.equals("mysql-collapsed-after-expansion")) {
             JPanel root = (JPanel)field(dialog, "rootPanel");
             int collapsed = root.getPreferredSize().height;
@@ -267,6 +322,32 @@ public final class UiPreview {
                     variant.equals("success") ? com.segfault03.ideadb.ui.DatabaseUi.Tone.SUCCESS : com.segfault03.ideadb.ui.DatabaseUi.Tone.ERROR);
         }
         JPanel panel = dialog.previewPanel();
+        if (variant.equals("new")) {
+            JComponent picker = (JComponent) field(dialog, "sourcePanel");
+            @SuppressWarnings("unchecked") Map<DatabaseType, JToggleButton> choices =
+                    (Map<DatabaseType, JToggleButton>) field(picker, "choices");
+            JComboBox<?> selection = (JComboBox<?>) field(dialog, "typeCombo");
+            for (DatabaseType type : DatabaseType.values()) {
+                choices.get(type).doClick(0);
+                if (selection.getSelectedItem() != type || !choices.get(type).isSelected())
+                    throw new AssertionError("Source picker did not select " + type);
+                if (!((JTextField) field(dialog, com.segfault03.ideadb.provider.DatabaseProviders.get(type).connectionForm()
+                        == com.segfault03.ideadb.provider.DatabaseProvider.ConnectionForm.SERVER
+                        ? "mysqlPortField" : "hsqlServerPortField")).getText().equals(String.valueOf(type.getDefaultPort())))
+                    throw new AssertionError("Source picker did not update the port for " + type);
+            }
+            choices.get(DatabaseType.MYSQL).doClick(0);
+            // A short viewport proves the source list scrolls independently of the form.
+            picker.setSize(208, 150);
+            for (int pass = 0; pass < 4; pass++) layout(picker);
+            JScrollPane sourceScroll = (JScrollPane) ((BorderLayout) picker.getLayout())
+                    .getLayoutComponent(BorderLayout.CENTER);
+            if (!sourceScroll.getVerticalScrollBar().isVisible())
+                throw new AssertionError("Source picker must scroll when its rows exceed the viewport");
+            sourceScroll.getVerticalScrollBar().setValue(sourceScroll.getVerticalScrollBar().getMaximum());
+            render(picker, theme + "-source-picker-scrolled-208", 208, 150);
+            System.out.println("Source selection, provider ports, and independent vertical scrolling verified");
+        }
         if (variant.endsWith("bundled-expanded") || variant.equals("driver-local")) {
             // Mirror the dialog's queued scroll-to-options after expansion, before painting.
             panel.setSize(width, panel.getPreferredSize().height);
@@ -292,7 +373,7 @@ public final class UiPreview {
             int userTop = SwingUtilities.convertPoint(user, 0, 0, root).y;
             if (userTop - bottom > 70) throw new AssertionError("Empty HSQL server rows before credentials");
         }
-        if (!variant.equals("new") && !variant.equals("jdbc-url-incomplete")
+        if (!(variant.equals("new") || variant.equals("postgresql")) && !variant.equals("jdbc-url-incomplete")
                 && !((JLabel)field(dialog, "urlPreviewLabel")).getText().equals(config.buildJdbcUrl()))
             throw new AssertionError("Resolved URL must retain the full value");
         // Editing settings here is safe: dialog network/test actions are never invoked.
@@ -350,7 +431,7 @@ public final class UiPreview {
         meta.addColumn(new ColumnMetadata("id", "BIGINT", java.sql.Types.BIGINT, 0, 0, false, true, true, null));
         meta.addColumn(new ColumnMetadata("name", "VARCHAR", java.sql.Types.VARCHAR, 120, 0, false, false, false, null));
         meta.addColumn(new ColumnMetadata("email", "VARCHAR", java.sql.Types.VARCHAR, 180, 0, true, false, false, null));
-        meta.addColumn(new ColumnMetadata("status", "VARCHAR", java.sql.Types.VARCHAR, 20, 0, false, false, false, "'active'"));
+        meta.addColumn(new ColumnMetadata("status", "VARCHAR", java.sql.Types.VARCHAR, 20, 0, false, false, false, "'active'").withForeignKey(true));
         meta.addColumn(new ColumnMetadata("balance", "DECIMAL", java.sql.Types.DECIMAL, 10, 2, false, false, false, "0"));
         TableDataEditorPanel panel = new TableDataEditorPanel(null, config(DatabaseType.MYSQL), "shop", meta);
         Object model = field(panel, "tableModel");
@@ -363,25 +444,379 @@ public final class UiPreview {
         invoke(panel, "setReadRunning", new Class<?>[]{boolean.class}, false);
         JTable table = (JTable) field(panel, "dataTable");
         ((JScrollPane)table.getParent().getParent()).setColumnHeaderView(table.getTableHeader());
-        int[] widths = {110, 190, 280, 150, 150};
+        int[] widths = {148, 190, 280, 150, 150};
         for (int i = 0; i < widths.length; i++) table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
         ((JButton) field(panel, "nextPageBtn")).setEnabled(false);
         ((JLabel) field(panel, "statusLabel")).setText("12 rows · 18 ms · Total: not counted");
         return panel;
     }
+    static TableDataEditorPanel valueWorkspacePreview() throws Exception {
+        TableDataEditorPanel editor = table(false);
+        JTable grid = (JTable)field(editor, "dataTable");
+        grid.changeSelection(0, 2, false, false);
+        invoke(editor, "toggleInspector", new Class<?>[0]);
+        JComponent details = (JComponent)field(editor, "cellDetails");
+        if (!(Boolean)field(editor, "inspectorVisible") || (Boolean)invokeResult(details, "isColumnMode"))
+            throw new AssertionError("Featured value workspace must open on a selected table cell");
+        return editor;
+    }
+    static void renderCellDetails(String theme) throws Exception {
+        renderApprovedInspector(theme);
+        renderCachedMenuThemeRefresh(theme);
+        TableDataEditorPanel editor = table(false);
+        JTable grid = (JTable) field(editor, "dataTable");
+        grid.changeSelection(0, 0, false, false);
+        grid.changeSelection(3, 4, false, true);
+        if (grid.getSelectedRowCount() != 1 || grid.getSelectedColumnCount() != 1)
+            throw new AssertionError("The table editor must permit only one selected body cell");
+        grid.changeSelection(0, 2, false, false);
+        clickColumnHeader(grid, 3);
+        JComponent details = (JComponent)field(editor, "cellDetails");
+        if ((Boolean)field(editor, "inspectorVisible") || ((DatabaseTable)grid).getSelectedHeaderColumn() != 3)
+            throw new AssertionError("A header click must select the header without opening a closed inspector");
+        if (grid.getSelectedRowCount() != 0 || grid.getSelectedColumnCount() != 0
+                || grid.getSelectionModel().getLeadSelectionIndex() != -1
+                || grid.getColumnModel().getSelectionModel().getLeadSelectionIndex() != -1)
+            throw new AssertionError("Selecting a header must clear both body selection and its former focus cell");
+        JComponent bodyRenderer = (JComponent)grid.getCellRenderer(0, 2)
+                .getTableCellRendererComponent(grid, grid.getValueAt(0, 2), false, true, 0, 2);
+        if (!(bodyRenderer.getBorder() instanceof javax.swing.border.EmptyBorder))
+            throw new AssertionError("A selected header must suppress a stale body-cell focus outline");
+        render(editor, theme + "-header-selected-inspector-closed-1440", 1440, 900);
+        invoke(editor, "toggleInspector", new Class<?>[0]);
+        if (!(Boolean)invokeResult(details, "isColumnMode"))
+            throw new AssertionError("Inspect must open the selected column header");
+        grid.changeSelection(0, 2, false, false);
+        if ((Integer)invokeResult(details, "inspectedRow") != 0 ||
+                (Integer)invokeResult(details, "inspectedColumn") != 2)
+            throw new AssertionError("Inspect must open the currently selected cell");
+        render(editor, theme + "-cell-details-1440", 1440, 900);
+        clickColumnHeader(grid, 3);
+        if (!(Boolean)invokeResult(details, "isColumnMode"))
+            throw new AssertionError("A column header must open column details while Inspect is on");
+        grid.changeSelection(2, 2, false, false);
+        if ((Boolean)invokeResult(details, "isColumnMode") ||
+                (Integer)invokeResult(details, "inspectedRow") != 2 ||
+                (Integer)invokeResult(details, "inspectedColumn") != 2)
+            throw new AssertionError("Column details must follow the next selected data cell");
+        render(editor, theme + "-cell-details-follow-selection-1440", 1440, 900);
+        clickColumnHeader(grid, 3);
+        if (!(Boolean)invokeResult(details, "isColumnMode"))
+            throw new AssertionError("Column click must open column details");
+        render(editor, theme + "-column-details-1440", 1440, 900);
+        JPanel metadata = (JPanel) field(details, "metadata");
+        JComponent title = (JComponent) field(details, "title");
+        if (metadata.getComponentCount() < 7 || title.getWidth() < title.getPreferredSize().width)
+            throw new AssertionError("Column details were clipped: rows=" + metadata.getComponentCount()
+                    + ", title=" + title.getWidth() + "/" + title.getPreferredSize().width);
+        invoke(editor, "openCellDetails", new Class<?>[]{int.class, int.class}, 1, 1);
+        JTextArea value = (JTextArea) field(details, "valueArea");
+        value.dispatchEvent(new java.awt.event.MouseEvent(value, java.awt.event.MouseEvent.MOUSE_CLICKED,
+                System.currentTimeMillis(), 0, 8, 8, 2, false));
+        if (!(Boolean) invokeResult(details, "isEditing"))
+            throw new AssertionError("Double-clicking the value must enable editing");
+        render(editor, theme + "-cell-details-editing-1440", 1440, 900);
+        value.setText(value.getText() + " updated");
+        if (!((JButton)field(details, "apply")).isEnabled())
+            throw new AssertionError("Stage change must enable after changing the draft");
+        render(editor, theme + "-cell-details-editing-changed-1440", 1440, 900);
+        ((JButton)field(details, "close")).doClick(0);
+        grid.changeSelection(2, 2, false, false);
+        Rectangle target = grid.getCellRect(2, 2, true);
+        grid.dispatchEvent(new java.awt.event.MouseEvent(grid, java.awt.event.MouseEvent.MOUSE_CLICKED,
+                System.currentTimeMillis(), 0, target.x + 8, target.y + 8, 1, false, java.awt.event.MouseEvent.BUTTON1));
+        com.intellij.util.ui.UIUtil.dispatchAllInvocationEvents();
+        if ((Boolean)field(editor, "inspectorVisible"))
+            throw new AssertionError("Ordinary cell selection must keep a closed inspector closed");
+        invoke(editor, "toggleInspector", new Class<?>[0]);
+        JLayeredPane overlay = (JLayeredPane)field(editor, "gridOverlay");
+        JScrollPane dataScroll = (JScrollPane)field(editor, "dataScroll");
+        Rectangle gridBounds = dataScroll.getBounds();
+        int columnsWidth = grid.getColumnModel().getTotalColumnWidth();
+        invoke(editor, "toggleInspector", new Class<?>[0]);
+        invoke(editor, "toggleInspector", new Class<?>[0]);
+        for (int pass = 0; pass < 4; pass++) layout(editor);
+        if (!gridBounds.equals(dataScroll.getBounds()) || columnsWidth != grid.getColumnModel().getTotalColumnWidth())
+            throw new AssertionError("Opening the overlay must preserve grid bounds and column widths");
+        if (overlay.getLayer(details) <= overlay.getLayer(dataScroll) || details.getX() <= 0
+                || details.getX() + details.getWidth() != overlay.getWidth())
+            throw new AssertionError("The inspector must overlay the right edge of the grid");
+        JComponent widthHandle = (JComponent)field(editor, "inspectorResizeHandle");
+        int initialWidth = details.getWidth();
+        widthHandle.dispatchEvent(new java.awt.event.MouseEvent(widthHandle, java.awt.event.MouseEvent.MOUSE_PRESSED,
+                0, 0, 3, 20, 1, false, java.awt.event.MouseEvent.BUTTON1));
+        widthHandle.dispatchEvent(new java.awt.event.MouseEvent(widthHandle, java.awt.event.MouseEvent.MOUSE_DRAGGED,
+                0, java.awt.event.InputEvent.BUTTON1_DOWN_MASK, -93, 20, 0, false));
+        widthHandle.dispatchEvent(new java.awt.event.MouseEvent(widthHandle, java.awt.event.MouseEvent.MOUSE_RELEASED,
+                0, 0, -93, 20, 1, false, java.awt.event.MouseEvent.BUTTON1));
+        render(editor, theme + "-inspector-width-resized-1440", 1440, 900);
+        int resizedWidth = details.getWidth();
+        if (resizedWidth != initialWidth + 96 || !gridBounds.equals(dataScroll.getBounds())
+                || columnsWidth != grid.getColumnModel().getTotalColumnWidth())
+            throw new AssertionError("Dragging the sidebar must change only its overlay width");
+        invoke(editor, "toggleInspector", new Class<?>[0]); invoke(editor, "toggleInspector", new Class<?>[0]);
+        for (int pass = 0; pass < 4; pass++) layout(editor);
+        if (details.getWidth() != resizedWidth) throw new AssertionError("Reopening must retain the chosen sidebar width");
+        for (int step = 0; step < 6; step++) widthHandle.getActionMap().get("RIGHT").actionPerformed(null);
+        for (int pass = 0; pass < 4; pass++) layout(editor);
+        if (details.getWidth() != initialWidth) throw new AssertionError("Repeated keyboard resizing must accumulate before layout");
+        renderAdversarialCellDetails(editor, theme);
+    }
+
+    private static void clickColumnHeader(JTable grid, int viewColumn) {
+        var header = grid.getTableHeader();
+        if (header.getWidth() <= 0 || header.getHeight() <= 0) {
+            Dimension preferred = header.getPreferredSize();
+            header.setSize(Math.max(preferred.width, grid.getColumnModel().getTotalColumnWidth()),
+                    Math.max(1, preferred.height));
+        }
+        Rectangle bounds = header.getHeaderRect(viewColumn);
+        header.dispatchEvent(new java.awt.event.MouseEvent(header,
+                java.awt.event.MouseEvent.MOUSE_CLICKED, System.currentTimeMillis(), 0,
+                bounds.x + bounds.width / 2, Math.max(1, header.getHeight() / 2),
+                1, false, java.awt.event.MouseEvent.BUTTON1));
+        com.intellij.util.ui.UIUtil.dispatchAllInvocationEvents();
+    }
+
+    static void verifyInspectorDraftRecovery() throws Exception {
+        for (boolean metadataArrives : new boolean[]{false, true}) {
+            var config = config(DatabaseType.HSQLDB);
+            var store = new com.segfault03.ideadb.state.TableDraftState();
+            var project = (com.intellij.openapi.project.Project)Proxy.newProxyInstance(
+                    com.intellij.openapi.project.Project.class.getClassLoader(), new Class<?>[]{com.intellij.openapi.project.Project.class},
+                    (proxy, method, args) -> switch (method.getName()) {
+                        case "getService" -> args[0] == com.segfault03.ideadb.state.TableDraftState.class ? store : null;
+                        case "isDisposed", "isDefault", "isInitialized" -> false;
+                        case "hashCode" -> System.identityHashCode(proxy);
+                        case "equals" -> proxy == args[0];
+                        case "getName", "toString" -> "Draft recovery preview";
+                        default -> null;
+                    });
+            String key = "table:" + config.getId() + ":PUBLIC:items";
+            var saved = com.segfault03.ideadb.state.TableDraftState.Draft.capture(List.of("id", "email"), List.of("INTEGER", "VARCHAR"),
+                    List.of(List.of(1, "original")), List.of(List.of(1, "original")));
+            saved.inspectorRow = 0; saved.inspectorColumn = 1; saved.inspectorText = "recovered text"; store.put(key, saved);
+            var metadata = new TableMetadata(null, "PUBLIC", "items", "TABLE");
+            TableDataEditorPanel editor = new TableDataEditorPanel(project, config, "PUBLIC", metadata);
+            Object details = field(editor, "cellDetails");
+            if (!"recovered text".equals(invokeResult(details, "draftText")) || store.get(key) == null)
+                throw new AssertionError("Restoring an inspector-only draft before metadata must retain its text and persistence");
+            invoke(editor, "setReadRunning", new Class<?>[]{boolean.class}, false);
+            ((JButton)field(details, "apply")).doClick(0);
+            if (store.get(key).hasChanges()) throw new AssertionError("Recovered text must not stage without column metadata");
+            editor.close();
+            if (!"recovered text".equals(store.get(key).inspectorText)) throw new AssertionError("Closing before metadata must preserve recovery");
+            editor = new TableDataEditorPanel(project, config, "PUBLIC", metadata);
+            details = field(editor, "cellDetails");
+            if (metadataArrives) {
+                metadata.setColumns(List.of(new ColumnMetadata("id", "INTEGER", java.sql.Types.INTEGER, 10, 0, false, true, false, null),
+                        new ColumnMetadata("email", "VARCHAR", java.sql.Types.VARCHAR, 180, 0, true, false, false, null)));
+                invoke(field(editor, "tableModel"), "refreshColumnMetadata", new Class<?>[0]);
+            }
+            invoke(editor, "setReadRunning", new Class<?>[]{boolean.class}, false);
+            invoke(editor, "refreshInspector", new Class<?>[0]);
+            if (!"recovered text".equals(invokeResult(details, "draftText"))) throw new AssertionError("Metadata completion/failure must preserve text");
+            if (metadataArrives) {
+                ((JButton)field(details, "apply")).doClick(0);
+                if (!store.get(key).hasChanges() || store.get(key).inspectorText != null)
+                    throw new AssertionError("Only explicit Stage may transfer recovered text into the pending batch");
+            } else {
+                invoke(details, "cancelEditing", new Class<?>[0]);
+                if (store.get(key) != null) throw new AssertionError("Explicit Cancel must discard an inspector-only draft");
+            }
+            editor.close();
+        }
+        System.out.println("Inspector-only draft recovery, unavailable metadata, close/reopen, explicit stage and cancellation verified");
+    }
+
+    /** Exact approved fixture and viewport, independent of the surrounding table width. */
+    static void renderApprovedInspector(String theme) throws Exception {
+        Class<?> panelType = Class.forName("com.segfault03.ideadb.ui.CellDetailsPanel");
+        Class<?> actionsType = Class.forName("com.segfault03.ideadb.ui.CellDetailsPanel$Actions");
+        Object actions = java.lang.reflect.Proxy.newProxyInstance(actionsType.getClassLoader(),
+                new Class<?>[]{actionsType}, (proxy, method, args) -> null);
+        var panelConstructor = panelType.getDeclaredConstructor(actionsType); panelConstructor.setAccessible(true);
+        JComponent panel = (JComponent)panelConstructor.newInstance(actions);
+        Class<?> cellType = Class.forName("com.segfault03.ideadb.ui.CellDetailsPanel$Cell");
+        var cellConstructor = cellType.getDeclaredConstructors()[0]; cellConstructor.setAccessible(true);
+        Object cell = cellConstructor.newInstance("WARMUP_ORDERS", 1, 3,
+                new ColumnMetadata("ORDER_DATE", "DATE", java.sql.Types.DATE, 10, 0, false, false, false, null),
+                "2026-09-18", false, false, true, false, null, "Row 2 · ID = 2", "");
+        invoke(panel, "showCell", new Class<?>[]{cellType}, cell);
+        // Match the editor host and a subsequent look-and-feel refresh before capturing.
+        SwingUtilities.updateComponentTreeUI(panel);
+        com.intellij.util.ui.UIUtil.removeScrollBorder(panel);
+        invoke(panel, "refreshTheme", new Class<?>[0]);
+        render(panel, theme + "-approved-inspector", 388, 730);
+        if (!"Row 2 · Column 4".equals(((JTextArea)field(panel, "identity")).getText()))
+            throw new AssertionError("Subtitle must contain only row and column coordinates");
+        JButton close = (JButton)field(panel, "close");
+        close.getModel().setRollover(true);
+        render(panel, theme + "-approved-inspector-close-hover", 388, 730);
+        close.getModel().setRollover(false);
+        render(panel, theme + "-approved-inspector-narrow", 320, 650);
+        Object newCell = cellConstructor.newInstance("WARMUP_PRODUCTS", 0, 5,
+                new ColumnMetadata("METADATA_JSON", "VARCHAR", java.sql.Types.VARCHAR, 500, 0, false, false, false, "'{}'"),
+                "{}", true, false, true, false, null, "New row", "");
+        invoke(panel, "showCell", new Class<?>[]{cellType}, newCell);
+        if (((JButton)field(panel, "useDefault")).isVisible())
+            throw new AssertionError("Set default must stay hidden until the cell has an edit");
+        invoke(panel, "beginEdit", new Class<?>[0]);
+        ((JTextArea)field(panel, "valueArea")).setText("{\"edited\":true}");
+        if (!((JButton)field(panel, "useDefault")).isVisible() || !((JButton)field(panel, "useDefault")).isEnabled())
+            throw new AssertionError("An edited new-row cell with a database default must expose Set default");
+        render(panel, theme + "-inspector-default-available", 388, 730);
+        renderDesktopText(panel, theme + "-inspector-desktop-text-125");
+        invoke(panel, "copyToClipboard", new Class<?>[]{java.awt.datatransfer.Clipboard.class},
+                new java.awt.datatransfer.Clipboard("preview-copy"));
+        JButton copyButton = (JButton)field(panel, "copy");
+        var hover = new java.awt.event.MouseEvent(copyButton, java.awt.event.MouseEvent.MOUSE_ENTERED,
+                0, 0, 4, 4, 0, false);
+        for (var listener : copyButton.getMouseListeners()) listener.mouseEntered(hover);
+        if (((JButton)field(panel, "copy")).getIcon() == null)
+            throw new AssertionError("Copy must replace its icon with the success check");
+        renderDesktopText(panel, theme + "-inspector-inline-copy-feedback-125");
+        invoke(panel, "dismissCopiedHint", new Class<?>[0]);
+        invoke(panel, "beginEdit", new Class<?>[0]);
+        renderDesktopText(panel, theme + "-inspector-desktop-text-disabled-125");
+        ((JTextArea)field(panel, "valueArea")).setText("{\"quantity\":2}");
+        renderDesktopText(panel, theme + "-inspector-desktop-text-enabled-125");
+    }
+
+    static void renderCachedMenuThemeRefresh(String theme) throws Exception {
+        JPopupMenu menu = com.segfault03.ideadb.ui.DatabaseUi.popupMenu();
+        menu.add(new JMenuItem("Count rows")); menu.addSeparator(); menu.add(new JMenuItem("Truncate table..."));
+        JMenu nested = com.segfault03.ideadb.ui.DatabaseUi.submenu("More");
+        nested.add(new JMenuItem("Nested action")); menu.add(nested);
+        LookAndFeel original = UIManager.getLookAndFeel();
+        boolean dark = theme.equals("dark");
+        try {
+            UIManager.setLookAndFeel(dark ? new FlatIntelliJLaf() : new FlatDarculaLaf());
+            JBColor.setDark(!dark);
+            for (var listener : menu.getPopupMenuListeners())
+                listener.popupMenuWillBecomeVisible(new javax.swing.event.PopupMenuEvent(menu));
+        } finally {
+            UIManager.setLookAndFeel(original); JBColor.setDark(dark);
+        }
+        for (var listener : menu.getPopupMenuListeners())
+            listener.popupMenuWillBecomeVisible(new javax.swing.event.PopupMenuEvent(menu));
+        JPopupMenu child = nested.getPopupMenu();
+        for (var listener : child.getPopupMenuListeners())
+            listener.popupMenuWillBecomeVisible(new javax.swing.event.PopupMenuEvent(child));
+        if (!menu.getBackground().equals(UIManager.getColor("PopupMenu.background"))
+                || !child.getBackground().equals(UIManager.getColor("PopupMenu.background")))
+            throw new AssertionError("Cached popup surfaces must follow the current theme after a round trip");
+        renderMenuSurface(menu, theme + "-cached-options-after-theme-switch");
+        renderMenuSurface(child, theme + "-cached-submenu-after-theme-switch");
+    }
+
+    private static void renderMenuSurface(JPopupMenu menu, String name) throws Exception {
+        Dimension size = menu.getPreferredSize(); menu.setSize(size); layout(menu);
+        JComponent surface = new JComponent() {
+            @Override protected void paintComponent(Graphics graphics) {
+                graphics.setColor(UIManager.getColor("PopupMenu.background"));
+                graphics.fillRect(0, 0, getWidth(), getHeight()); menu.paint(graphics);
+            }
+        };
+        render(surface, name, size.width, size.height);
+    }
+
+    static void renderAdversarialCellDetails(TableDataEditorPanel editor, String theme) throws Exception {
+        JTable grid = (JTable)field(editor, "dataTable");
+        JComponent details = (JComponent)field(editor, "cellDetails");
+        grid.setValueAt("{\"customer\":{\"name\":\"Amelia Brooks\",\"notifications\":true},\"tags\":[\"premium\",\"newsletter\"]}", 0, 2);
+        grid.changeSelection(0, 2, false, false);
+        invoke(editor, "openCellDetails", new Class<?>[]{int.class, int.class}, 0, 2);
+        render(editor, theme + "-cell-json-1100", 1100, 700);
+        JComponent valueViewport = (JComponent)field(details, "valueScroll");
+        Rectangle viewingBounds = SwingUtilities.convertRectangle(valueViewport.getParent(), valueViewport.getBounds(), details);
+        invoke(details, "beginEdit", new Class<?>[0]);
+        render(editor, theme + "-cell-json-editing-unchanged-1100", 1100, 700);
+        if (!viewingBounds.equals(SwingUtilities.convertRectangle(valueViewport.getParent(), valueViewport.getBounds(), details)))
+            throw new AssertionError("Editing must keep the formatted value viewport's geometry");
+        ((JTextArea)field(details, "valueArea")).append(" ");
+        if (!(Boolean)invokeResult(details, "hasDraftChange") || !((JButton)field(details, "apply")).isEnabled())
+            throw new AssertionError("Changing the JSON draft must enable Stage change");
+        render(editor, theme + "-cell-json-editing-changed-1100", 1100, 700);
+        if (!((JButton)field(details, "apply")).isEnabled())
+            throw new AssertionError("JSON staging became disabled during rendering; draft=" + field(details, "draft")
+                    + ", text=" + ((JTextArea)field(details, "valueArea")).getText());
+        invoke(details, "cancelEditing", new Class<?>[0]);
+        render(editor, theme + "-cell-json-cancelled-1100", 1100, 700);
+        if (!viewingBounds.equals(SwingUtilities.convertRectangle(valueViewport.getParent(), valueViewport.getBounds(), details)))
+            throw new AssertionError("Cancellation must keep the value viewport's geometry");
+        JComponent heightHandle = (JComponent)field(details, "valueResizeHandle");
+        for (int step = 0; step < 6; step++) heightHandle.getActionMap().get("DOWN").actionPerformed(null);
+        render(editor, theme + "-cell-value-height-resized-1100", 1100, 700);
+        if (valueViewport.getHeight() != viewingBounds.height + 96)
+            throw new AssertionError("The value resize rail must change the viewport height");
+        for (int step = 0; step < 6; step++) heightHandle.getActionMap().get("UP").actionPerformed(null);
+        for (int width : new int[]{960, 760}) {
+            render(editor, theme + "-cell-json-compact-" + width, width, 600);
+            JComponent formatted = (JComponent)field(details, "formattedTab"), summary = (JComponent)field(details, "summary");
+            Rectangle formatBounds = SwingUtilities.convertRectangle(formatted.getParent(), formatted.getBounds(), details);
+            Rectangle summaryBounds = SwingUtilities.convertRectangle(summary.getParent(), summary.getBounds(), details);
+            if (formatBounds.intersects(summaryBounds)) throw new AssertionError("Presentation controls overlap the count");
+        }
+        if (!((JComponent)field(details, "lower")).isVisible())
+            throw new AssertionError("Column metadata must always remain visible");
+        render(editor, theme + "-cell-metadata-expanded-960", 960, 700);
+        updateToolbars(editor);
+        com.intellij.util.ui.UIUtil.dispatchAllInvocationEvents();
+        var constructor = Class.forName("com.segfault03.ideadb.ui.CellDetailsPanel$Column").getDeclaredConstructors()[0];
+        constructor.setAccessible(true);
+        Object longColumn = constructor.newInstance("customer_account_notification_history", 2,
+                new ColumnMetadata("customer_notification_preferences_override_payload", "VARCHAR", java.sql.Types.VARCHAR,
+                        4096, 0, true, false, false, "'notify-on-email-and-sms-unless-account-is-suspended'"), false);
+        invoke(details, "showColumn", new Class<?>[]{longColumn.getClass()}, longColumn);
+        render(editor, theme + "-column-long-metadata-960", 960, 700);
+        JTextArea title = (JTextArea)field(details, "title");
+        if (!title.getText().endsWith("override_payload") || title.getHeight() < title.getPreferredSize().height)
+            throw new AssertionError("Long identifiers must wrap without losing text");
+        grid.changeSelection(0, 4, false, false);
+        grid.setValueAt("not-a-number", 0, 4);
+        invoke(editor, "openCellDetails", new Class<?>[]{int.class, int.class}, 0, 4);
+        render(editor, theme + "-cell-validation-1100", 1100, 700);
+        if (!((JComponent)field(details, "validation")).isVisible())
+            throw new AssertionError("Invalid values need local feedback");
+        Font label = UIManager.getFont("Label.font"), button = UIManager.getFont("Button.font");
+        try {
+            UIManager.put("Label.font", label.deriveFont(label.getSize2D() * 1.5f));
+            UIManager.put("Button.font", button.deriveFont(button.getSize2D() * 1.5f));
+            SwingUtilities.updateComponentTreeUI(details);
+            invoke(details, "refreshTheme", new Class<?>[0]);
+            render(editor, theme + "-cell-large-font-1100", 1100, 800);
+            JButton edit = (JButton)field(details, "edit"), copy = (JButton)field(details, "copy");
+            if (edit.getPreferredSize().height != copy.getPreferredSize().height)
+                throw new AssertionError("Action targets must share a preferred height at larger fonts");
+        } finally {
+            UIManager.put("Label.font", label); UIManager.put("Button.font", button);
+        }
+    }
+    static Object invokeResult(Object target, String name) throws Exception {
+        Method method = target.getClass().getDeclaredMethod(name);
+        method.setAccessible(true);
+        return method.invoke(target);
+    }
     static SqlQueryConsolePanel console() throws Exception {
         SqlQueryConsolePanel panel = new SqlQueryConsolePanel(null, config(DatabaseType.MYSQL), "shop", List.of("shop", "analytics"));
-        panel.setSqlText("-- Active customers with an outstanding balance\nSELECT id, name, email, balance\nFROM customers\nWHERE status = 'active' AND balance > 0\nORDER BY balance DESC;\n");
-        DefaultTableModel model = (DefaultTableModel)field(panel, "resultsModel");
+        panel.setSqlText("-- Active customers with an outstanding balance\nSELECT id, name, email, balance, status\nFROM customers\nWHERE status = 'active' AND balance > 0\nORDER BY balance DESC;\n");
+        com.segfault03.ideadb.model.ReadOnlyResultModel model = (com.segfault03.ideadb.model.ReadOnlyResultModel)field(panel, "resultsModel");
         model.setDataVector(new Object[][]{
-                {1001L, "Amelia Brooks", "amelia@example.com", new java.math.BigDecimal("240.50")},
-                {1004L, "Noah Williams", null, new java.math.BigDecimal("240.50")},
-                {1007L, "Isabella Rossi", "isabella@example.com", new java.math.BigDecimal("240.50")},
-                {1010L, "Aiden Davis", "aiden@example.com", new java.math.BigDecimal("240.50")}
-        }, new Object[]{"id", "name", "email", "balance"});
+                {1001L, "Amelia Brooks", "amelia@example.com", new java.math.BigDecimal("240.50"), "active"},
+                {1004L, "Noah Williams", null, new java.math.BigDecimal("240.50"), "active"},
+                {1007L, "Isabella Rossi", "isabella@example.com", new java.math.BigDecimal("240.50"), "active"},
+                {1010L, "Aiden Davis", "aiden@example.com", new java.math.BigDecimal("240.50"), "active"}
+        }, new Object[]{"id", "name", "email", "balance", "status"});
+        model.setResult(QueryResult.forResultSet(List.of("id", "name", "email", "balance", "status"),
+                List.of("BIGINT", "VARCHAR", "VARCHAR", "DECIMAL", "VARCHAR"),
+                java.util.stream.IntStream.range(0, model.getRowCount())
+                        .mapToObj(row -> java.util.stream.IntStream.range(0, model.getColumnCount())
+                                .mapToObj(column -> model.getValueAt(row, column)).toList()).toList(), 18)
+                .withPrimaryKeyColumns(Set.of(0)).withForeignKeyColumns(Set.of(4)));
         JTable table = (JTable)field(panel, "resultsTable");
         ((JScrollPane)table.getParent().getParent()).setColumnHeaderView(table.getTableHeader());
-        int[] widths = {110, 220, 320, 150};
+        int[] widths = {110, 220, 320, 150, 150};
         for (int i = 0; i < widths.length; i++) table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
         com.segfault03.ideadb.ui.DatabaseUi.status((JLabel)field(panel, "statusLabel"), "4 rows · 18 ms", com.segfault03.ideadb.ui.DatabaseUi.Tone.SUCCESS);
         ((JTabbedPane)field(panel, "resultsTabs")).setTitleAt(0, "Results (4)");
@@ -389,6 +824,10 @@ public final class UiPreview {
         return panel;
     }
     static void verifyControls(Container container) {
+        // Native AUTOLAYOUT keeps folded custom controls offscreen for its overflow popup.
+        // Their parent toolbar bounds are still checked by the caller; its internal
+        // placement is not a clipped application form/control.
+        if (container instanceof com.intellij.openapi.actionSystem.impl.ActionToolbarImpl) return;
         for (Component child : container.getComponents()) {
             if (!child.isVisible()) continue;
             if (child.getX() < 0 || child.getY() < 0 || child.getX() + child.getWidth() > container.getWidth()
@@ -643,9 +1082,40 @@ public final class UiPreview {
         }
     }
 
+    static void connectionMenuPreview(JComponent content, String buttonText, String name, int width, int height) throws Exception {
+        content.setBounds(0, 0, width, height);
+        layout(content);
+        JButton invoker = findButton(content, buttonText);
+        JPopupMenu choices = com.segfault03.ideadb.ui.DatabaseUi.connectionMenu(type -> {});
+        for (Component component : choices.getComponents()) {
+            if (component instanceof JMenuItem item && (item.getIcon() == null || item.getIcon().getIconWidth() <= 0))
+                throw new AssertionError("Connection menu needs a source icon: " + item.getText());
+        }
+        Point anchor = SwingUtilities.convertPoint(invoker, 0, invoker.getHeight(), content);
+        choices.setBounds(anchor.x, anchor.y, choices.getPreferredSize().width, choices.getPreferredSize().height);
+        layout(choices);
+        JComponent popupPreview = new JComponent() {
+            @Override protected void paintComponent(Graphics graphics) {
+                // Native popup windows supply their own surface; supply it for an offscreen capture too.
+                Color surface = UIManager.getColor("PopupMenu.background");
+                graphics.setColor(surface == null ? UIManager.getColor("Panel.background") : surface);
+                graphics.fillRect(0, 0, getWidth(), getHeight());
+                choices.paint(graphics);
+            }
+        };
+        popupPreview.setBounds(choices.getBounds());
+        JLayeredPane menuPreview = new JLayeredPane();
+        menuPreview.add(content, JLayeredPane.DEFAULT_LAYER);
+        menuPreview.add(popupPreview, JLayeredPane.POPUP_LAYER);
+        render(menuPreview, name, width, height);
+    }
+
     static void renderFeatured(String theme) throws Exception {
-        render(ExplorerPreview.create(config(DatabaseType.MYSQL), false), theme + "-side-panel-340", 340, 620);
-        connection(theme, "mysql", 600);
+        render(welcome(false), theme + "-welcome-900", 900, 680);
+        render(valueWorkspacePreview(), theme + "-cell-details-1440", 1440, 900);
+        AlterTableDialog alter = alterTableDialog();
+        render(alter.previewPanel(), theme + "-schema-alter-table-800", 800, alter.previewPanel().getPreferredSize().height);
+        connection(theme, "mysql", 740);
         render(console(), theme + "-sql-console-1100", 1100, 620);
         TableDataEditorPanel editor = table(false);
         render(editor, theme + "-table-1100", 1100, 620);
@@ -659,6 +1129,80 @@ public final class UiPreview {
         if (!((JButton)field(editor, "saveBtn")).isEnabled())
             throw new AssertionError("Featured new-row preview must be valid: " + field(model, "validationErrors"));
         render(editor, theme + "-table-new-row-1100", 1100, 620);
+    }
+
+    static void renderSourceFilter(String theme) throws Exception {
+        render(ExplorerPreview.create(config(DatabaseType.MYSQL), false), theme + "-side-panel-340", 340, 620);
+        render(ExplorerPreview.viewOnly(config(DatabaseType.MYSQL), true), theme + "-side-panel-view-only-picker-340", 340, 620);
+        render(ExplorerPreview.viewOnly(config(DatabaseType.MYSQL), false), theme + "-side-panel-view-only-mysql-340", 340, 620);
+    }
+
+    static void renderExplorerSearch(String theme) throws Exception {
+        render(ExplorerPreview.search(config(DatabaseType.MYSQL), false), theme + "-explorer-search-all-340", 340, 700);
+        render(ExplorerPreview.search(config(DatabaseType.MYSQL), true), theme + "-explorer-search-focused-340", 340, 700);
+        render(ExplorerPreview.search(config(DatabaseType.MYSQL), true), theme + "-explorer-search-focused-1100", 1100, 620);
+    }
+
+    static void renderTableTabIcons(String theme) throws Exception {
+        JPanel preview = new JPanel(new BorderLayout(0, 18));
+        preview.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        JTabbedPane tabs = new JTabbedPane();
+        for (DatabaseType type : DatabaseType.values()) {
+            var config = config(type);
+            var file = new com.segfault03.ideadb.editor.TableDataVirtualFile(config, "shop",
+                    new TableMetadata("shop", "public", "customers", "TABLE"));
+            Icon icon = new com.segfault03.ideadb.editor.DatabaseTableIconProvider().getIcon(file, 0, null);
+            verifyTableTabBadge(type, icon);
+            JPanel content = new JPanel(new BorderLayout());
+            content.setBorder(BorderFactory.createEmptyBorder(20, 16, 16, 16));
+            content.add(new JLabel("customers — " + type.getDisplayName()), BorderLayout.NORTH);
+            tabs.addTab("customers [" + type.getDisplayName() + "]", icon, content);
+        }
+        preview.add(tabs, BorderLayout.CENTER);
+        JPanel detail = new JPanel(new GridLayout(1, DatabaseType.values().length, 20, 0));
+        for (DatabaseType type : DatabaseType.values()) {
+            Icon icon = com.segfault03.ideadb.ui.Icons.tableWithDataSource(type);
+            JPanel item = new JPanel(new BorderLayout(0, 10));
+            item.add(new JLabel(type.getDisplayName(), SwingConstants.CENTER), BorderLayout.NORTH);
+            Icon enlarged = new Icon() {
+                public int getIconWidth() { return icon.getIconWidth() * 4; }
+                public int getIconHeight() { return icon.getIconHeight() * 4; }
+                public void paintIcon(Component component, Graphics graphics, int x, int y) {
+                    Graphics2D copy = (Graphics2D) graphics.create();
+                    copy.translate(x, y);
+                    copy.scale(4, 4);
+                    icon.paintIcon(component, copy, 0, 0);
+                    copy.dispose();
+                }
+            };
+            item.add(new JLabel(enlarged, SwingConstants.CENTER), BorderLayout.CENTER);
+            detail.add(item);
+        }
+        preview.add(detail, BorderLayout.SOUTH);
+        render(preview, theme + "-table-tab-icons-760", 760, 300);
+    }
+
+    static void verifyTableTabBadge(DatabaseType type, Icon icon) {
+        if (icon.getIconWidth() != 16 || icon.getIconHeight() != 16)
+            throw new AssertionError("Table tab icon must remain 16 x 16: " + type);
+        BufferedImage pixels = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = pixels.createGraphics();
+        icon.paintIcon(new JLabel(), graphics, 0, 0);
+        graphics.dispose();
+        int expected = switch (type) {
+            case MYSQL -> 0x00758F;
+            case HSQLDB -> 0x7256A8;
+            case POSTGRESQL -> 0x4169E1;
+            case H2 -> 0x2471A3;
+        };
+        int filled = 0;
+        for (int y = 6; y < 16; y++) for (int x = 0; x < 10; x++) {
+            int argb = pixels.getRGB(x, y);
+            if (x >= 2 && x < 8 && y >= 8 && y < 14 && (argb >>> 24) != 255)
+                throw new AssertionError("Source badge must hide the grid at " + x + "," + y + ": " + type);
+            if ((argb & 0xffffff) == expected) filled++;
+        }
+        if (filled < 10) throw new AssertionError("Missing solid bottom-left source badge: " + type);
     }
 
     private static void initializePreviewApplication() throws Exception {
@@ -702,7 +1246,11 @@ public final class UiPreview {
             output = Path.of(args[0]);
             Files.createDirectories(output);
             String theme = args[1];
-            featuredOnly = args.length < 3 || !args[2].equals("all");
+            boolean sourceFilterOnly = args.length >= 3 && args[2].equals("source-filter");
+            boolean searchOnly = args.length >= 3 && args[2].equals("search");
+            boolean tabIconsOnly = args.length >= 3 && args[2].equals("tab-icons");
+            boolean cellDetailsOnly = args.length >= 3 && args[2].equals("cell-details");
+            featuredOnly = !sourceFilterOnly && !searchOnly && !tabIconsOnly && !cellDetailsOnly && (args.length < 3 || !args[2].equals("all"));
             UIManager.setLookAndFeel(theme.equals("dark") ? new FlatDarculaLaf() : new FlatIntelliJLaf());
             Font font = new javax.swing.plaf.FontUIResource(previewFont());
             UIManager.put("defaultFont", font);
@@ -714,6 +1262,19 @@ public final class UiPreview {
             com.intellij.ui.IconManager.Companion.activate(new com.intellij.ui.icons.CoreIconManager());
             IconLoader.activate();
             IconLoader.setUseDarkIcons(theme.equals("dark"));
+            SwingUtilities.invokeAndWait(() -> {
+                try { verifyInspectorDraftRecovery(); }
+                catch (Exception exception) { throw new RuntimeException(exception); }
+            });
+            if (args.length >= 3 && args[2].equals("checks")) return;
+            if (sourceFilterOnly || searchOnly || tabIconsOnly || cellDetailsOnly) {
+                SwingUtilities.invokeAndWait(() -> {
+                    try { if (cellDetailsOnly) renderCellDetails(theme); else if (tabIconsOnly) renderTableTabIcons(theme); else if (searchOnly) renderExplorerSearch(theme); else renderSourceFilter(theme); }
+                    catch (Exception exception) { throw new RuntimeException(exception); }
+                });
+                Files.write(output.resolve(theme + "-manifest.txt"), snapshots);
+                return;
+            }
             if (featuredOnly) {
                 SwingUtilities.invokeAndWait(() -> {
                     try { renderFeatured(theme); }
@@ -729,25 +1290,15 @@ public final class UiPreview {
                 render(welcome(false), theme + "-welcome-520", 520, 680);
                 render(welcome(true), theme + "-welcome-connected-900", 900, 680);
                 verifyWelcome();
-                render(ExplorerPreview.create(config(DatabaseType.MYSQL), false), theme + "-side-panel-340", 340, 620);
+                renderSourceFilter(theme);
+                renderExplorerSearch(theme);
+                renderTableTabIcons(theme);
+                render(valueWorkspacePreview(), theme + "-cell-details-1440", 1440, 900);
                 render(ExplorerPreview.create(config(DatabaseType.MYSQL), true), theme + "-side-panel-empty-340", 340, 620);
-                JPanel empty = ExplorerPreview.create(config(DatabaseType.MYSQL), true);
-                empty.setBounds(0, 0, 340, 620);
-                layout(empty);
-                JButton addConnection = findButton(empty, "Add a connection…");
-                JPopupMenu choices = com.segfault03.ideadb.ui.DatabaseUi.connectionMenu(type -> {});
-                Point anchor = SwingUtilities.convertPoint(addConnection, 0, addConnection.getHeight(), empty);
-                choices.setBounds(anchor.x, anchor.y, choices.getPreferredSize().width, choices.getPreferredSize().height);
-                layout(choices);
-                // Paint the production popup directly without opening an OS popup window.
-                JComponent popupPreview = new JComponent() {
-                    @Override protected void paintComponent(Graphics graphics) { choices.paint(graphics); }
-                };
-                popupPreview.setBounds(choices.getBounds());
-                JLayeredPane menuPreview = new JLayeredPane();
-                menuPreview.add(empty, JLayeredPane.DEFAULT_LAYER);
-                menuPreview.add(popupPreview, JLayeredPane.POPUP_LAYER);
-                render(menuPreview, theme + "-side-panel-connection-menu-340", 340, 620);
+                connectionMenuPreview(ExplorerPreview.create(config(DatabaseType.MYSQL), true),
+                        "Add a connection…", theme + "-side-panel-connection-menu-340", 340, 620);
+                connectionMenuPreview(welcome(false), "Add connection…",
+                        theme + "-welcome-connection-menu-900", 900, 680);
                 render(ExplorerPreview.error(config(DatabaseType.MYSQL)), theme + "-side-panel-error-340", 340, 620);
                 SqlQueryConsolePanel console = console();
                 render(console, theme + "-sql-console-1100", 1100, 620);
@@ -782,10 +1333,11 @@ public final class UiPreview {
                 nativeDelegates(nativeTable);
                 ((DatabaseTable)field(nativeTable, "dataTable")).sizeColumnsToContent();
                 render(nativeTable, theme + "-table-native-1100", 1100, 620);
-                verifyControls((Container)((BorderLayout)nativeTable.getLayout()).getLayoutComponent(BorderLayout.NORTH));
+                JPanel nativeWorkspace = (JPanel)field(nativeTable, "tableWorkspace");
+                verifyControls((Container)((BorderLayout)nativeWorkspace.getLayout()).getLayoutComponent(BorderLayout.NORTH));
                 autoEditing(theme);
                 verifyConnectionReadiness();
-                for (String variant : List.of("mysql", "new", "success", "failed", "hsql-server", "hsql-memory", "hsql-file", "jdbc-url", "driver-download", "driver-retained", "driver-retained-hsqldb", "driver-local", "mysql-bundled-expanded", "hsql-bundled-expanded", "hsql-memory-bundled-expanded", "hsql-file-bundled-expanded", "mysql-collapsed-after-expansion", "mysql-incomplete", "hsql-incomplete", "jdbc-url-incomplete")) connection(theme, variant, 600);
+                for (String variant : List.of("mysql", "new", "postgresql", "success", "failed", "hsql-server", "hsql-memory", "hsql-file", "jdbc-url", "driver-download", "driver-retained", "driver-retained-hsqldb", "driver-local", "mysql-bundled-expanded", "hsql-bundled-expanded", "hsql-memory-bundled-expanded", "hsql-file-bundled-expanded", "mysql-collapsed-after-expansion", "mysql-incomplete", "hsql-incomplete", "jdbc-url-incomplete")) connection(theme, variant, 740);
                 connection(theme, "mysql", 800);
                 TableDataEditorPanel editor = table(false);
                 render(editor, theme + "-table-1100", 1100, 620);
@@ -793,7 +1345,7 @@ public final class UiPreview {
                 verifyGrid(grid, 3, 2);
                 render(editor, theme + "-table-760", 760, 620);
                 render(editor, theme + "-table-520", 520, 620);
-                BorderLayout editorLayout = (BorderLayout)editor.getLayout();
+                BorderLayout editorLayout = (BorderLayout)((JPanel)field(editor, "tableWorkspace")).getLayout();
                 verifyControls((Container)editorLayout.getLayoutComponent(BorderLayout.NORTH));
                 verifyControls((Container)editorLayout.getLayoutComponent(BorderLayout.SOUTH));
                 Object model = field(editor, "tableModel");

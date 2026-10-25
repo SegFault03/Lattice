@@ -1,5 +1,7 @@
 package com.segfault03.ideadb.ui;
 
+import com.segfault03.ideadb.provider.DatabaseProviders;
+
 import com.intellij.icons.AllIcons;
 import com.intellij.util.ui.JBUI;
 import com.intellij.openapi.project.Project;
@@ -15,13 +17,15 @@ import com.segfault03.ideadb.model.*;
 import com.segfault03.ideadb.service.DatabaseConnectionManager;
 import com.segfault03.ideadb.service.DdlService;
 import com.segfault03.ideadb.service.MetadataService;
+import com.segfault03.ideadb.service.DatabaseChange;
+import com.segfault03.ideadb.service.DatabaseChangeListener;
 import com.segfault03.ideadb.state.DatabaseSettingsState;
+import com.segfault03.ideadb.state.MetadataCacheState;
 
 import javax.swing.*;
 import javax.swing.event.TreeExpansionEvent;
 import javax.swing.event.TreeExpansionListener;
 import javax.swing.tree.DefaultMutableTreeNode;
-import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 import java.awt.*;
@@ -36,13 +40,18 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     private volatile boolean disposed;
     private final Project project;
 
-    private DefaultTreeModel treeModel;
+    private DatabaseSourceTreeModel treeModel;
     private DefaultMutableTreeNode rootNode;
     private Tree databaseTree;
     private DatabaseExplorerToolbar toolbar;
+    private DatabaseExplorerSearchBar searchBar;
+    private DatabaseExplorerHeader explorerHeader;
+    private DatabaseExplorerSearchController searchController;
     private final JLabel operationStatus = new WrappingLabel("Ready");
     private final java.util.Map<TreeNodeData, String> loadingNodes = new java.util.LinkedHashMap<>();
     private boolean mutationRunning;
+    private boolean connectionsInitialized;
+    private final java.util.Set<DatabaseChange> pendingRefreshes = new java.util.LinkedHashSet<>();
     private final DatabaseExplorerHint selectionHint = new DatabaseExplorerHint();
     private final CardLayout explorerLayout = new CardLayout();
     private final JPanel explorerCards = new JPanel(explorerLayout);
@@ -52,25 +61,31 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         this.project = project;
 
         initUI();
-        project.getMessageBus().connect(this).subscribe(com.segfault03.ideadb.editor.TableRenameListener.TOPIC,(config,database,oldName,renamed) -> {
-            var nodes=rootNode.depthFirstEnumeration();
-            while(nodes.hasMoreElements()) {
-                DefaultMutableTreeNode node=(DefaultMutableTreeNode)nodes.nextElement();
-                if(node.getUserObject() instanceof TreeNodeData data && data.getType()==TreeNodeData.NodeType.DATABASE && config.getId().equals(data.getConnectionConfig().getId()) && database.equals(data.getDatabaseName())) {
-                    data.setLoaded(false); loadTablesForDatabaseNode(node,data); break;
-                }
-            }
-        });
+        com.intellij.openapi.application.ApplicationManager.getApplication().getMessageBus().connect(this)
+                .subscribe(DatabaseChangeListener.TOPIC, change -> {
+                    pendingRefreshes.add(change);
+                    drainRefreshes();
+                });
         com.intellij.openapi.application.ApplicationManager.getApplication().getMessageBus().connect(this)
                 .subscribe(com.segfault03.ideadb.state.DatabaseSettingsListener.TOPIC, () -> SwingUtilities.invokeLater(() -> {
                     if (!disposed && !project.isDisposed()) loadConnectionsFromState();
                 }));
         loadConnectionsFromState();
+        SwingUtilities.invokeLater(this::refreshConnectionsOnOpen);
+    }
+
+    private void refreshConnectionsOnOpen() {
+        if (disposed || project.isDisposed()) return;
+        // Snapshot all saved sources, including cached and filtered-out connections.
+        // Loading a node replaces its children, so do not traverse during loading.
+        for (DefaultMutableTreeNode node : treeModel.connectionNodes())
+            loadDatabasesForConnectionNode(node, (TreeNodeData) node.getUserObject(), false);
     }
 
     public boolean isDisposed() { return disposed; }
 
     @Override public void dispose() {
+        if (searchController != null) searchController.close();
         disposed=true; tasks.cancelPending();
         ToolTipManager.sharedInstance().unregisterComponent(databaseTree);
         com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(tasks::close);
@@ -79,13 +94,19 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         toolbar = new DatabaseExplorerToolbar(this::showAddConnectionMenu,
                 this::editSelectedConnection, this::removeSelectedConnection,
                 this::refreshSelectedNode, this::openConsoleForSelected,
+                this::showSourceFilter,
+                this::toggleSearch,
                 () -> DatabaseEditorManager.getInstance(project).openWelcome());
-        add(toolbar.createComponent(this), BorderLayout.NORTH);
+        searchBar = new DatabaseExplorerSearchBar(query -> {
+            if (searchController != null) searchController.changed(query);
+        }, () -> setSearchVisible(false), () -> searchController.navigate(-1), () -> searchController.navigate(1));
+        explorerHeader = new DatabaseExplorerHeader(toolbar.createComponent(this), searchBar);
+        add(explorerHeader, BorderLayout.NORTH);
         setPreferredSize(JBUI.size(260, 400));
 
         // Database Tree
         rootNode = new DefaultMutableTreeNode(TreeNodeData.root());
-        treeModel = new DefaultTreeModel(rootNode);
+        treeModel = new DatabaseSourceTreeModel(rootNode);
         databaseTree = new Tree(treeModel);
         databaseTree.setCellRenderer(new DatabaseTreeCellRenderer());
         databaseTree.putClientProperty(com.intellij.ui.AnimatedIcon.ANIMATION_IN_RENDERER_ALLOWED, Boolean.TRUE);
@@ -96,11 +117,29 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         databaseTree.setBorder(JBUI.Borders.empty(6, 8));
 
         setupTreeListeners();
+        searchController = new DatabaseExplorerSearchController(databaseTree, treeModel, searchBar);
+        String searchAction = "lattice.explorer.search";
+        getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_F,
+                com.intellij.openapi.util.SystemInfo.isMac ? java.awt.event.InputEvent.META_DOWN_MASK : java.awt.event.InputEvent.CTRL_DOWN_MASK), searchAction);
+        getActionMap().put(searchAction, new AbstractAction() {
+            @Override public void actionPerformed(java.awt.event.ActionEvent event) { setSearchVisible(true); }
+        });
 
         JBScrollPane treeScrollPane = new JBScrollPane(databaseTree);
         treeScrollPane.setBorder(JBUI.Borders.empty());
         explorerCards.add(treeScrollPane, "tree");
         explorerCards.add(new EmptyConnectionPanel(this::showAddConnectionMenu), "empty");
+        JPanel filteredEmpty = new JPanel(new GridBagLayout());
+        GridBagConstraints prompt = new GridBagConstraints();
+        prompt.gridx = 0;
+        prompt.gridy = 0;
+        filteredEmpty.add(new com.intellij.ui.components.JBLabel("No connections match this view"), prompt);
+        prompt.gridy = 1;
+        prompt.insets = JBUI.insetsTop(8);
+        com.intellij.ui.components.ActionLink showAll = new com.intellij.ui.components.ActionLink("Show all data sources");
+        showAll.addActionListener(event -> applySourceFilter(java.util.EnumSet.allOf(DatabaseType.class)));
+        filteredEmpty.add(showAll, prompt);
+        explorerCards.add(filteredEmpty, "filtered-empty");
         add(explorerCards, BorderLayout.CENTER);
 
         JPanel footer = new JPanel(new BorderLayout(0, JBUI.scale(4)));
@@ -112,21 +151,117 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     }
 
     public void loadConnectionsFromState() {
-        rootNode.removeAllChildren();
-        List<ConnectionConfig> configs = DatabaseSettingsState.getInstance().getConnections();
-        toolbar.setHasConnections(!configs.isEmpty());
-        explorerLayout.show(explorerCards, configs.isEmpty() ? "empty" : "tree");
-        if (!configs.isEmpty()) {
-            for (ConnectionConfig cfg : configs) {
-                boolean connected = DatabaseConnectionManager.getInstance().isConnected(cfg.getId());
-                DefaultMutableTreeNode connNode = new DefaultMutableTreeNode(TreeNodeData.connection(cfg, connected));
-                connNode.add(new DefaultMutableTreeNode(TreeNodeData.placeholder("Expand to load databases...")));
-                rootNode.add(connNode);
+        boolean initial = !connectionsInitialized;
+        connectionsInitialized = true;
+        var existing = new java.util.HashMap<String, DefaultMutableTreeNode>();
+        for (var node : treeModel.connectionNodes())
+            existing.put(((TreeNodeData)node.getUserObject()).getConnectionConfig().getId(), node);
+        ExplorerTreeViewState.preserving(databaseTree, () -> {
+            rootNode.removeAllChildren();
+            List<ConnectionConfig> configs = DatabaseSettingsState.getInstance().getConnections();
+            toolbar.setHasConnections(!configs.isEmpty());
+            if (!configs.isEmpty()) {
+                java.util.Map<DatabaseType, List<ConnectionConfig>> byType = new java.util.EnumMap<>(DatabaseType.class);
+                for (ConnectionConfig cfg : configs) {
+                    byType.computeIfAbsent(cfg.getType(), ignored -> new ArrayList<>()).add(cfg);
+                }
+                List<DatabaseType> types = new ArrayList<>(byType.keySet());
+                types.sort(java.util.Comparator.comparing(DatabaseType::getDisplayName, String.CASE_INSENSITIVE_ORDER));
+                for (DatabaseType type : types) {
+                    DefaultMutableTreeNode typeNode = new DefaultMutableTreeNode(TreeNodeData.sourceType(type));
+                    for (ConnectionConfig cfg : byType.get(type)) {
+                        boolean connected = DatabaseConnectionManager.getInstance().isConnected(cfg.getId());
+                        DefaultMutableTreeNode connNode = existing.get(cfg.getId());
+                        var old = connNode == null ? null : ((TreeNodeData)connNode.getUserObject()).getConnectionConfig();
+                        boolean sameSource = old != null && old.getType() == cfg.getType()
+                                && old.buildJdbcUrl().equals(cfg.buildJdbcUrl()) && java.util.Objects.equals(old.getUser(), cfg.getUser());
+                        if (!sameSource) {
+                            connNode = new DefaultMutableTreeNode(TreeNodeData.connection(cfg, connected));
+                            CachedMetadataTree.restore(connNode, MetadataCacheState.getInstance().snapshot(cfg));
+                        }
+                        var descendants = connNode.preorderEnumeration();
+                        while (descendants.hasMoreElements()) {
+                            var data = (TreeNodeData)((DefaultMutableTreeNode)descendants.nextElement()).getUserObject();
+                            if (data.getConnectionConfig() != null) data.setConnectionConfig(cfg);
+                        }
+                        var connection = (TreeNodeData)connNode.getUserObject();
+                        connection.setName(cfg.getName()); connection.setConnected(connected);
+                        typeNode.add(connNode);
+                    }
+                    rootNode.add(typeNode);
+                }
+            }
+            treeModel.reload();
+        });
+        updateSourceFilterAction();
+        if (initial) {
+            databaseTree.expandPath(new TreePath(rootNode.getPath()));
+            for (int i = 0; i < treeModel.getChildCount(rootNode); i++) {
+                DefaultMutableTreeNode typeNode = (DefaultMutableTreeNode) treeModel.getChild(rootNode, i);
+                databaseTree.expandPath(new TreePath(typeNode.getPath()));
             }
         }
-        treeModel.reload();
-        databaseTree.expandPath(new TreePath(rootNode.getPath()));
         updateSelectionActions();
+        if (searchController != null) searchController.reset();
+    }
+
+    private void toggleSearch() { setSearchVisible(!searchBar.isVisible()); }
+
+    private void setSearchVisible(boolean visible) {
+        searchBar.setVisible(visible);
+        toolbar.setSearchVisible(visible);
+        if (visible) SwingUtilities.invokeLater(searchBar::focusInput);
+        else {
+            searchBar.setText("");
+            searchController.changed(searchBar.query());
+            databaseTree.requestFocusInWindow();
+        }
+        explorerHeader.revalidate();
+        explorerHeader.repaint();
+    }
+
+    private void showSourceFilter(Component anchor) {
+        List<DatabaseType> available = new ArrayList<>(java.util.Arrays.asList(DatabaseType.values()));
+        available.sort(java.util.Comparator.comparing(DatabaseType::getDisplayName, String.CASE_INSENSITIVE_ORDER));
+        DatabaseSourceFilterPopup.show(anchor, available, treeModel.getVisibleTypes(), this::applySourceFilter, this);
+    }
+
+    private void applySourceFilter(java.util.Set<DatabaseType> types) {
+        if (disposed || project.isDisposed()) return;
+        TreePath rootPath = new TreePath(rootNode.getPath());
+        var expanded = databaseTree.getExpandedDescendants(rootPath);
+        List<TreePath> expandedPaths = expanded == null ? List.of() : java.util.Collections.list(expanded);
+        TreePath selected = databaseTree.getSelectionPath();
+        java.util.Set<DatabaseType> previousTypes = treeModel.getVisibleTypes();
+        treeModel.setVisibleTypes(types);
+        databaseTree.expandPath(rootPath);
+        for (TreePath path : expandedPaths) {
+            if (isVisibleSourcePath(path)) databaseTree.expandPath(path);
+        }
+        for (int i = 0; i < treeModel.getChildCount(rootNode); i++) {
+            DefaultMutableTreeNode group = (DefaultMutableTreeNode) treeModel.getChild(rootNode, i);
+            TreeNodeData data = (TreeNodeData) group.getUserObject();
+            if (!previousTypes.contains(data.getDatabaseType())) databaseTree.expandPath(new TreePath(group.getPath()));
+        }
+        if (selected != null && isVisibleSourcePath(selected)) databaseTree.setSelectionPath(selected);
+        updateSourceFilterAction();
+        updateSelectionActions();
+    }
+
+    private boolean isVisibleSourcePath(TreePath path) {
+        if (path.getPathCount() < 2) return true;
+        TreeNodeData source = (TreeNodeData) ((DefaultMutableTreeNode) path.getPathComponent(1)).getUserObject();
+        return treeModel.getVisibleTypes().contains(source.getDatabaseType());
+    }
+
+    private void updateSourceFilterAction() {
+        java.util.Set<DatabaseType> types = treeModel.getVisibleTypes();
+        boolean all = types.size() == DatabaseType.values().length;
+        String summary = all ? "All data sources" : types.stream().map(DatabaseType::getDisplayName)
+                .sorted(String.CASE_INSENSITIVE_ORDER).collect(java.util.stream.Collectors.joining(", "));
+        toolbar.setSourceFilter(summary, !all);
+        explorerLayout.show(explorerCards, rootNode.getChildCount() == 0 ? "empty"
+                : treeModel.getChildCount(rootNode) == 0 ? "filtered-empty" : "tree");
     }
 
     private void setupTreeListeners() {
@@ -170,16 +305,32 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
 
     private void updateSelectionActions() {
         TreeNodeData selection = null;
+        DefaultMutableTreeNode selectedNode = null;
         TreePath path = databaseTree.getSelectionPath();
         if (path != null && path.getLastPathComponent() instanceof DefaultMutableTreeNode node
                 && node.getUserObject() instanceof TreeNodeData data) {
             selection = data;
+            selectedNode = node;
         }
-        toolbar.setSelection(selection);
+        var source = selectedNode == null ? null : connectionAncestor(selectedNode);
+        toolbar.setSelection(selection, source == null ? firstConnectedSource() != null : connectionAvailable(selectedNode));
         selectionHint.setSelection(selection);
     }
 
+    private DefaultMutableTreeNode firstConnectedSource() {
+        for (int i = 0; i < treeModel.getChildCount(rootNode); i++) {
+            var group = (DefaultMutableTreeNode) treeModel.getChild(rootNode, i);
+            for (int j = 0; j < group.getChildCount(); j++) {
+                var node = (DefaultMutableTreeNode) group.getChildAt(j);
+                if (connectionAvailable(node)) return node;
+            }
+        }
+        return null;
+    }
+
     private void handleNodeExpansion(DefaultMutableTreeNode node) {
+        if (ExplorerTreeViewState.isRestoring(databaseTree)) return;
+        if (searchController != null && searchController.isRevealing()) return;
         Object uo = node.getUserObject();
         if (!(uo instanceof TreeNodeData)) return;
         TreeNodeData data = (TreeNodeData) uo;
@@ -202,8 +353,58 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         TreeNodeData data = (TreeNodeData) uo;
 
         if (data.getType() == TreeNodeData.NodeType.TABLE || data.getType() == TreeNodeData.NodeType.VIEW) {
-            DatabaseEditorManager.getInstance(project).openTableData(data.getConnectionConfig(), data.getDatabaseName(), data.getTableMetadata());
+            openTableData(node, data);
         }
+    }
+
+    private void openTableData(DefaultMutableTreeNode node, TreeNodeData data) {
+        if (!data.isCached()) {
+            DatabaseEditorManager.getInstance(project).openTableData(data.getConnectionConfig(), data.getDatabaseName(), data.getTableMetadata());
+            return;
+        }
+        if (data.isLoading()) return;
+        data.setLoading(true);
+        loadingNodes.put(data, "Connecting to database…");
+        updateExplorerStatus("Connecting to database…", DatabaseUi.Tone.BUSY);
+        tasks.submit(() -> {
+            try (var read = tasks.openRead(data.getConnectionConfig())) {
+                // Verify a live connection even when an editor for this table is already open.
+                var columns = MetadataService.getInstance().getColumns(read.connection(), data.getConnectionConfig(),
+                        data.getDatabaseName(), data.getTableMetadata().getName());
+                SwingUtilities.invokeLater(() -> {
+                    if (!finishNodeLoad(node, data, "Connected", DatabaseUi.Tone.NORMAL)) return;
+                    data.getTableMetadata().setColumns(columns);
+                    DatabaseEditorManager.getInstance(project).openTableData(data.getConnectionConfig(), data.getDatabaseName(), data.getTableMetadata());
+                    var source = connectionAncestor(node);
+                    if (source != null) loadDatabasesForConnectionNode(source, (TreeNodeData) source.getUserObject());
+                });
+            } catch (Exception failure) {
+                SwingUtilities.invokeLater(() -> {
+                    if (!finishNodeLoad(node, data, "Could not connect · Showing cached metadata", DatabaseUi.Tone.ERROR)) return;
+                    restoreCachedConnection(node);
+                    Messages.showErrorDialog(project, "Failed to connect: " + failure.getMessage(), "Connection Error");
+                });
+            }
+        });
+    }
+
+    private static DefaultMutableTreeNode connectionAncestor(DefaultMutableTreeNode node) {
+        for (var current = node; current != null; current = (DefaultMutableTreeNode) current.getParent()) {
+            if (current.getUserObject() instanceof TreeNodeData data && data.getType() == TreeNodeData.NodeType.CONNECTION) return current;
+        }
+        return null;
+    }
+
+    private void restoreCachedConnection(DefaultMutableTreeNode node) {
+        var source = connectionAncestor(node);
+        if (source == null) return;
+        var data = (TreeNodeData) source.getUserObject();
+        DatabaseConnectionManager.getInstance().closeBrowserConnections(data.getConnectionConfig().getId());
+        ExplorerTreeViewState.preserving(databaseTree, () -> {
+            CachedMetadataTree.restore(source, MetadataCacheState.getInstance().snapshot(data.getConnectionConfig()));
+            treeModel.nodeStructureChanged(source);
+        });
+        updateSelectionActions();
     }
 
     private void showContextMenu(TreePath path, int x, int y) {
@@ -213,145 +414,67 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         if (!(uo instanceof TreeNodeData)) return;
         TreeNodeData data = (TreeNodeData) uo;
 
-        JPopupMenu menu = DatabaseUi.popupMenu();
+        var menu = DatabaseExplorerContextMenu.create(data, connectionAvailable(node), action -> performContextAction(node, data, action));
+        if (menu.getComponentCount() > 0) menu.show(databaseTree, x, y);
+    }
 
-        switch (data.getType()) {
-            case CONNECTION: {
-                ConnectionConfig cfg = data.getConnectionConfig();
-                JMenuItem connectItem = new JMenuItem(data.isConnected() ? "Refresh connection" : "Connect", AllIcons.Actions.Refresh);
-                connectItem.addActionListener(e -> {
-                    data.setLoaded(false);
-                    loadDatabasesForConnectionNode(node, data);
-                });
-                menu.add(connectItem);
+    private boolean connectionAvailable(DefaultMutableTreeNode node) {
+        var source = connectionAncestor(node);
+        return source != null && ((TreeNodeData) source.getUserObject()).isConnected()
+                && node.getUserObject() instanceof TreeNodeData data && !data.isCached();
+    }
 
-                JMenuItem disconnectItem = new JMenuItem("Disconnect");
-                disconnectItem.addActionListener(e -> {
-                    DatabaseConnectionManager.getInstance().closeConnection(cfg.getId());
-                    data.setConnected(false);
-                    data.setLoaded(false);
-                    node.removeAllChildren();
-                    node.add(new DefaultMutableTreeNode(TreeNodeData.placeholder("Expand to load databases...")));
-                    treeModel.nodeStructureChanged(node);
-                });
-                menu.add(disconnectItem);
-
-                menu.addSeparator();
-
-                JMenuItem consoleItem = new JMenuItem("Open SQL console", Icons.CONSOLE);
-                consoleItem.addActionListener(e -> DatabaseEditorManager.getInstance(project).openConsole(cfg, null, null));
-                menu.add(consoleItem);
-
-                JMenuItem createDbItem = new JMenuItem("Create " + (cfg.getType() == DatabaseType.MYSQL ? "database…" : "schema…"));
-                createDbItem.addActionListener(e -> doCreateDatabase(cfg, node, data));
-                menu.add(createDbItem);
-
-                menu.addSeparator();
-
-                JMenuItem editItem = new JMenuItem("Edit connection…", AllIcons.Actions.Edit);
-                editItem.addActionListener(e -> editConnection(cfg));
-                menu.add(editItem);
-
-                JMenuItem delItem = new JMenuItem("Remove connection", AllIcons.General.Remove);
-                delItem.addActionListener(e -> removeConnection(cfg));
-                menu.add(delItem);
-                break;
+    private void performContextAction(DefaultMutableTreeNode node, TreeNodeData data, DatabaseExplorerContextMenu.Action action) {
+        if (action.requiresConnection() && !connectionAvailable(node)) return;
+        var cfg = data.getConnectionConfig();
+        var db = data.getDatabaseName();
+        var table = data.getTableMetadata();
+        switch (action) {
+            case CONNECT -> { data.setLoaded(false); loadDatabasesForConnectionNode(node, data); }
+            case DISCONNECT -> { DatabaseConnectionManager.getInstance().closeConnection(cfg.getId()); restoreCachedConnection(node); }
+            case CONSOLE -> DatabaseEditorManager.getInstance(project).openConsole(cfg, db,
+                    table == null ? null : DdlService.getInstance().buildSelectSql(cfg, db, table.getName(), List.of()));
+            case CREATE_NAMESPACE -> doCreateDatabase(cfg);
+            case EDIT_CONNECTION -> editConnection(cfg);
+            case REMOVE_CONNECTION -> removeConnection(cfg);
+            case CREATE_TABLE -> doCreateTable(cfg, db);
+            case DROP_NAMESPACE -> doDropDatabase(cfg, db);
+            case REFRESH_TABLES -> {
+                if (data.isCached()) {
+                    var source = connectionAncestor(node);
+                    loadDatabasesForConnectionNode(source, (TreeNodeData) source.getUserObject());
+                } else { data.setLoaded(false); loadTablesForDatabaseNode(node, data); }
             }
-
-            case DATABASE: {
-                ConnectionConfig cfg = data.getConnectionConfig();
-                String dbName = data.getDatabaseName();
-
-                JMenuItem consoleItem = new JMenuItem("Open SQL console", Icons.CONSOLE);
-                consoleItem.addActionListener(e -> DatabaseEditorManager.getInstance(project).openConsole(cfg, dbName, null));
-                menu.add(consoleItem);
-
-                JMenuItem createTableItem = new JMenuItem("Create table…", Icons.TABLE);
-                createTableItem.addActionListener(e -> doCreateTable(cfg, dbName, node));
-                menu.add(createTableItem);
-
-                JMenuItem dropDbItem = new JMenuItem("Drop " + (cfg.getType() == DatabaseType.MYSQL ? "database…" : "schema…"));
-                dropDbItem.addActionListener(e -> doDropDatabase(cfg, dbName, node));
-                menu.add(dropDbItem);
-
-                menu.addSeparator();
-                JMenuItem refreshItem = new JMenuItem("Refresh tables", AllIcons.Actions.Refresh);
-                refreshItem.addActionListener(e -> {
-                    data.setLoaded(false);
-                    loadTablesForDatabaseNode(node, data);
-                });
-                menu.add(refreshItem);
-                break;
+            case OPEN_TABLE -> openTableData(node, data);
+            case ALTER_TABLE -> new AlterTableDialog(project, cfg, db, table).showAndGet();
+            case TRUNCATE_TABLE -> doTruncateTable(cfg, db, table.getName());
+            case DROP_TABLE -> doDropTable(cfg, db, table.getName());
+            case GENERATE_SELECT, GENERATE_INSERT -> {
+                if (action == DatabaseExplorerContextMenu.Action.GENERATE_INSERT && table.getColumns().isEmpty())
+                    loadColumnsForTableNode(node, data, () -> showGeneratedSql(node, data, action));
+                else showGeneratedSql(node, data, action);
             }
-
-            case TABLE:
-            case VIEW: {
-                ConnectionConfig cfg = data.getConnectionConfig();
-                String dbName = data.getDatabaseName();
-                TableMetadata tm = data.getTableMetadata();
-
-                JMenuItem viewDataItem = new JMenuItem("Open data editor", AllIcons.Actions.Preview);
-                viewDataItem.setFont(viewDataItem.getFont().deriveFont(Font.BOLD));
-                viewDataItem.addActionListener(e -> DatabaseEditorManager.getInstance(project).openTableData(cfg, dbName, tm));
-                menu.add(viewDataItem);
-
-                JMenuItem consoleItem = new JMenuItem("Open in SQL console", Icons.CONSOLE);
-                consoleItem.addActionListener(e -> {
-                    String query = "SELECT * FROM " + DdlService.formatTable(cfg,dbName,tm.getName()) + " LIMIT 100;";
-                    DatabaseEditorManager.getInstance(project).openConsole(cfg, dbName, query);
-                });
-                menu.add(consoleItem);
-
-                if (!tm.isView()) {
-                    menu.addSeparator();
-
-                    JMenuItem alterItem = new JMenuItem("Alter table…", AllIcons.Actions.Edit);
-                    alterItem.addActionListener(e -> {
-                        AlterTableDialog dlg = new AlterTableDialog(project, cfg, dbName, tm);
-                        if (dlg.showAndGet()) {
-                            if(node.getParent() instanceof DefaultMutableTreeNode parent && parent.getUserObject() instanceof TreeNodeData parentData) {
-                                parentData.setLoaded(false); loadTablesForDatabaseNode(parent,parentData);
-                            }
-                        }
-                    });
-                    menu.add(alterItem);
-
-                    JMenuItem truncateItem = new JMenuItem("Truncate table…", AllIcons.General.Remove);
-                    truncateItem.addActionListener(e -> doTruncateTable(cfg, dbName, tm.getName()));
-                    menu.add(truncateItem);
-
-                    JMenuItem dropItem = new JMenuItem("Drop table…", AllIcons.General.Remove);
-                    dropItem.addActionListener(e -> doDropTable(cfg, dbName, tm.getName(), node));
-                    menu.add(dropItem);
-                }
-
-                menu.addSeparator();
-                JMenu genSqlMenu = new JMenu("Generate SQL");
-                JMenuItem genSelect = new JMenuItem("SELECT Statement");
-                genSelect.addActionListener(e -> {
-                    List<String> cols = tm.getColumns().stream().map(ColumnMetadata::getName).toList();
-                    String sql = DdlService.getInstance().buildSelectSql(cfg, dbName, tm.getName(), cols);
-                    DatabaseEditorManager.getInstance(project).openConsole(cfg, dbName, sql);
-                });
-                genSqlMenu.add(genSelect);
-
-                JMenuItem genInsert = new JMenuItem("INSERT Statement");
-                genInsert.addActionListener(e -> {
-                    List<String> cols = tm.getColumns().stream().map(ColumnMetadata::getName).toList();
-                    String sql = DdlService.getInstance().buildInsertSql(cfg, dbName, tm.getName(), cols);
-                    DatabaseEditorManager.getInstance(project).openConsole(cfg, dbName, sql);
-                });
-                genSqlMenu.add(genInsert);
-                menu.add(genSqlMenu);
-                break;
-            }
-
-            default:
-                break;
         }
+    }
 
-        if (menu.getComponentCount() > 0) {
-            menu.show(databaseTree, x, y);
+    static String generatedSql(TreeNodeData data, DatabaseExplorerContextMenu.Action action) {
+        var table = data.getTableMetadata();
+        var columns = table.getColumns().stream().map(ColumnMetadata::getName).toList();
+        if (action == DatabaseExplorerContextMenu.Action.GENERATE_INSERT && columns.isEmpty())
+            throw new IllegalStateException("Column metadata is unavailable. Refresh the table before generating an INSERT statement.");
+        return action == DatabaseExplorerContextMenu.Action.GENERATE_SELECT
+                ? DdlService.getInstance().buildSelectSql(data.getConnectionConfig(), data.getDatabaseName(), table.getName(), columns)
+                : DdlService.getInstance().buildInsertSql(data.getConnectionConfig(), data.getDatabaseName(), table.getName(), columns);
+    }
+
+    private void showGeneratedSql(DefaultMutableTreeNode node, TreeNodeData data, DatabaseExplorerContextMenu.Action action) {
+        try {
+            String sql = generatedSql(data, action);
+            if (connectionAvailable(node)) DatabaseEditorManager.getInstance(project).openConsole(data.getConnectionConfig(), data.getDatabaseName(), sql);
+            else new GeneratedSqlDialog(project, sql).show();
+        } catch (IllegalStateException error) {
+            updateExplorerStatus("Could not generate SQL · Refresh the table", DatabaseUi.Tone.ERROR);
+            Messages.showErrorDialog(project, error.getMessage(), "Could not generate SQL");
         }
     }
 
@@ -359,10 +482,8 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         if (disposed || project.isDisposed() || mutationRunning || data.isLoading() || node.getRoot() != rootNode) return false;
         data.setLoading(true);
         loadingNodes.put(data, message);
-        node.removeAllChildren();
-        node.add(new DefaultMutableTreeNode(TreeNodeData.loading(message)));
-        treeModel.nodeStructureChanged(node);
-        databaseTree.expandPath(new TreePath(node.getPath()));
+        // Keep browsable children, expansion and selection while the background read runs.
+        treeModel.nodeChanged(node);
         updateExplorerStatus(message, DatabaseUi.Tone.BUSY);
         return true;
     }
@@ -372,7 +493,38 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         loadingNodes.remove(data);
         if (disposed || project.isDisposed()) return false;
         updateExplorerStatus(message, tone);
+        SwingUtilities.invokeLater(() -> {
+            if (!disposed && !project.isDisposed()) updateSelectionActions();
+        });
+        SwingUtilities.invokeLater(this::drainRefreshes);
         return node.getRoot() == rootNode;
+    }
+
+    /** Never drop an invalidation just because a previous metadata read is still running. */
+    private void drainRefreshes() {
+        if (disposed || project.isDisposed() || mutationRunning || !loadingNodes.isEmpty() || pendingRefreshes.isEmpty()) return;
+        var changes = List.copyOf(pendingRefreshes);
+        pendingRefreshes.clear();
+        var targets = new java.util.LinkedHashSet<DefaultMutableTreeNode>();
+        var nodes = rootNode.depthFirstEnumeration();
+        while (nodes.hasMoreElements()) {
+            var node = (DefaultMutableTreeNode) nodes.nextElement();
+            if (!(node.getUserObject() instanceof TreeNodeData data) || data.getConnectionConfig() == null) continue;
+            for (var change : changes) {
+                if (!change.connectionId().equals(data.getConnectionConfig().getId())) continue;
+                if ((change.namespacesChanged() && data.getType() == TreeNodeData.NodeType.CONNECTION)
+                        || (!change.namespacesChanged() && data.getType() == TreeNodeData.NodeType.DATABASE
+                        && (change.namespace() == null || change.namespace().equals(data.getDatabaseName())))) targets.add(node);
+            }
+        }
+        // A connection refresh includes its previously loaded namespaces.
+        targets.removeIf(node -> targets.stream().anyMatch(parent -> parent != node && parent.isNodeDescendant(node)));
+        for (var node : targets) {
+            var data = (TreeNodeData) node.getUserObject();
+            data.setLoaded(false);
+            if (data.getType() == TreeNodeData.NodeType.CONNECTION) loadDatabasesForConnectionNode(node, data);
+            else loadTablesForDatabaseNode(node, data);
+        }
     }
 
     private void updateExplorerStatus(String message, DatabaseUi.Tone tone) {
@@ -385,96 +537,156 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         DatabaseUi.status(operationStatus, message, tone);
     }
 
+    private java.util.Map<String, DefaultMutableTreeNode> existingNodes(DefaultMutableTreeNode parent, TreeNodeData.NodeType... types) {
+        var result = new java.util.LinkedHashMap<String, DefaultMutableTreeNode>();
+        var wanted = java.util.Set.of(types);
+        var nodes = parent.depthFirstEnumeration();
+        while (nodes.hasMoreElements()) {
+            var node = (DefaultMutableTreeNode) nodes.nextElement();
+            if (node.getUserObject() instanceof TreeNodeData data && wanted.contains(data.getType()))
+                result.put(data.getName(), node);
+        }
+        return result;
+    }
+
+
     private void loadDatabasesForConnectionNode(DefaultMutableTreeNode connNode, TreeNodeData data) {
+        loadDatabasesForConnectionNode(connNode, data, true);
+    }
+
+    private void loadDatabasesForConnectionNode(DefaultMutableTreeNode connNode, TreeNodeData data, boolean showErrorDialog) {
         ConnectionConfig cfg = data.getConnectionConfig();
+        var existing = existingNodes(connNode, TreeNodeData.NodeType.DATABASE);
         if (!beginNodeLoad(connNode, data, data.isConnected() ? "Loading databases…" : "Connecting to database…")) return;
         tasks.submit(() -> {
             try {
-                Connection conn = DatabaseConnectionManager.getInstance().getConnection(cfg);
-                List<String> dbs = MetadataService.getInstance().getDatabases(conn, cfg);
+                List<String> dbs = DatabaseConnectionManager.getInstance().executeBrowser(cfg, conn -> MetadataService.getInstance().getDatabases(conn, cfg));
 
                 SwingUtilities.invokeLater(() -> {
                     if (!finishNodeLoad(connNode, data, "Loaded databases", DatabaseUi.Tone.NORMAL)) return;
-                    connNode.removeAllChildren();
-                    data.setConnected(true);
-                    data.setLoaded(true);
+                    ExplorerTreeViewState.preserving(databaseTree, () -> {
+                        connNode.removeAllChildren();
+                        data.setConnected(true);
+                        data.setLoaded(true);
 
-                    for (String db : dbs) {
-                        DefaultMutableTreeNode dbNode = new DefaultMutableTreeNode(TreeNodeData.database(cfg, db));
-                        dbNode.add(new DefaultMutableTreeNode(TreeNodeData.placeholder("Expand to load tables...")));
-                        connNode.add(dbNode);
+                        for (String db : dbs) {
+                            DefaultMutableTreeNode dbNode = existing.get(db);
+                            if (dbNode == null) {
+                                dbNode = new DefaultMutableTreeNode(TreeNodeData.database(cfg, db));
+                                dbNode.add(new DefaultMutableTreeNode(TreeNodeData.placeholder("Expand to load tables...")));
+                            }
+                            ((TreeNodeData) dbNode.getUserObject()).setCached(false);
+                            connNode.add(dbNode);
+                        }
+
+                        treeModel.nodeStructureChanged(connNode);
+                    });
+                    for (int i = 0; i < connNode.getChildCount(); i++) {
+                        var node = (DefaultMutableTreeNode) connNode.getChildAt(i);
+                        var namespace = (TreeNodeData) node.getUserObject();
+                        if (namespace.isLoaded()) loadTablesForDatabaseNode(node, namespace);
                     }
-
-                    treeModel.nodeStructureChanged(connNode);
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
                     if (!finishNodeLoad(connNode, data, "Could not load databases · Refresh to retry", DatabaseUi.Tone.ERROR)) return;
-                    connNode.removeAllChildren();
-                    data.setConnected(false);
-                    connNode.add(new DefaultMutableTreeNode(TreeNodeData.error("Connection failed · Refresh to retry", ex.getMessage())));
-                    treeModel.nodeStructureChanged(connNode);
-                    Messages.showErrorDialog(project, "Failed to connect: " + ex.getMessage(), "Connection Error");
+                    restoreCachedConnection(connNode);
+                    if (MetadataCacheState.getInstance().snapshot(cfg) == null) {
+                        ExplorerTreeViewState.preserving(databaseTree, () -> {
+                            connNode.removeAllChildren();
+                            connNode.add(new DefaultMutableTreeNode(TreeNodeData.error("Connection failed · Refresh to retry", ex.getMessage())));
+                            treeModel.nodeStructureChanged(connNode);
+                        });
+                    }
+                    if (showErrorDialog)
+                        Messages.showErrorDialog(project, "Failed to connect: " + ex.getMessage(), "Connection Error");
                 });
             }
         });
+    }
+
+    static DefaultMutableTreeNode databaseAncestor(DefaultMutableTreeNode node) {
+        for (DefaultMutableTreeNode current = node; current != null; current = (DefaultMutableTreeNode)current.getParent())
+            if (current.getUserObject() instanceof TreeNodeData data && data.getType() == TreeNodeData.NodeType.DATABASE) return current;
+        return null;
     }
 
     private void loadTablesForDatabaseNode(DefaultMutableTreeNode dbNode, TreeNodeData data) {
         ConnectionConfig cfg = data.getConnectionConfig();
         String dbName = data.getDatabaseName();
+        var existing = existingNodes(dbNode, TreeNodeData.NodeType.TABLE, TreeNodeData.NodeType.VIEW);
         if (!beginNodeLoad(dbNode, data, "Loading tables…")) return;
 
         tasks.submit(() -> {
             try {
-                Connection conn = DatabaseConnectionManager.getInstance().getConnection(cfg);
-                List<TableMetadata> tables = MetadataService.getInstance().getTables(conn, cfg, dbName);
+                List<TableMetadata> tables = DatabaseConnectionManager.getInstance().executeBrowser(cfg, conn -> MetadataService.getInstance().getTables(conn, cfg, dbName));
 
                 SwingUtilities.invokeLater(() -> {
                     if (!finishNodeLoad(dbNode, data, "Loaded tables", DatabaseUi.Tone.NORMAL)) return;
-                    dbNode.removeAllChildren();
-                    data.setLoaded(true);
+                    ExplorerTreeViewState.preserving(databaseTree, () -> {
+                        dbNode.removeAllChildren();
+                        data.setLoaded(true);
+                        data.setCached(false);
+                        var source = connectionAncestor(dbNode);
+                        if (source != null) ((TreeNodeData) source.getUserObject()).setConnected(true);
 
-                    List<TableMetadata> regularTables = new ArrayList<>();
-                    List<TableMetadata> views = new ArrayList<>();
-                    for (TableMetadata tm : tables) {
-                        if (tm.isView()) views.add(tm);
-                        else regularTables.add(tm);
-                    }
-
-                    DefaultMutableTreeNode tablesFolder = new DefaultMutableTreeNode(TreeNodeData.tablesFolder(cfg, dbName, regularTables.size()));
-                    for (TableMetadata tm : regularTables) {
-                        DefaultMutableTreeNode tableNode = new DefaultMutableTreeNode(TreeNodeData.table(cfg, dbName, tm));
-                        tableNode.add(new DefaultMutableTreeNode(TreeNodeData.placeholder("Expand to load columns...")));
-                        tablesFolder.add(tableNode);
-                    }
-                    dbNode.add(tablesFolder);
-
-                    if (!views.isEmpty()) {
-                        DefaultMutableTreeNode viewsFolder = new DefaultMutableTreeNode(TreeNodeData.viewsFolder(cfg, dbName, views.size()));
-                        for (TableMetadata tm : views) {
-                            DefaultMutableTreeNode viewNode = new DefaultMutableTreeNode(TreeNodeData.table(cfg, dbName, tm));
-                            viewNode.add(new DefaultMutableTreeNode(TreeNodeData.placeholder("Expand to load columns...")));
-                            viewsFolder.add(viewNode);
+                        List<TableMetadata> regularTables = new ArrayList<>();
+                        List<TableMetadata> views = new ArrayList<>();
+                        for (TableMetadata tm : tables) {
+                            if (tm.isView()) views.add(tm);
+                            else regularTables.add(tm);
                         }
-                        dbNode.add(viewsFolder);
-                    }
 
-                    treeModel.nodeStructureChanged(dbNode);
-                    databaseTree.expandPath(new TreePath(tablesFolder.getPath()));
+                        DefaultMutableTreeNode tablesFolder = new DefaultMutableTreeNode(TreeNodeData.tablesFolder(cfg, dbName, regularTables.size()));
+                        for (TableMetadata tm : regularTables) {
+                            DefaultMutableTreeNode tableNode = reuseTableNode(existing.get(tm.getName()), cfg, dbName, tm);
+                            tablesFolder.add(tableNode);
+                        }
+                        dbNode.add(tablesFolder);
+
+                        if (!views.isEmpty()) {
+                            DefaultMutableTreeNode viewsFolder = new DefaultMutableTreeNode(TreeNodeData.viewsFolder(cfg, dbName, views.size()));
+                            for (TableMetadata tm : views) {
+                                DefaultMutableTreeNode viewNode = reuseTableNode(existing.get(tm.getName()), cfg, dbName, tm);
+                                viewsFolder.add(viewNode);
+                            }
+                            dbNode.add(viewsFolder);
+                        }
+
+                        treeModel.nodeStructureChanged(dbNode);
+                    });
+                    var nodes = existingNodes(dbNode, TreeNodeData.NodeType.TABLE, TreeNodeData.NodeType.VIEW);
+                    for (var node : nodes.values()) {
+                        var table = (TreeNodeData) node.getUserObject();
+                        if (table.isLoaded()) loadColumnsForTableNode(node, table);
+                    }
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
                     if (!finishNodeLoad(dbNode, data, "Could not load tables · Refresh to retry", DatabaseUi.Tone.ERROR)) return;
-                    dbNode.removeAllChildren();
-                    dbNode.add(new DefaultMutableTreeNode(TreeNodeData.error("Could not load tables", ex.getMessage())));
-                    treeModel.nodeStructureChanged(dbNode);
+                    restoreCachedConnection(dbNode);
                 });
             }
         });
     }
 
+    private DefaultMutableTreeNode reuseTableNode(DefaultMutableTreeNode node, ConnectionConfig config, String database, TableMetadata metadata) {
+        var data = TreeNodeData.table(config, database, metadata);
+        if (node == null) {
+            node = new DefaultMutableTreeNode(data);
+            node.add(new DefaultMutableTreeNode(TreeNodeData.placeholder("Expand to load columns...")));
+        } else {
+            data.setLoaded(((TreeNodeData) node.getUserObject()).isLoaded());
+            node.setUserObject(data);
+        }
+        return node;
+    }
+
     private void loadColumnsForTableNode(DefaultMutableTreeNode tableNode, TreeNodeData data) {
+        loadColumnsForTableNode(tableNode, data, () -> {});
+    }
+
+    private void loadColumnsForTableNode(DefaultMutableTreeNode tableNode, TreeNodeData data, Runnable onLoaded) {
         ConnectionConfig cfg = data.getConnectionConfig();
         String dbName = data.getDatabaseName();
         TableMetadata tm = data.getTableMetadata();
@@ -482,29 +694,29 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
 
         tasks.submit(() -> {
             try {
-                Connection conn = DatabaseConnectionManager.getInstance().getConnection(cfg);
-                List<ColumnMetadata> cols = MetadataService.getInstance().getColumns(conn, cfg, dbName, tm.getName());
+                List<ColumnMetadata> cols = DatabaseConnectionManager.getInstance().executeBrowser(cfg, conn -> MetadataService.getInstance().getColumns(conn, cfg, dbName, tm.getName()));
                 SwingUtilities.invokeLater(() -> {
                     if (!finishNodeLoad(tableNode, data, "Loaded columns", DatabaseUi.Tone.NORMAL)) return;
-                    tm.setColumns(cols);
-                    tableNode.removeAllChildren();
-                    data.setLoaded(true);
+                    ExplorerTreeViewState.preserving(databaseTree, () -> {
+                        tm.setColumns(cols);
+                        tableNode.removeAllChildren();
+                        data.setLoaded(true);
+                        data.setCached(false);
 
-                    DefaultMutableTreeNode colsFolder = new DefaultMutableTreeNode(TreeNodeData.columnsFolder(cfg, dbName, tm, cols.size()));
-                    for (ColumnMetadata col : cols) {
-                        colsFolder.add(new DefaultMutableTreeNode(TreeNodeData.column(cfg, dbName, tm, col)));
-                    }
-                    tableNode.add(colsFolder);
+                        DefaultMutableTreeNode colsFolder = new DefaultMutableTreeNode(TreeNodeData.columnsFolder(cfg, dbName, tm, cols.size()));
+                        for (ColumnMetadata col : cols) {
+                            colsFolder.add(new DefaultMutableTreeNode(TreeNodeData.column(cfg, dbName, tm, col)));
+                        }
+                        tableNode.add(colsFolder);
 
-                    treeModel.nodeStructureChanged(tableNode);
-                    databaseTree.expandPath(new TreePath(colsFolder.getPath()));
+                        treeModel.nodeStructureChanged(tableNode);
+                    });
+                    onLoaded.run();
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
                     if (!finishNodeLoad(tableNode, data, "Could not load columns · Refresh to retry", DatabaseUi.Tone.ERROR)) return;
-                    tableNode.removeAllChildren();
-                    tableNode.add(new DefaultMutableTreeNode(TreeNodeData.error("Could not load columns", ex.getMessage())));
-                    treeModel.nodeStructureChanged(tableNode);
+                    restoreCachedConnection(tableNode);
                 });
             }
         });
@@ -577,48 +789,47 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 loadConnectionsFromState();
                 return;
             }
+            if (data.isCached()) {
+                var source = connectionAncestor(node);
+                loadDatabasesForConnectionNode(source, (TreeNodeData) source.getUserObject());
+                return;
+            }
             data.setLoaded(false);
             handleNodeExpansion(node);
         }
     }
 
     private void openConsoleForSelected() {
-        TreePath path = databaseTree.getSelectionPath();
-        if (path != null) {
-            DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
-            if (node.getUserObject() instanceof TreeNodeData) {
-                TreeNodeData data = (TreeNodeData) node.getUserObject();
-                if (data.getConnectionConfig() != null) {
-                    DatabaseEditorManager.getInstance(project).openConsole(data.getConnectionConfig(), data.getDatabaseName(), null);
-                    return;
-                }
-            }
-        }
-        // Fallback to first available connection
-        List<ConnectionConfig> configs = DatabaseSettingsState.getInstance().getConnections();
-        if (!configs.isEmpty()) {
-            DatabaseEditorManager.getInstance(project).openConsole(configs.get(0), null, null);
-        } else {
-            showAddConnectionDialog(DatabaseType.HSQLDB);
-        }
+        if (mutationRunning || !loadingNodes.isEmpty()) return;
+        var path = databaseTree.getSelectionPath();
+        var selected = path == null ? null : (DefaultMutableTreeNode) path.getLastPathComponent();
+        var source = selected == null ? null : connectionAncestor(selected);
+        if (source == null) { source = firstConnectedSource(); selected = source; }
+        if (source == null || !connectionAvailable(selected)) return;
+        var data = (TreeNodeData) selected.getUserObject();
+        DatabaseEditorManager.getInstance(project).openConsole(data.getConnectionConfig(), data.getDatabaseName(), null);
     }
 
     @FunctionalInterface private interface DdlOperation { void execute(Connection connection) throws Exception; }
 
-    private void runMutation(ConnectionConfig config, String message, String failure, DdlOperation operation, Runnable onSuccess) {
+    private void runMutation(ConnectionConfig config, String message, String failure, DdlOperation operation,
+                             DatabaseChange change, Runnable onSuccess) {
         if (disposed || project.isDisposed() || mutationRunning || !loadingNodes.isEmpty()) return;
         mutationRunning = true;
         databaseTree.setEnabled(false);
         updateExplorerStatus(message, DatabaseUi.Tone.BUSY);
         tasks.submitMutation(() -> {
             try {
-                operation.execute(DatabaseConnectionManager.getInstance().getConnection(config));
+                com.segfault03.ideadb.service.DataService.getInstance().withMutationConnection(
+                        DatabaseConnectionManager.getInstance().openConnection(config), conn -> { operation.execute(conn); return null; });
+                DatabaseChangeListener.publish(change);
                 SwingUtilities.invokeLater(() -> {
                     if (disposed || project.isDisposed()) return;
                     mutationRunning = false;
                     databaseTree.setEnabled(true);
                     updateExplorerStatus("Database operation completed", DatabaseUi.Tone.SUCCESS);
                     onSuccess.run();
+                    drainRefreshes();
                 });
             } catch (Exception error) {
                 SwingUtilities.invokeLater(() -> {
@@ -627,60 +838,46 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                     databaseTree.setEnabled(true);
                     updateExplorerStatus(failure + " · See error details", DatabaseUi.Tone.ERROR);
                     Messages.showErrorDialog(project, error.getMessage(), failure);
+                    drainRefreshes();
                 });
             }
         });
     }
 
-    private void doCreateDatabase(ConnectionConfig cfg, DefaultMutableTreeNode connNode, TreeNodeData connData) {
+    private void doCreateDatabase(ConnectionConfig cfg) {
         CreateDatabaseDialog dlg = new CreateDatabaseDialog(project, cfg);
         if (!dlg.showAndGet()) return;
         String dbName = dlg.getDatabaseName();
-        String object = cfg.getType() == DatabaseType.MYSQL ? "database" : "schema";
+        String object = DatabaseProviders.get(cfg.getType()).namespaceLabel();
         runMutation(cfg, "Creating " + object + "…", "Create " + object + " failed",
-                conn -> DdlService.getInstance().createDatabase(conn, cfg, dbName), () -> {
+                conn -> DdlService.getInstance().createDatabase(conn, cfg, dbName), DatabaseChange.connection(cfg.getId()), () -> {
                     Messages.showInfoMessage(project, "Created " + object + " '" + dbName + "'.", "Created");
-                    connData.setLoaded(false);
-                    loadDatabasesForConnectionNode(connNode, connData);
                 });
     }
 
-    private void doDropDatabase(ConnectionConfig cfg, String dbName, DefaultMutableTreeNode dbNode) {
-        String object = cfg.getType() == DatabaseType.MYSQL ? "database" : "schema";
+    private void doDropDatabase(ConnectionConfig cfg, String dbName) {
+        String object = DatabaseProviders.get(cfg.getType()).namespaceLabel();
         if (!DatabaseUi.confirmDestructive(project, "Drop " + object,
                 "Drop " + object + " '" + dbName + "'?\nAll tables and their data will be permanently deleted.", "Drop " + object)) return;
         runMutation(cfg, "Dropping " + object + "…", "Drop " + object + " failed",
-                conn -> DdlService.getInstance().dropDatabase(conn, cfg, dbName), () -> {
+                conn -> DdlService.getInstance().dropDatabase(conn, cfg, dbName), DatabaseChange.connection(cfg.getId()), () -> {
                     Messages.showInfoMessage(project, "Dropped " + object + " '" + dbName + "'.", "Dropped");
-                    if (dbNode.getParent() instanceof DefaultMutableTreeNode parent) {
-                        TreeNodeData data = (TreeNodeData) parent.getUserObject();
-                        data.setLoaded(false);
-                        loadDatabasesForConnectionNode(parent, data);
-                    }
                 });
     }
 
-    private void doCreateTable(ConnectionConfig cfg, String dbName, DefaultMutableTreeNode dbNode) {
+    private void doCreateTable(ConnectionConfig cfg, String dbName) {
         CreateTableDialog dlg = new CreateTableDialog(project, cfg, dbName);
         if (!dlg.showAndGet()) return;
         String tableName = dlg.getTableName();
-        List<ColumnDefinition> columns = dlg.getColumns();
-        runMutation(cfg, "Creating table…", "Create table failed",
-                conn -> DdlService.getInstance().createTable(conn, cfg, dbName, tableName, columns), () -> {
-                    Messages.showInfoMessage(project, "Table '" + tableName + "' created.", "Table created");
-                    TreeNodeData data = (TreeNodeData) dbNode.getUserObject();
-                    data.setLoaded(false);
-                    loadTablesForDatabaseNode(dbNode, data);
-                });
+        Messages.showInfoMessage(project, "Table '" + tableName + "' created.", "Table created");
     }
 
-    private void doDropTable(ConnectionConfig cfg, String dbName, String tableName, DefaultMutableTreeNode tableNode) {
+    private void doDropTable(ConnectionConfig cfg, String dbName, String tableName) {
         if (!DatabaseUi.confirmDestructive(project, "Drop table",
                 "Drop table '" + tableName + "'?\nThe table structure and all its data will be permanently deleted.", "Drop table")) return;
         runMutation(cfg, "Dropping table…", "Drop table failed",
-                conn -> DdlService.getInstance().dropTable(conn, cfg, dbName, tableName), () -> {
+                conn -> DdlService.getInstance().dropTable(conn, cfg, dbName, tableName), DatabaseChange.table(cfg.getId(), dbName, tableName), () -> {
                     Messages.showInfoMessage(project, "Table '" + tableName + "' dropped.", "Table dropped");
-                    if (tableNode.getParent() != null) treeModel.removeNodeFromParent(tableNode);
                 });
     }
 
@@ -689,6 +886,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 "Truncate table '" + tableName + "'?\nAll rows will be permanently deleted. The table structure will be kept.", "Truncate table")) return;
         runMutation(cfg, "Truncating table…", "Truncate table failed",
                 conn -> DdlService.getInstance().truncateTable(conn, cfg, dbName, tableName),
+                DatabaseChange.table(cfg.getId(), dbName, tableName),
                 () -> Messages.showInfoMessage(project, "All rows removed from '" + tableName + "'.", "Table truncated"));
     }
 }

@@ -14,6 +14,29 @@ import java.awt.event.MouseEvent;
 
 /** Shared database grids with column-aligned headers and no hover surfaces. */
 public final class DatabaseTable extends JBTable {
+    private int selectedHeaderColumn = -1;
+
+    public int getSelectedHeaderColumn() { return selectedHeaderColumn; }
+
+    public void setSelectedHeaderColumn(int modelColumn) {
+        selectedHeaderColumn = modelColumn;
+        if (modelColumn >= 0) {
+            clearSelection();
+            // clearSelection leaves JTable's former focus/lead cell behind.
+            getSelectionModel().setAnchorSelectionIndex(-1);
+            getSelectionModel().setLeadSelectionIndex(-1);
+            getColumnModel().getSelectionModel().setAnchorSelectionIndex(-1);
+            getColumnModel().getSelectionModel().setLeadSelectionIndex(-1);
+        }
+        getTableHeader().repaint();
+        repaint();
+    }
+
+    @Override public void changeSelection(int row, int column, boolean toggle, boolean extend) {
+        setSelectedHeaderColumn(-1);
+        super.changeSelection(row, column, toggle, extend);
+    }
+
     public DatabaseTable(TableModel model) {
         super(model);
         setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
@@ -56,6 +79,10 @@ public final class DatabaseTable extends JBTable {
                 } finally { copy.dispose(); }
             }
             @Override public void updateUI() {
+                // A replacement BasicTableHeaderUI starts with a resize cursor in
+                // its swap slot. Retaining the old resize cursor poisons both slots,
+                // so moving back into a column can never restore the normal pointer.
+                setCursor(Cursor.getDefaultCursor());
                 super.updateUI();
                 if (getParent() instanceof JViewport viewport) viewport.setBackground(DatabaseTable.this.getBackground());
             }
@@ -102,13 +129,33 @@ public final class DatabaseTable extends JBTable {
         @Override public Component getTableCellRendererComponent(JTable table, Object value, boolean selected,
                                                                  boolean focus, int row, int column) {
             super.getTableCellRendererComponent(table, value, selected, focus, row, column);
-            setBackground(table.getTableHeader().getBackground());
+            boolean primaryKey = table.getModel() instanceof com.segfault03.ideadb.model.KeyTableModel keys
+                    && keys.isPrimaryKeyColumn(table.convertColumnIndexToModel(column));
+            boolean foreignKey = table.getModel() instanceof com.segfault03.ideadb.model.KeyTableModel keys
+                    && keys.isForeignKeyColumn(table.convertColumnIndexToModel(column));
+            Color normal = table.getTableHeader().getBackground();
+            boolean light = normal.getRed() + normal.getGreen() + normal.getBlue() > 384;
+            setBackground(primaryKey ? new Color(light ? 0xF5EFDE : 0x423D30)
+                    : foreignKey ? new Color(light ? 0xEEEAF4 : 0x3E3648) : normal);
+            setIcon(primaryKey ? foreignKey ? Icons.PRIMARY_FOREIGN_KEY : Icons.KEY
+                    : foreignKey ? Icons.FOREIGN_KEY
+                    : Boolean.TRUE.equals(table.getClientProperty("lattice.showColumnIcons")) ? Icons.COLUMN : null);
+            setIconTextGap(JBUI.scale(6));
+            getAccessibleContext().setAccessibleDescription(primaryKey
+                    ? foreignKey ? "Primary and foreign key column" : "Primary key column"
+                    : foreignKey ? "Foreign key column" : null);
             setForeground(table.getForeground());
             setFont(table.getFont().deriveFont(Font.BOLD));
             setHorizontalAlignment(SwingConstants.LEFT);
             setBorder(BorderFactory.createCompoundBorder(
                     BorderFactory.createMatteBorder(0, 0, JBUI.scale(2), JBUI.scale(1), table.getGridColor()),
                     JBUI.Borders.empty(4, 8)));
+            if (table instanceof DatabaseTable grid && grid.getSelectedHeaderColumn() == table.convertColumnIndexToModel(column)) {
+                setBackground(new JBColor(0xE8F1FF, 0x283447));
+                setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(new JBColor(0x3868CC, 0x6EA3FF), JBUI.scale(2)),
+                        JBUI.Borders.empty(2, 6, 4, 7)));
+            }
             return this;
         }
     }

@@ -6,6 +6,7 @@ import com.intellij.ui.JBColor;
 import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBScrollPane;
+import com.intellij.util.ui.JBUI;
 import com.segfault03.ideadb.dialog.ConnectionDialog;
 import com.segfault03.ideadb.editor.DatabaseEditorManager;
 import com.segfault03.ideadb.model.ConnectionConfig;
@@ -41,9 +42,11 @@ public class WelcomePanel extends JPanel implements AutoCloseable {
 
     private void initUI() {
         setBackground(JBColor.namedColor("Panel.background", JBColor.background()));
+
         JPanel content = new JPanel(new GridBagLayout());
         content.setOpaque(false);
-        content.setBorder(com.intellij.util.ui.JBUI.Borders.empty(32, 24));
+        content.setBorder(JBUI.Borders.empty(36, 32, 28, 32));
+
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.gridx = 0;
         gbc.gridy = 0;
@@ -51,60 +54,62 @@ public class WelcomePanel extends JPanel implements AutoCloseable {
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.anchor = GridBagConstraints.NORTHWEST;
 
-        JBLabel title = new JBLabel("Welcome to Lattice", Icons.LATTICE_LARGE, SwingConstants.LEFT);
-        title.setFont(title.getFont().deriveFont(Font.BOLD, 22f));
-        title.setIconTextGap(com.intellij.util.ui.JBUI.scale(12));
-        content.add(title, gbc);
-        gbc.gridy++;
-        gbc.insets = com.intellij.util.ui.JBUI.insets(12, 0, 20, 0);
-        content.add(description("Explore MySQL and HSQLDB from your IDE."), gbc);
+        JBLabel brand = new JBLabel("Lattice", Icons.LATTICE_LARGE, SwingConstants.LEFT);
+        brand.setFont(brand.getFont().deriveFont(Font.BOLD, 18f));
+        brand.setIconTextGap(JBUI.scale(12));
+        content.add(brand, gbc);
 
-        JPanel actions = new JPanel(new WrapLayout(FlowLayout.LEFT, 0, 4));
+        gbc.gridy++;
+        gbc.insets = JBUI.insets(22, 0, 8, 0);
+        JTextArea headline = description("Database work, inside your IDE.");
+        headline.setForeground(JBColor.namedColor("Label.foreground", JBColor.foreground()));
+        headline.setFont(headline.getFont().deriveFont(Font.BOLD, 25f));
+        headline.setColumns(34);
+        content.add(headline, gbc);
+
+        gbc.gridy++;
+        gbc.insets = JBUI.insetsBottom(20);
+        content.add(description("Explore schemas, edit tables, run SQL, and export results."), gbc);
+
+        JPanel actions = new JPanel(new WrapLayout(FlowLayout.LEFT, JBUI.scale(14), JBUI.scale(4)));
         actions.setOpaque(false);
-        JButton addConnection = new JButton("Add connection…", AllIcons.General.Add);
-        addConnection.setToolTipText("Configure a MySQL or HSQLDB connection");
+        JButton addConnection = new JButton("Add connection\u2026", AllIcons.General.Add);
+        addConnection.setToolTipText("Configure a database connection");
+        addConnection.getAccessibleContext().setAccessibleName("Add connection\u2026");
         addConnection.addActionListener(e -> showAddConnectionMenu(addConnection));
         actions.add(addConnection);
-        actions.add(Box.createHorizontalStrut(com.intellij.util.ui.JBUI.scale(12)));
-        openConsole = DatabaseUi.action("Open SQL console", Icons.CONSOLE, "Open a SQL console for a saved connection");
+
+        openConsole = DatabaseUi.action("Open SQL console", Icons.CONSOLE,
+                "Open a SQL console for a saved connection");
         updateConsoleAvailability();
         openConsole.addActionListener(e -> openSqlConsole());
         actions.add(openConsole);
+
+        com.intellij.ui.components.ActionLink whatsNew = new com.intellij.ui.components.ActionLink("What's new in Lattice");
+        whatsNew.addActionListener(event -> { if (project != null) DatabaseEditorManager.getInstance(project).openReleaseNotes(); });
+        actions.add(whatsNew);
+
         gbc.gridy++;
-        gbc.insets = com.intellij.util.ui.JBUI.insetsBottom(20);
+        gbc.insets = JBUI.insetsBottom(26);
         content.add(actions, gbc);
 
         gbc.gridy++;
-        gbc.insets = com.intellij.util.ui.JBUI.insetsBottom(8);
-        content.add(DatabaseUi.section("Get started"), gbc);
-        gbc.gridy++;
-        content.add(step(Icons.DATABASE, "1. Connect to a database", "Use a server, a local file, or an in-memory HSQLDB database."), gbc);
-        gbc.gridy++;
-        content.add(step(Icons.TABLE, "2. Browse and edit data", "Double-click a table in the explorer. Commit saves your edits."), gbc);
-        gbc.gridy++;
-        content.add(step(Icons.CONSOLE, "3. Run SQL", "Open a SQL console from a connection, database, or table."), gbc);
+        gbc.insets = JBUI.insetsBottom(0);
+        content.add(sourceShelf(), gbc);
 
         gbc.gridy++;
-        gbc.insets = com.intellij.util.ui.JBUI.insets(12, 0, 8, 0);
-        content.add(DatabaseUi.section("Try it locally"), gbc);
-        gbc.gridy++;
-        gbc.insets = com.intellij.util.ui.JBUI.insetsBottom(20);
-        content.add(description("Choose HSQLDB → In-Memory for a database without a server."), gbc);
-        gbc.gridy++;
-        gbc.insets = com.intellij.util.ui.JBUI.insetsBottom(0);
+        gbc.insets = JBUI.insets(24, 0, 0, 0);
         JBCheckBox showWelcome = new JBCheckBox("Show welcome screen on startup", settings.isShowWelcomeScreen());
         showWelcome.setOpaque(false);
         showWelcome.setToolTipText("You can reopen this screen from the explorer's Help button");
         showWelcome.addActionListener(e -> settings.setShowWelcomeScreen(showWelcome.isSelected()));
         content.add(showWelcome, gbc);
-        gbc.gridy++;
-        gbc.weighty = 1;
-        content.add(Box.createVerticalGlue(), gbc);
 
-        // Limit reading width while letting the editor fit narrower windows.
+        // Keep the reading column comfortable on wide editors and let it contract on narrow ones.
         JPanel frame = new JPanel(new GridBagLayout()) {
             @Override public void doLayout() {
-                content.setPreferredSize(new Dimension(Math.min(com.intellij.util.ui.JBUI.scale(660), getWidth()), content.getPreferredSize().height));
+                content.setPreferredSize(new Dimension(Math.min(JBUI.scale(760), getWidth()),
+                        content.getPreferredSize().height));
                 super.doLayout();
             }
         };
@@ -113,34 +118,45 @@ public class WelcomePanel extends JPanel implements AutoCloseable {
         body.weightx = 1;
         body.weighty = 1;
         body.fill = GridBagConstraints.VERTICAL;
-        body.anchor = GridBagConstraints.NORTH;
+        body.anchor = GridBagConstraints.CENTER;
         frame.add(content, body);
+
         JBScrollPane scroll = new JBScrollPane(frame);
-        scroll.setBorder(com.intellij.util.ui.JBUI.Borders.empty());
+        scroll.setBorder(JBUI.Borders.empty());
         scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         add(scroll, BorderLayout.CENTER);
     }
 
-    private static JPanel step(Icon icon, String title, String text) {
-        JPanel row = new JPanel(new BorderLayout(com.intellij.util.ui.JBUI.scale(12), 0));
-        row.setOpaque(false);
-        row.setBorder(com.intellij.util.ui.JBUI.Borders.empty(10, 0));
-        JBLabel glyph = new JBLabel(icon);
-        glyph.setVerticalAlignment(SwingConstants.TOP);
-        row.add(glyph, BorderLayout.WEST);
-        JPanel copy = new JPanel(new BorderLayout(0, com.intellij.util.ui.JBUI.scale(4)));
-        copy.setOpaque(false);
-        JBLabel heading = new JBLabel(title);
+    private static JPanel sourceShelf() {
+        JPanel shelf = new JPanel(new BorderLayout(0, JBUI.scale(12)));
+        shelf.setOpaque(true);
+        shelf.setBackground(JBColor.namedColor("Panel.background", JBColor.background()));
+        Color borderColor = JBColor.namedColor("Borders.color",
+                new JBColor(new Color(0xD8DCE3), new Color(0x41454D)));
+        shelf.setBorder(BorderFactory.createCompoundBorder(
+                JBUI.Borders.customLine(borderColor),
+                JBUI.Borders.empty(14, 16)));
+
+        JBLabel heading = new JBLabel("Supported data sources");
         heading.setFont(heading.getFont().deriveFont(Font.BOLD));
-        copy.add(heading, BorderLayout.NORTH);
-        copy.add(description(text), BorderLayout.CENTER);
-        row.add(copy, BorderLayout.CENTER);
-        return row;
+        shelf.add(heading, BorderLayout.NORTH);
+
+        JPanel sources = new JPanel(new WrapLayout(FlowLayout.LEFT, JBUI.scale(22), JBUI.scale(6)));
+        sources.setOpaque(false);
+        for (DatabaseType type : List.of(DatabaseType.MYSQL, DatabaseType.POSTGRESQL,
+                DatabaseType.H2, DatabaseType.HSQLDB)) {
+            JBLabel source = new JBLabel(type.getDisplayName(), Icons.dataSource(type, JBUI.scale(24)), SwingConstants.LEFT);
+            source.setIconTextGap(JBUI.scale(8));
+            source.getAccessibleContext().setAccessibleName(type.getDisplayName());
+            sources.add(source);
+        }
+        shelf.add(sources, BorderLayout.CENTER);
+        return shelf;
     }
 
     private static JTextArea description(String text) {
         JTextArea copy = new JTextArea(text);
-        copy.setFont(javax.swing.UIManager.getFont("Label.font"));
+        copy.setFont(UIManager.getFont("Label.font"));
         copy.setForeground(JBColor.namedColor("Label.infoForeground", new JBColor(0x616872, 0xA8ADB7)));
         copy.setEditable(false);
         copy.setFocusable(false);
@@ -193,5 +209,4 @@ public class WelcomePanel extends JPanel implements AutoCloseable {
             menu.show(openConsole, 0, openConsole.getHeight());
         }
     }
-
 }

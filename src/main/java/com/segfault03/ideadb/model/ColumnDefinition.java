@@ -9,7 +9,8 @@ public class ColumnDefinition {
     private boolean autoIncrement = false;
     private String defaultValue = "";
     private int decimalDigits = -1;
-    public enum DefaultKind { AUTO, LITERAL, EXPRESSION }
+    /** PRESERVED is only for an unchanged expression read from database metadata. */
+    public enum DefaultKind { AUTO, LITERAL, EXPRESSION, PRESERVED }
     private DefaultKind defaultKind = DefaultKind.AUTO;
 
     public ColumnDefinition() {

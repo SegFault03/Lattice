@@ -2,9 +2,11 @@
 .gradle/
 .kotlin/
 build/
-# Only the five README screenshots are versioned.
+# Only the seven README screenshots are versioned.
 /screenshots/*
 !/screenshots/side-panel.png
+!/screenshots/welcome.png
+!/screenshots/alter-table-dialog.png
 !/screenshots/connection-dialog.png
 !/screenshots/table-view.png
 !/screenshots/table-editing.png
@@ -51,6 +53,8 @@ test-binaries/
 TESTING-INSTRUCTIONS.md
 AGENTS
 AGENTS.md
+# Shared repository guidance is versioned at the root.
+!/AGENTS.md
 
 # Downloaded tools, native binaries and archives
 /lib/
@@ -72,11 +76,13 @@ AGENTS.md
 *.png
 *.jpg
 *.jpeg
-# Authored branding and the five documented previews
+# Authored branding and the seven documented previews
 !/assets/icon.png
 !/src/main/resources/META-INF/pluginIcon.png
 !/src/main/resources/META-INF/pluginIcon@2x.png
 !/screenshots/side-panel.png
+!/screenshots/welcome.png
+!/screenshots/alter-table-dialog.png
 !/screenshots/connection-dialog.png
 !/screenshots/table-view.png
 !/screenshots/table-editing.png

@@ -1,5 +1,7 @@
 package com.segfault03.ideadb.model;
 
+import com.segfault03.ideadb.provider.DatabaseProviders;
+
 import java.math.*;
 import java.sql.Types;
 import java.time.*;
@@ -11,6 +13,8 @@ public final class CellValueConverter {
     public static Object convert(DatabaseType dialect,ColumnMetadata column,Object value) {
         if(column==null || value==RowDefaults.Value.USE_DEFAULT) return value;
         if(value==null) { if(!column.isNullable() && !column.isAutoIncrement()) throw new IllegalArgumentException("Column '" + column.getName() + "' cannot be NULL"); return null; }
+        var special = com.segfault03.ideadb.provider.DatabaseProviders.get(dialect).convertSpecialValue(column,value);
+        if (special.isPresent()) return special.get();
         String type=column.getTypeName().toUpperCase(Locale.ROOT), text=value.toString().trim();
         int jdbc=column.getDataType();
         if(isText(jdbc)) {
@@ -49,19 +53,14 @@ public final class CellValueConverter {
                 if(jdbc==Types.BIT && column.getColumnSize()>1) {
                     if(value instanceof byte[] bytes) return bytes;
                     if(!text.matches("[01]+") || text.length()>column.getColumnSize()) throw new IllegalArgumentException("Expected a bit string within column capacity");
-                    return dialect==DatabaseType.MYSQL ? new BigInteger(text,2) : new BigInteger(text,2).toByteArray();
+                    return DatabaseProviders.get(dialect).bitValue(text);
                 }
                 return switch(text.toLowerCase(Locale.ROOT)) { case "true","1","t","yes" -> true; case "false","0","f","no" -> false; default -> throw new IllegalArgumentException("Expected true/false or 1/0"); };
             }
             if(jdbc==Types.DATE) return value instanceof java.sql.Date date ? date.toLocalDate() : LocalDate.parse(text);
             if(jdbc==Types.TIME_WITH_TIMEZONE) return value instanceof OffsetTime ? value : OffsetTime.parse(text);
             if(jdbc==Types.TIME) {
-                if(dialect==DatabaseType.MYSQL) {
-                    var match=java.util.regex.Pattern.compile("-?(\\d{1,3}):([0-5]\\d):([0-5]\\d)(?:\\.(\\d{1,6}))?").matcher(text);
-                    if(!match.matches() || Integer.parseInt(match.group(1))>838) throw new IllegalArgumentException("MySQL TIME must be within -838:59:59 and 838:59:59");
-                    if(match.group(4)!=null && match.group(4).length()>column.getDecimalDigits()) throw new IllegalArgumentException("TIME exceeds fractional precision"); return text;
-                }
-                return value instanceof java.sql.Time time ? time.toLocalTime() : LocalTime.parse(text);
+                return DatabaseProviders.get(dialect).timeValue(column,value);
             }
             if(jdbc==Types.TIMESTAMP_WITH_TIMEZONE) return value instanceof OffsetDateTime ? value : OffsetDateTime.parse(text.replace(' ','T'));
             if(jdbc==Types.TIMESTAMP || type.contains("DATETIME")) {

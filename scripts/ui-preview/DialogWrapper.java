@@ -12,15 +12,21 @@ public abstract class DialogWrapper {
     private final Action cancelAction = new AbstractAction("Cancel") { public void actionPerformed(java.awt.event.ActionEvent event) {} };
     protected DialogWrapper(Project project, boolean modal) {}
     protected void init() {
-        panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        panel.setBorder(createContentPaneBorder());
         JLabel heading = new JLabel(title);
         heading.setFont(heading.getFont().deriveFont(Font.BOLD, 16f));
         panel.add(heading, BorderLayout.NORTH);
         panel.add(createCenterPanel(), BorderLayout.CENTER);
-        panel.add(createSouthPanel(), BorderLayout.SOUTH);
+        JComponent south = createSouthPanel();
+        if (south != null) panel.add(south, BorderLayout.SOUTH);
     }
     public Window getWindow() { return null; }
     public JPanel previewPanel() { return panel; }
+    public JRootPane getRootPane() { return null; }
+    public void doCancelAction() {}
+    protected void doOKAction() {}
+    public JComponent getPreferredFocusedComponent() { return null; }
+    protected javax.swing.border.Border createContentPaneBorder() { return BorderFactory.createEmptyBorder(20, 20, 20, 20); }
     protected abstract JComponent createCenterPanel();
     protected JComponent createSouthPanel() {
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));

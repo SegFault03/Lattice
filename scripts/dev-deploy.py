@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test, build and deploy Lattice to a local IDEA installation using standard-library tools."""
+"""Build and deploy Lattice to a local IDEA installation using standard-library tools."""
 import argparse
 from contextlib import contextmanager
 import ctypes
@@ -24,14 +24,16 @@ import zipfile
 from dependencies import Dependencies, add_dependency_options, temporary_environment
 from common import ROOT, gradle_command
 from release import validate_version
+from test_suites import gradle_tasks
 
 PLUGIN_ID = "com.segfault03.lattice"
 PLUGIN_FOLDER = "Lattice"
 
 
 class Progress:
-    def __init__(self, color=True):
+    def __init__(self, color=True, total_steps=7):
         self.color = color and sys.stdout.isatty() and "NO_COLOR" not in os.environ
+        self.total_steps = total_steps
         if self.color and sys.platform == "win32":
             mode = ctypes.c_ulong()
             kernel = ctypes.windll.kernel32
@@ -46,17 +48,17 @@ class Progress:
     @contextmanager
     def step(self, number, label):
         started = time.monotonic()
-        self.emit(f"[{number}/7] RUN   {label}")
+        self.emit(f"[{number}/{self.total_steps}] RUN   {label}")
         try:
             yield
         except BaseException:
-            self.emit(f"[{number}/7] FAIL  {label} ({time.monotonic() - started:.1f}s)", 31)
+            self.emit(f"[{number}/{self.total_steps}] FAIL  {label} ({time.monotonic() - started:.1f}s)", 31)
             raise
         else:
-            self.emit(f"[{number}/7] OK    {label} ({time.monotonic() - started:.1f}s)", 32)
+            self.emit(f"[{number}/{self.total_steps}] OK    {label} ({time.monotonic() - started:.1f}s)", 32)
 
     def skip(self, number, reason):
-        self.emit(f"[{number}/7] SKIP  {reason}", 33)
+        self.emit(f"[{number}/{self.total_steps}] SKIP  {reason}", 33)
 
 
 @dataclass(frozen=True)
@@ -436,11 +438,14 @@ def find_java(ide, override=None):
     raise ValueError("Java 21 not found. Install JDK 21 or supply --java-home /path/to/jdk-21.")
 
 
-def build_plugin(java_home, version):
+def build_plugin(java_home, version, *, minimal=False):
     if sys.platform == "win32" and any(c in str(ROOT) for c in '\"&|<>^%!\r\n'):
         raise ValueError("Windows checkout paths must not contain batch shell metacharacters")
     environment = {**os.environ, "JAVA_HOME": str(java_home)}
-    build_args = ["--console=plain", "--no-daemon", "test", "buildPlugin", f"-PreleaseVersion={version}"]
+    tasks = (['buildPlugin'] if minimal else
+             [*gradle_tasks('functional-build'), *gradle_tasks('backend-regression'),
+              *gradle_tasks('functional-build', packaging=True)])
+    build_args = ["--console=plain", "--no-daemon", *tasks, f"-PreleaseVersion={version}"]
     if os.environ.get('LATTICE_BUILD_IDE'):
         sdk = os.environ['LATTICE_BUILD_IDE']
         if sys.platform == 'win32' and any(c in sdk for c in '\"&|<>^%!\r\n'):
@@ -649,36 +654,43 @@ def run(args, progress, deps=None):
         existing_plugin(plugins)  # Fail before a build or shutdown on an unrelated target.
         progress.emit(f"      IDEA {ide.info['version']}: {ide.home}\n      Java 21: {java_home}\n      Plugin target: {plugins / PLUGIN_FOLDER}")
     if args.dry_run:
-        for number, label in enumerate(("Run tooling tests", "Run Java tests and build plugin", "Validate and stage ZIP",
-                                        "Close selected IDEA if running", "Replace Lattice plugin", "Restart IDEA if it was running"), 2):
+        labels = (("Build plugin ZIP without tests", "Validate and stage ZIP", "Close selected IDEA if running",
+                   "Replace Lattice plugin", "Restart IDEA if it was running") if args.min else
+                  ("Run tooling tests", "Run Java tests and build plugin", "Validate and stage ZIP",
+                   "Close selected IDEA if running", "Replace Lattice plugin", "Restart IDEA if it was running"))
+        for number, label in enumerate(labels, 2):
             progress.skip(number, f"Dry run: would {label.lower()}")
         return
-    with progress.step(2, "Run development tooling tests"):
-        subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "scripts/tests", "-v"], cwd=ROOT, check=True)
-    with progress.step(3, "Run pure Java tests and build plugin ZIP"):
+    if not args.min:
+        with progress.step(2, "Run development tooling tests"):
+            subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "scripts/tests", "-v"], cwd=ROOT, check=True)
+    build_step = 2 if args.min else 3
+    build_label = "Build plugin ZIP only (--min skips tests)" if args.min else "Run pure Java tests and build plugin ZIP"
+    with progress.step(build_step, build_label):
         if deps is None:
-            archive = build_plugin(java_home, version)
+            archive = build_plugin(java_home, version, minimal=args.min)
         else:
             environment = deps.environment(java_home)
             if args.build_ide_home or args.binaries_dir:
                 environment['LATTICE_BUILD_IDE'] = str(deps.ide(args.build_ide_home))
             with temporary_environment(environment):
-                archive = build_plugin(java_home, version)
+                archive = build_plugin(java_home, version, minimal=args.min)
+    stage_step = 3 if args.min else 4
     stage, stopped, retain = None, False, False
     try:
-        with progress.step(4, "Validate and stage the exact built ZIP"):
+        with progress.step(stage_step, "Validate and stage the exact built ZIP"):
             stage = stage_plugin(archive, version, plugins)
             progress.emit(f"      {archive}")
         active = matching_processes(ide, scan_processes())
         if active:
-            with progress.step(5, "Close the selected running IDEA"):
+            with progress.step(stage_step + 1, "Close the selected running IDEA"):
                 if ide_paths(ide, active, args.plugins_dir) != (config, plugins):
                     raise RuntimeError("IDE profile paths changed during the build. Rerun to refresh the target.")
                 stop_ide(ide, active, args.shutdown_timeout, progress)
                 stopped = True
         else:
-            progress.skip(5, "Selected IDEA is not running")
-        with progress.step(6, "Deploy Lattice with rollback on replacement failure"):
+            progress.skip(stage_step + 1, "Selected IDEA is not running")
+        with progress.step(stage_step + 2, "Deploy Lattice with rollback on replacement failure"):
             if matching_processes(ide, scan_processes()):
                 raise RuntimeError("IDEA started during deployment. Exit it and rerun.")
             deploy_plugin(stage, plugins)
@@ -692,10 +704,10 @@ def run(args, progress, deps=None):
     finally:
         try:
             if stopped:
-                with progress.step(7, "Restart the selected IDEA"):
+                with progress.step(stage_step + 3, "Restart the selected IDEA"):
                     start_ide(ide, project, args.startup_timeout, progress, (config, plugins))
             elif stage:
-                progress.skip(7, "IDEA was not stopped; its running state is unchanged")
+                progress.skip(stage_step + 3, "IDEA was not stopped; its running state is unchanged")
         except BaseException:
             retain = True
             if stage:
@@ -704,7 +716,8 @@ def run(args, progress, deps=None):
         finally:
             if stage and not retain:
                 cleanup_stage(stage, plugins.parent)
-    progress.emit("Done. Tests passed and the built Lattice plugin is deployed.", 32)
+    progress.emit("Done. Minimal plugin build and deployment completed." if args.min
+                  else "Done. Tests passed and the built Lattice plugin is deployed.", 32)
 
 
 def positive_timeout(value):
@@ -721,6 +734,8 @@ def main(argv=None):
     parser.add_argument("--java-home", type=Path, help="JDK 21 directory; otherwise discover Java 21")
     parser.add_argument("--build-ide-home", type=Path, help="Local build SDK; deployment target still comes from --ide-home/discovery")
     add_dependency_options(parser)
+    parser.add_argument("--min", action="store_true",
+                        help="Skip tooling and Java tests; build the plugin ZIP, validate it and deploy it")
     parser.add_argument("--project", type=Path, help="Project to open after restart (otherwise IDEA's reopen setting applies)")
     parser.add_argument("--dry-run", action="store_true", help="Print targets and planned steps without building, deploying or restarting")
     parser.add_argument("--list-ides", action="store_true", help="List discovered compatible IDEA installations and exit")
@@ -728,7 +743,7 @@ def main(argv=None):
     parser.add_argument("--startup-timeout", type=positive_timeout, default=60, metavar="SECONDS")
     parser.add_argument("--no-color", action="store_true", help="Disable ANSI colors (also honors NO_COLOR)")
     args = parser.parse_args(argv)
-    progress = Progress(not args.no_color)
+    progress = Progress(not args.no_color, total_steps=6 if args.min else 7)
     try:
         if args.dry_run or args.list_ides:
             run(args, progress)

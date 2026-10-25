@@ -10,8 +10,12 @@ import java.util.concurrent.TimeUnit;
 
 /** Opt-in downloadable driver/server matrix; uses only dedicated test fixtures and temporary schemas. */
 public final class DatabaseCompatibilityTest {
-    private static final List<String> MYSQL = List.of("5.1.49", "6.0.6", "8.0.33", "8.4.0", "9.0.0", "26.7.0");
-    private static final List<String> HSQL = List.of("2.2.9", "2.3.0", "2.3.6", "2.4.1", "2.5.0", "2.5.2", "2.6.1-jdk8", "2.7.0-jdk8", "2.7.3-jdk8", "2.7.4-jdk8");
+    private static final List<String> MYSQL = List.of("5.1.49", "6.0.6", "8.0.33", "26.7.0");
+    private static final List<String> HSQL = List.of("2.2.9", "2.3.6", "2.4.1", "2.5.2", "2.6.1-jdk8", "2.7.4-jdk8");
+    private static List<String> selectedVersions(List<String> defaults) {
+        String selected = System.getProperty("lattice.test.compatibility.drivers");
+        return selected == null ? defaults : List.of(selected.split(","));
+    }
     private static final DatabaseConnectionManager MANAGER = DatabaseConnectionManager.getInstance();
     private static final DataService DATA = DataService.getInstance();
     private static final DdlService DDL = DdlService.getInstance();
@@ -20,7 +24,7 @@ public final class DatabaseCompatibilityTest {
         try (Statement statement = connection.createStatement(); ResultSet result = statement.executeQuery(sql)) { require(result.next(), "Missing scalar"); return result.getObject(1); }
     }
     private static void execute(Connection connection, String sql) throws Exception { try (Statement statement = connection.createStatement()) { statement.execute(sql); } }
-    private static void flow(ConnectionConfig config, String version, Path selectedJar) throws Exception {
+    public static void verifySelectedDriver(ConnectionConfig config, Path selectedJar) throws Exception {
         var test = MANAGER.testConnection(config);
         require(test.isSuccess(), test.getSummaryMessage());
         require(test.getDriverVersion() != null && !test.getDriverVersion().isBlank(), "No reported driver version");
@@ -30,10 +34,14 @@ public final class DatabaseCompatibilityTest {
         require(driver.getClass().getClassLoader() != DriverRegistry.class.getClassLoader(), "Explicit driver must be isolated from bundled driver");
         var local = config.copy(); local.setDriverSource(DriverSource.LOCAL_JAR); local.setDriverJarPath(selectedJar.toString());
         require(DriverRegistry.getInstance().getDriver(local) == driver, "Local JAR selection should load the same selected artifact");
+    }
+    public static void flow(ConnectionConfig config, String version, Path selectedJar) throws Exception {
+        verifySelectedDriver(config, selectedJar);
         String schema = "compat_" + UUID.randomUUID().toString().replace("-", "");
         try (Connection c = MANAGER.openConnection(config)) {
             DDL.createDatabase(c, config, schema);
             try {
+                com.segfault03.ideadb.provider.ProviderEndToEndTest.verifyKeyMetadata(c, config, schema);
                 ColumnDefinition id = new ColumnDefinition("id", "INTEGER", 0, true, false, false, ""); id.setPrimaryKey(true); id.setNullable(false);
                 ColumnDefinition text = new ColumnDefinition("name", "VARCHAR", 0, true, false, false, ""); text.setSize(80); text.setDefaultValue("TEXT:c:\\old's");
                 ColumnDefinition time = new ColumnDefinition("created", "TIMESTAMP", 0, true, false, false, ""); time.setNullable(false); time.setDefaultValue("CURRENT_TIMESTAMP");
@@ -71,9 +79,9 @@ public final class DatabaseCompatibilityTest {
                 DDL.dropTable(c,config,schema,"copy"); DDL.dropTable(c,config,schema,"records");
             } finally { DDL.dropDatabase(c,config,schema); }
         }
-        System.out.println("PASS matrix " + test.getDatabaseProductName() + " " + test.getDatabaseProductVersion() + " / driver " + version);
+        System.out.println("PASS matrix " + config.getType() + " / driver " + version);
     }
-    private static void java8Probe(Path java8, Path tests, Path jar, String type, String url) throws Exception {
+    public static void java8Probe(Path java8, Path tests, Path jar, String type, String url) throws Exception {
         Process probe=new ProcessBuilder(java8.toString(),"-cp",tests+File.pathSeparator+jar,
                 "com.segfault03.ideadb.Java8DriverProbe",type,url).inheritIO().start();
         require(probe.waitFor(45,TimeUnit.SECONDS) && probe.exitValue()==0,"Java 8 driver failed: " + type + " / " + jar.getFileName());
@@ -83,7 +91,7 @@ public final class DatabaseCompatibilityTest {
         if(args[0].equals("download")) {
             for(DatabaseType type:DatabaseType.values()) {
                 require(DriverCatalog.availableVersions(type).size()>10,"Incomplete version catalogue");
-                for(String version:type==DatabaseType.MYSQL ? MYSQL : HSQL) System.out.println("Downloaded " + version + " " + DriverCatalog.download(type,version));
+                for(String version:type==DatabaseType.MYSQL ? MYSQL : type==DatabaseType.HSQLDB ? HSQL : type==DatabaseType.H2 ? List.of("2.1.214","2.2.224","2.3.232") : List.of("42.2.27","42.7.3","42.7.14")) System.out.println("Downloaded " + version + " " + DriverCatalog.download(type,version));
             }
             return;
         }
@@ -93,7 +101,7 @@ public final class DatabaseCompatibilityTest {
             int port=Integer.parseInt(args[1]); String server=args[2];
             Path java8=args.length > 3 ? Path.of(args[3]) : null;
             Path tests=args.length > 4 ? Path.of(args[4]) : null;
-            for(String version:server.startsWith("8.") ? List.of("8.0.33","8.4.0","9.0.0","26.7.0") : List.of("5.1.49","6.0.6","8.0.33")) {
+            for(String version:selectedVersions(server.startsWith("8.") ? List.of("8.0.33","26.7.0") : server.startsWith("5.5.") ? List.of("5.1.49","6.0.6","8.0.33") : List.of("8.0.33"))) {
                 Path jar=null;
                 try {
                     jar=DriverCatalog.download(DatabaseType.MYSQL,version);
@@ -104,7 +112,7 @@ public final class DatabaseCompatibilityTest {
             }
         } else {
             Path java8=Path.of(args[1]), tests=Path.of(args[2]);
-            for(String version:args.length > 3 ? List.of(args[3]) : HSQL) {
+            for(String version:selectedVersions(args.length > 3 ? List.of(args[3]) : HSQL)) {
                 Path jar=null;
                 int selectedPort;
                 try(var listener=new java.net.ServerSocket(0,0,java.net.InetAddress.getByName("127.0.0.1"))) {

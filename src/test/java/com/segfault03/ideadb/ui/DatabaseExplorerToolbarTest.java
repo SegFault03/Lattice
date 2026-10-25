@@ -19,30 +19,33 @@ class DatabaseExplorerToolbarTest {
             AtomicInteger calls = new AtomicInteger();
             Runnable action = calls::incrementAndGet;
             DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(
-                    component -> action.run(), action, action, action, action, action);
+                    component -> action.run(), action, action, action, action, component -> action.run(), action, action);
             assertInstanceOf(javax.swing.border.EmptyBorder.class, toolbar.getBorder(),
                     "The explorer must leave the section boundary to the IDE tool-window header");
             List<JButton> buttons = new ArrayList<>();
             for (Component child : toolbar.getComponents()) {
                 if (child instanceof JButton button) buttons.add(button);
             }
-            assertEquals(6, buttons.size());
-            for (int i = 1; i <= 4; i++) {
+            assertEquals(8, buttons.size());
+            for (int i = 1; i <= 5; i++) {
                 assertTrue(buttons.get(i).isVisible());
                 assertFalse(buttons.get(i).isEnabled());
                 buttons.get(i).doClick(0);
             }
             assertEquals(0, calls.get(), "Disabled actions must not invoke their handlers");
             assertTrue(buttons.get(0).isEnabled());
-            assertTrue(buttons.get(5).isEnabled());
+            assertTrue(buttons.get(6).isEnabled());
+            assertTrue(buttons.get(7).isEnabled());
             toolbar.setHasConnections(true);
             ConnectionConfig config = new ConnectionConfig();
             toolbar.setSelection(TreeNodeData.connection(config, false));
-            for (int i = 1; i <= 4; i++) {
-                assertTrue(buttons.get(i).isEnabled());
+            for (int i = 1; i <= 5; i++) {
+                assertEquals(i != 4, buttons.get(i).isEnabled(), "A disconnected source cannot open a SQL console");
                 buttons.get(i).doClick(0);
             }
             assertEquals(4, calls.get());
+            toolbar.setSelection(TreeNodeData.connection(config, true));
+            assertTrue(buttons.get(4).isEnabled());
             toolbar.setHasConnections(false);
             assertFalse(buttons.get(1).isEnabled());
             for (int width : new int[]{260, 420, 600}) {
@@ -64,13 +67,13 @@ class DatabaseExplorerToolbarTest {
     void actionAvailabilityFollowsTheSelectedNodeAndClearsAfterRemovingConnections() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             Runnable noop = () -> {};
-            DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(component -> {}, noop, noop, noop, noop, noop);
+            DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(component -> {}, noop, noop, noop, noop, component -> {}, noop, noop);
             List<JButton> buttons = buttons(toolbar);
             toolbar.setHasConnections(true);
             assertFalse(buttons.get(1).isEnabled());
             assertFalse(buttons.get(2).isEnabled());
             assertTrue(buttons.get(3).isEnabled());
-            assertTrue(buttons.get(4).isEnabled());
+            assertFalse(buttons.get(4).isEnabled(), "Saved sources alone do not make a console available");
 
             ConnectionConfig config = new ConnectionConfig();
             toolbar.setSelection(TreeNodeData.connection(config, false));
@@ -86,32 +89,79 @@ class DatabaseExplorerToolbarTest {
             assertFalse(buttons.get(1).isEnabled());
             assertTrue(buttons.get(3).isEnabled());
             toolbar.setHasConnections(false);
-            for (int i = 1; i <= 4; i++) assertFalse(buttons.get(i).isEnabled());
+            for (int i = 1; i <= 5; i++) assertFalse(buttons.get(i).isEnabled());
         });
     }
 
-    @Test
-    void hoverAndPressHaveDistinctBackgroundsAndDisabledButtonsDoNotHighlight() throws Exception {
+    @Test void disconnectedSelectionsDimTheConsoleInTheToolbarAndItsOverflowAndReconnectRestoresIt() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             Runnable noop = () -> {};
-            DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(component -> {}, noop, noop, noop, noop, noop);
-            JButton button = buttons(toolbar).get(3);
+            var toolbar = new DatabaseExplorerToolbar(component -> {}, noop, noop, noop, noop, component -> {}, noop, noop);
             toolbar.setHasConnections(true);
-            button.setSize(button.getPreferredSize());
-            int normal = pixel(button);
-            button.getModel().setRollover(true);
-            int hover = pixel(button);
-            assertNotEquals(normal, hover);
-            button.getModel().setArmed(true);
-            button.getModel().setPressed(true);
-            int pressed = pixel(button);
-            assertNotEquals(normal, pressed);
-            assertNotEquals(hover, pressed);
-            button.getModel().setPressed(false);
-            button.getModel().setArmed(false);
-            button.setEnabled(false);
-            button.getModel().setRollover(true);
-            assertEquals(normal, pixel(button), "Unavailable actions have no hover or pressed background");
+            var buttons = buttons(toolbar);
+            var console = buttons.get(4);
+            var overflow = DatabaseUi.mirrorAction(console);
+            overflow.addNotify();
+            try {
+                var config = new ConnectionConfig();
+                var cached = TreeNodeData.table(config, "shop", new TableMetadata("shop", null, "products", "TABLE"));
+                cached.setCached(true);
+                toolbar.setSelection(cached, false);
+                assertFalse(console.isEnabled());
+                assertFalse(overflow.isEnabled());
+                assertTrue(console.getToolTipText().contains("Connect"));
+                assertTrue(buttons.get(0).isEnabled(), "Adding a connection works offline");
+                assertTrue(buttons.get(1).isEnabled(), "Connection settings work offline");
+                assertTrue(buttons.get(3).isEnabled(), "Refresh remains available to reconnect");
+                assertTrue(buttons.get(5).isEnabled(), "Source filtering works offline");
+                assertTrue(buttons.get(6).isEnabled(), "Search includes cached metadata");
+                assertTrue(buttons.get(7).isEnabled());
+                var presentation = new com.intellij.openapi.actionSystem.Presentation();
+                var action = new DatabaseActionToolbar.ControlAction(console, null);
+                action.updatePresentation(presentation);
+                assertFalse(presentation.isEnabled());
+                assertTrue(presentation.getDescription().contains("Connect"));
+                assertNotNull(presentation.getDisabledIcon());
+                cached.setCached(false);
+                toolbar.setSelection(cached, true);
+                action.updatePresentation(presentation);
+                assertTrue(console.isEnabled()); assertTrue(overflow.isEnabled()); assertTrue(presentation.isEnabled());
+                assertEquals("Open SQL Console", presentation.getDescription());
+                toolbar.setBusy(true);
+                assertFalse(console.isEnabled()); assertFalse(overflow.isEnabled());
+                toolbar.setBusy(false);
+                toolbar.setSelection(cached, false);
+                assertFalse(console.isEnabled()); assertFalse(overflow.isEnabled());
+            } finally { overflow.removeNotify(); }
+        });
+    }
+
+    @Test void filterIndicatorAndOverflowStayActiveUntilAllSourcesAreRestored() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            Runnable noop = () -> {};
+            DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(component -> {}, noop, noop, noop, noop, component -> {}, noop, noop);
+            toolbar.setHasConnections(true);
+            JButton eye = buttons(toolbar).stream()
+                    .filter(button -> "View only…".equals(button.getAccessibleContext().getAccessibleName()))
+                    .findFirst().orElseThrow();
+            JButton overflow = DatabaseUi.mirrorAction(eye);
+            overflow.addNotify();
+            try {
+                toolbar.setSourceFilter("MySQL", true);
+                assertTrue(eye.isSelected());
+                assertTrue(overflow.isSelected());
+                assertEquals("View only: MySQL", overflow.getToolTipText());
+                toolbar.setBusy(true);
+                assertFalse(eye.isEnabled());
+                assertFalse(overflow.isEnabled());
+                toolbar.setBusy(false);
+                assertTrue(eye.isEnabled());
+                assertTrue(overflow.isSelected(), "Finishing work preserves the applied filter indicator");
+                toolbar.setSourceFilter("All data sources", false);
+                assertFalse(eye.isSelected());
+                assertFalse(overflow.isSelected());
+                assertEquals("View only: All data sources", overflow.getToolTipText());
+            } finally { overflow.removeNotify(); }
         });
     }
 
@@ -122,10 +172,14 @@ class DatabaseExplorerToolbarTest {
     }
 
     private static int pixel(JButton button) {
+        return pixel(button, JBUI.scale(3), JBUI.scale(3));
+    }
+
+    private static int pixel(JButton button, int x, int y) {
         BufferedImage image = new BufferedImage(button.getWidth(), button.getHeight(), BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = image.createGraphics();
         try { button.paint(graphics); }
         finally { graphics.dispose(); }
-        return image.getRGB(JBUI.scale(3), JBUI.scale(3));
+        return image.getRGB(x, y);
     }
 }

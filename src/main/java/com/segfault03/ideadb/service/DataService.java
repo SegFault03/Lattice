@@ -1,8 +1,10 @@
 package com.segfault03.ideadb.service;
 
+import com.segfault03.ideadb.provider.DatabaseProviders;
+
 import com.segfault03.ideadb.model.ConnectionConfig;
-import com.segfault03.ideadb.model.DatabaseType;
 import com.segfault03.ideadb.model.QueryResult;
+import com.segfault03.ideadb.model.RowDefaults;
 
 import java.sql.*;
 import java.util.ArrayList;
@@ -29,8 +31,10 @@ public class DataService {
         if(where!=null && !where.isBlank()) sql.append(" WHERE ").append(where.trim());
         if(order!=null && !order.isBlank()) sql.append(" ORDER BY ").append(order.trim());
         else if(!keys.isEmpty()) sql.append(" ORDER BY ").append(keys.stream().map(key -> DdlService.quoteIdentifier(config,key)).collect(java.util.stream.Collectors.joining(", ")));
-        if(limit>0) { sql.append(" LIMIT ").append(limit); if(offset>0) sql.append(" OFFSET ").append(offset); }
-        return executeQuery(conn,db,sql.toString());
+        QueryResult result = executeQuery(conn,db,DatabaseProviders.get(config.getType()).dialect().paginate(sql.toString(),limit,offset));
+        if (!result.isResultSet()) return result;
+        var omitted = MetadataService.getInstance().getColumns(conn,config,db,table).stream().filter(com.segfault03.ideadb.model.ColumnMetadata::isGenerated).map(com.segfault03.ideadb.model.ColumnMetadata::getName).collect(java.util.stream.Collectors.toSet());
+        return result.withInsertPolicy(omitted,DatabaseProviders.get(config.getType()).insertOverride(conn));
     }
     public long countRows(Connection conn,ConnectionConfig config,String db,String table,String where) throws Exception {
         String sql="SELECT COUNT(*) FROM " + DdlService.formatTable(config,db,table) + (where==null || where.isBlank() ? "" : " WHERE " + where.trim());
@@ -56,13 +60,21 @@ public class DataService {
                           Map<String, Object> changes, Map<String, Object> pkVals) throws Exception {
         requireKeys(pkVals);
         if (changes.isEmpty()) return;
-        boolean isMysql = config.getType() == DatabaseType.MYSQL;
         StringBuilder sb = new StringBuilder("UPDATE ");
         sb.append(DdlService.formatTable(config, dbName, tableName)).append(" SET ");
         List<String> columns = new ArrayList<>(changes.keySet());
+        List<String> boundColumns = new ArrayList<>();
+        boolean usesDefault = false;
         for (int i = 0; i < columns.size(); i++) {
             String column = columns.get(i);
-            sb.append(DdlService.quoteIdentifier(config,column)).append(" = ?");
+            sb.append(DdlService.quoteIdentifier(config,column)).append(" = ");
+            if (changes.get(column) == RowDefaults.Value.USE_DEFAULT) {
+                sb.append("DEFAULT");
+                usesDefault = true;
+            } else {
+                sb.append("?");
+                boundColumns.add(column);
+            }
             if (i < columns.size() - 1) sb.append(", ");
         }
 
@@ -74,12 +86,33 @@ public class DataService {
             if (i < pkKeys.size() - 1) sb.append(" AND ");
         }
 
+        int affected;
         try (PreparedStatement ps = conn.prepareStatement(sb.toString())) {
-            for (int i = 0; i < columns.size(); i++) bind(ps,i + 1, changes.get(columns.get(i)));
-            for (int i = 0; i < pkKeys.size(); i++) {
-                bind(ps,i + columns.size() + 1, pkVals.get(pkKeys.get(i)));
+            int parameter = 1;
+            for (String column : boundColumns) bind(config, ps, parameter++, changes.get(column));
+            for (String key : pkKeys) {
+                bind(config, ps, parameter++, pkVals.get(key));
             }
-            requireOneRow(ps.executeUpdate());
+            affected = ps.executeUpdate();
+        }
+        // Some drivers report changed rows rather than matched rows. DEFAULT may
+        // legitimately leave a value unchanged, so distinguish that from a lost row.
+        if (affected == 0 && usesDefault && rowExists(conn, config, dbName, tableName, pkVals)) return;
+        requireOneRow(affected);
+    }
+
+    private boolean rowExists(Connection conn, ConnectionConfig config, String dbName, String tableName,
+                              Map<String, Object> pkVals) throws SQLException {
+        StringBuilder sql = new StringBuilder("SELECT 1 FROM ")
+                .append(DdlService.formatTable(config, dbName, tableName)).append(" WHERE ");
+        List<String> keys = new ArrayList<>(pkVals.keySet());
+        for (int i = 0; i < keys.size(); i++) {
+            if (i > 0) sql.append(" AND ");
+            sql.append(DdlService.quoteIdentifier(config, keys.get(i))).append(" = ?");
+        }
+        try (PreparedStatement statement = conn.prepareStatement(sql.toString())) {
+            for (int i = 0; i < keys.size(); i++) bind(config, statement, i + 1, pkVals.get(keys.get(i)));
+            try (ResultSet result = statement.executeQuery()) { return result.next(); }
         }
     }
 
@@ -87,11 +120,10 @@ public class DataService {
                           Map<String, Object> values) throws Exception {
         if (values.isEmpty()) {
             String target=DdlService.formatTable(config,dbName,tableName);
-            try(PreparedStatement statement=conn.prepareStatement("INSERT INTO " + target + (config.getType()==DatabaseType.MYSQL ? " () VALUES ()" : " DEFAULT VALUES"))) { requireOneRow(statement.executeUpdate()); }
+            try(PreparedStatement statement=conn.prepareStatement(DatabaseProviders.get(config.getType()).dialect().defaultInsert(target))) { requireOneRow(statement.executeUpdate()); }
             return;
         }
 
-        boolean isMysql = config.getType() == DatabaseType.MYSQL;
         StringBuilder sb = new StringBuilder("INSERT INTO ");
         sb.append(DdlService.formatTable(config, dbName, tableName)).append(" (");
 
@@ -101,7 +133,7 @@ public class DataService {
             sb.append(DdlService.quoteIdentifier(config,col));
             if (i < cols.size() - 1) sb.append(", ");
         }
-        sb.append(") VALUES (");
+        sb.append(")").append(DatabaseProviders.get(config.getType()).insertOverride(conn)).append(" VALUES (");
         for (int i = 0; i < cols.size(); i++) {
             sb.append("?");
             if (i < cols.size() - 1) sb.append(", ");
@@ -110,7 +142,7 @@ public class DataService {
 
         try (PreparedStatement ps = conn.prepareStatement(sb.toString())) {
             for (int i = 0; i < cols.size(); i++) {
-                bind(ps,i + 1, values.get(cols.get(i)));
+                bind(config,ps,i + 1, values.get(cols.get(i)));
             }
             ps.executeUpdate();
         }
@@ -120,7 +152,6 @@ public class DataService {
                           Map<String, Object> pkVals) throws Exception {
         requireKeys(pkVals);
 
-        boolean isMysql = config.getType() == DatabaseType.MYSQL;
         StringBuilder sb = new StringBuilder("DELETE FROM ");
         sb.append(DdlService.formatTable(config, dbName, tableName)).append(" WHERE ");
 
@@ -133,15 +164,15 @@ public class DataService {
 
         try (PreparedStatement ps = conn.prepareStatement(sb.toString())) {
             for (int i = 0; i < pkKeys.size(); i++) {
-                bind(ps,i + 1, pkVals.get(pkKeys.get(i)));
+                bind(config,ps,i + 1, pkVals.get(pkKeys.get(i)));
             }
             requireOneRow(ps.executeUpdate());
         }
     }
 
-    private static void bind(PreparedStatement statement,int index,Object value) throws SQLException {
+    private static void bind(ConnectionConfig config,PreparedStatement statement,int index,Object value) throws SQLException {
         // Connector/J maps BigInteger through signed BIGINT unless it is bound as DECIMAL.
-        statement.setObject(index,value instanceof java.math.BigInteger integer ? new java.math.BigDecimal(integer) : value);
+        DatabaseProviders.get(config.getType()).bind(statement,index,value);
     }
 
     private static void requireKeys(Map<String, Object> keys) throws SQLException {
@@ -225,16 +256,7 @@ public class DataService {
     }
 
     private void requireTransactionalTable(Connection conn, ConnectionConfig config, String db, String table) throws SQLException {
-        if (config.getType() != DatabaseType.MYSQL) return;
-        try (PreparedStatement statement = conn.prepareStatement(
-                "SELECT ENGINE FROM information_schema.tables WHERE table_schema=COALESCE(?,DATABASE()) AND table_name=?")) {
-            statement.setString(1, db); statement.setString(2, table);
-            try (ResultSet result = statement.executeQuery()) {
-                if (!result.next() || !"InnoDB".equalsIgnoreCase(result.getString(1))) {
-                    throw new SQLException("Atomic grid changes require an InnoDB table");
-                }
-            }
-        }
+        DatabaseProviders.get(config.getType()).requireTransactionalTable(conn, config, db, table);
     }
 
     public record QueryOptions(int maxRows, int timeoutSeconds, int fetchSize) {
@@ -253,18 +275,18 @@ public class DataService {
         long start = System.nanoTime();
         try {
             execution.checkCancelled();
-            boolean mysql = conn.getMetaData().getDatabaseProductName().equalsIgnoreCase("MySQL");
-            if (dbName != null && !dbName.trim().isEmpty()) {
-                if (mysql) { if (!dbName.equals(conn.getCatalog())) conn.setCatalog(dbName); }
-                else { JdbcSchema.select(conn, dbName); }
-            }
+            var provider = DatabaseProviders.forConnection(conn);
+            provider.beforeQuery(conn, dbName, sql);
+            List<ResultColumn> origins = new ArrayList<>();
+            QueryResult result;
             try (Statement stmt = conn.createStatement()) {
                 stmt.setQueryTimeout(options.timeoutSeconds());
                 stmt.setMaxRows(options.maxRows() + 1);
                 // Connector/J's streaming sentinel prevents buffering the whole result client-side.
-                stmt.setFetchSize(mysql ? Integer.MIN_VALUE : options.fetchSize());
-                execution.attach(stmt);
+                stmt.setFetchSize(provider.fetchSize(options.fetchSize()));
+                execution.attach(stmt,()->provider.cancelStatement(stmt));
                 execution.checkCancelled();
+                execution.markSqlStarted();
                 boolean hasResultSet = stmt.execute(sql);
                 execution.checkCancelled();
                 if (!hasResultSet) return QueryResult.forUpdate(stmt.getUpdateCount(), elapsed(start));
@@ -272,7 +294,11 @@ public class DataService {
                     ResultSetMetaData md = rs.getMetaData();
                     int colCount = md.getColumnCount();
                     List<String> cols = new ArrayList<>(), types = new ArrayList<>();
-                    for (int i=1;i<=colCount;i++) { cols.add(md.getColumnLabel(i)); types.add(md.getColumnTypeName(i)); }
+                    for (int i=1;i<=colCount;i++) {
+                        cols.add(md.getColumnLabel(i)); types.add(md.getColumnTypeName(i));
+                        try { origins.add(new ResultColumn(md.getCatalogName(i), provider.sourceSchemaName(md, i), md.getTableName(i), provider.sourceColumnName(md, i))); }
+                        catch (SQLException unsupported) { origins.add(new ResultColumn(null, null, null, null)); }
+                    }
                     List<List<Object>> rows = new ArrayList<>();
                     long bytes = 0;
                     boolean truncated = false;
@@ -281,21 +307,62 @@ public class DataService {
                         if (rows.size() >= options.maxRows()) { truncated=true; break; }
                         List<Object> row = new ArrayList<>();
                         for (int i=1;i<=colCount;i++) {
-                            Object value = detachValue(rs.getObject(i)); row.add(value);
+                            Object value = detachValue(provider.readValue(rs,md,i)); row.add(value);
                             bytes += value instanceof byte[] binary ? binary.length : value instanceof String text ? text.length()*2L : 32;
                         }
                         if (bytes > 16L * 1024 * 1024) { truncated=true; break; }
                         rows.add(row);
                     }
-                    return QueryResult.forResultSet(cols,types,rows,elapsed(start),truncated);
+                    result = QueryResult.forResultSet(cols,types,rows,elapsed(start),truncated).withInsertPolicy(java.util.Set.of(),provider.insertOverride(conn));
                 }
             }
+            // Close streaming result sets before metadata queries on the same connection.
+            execution.checkCancelled();
+            result = result.withPrimaryKeyColumns(primaryKeyColumns(conn, origins))
+                    .withForeignKeyColumns(foreignKeyColumns(conn, origins));
+            execution.checkCancelled();
+            return result;
         } catch (Exception error) {
             if (execution.isCancellationRequested()) return QueryResult.forCancellation(elapsed(start));
             String message = error.getMessage();
             return QueryResult.forError(message == null || message.isEmpty() ? error.toString() : message, elapsed(start));
         } finally { execution.detach(); }
     }
+    record ResultColumn(String catalog, String schema, String table, String name) {}
+    private record ResultTable(String catalog, String schema, String name) {}
+
+    static java.util.Set<Integer> primaryKeyColumns(Connection connection, List<ResultColumn> columns) {
+        return keyColumns(connection, columns, false);
+    }
+    static java.util.Set<Integer> foreignKeyColumns(Connection connection, List<ResultColumn> columns) {
+        return keyColumns(connection, columns, true);
+    }
+    private static java.util.Set<Integer> keyColumns(Connection connection, List<ResultColumn> columns, boolean foreign) {
+        Map<ResultTable, java.util.Set<String>> keysByTable = new java.util.HashMap<>();
+        java.util.Set<Integer> indices = new java.util.HashSet<>();
+        for (int index = 0; index < columns.size(); index++) {
+            ResultColumn column = columns.get(index);
+            if (column.table() == null || column.table().isBlank() || column.name() == null) continue;
+            // An empty source catalog means the driver did not report one; it must not filter
+            // key metadata to a nonexistent empty database (notably with pgJDBC).
+            String catalog = column.catalog() == null || column.catalog().isEmpty() ? null : column.catalog();
+            ResultTable table = new ResultTable(catalog, column.schema(), column.table());
+            java.util.Set<String> keys = keysByTable.get(table);
+            if (keys == null) {
+                keys = new java.util.HashSet<>();
+                // Metadata is optional: permissions or unsupported drivers must not fail a successful query.
+                try (ResultSet metadata = foreign
+                        ? connection.getMetaData().getImportedKeys(table.catalog(), table.schema(), table.name())
+                        : connection.getMetaData().getPrimaryKeys(table.catalog(), table.schema(), table.name())) {
+                    if (metadata != null) while (metadata.next()) keys.add(metadata.getString(foreign ? "FKCOLUMN_NAME" : "COLUMN_NAME"));
+                } catch (SQLException unavailable) { }
+                keysByTable.put(table, keys);
+            }
+            if (keys.contains(column.name())) indices.add(index);
+        }
+        return java.util.Set.copyOf(indices);
+    }
+
     private static long elapsed(long start) { return (System.nanoTime()-start)/1_000_000; }
 
     /** LOBs must remain usable after the ResultSet and Statement have been closed. */

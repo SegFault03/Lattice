@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""Run Lattice's headless Linux/Windows validation in disposable tool/cache directories.
+"""Run Lattice's shared CI/local suites in disposable tool/cache directories.
 
 The runner checks tooling, Java unit tests, package integrity, live database behavior,
 all supported IntelliJ targets, and the documented Java 8/JDBC compatibility matrix.
-It never starts an IDE; use review-intellij-ui.sh for real UI validation.
+Use --windows-ui for the complete Windows scope, including real IDE validation.
+CI executes individual catalog entries with --suite ID --in-place.
 Downloaded assets are removed by default; --no-cleanup retains them for reuse.
 """
 from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
+import json
 import os
 from pathlib import Path
 import platform
@@ -29,20 +31,16 @@ import uuid
 from common import gradle_command, resolved_path
 from dependencies import Dependencies, add_dependency_options, executable
 from test import fixture_port, port_number
+import test_suites
 
 
 ROOT = Path(__file__).resolve().parents[1]
-IDE_VERSIONS = ("2025.1", "2025.2", "2025.3")
-MYSQL_MATRIX = (
-    ("5.5.62", ("5.1.49", "6.0.6", "8.0.33")),
-    ("5.6.51", ("5.1.49", "6.0.6", "8.0.33")),
-    ("5.7.44", ("5.1.49", "6.0.6", "8.0.33")),
-    ("8.4.2", ("8.0.33", "8.4.0", "9.0.0", "26.7.0")),
-)
-HSQL_VERSIONS = (
-    "2.2.9", "2.3.0", "2.3.6", "2.4.1", "2.5.0", "2.5.2",
-    "2.6.1-jdk8", "2.7.0-jdk8", "2.7.3-jdk8", "2.7.4-jdk8",
-)
+SUITE_CATALOG = test_suites.load_catalog()
+IDE_VERSIONS = tuple(s['version'] for s in SUITE_CATALOG['suites'] if s['kind'] == 'verifier')
+MYSQL_MATRIX = tuple((server, tuple(drivers)) for server, drivers in SUITE_CATALOG['mysql_matrix'])
+HSQL_VERSIONS = tuple(SUITE_CATALOG['hsqldb_versions'])
+WINDOWS_UI_SCENARIOS = tuple((s['id'].removeprefix('ui-'), s['theme'], s['env'])
+                             for s in test_suites.select_suites('windows', phases={'ui'}) if s['kind'] == 'ui')
 TOTAL_STEPS = 8
 
 
@@ -264,6 +262,8 @@ def run_plugin_verifier(runner: CommandRunner, source: Path, env: dict[str, str]
     runner.run(command, cwd=source, env=env, name=f"plugin-verifier-{version}", timeout=900)
 
 
+
+
 def docker_image_exists(image: str, docker=None) -> bool:
     return subprocess.run([docker or "docker", "image", "inspect", image], stdout=subprocess.DEVNULL,
                           stderr=subprocess.DEVNULL, check=False).returncode == 0
@@ -352,21 +352,33 @@ def preserve_failure(root: Path, temp: Path, logs: Path,
     return destination
 
 
+def selected_suites(args: argparse.Namespace) -> list[dict]:
+    if getattr(args, 'ci_group', None):
+        host = getattr(args, 'platform', None) or test_suites.host_platform()
+        suites = [s for s in test_suites.select_suites(host)
+                  if s['group'] == args.ci_group and host in s['ci_hosts']]
+        if not suites:
+            raise ValueError(f'No CI suites registered for group {args.ci_group} on {host}')
+        return suites
+    phases = {"base"}
+    if not args.skip_compatibility:
+        phases |= {"ide", "database"}
+    if args.compatibility_only:
+        phases.discard("base")
+    if args.database_compatibility_only:
+        phases = {"database"}
+    if getattr(args, "windows_ui", False):
+        phases.add("ui")
+    return test_suites.select_suites(getattr(args, "platform", None) or test_suites.host_platform(),
+                                     phases=phases, ids=getattr(args, "suites", None))
+
+
 def validation_plan(args: argparse.Namespace) -> tuple[bool, bool, bool, int]:
-    """Return whether to run base, IDE and database checks, plus visible step count."""
-    run_base = not (args.compatibility_only or args.database_compatibility_only)
-    run_ide_compatibility = not (args.skip_compatibility or args.database_compatibility_only)
-    run_database_compatibility = not args.skip_compatibility
-    step_count = 2
-    if run_base:
-        step_count += 3
-    elif run_ide_compatibility:
-        step_count += 1  # Build the archive needed by Plugin Verifier.
-    if run_ide_compatibility:
-        step_count += 1
-    if run_database_compatibility:
-        step_count += 2
-    return run_base, run_ide_compatibility, run_database_compatibility, step_count
+    suites = selected_suites(args)
+    phases = {suite["phase"] for suite in suites}
+    build_for_verifier = "ide" in phases and not any(s["kind"] == "build" for s in suites) and not getattr(args, "archive", None)
+    return ("base" in phases, "ide" in phases, "database" in phases,
+            2 + len(suites) + int(build_for_verifier))
 
 
 def path_mapping(values, versions):
@@ -379,220 +391,324 @@ def path_mapping(values, versions):
     return result
 
 
+def build_archive(context, tasks, package_tasks=None):
+    source, runner = context.source, context.runner
+    package_tasks = package_tasks or test_suites.gradle_tasks("functional-build", packaging=True)
+    run_gradle(runner, source, *tasks, *package_tasks, name="gradle-plugin-package", timeout=1200)
+    version = project_version(source)
+    archive = source / "build/distributions" / f"Lattice-{version}.zip"
+    if not archive.is_file():
+        raise RunnerError(f"Gradle completed without producing {archive}")
+    runner.run([sys.executable, "scripts/check-release-archive.py", str(archive), "--version", version],
+               cwd=source, name="plugin-archive-check", timeout=300)
+    context.archive = archive
+
+
+def run_ui_suite(suite, context):
+    args, source, runner = context.args, context.source, context.runner
+    ide = context.deps.ide(args.ide_home)
+    name = suite["id"].removeprefix("ui-")
+    output = (ROOT / "build/ui-review/windows-ci" / context.stamp / name if os.name == "nt"
+              else source / "build/ui-review" / name)
+    environment = dict(context.env)
+    environment.update({
+        "LATTICE_UI_REVIEW_OUTPUT": str(output), "LATTICE_UI_SCALE": "1.0",
+        "LATTICE_UI_ALTER_TABLE_ONLY": "false", "LATTICE_UI_CREATE_TABLE_ONLY": "false",
+        "LATTICE_UI_CELL_DETAILS_ONLY": "false", "LATTICE_UI_EXPLORER_SEARCH_ONLY": "false",
+        "LATTICE_UI_SOURCE_FILTER_ONLY": "false", "LATTICE_UI_STYLE_ONLY": "false",
+        "LATTICE_UI_INPUTS_ONLY": "false", "LATTICE_UI_DIALOG_AUDIT": "false",
+        "LATTICE_UI_H2": "false", "LATTICE_UI_POSTGRES_PORT": "0",
+        "LATTICE_UI_BUILD_IDE_HOME": str(ide), "LATTICE_UI_IDE_HOME": str(ide),
+        "UI_THEME": suite["theme"],
+    })
+    environment.update(suite.get("env", {}))
+    if os.name == "nt":
+        maven = args.binaries_dir / "ui-maven-repository" if args.binaries_dir else context.temp / "ui-maven-repository"
+        command = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+                   str(source / "scripts/windows/review-intellij-ui.ps1"),
+                   "-Themes", suite["theme"], "-OutputRoot", str(output),
+                   "-IdeHome", str(ide), "-BuildIdeHome", str(ide),
+                   "-JavaHome", str(context.java_home), "-DownloadDir", str(args.download_dir or context.temp),
+                   "-GradleUserHome", context.env["GRADLE_USER_HOME"], "-MavenRepository", str(maven),
+                   "-Cleanup" if args.cleanup else "-NoCleanup", "-Python", sys.executable]
+        if args.binaries_dir:
+            command += ["-BinariesDir", str(args.binaries_dir)]
+            fixture_cache = args.binaries_dir / "jdbc"
+            if fixture_cache.is_dir():
+                command += ["-FixtureCache", str(fixture_cache)]
+    else:
+        command = ["bash", str(source / "scripts/linux/review-intellij-ui.sh"), suite["theme"]]
+    runner.run(command, cwd=source, name=suite["id"], timeout=1500, env=environment)
+
+
+def run_database_suite(suite, context):
+    args, source, runner = context.args, context.source, context.runner
+    mode = suite["mode"]
+    properties = [f"-Plattice.compatibility.mode={mode}",
+                  f"-Plattice.compatibility.java8={executable(context.java8_home, 'java')}",
+                  f"-Plattice.compatibility.probe={context.probe_classes}",
+                  f"-Plattice.compatibility.cache={context.jdbc_cache}",
+                  f"-Plattice.compatibility.cleanup={str(args.cleanup and not args.binaries_dir and os.name != 'nt').lower()}",
+                  f"-Plattice.compatibility.output={source / 'build/compatibility' / mode if mode in {'h2', 'postgres'} else source / 'build/compatibility'}"]
+    if mode == "mysql":
+        for server_version, driver_versions in MYSQL_MATRIX:
+            port = fixture_port(args.mysql_port, 3306)
+            print(f"  MySQL {server_version}; drivers {', '.join(driver_versions)}", flush=True)
+            if context.native:
+                from windows.native_mysql import mysql_fixture
+                fixture = mysql_fixture(context.deps, server_version, args.mysql_homes.get(server_version),
+                                        logs=runner.logs, runtime_dir=args.runtime_dir,
+                                        sevenzip=args.sevenzip, port=port)
+            else:
+                fixture = mysql_server(runner, server_version, port=port, cleanup=args.cleanup)
+            with fixture:
+                run_gradle(runner, source, "databaseCompatibilityTest",
+                           properties=properties + [f"-Plattice.compatibility.port={port}",
+                                                    f"-Plattice.compatibility.server={server_version}",
+                                                    f"-Plattice.compatibility.drivers={','.join(driver_versions)}"],
+                           name=f"mysql-matrix-{server_version}", timeout=900)
+    elif mode == "postgres":
+        from postgres import POSTGRES_VERSIONS, matrix_fixture
+        for server_version in POSTGRES_VERSIONS:
+            port = fixture_port(None, 5432)
+            with matrix_fixture(port, server_version, context.deps, args.docker or "docker", args.cleanup):
+                run_gradle(runner, source, "databaseCompatibilityTest",
+                           properties=properties + [f"-Plattice.compatibility.port={port}",
+                                                    f"-Plattice.compatibility.server={server_version}"],
+                           name=f"postgres-matrix-{server_version}", timeout=900)
+    else:
+        if mode == 'hsqldb':
+            properties += [f"-Plattice.compatibility.drivers={','.join(HSQL_VERSIONS)}"]
+        run_gradle(runner, source, "databaseCompatibilityTest", properties=properties,
+                   name=f"{mode}-matrix", timeout=1800 if mode == "hsqldb" else 900)
+
+
+def execute_suite(suite, context):
+    """Both the CI single-suite path and the local aggregate call this function."""
+    args, source, runner = context.args, context.source, context.runner
+    kind = suite["kind"]
+    if kind == "build":
+        build_archive(context, suite["tasks"], suite["package_tasks"])
+    elif kind == "gradle":
+        run_gradle(runner, source, *suite["tasks"], name=suite["id"])
+    elif kind == "command":
+        ide = context.deps.ide(args.ide_home) if "ide" in suite["requires"] else None
+        values = {"python": sys.executable, "java_home": str(context.java_home),
+                  "ide_home": str(ide), "java8_home": str(context.java8_home),
+                  "jdbc_cache": str(context.jdbc_cache), "binaries_dir": str(args.binaries_dir or ""),
+                  "download_dir": str(args.download_dir or context.temp),
+                  "gradle_user_home": context.env.get("GRADLE_USER_HOME", "")}
+        runner.run([part.format_map(values) for part in suite["command"]],
+                   cwd=source, name=suite["id"], timeout=suite.get("timeout", 900))
+    elif kind == "live":
+        command = [sys.executable, "scripts/test.py", "--suite", suite["id"],
+                   "--live", "--integration-only", "--java-home", str(context.java_home),
+                   "--gradle-user-home", context.env["GRADLE_USER_HOME"],
+                   "--download-dir", str(context.temp / "live-dependencies")]
+        command += ["--" + name for name in suite["fixtures"][test_suites.host_platform()]]
+        for option in ("mysql_port", "hsqldb_port", "binaries_dir", "runtime_dir", "sevenzip", "docker"):
+            value = getattr(args, option)
+            if value is not None:
+                command += ["--" + option.replace("_", "-"), str(value)]
+        if context.env.get("LATTICE_BUILD_IDE"):
+            command += ["--ide-home", context.env["LATTICE_BUILD_IDE"]]
+        if context.native and 'mysql' in suite['fixtures'][test_suites.host_platform()]:
+            from windows.native_mysql import mysql_home
+            version = suite['mysql_native_version']
+            command += ["--mysql-home", str(mysql_home(context.deps, version, args.mysql_homes.get(version)))]
+        command += ["--cleanup" if args.cleanup else "--no-cleanup"]
+        runner.run(command, cwd=source, name=suite["id"], timeout=900)
+    elif kind == "ui":
+        run_ui_suite(suite, context)
+    elif kind in {"postgres-ui", "h2-ui"}:
+        ide = context.deps.ide(args.ide_home)
+        script = "postgres-ui-review.py" if kind == "postgres-ui" else "h2-test.py"
+        command = [sys.executable, f"scripts/{script}"]
+        if kind == "h2-ui":
+            command += ["--ui-only"]
+        command += ["--java-home", str(context.java_home), "--ide-home", str(ide),
+                    "--output", str(source / "build/ui-review" / suite["id"].removeprefix("ui-")),
+                    "--themes", suite["theme"], "--cleanup" if args.cleanup else "--no-cleanup",
+                    "--gradle-user-home", context.env["GRADLE_USER_HOME"],
+                    "--download-dir", str(args.download_dir or context.temp)]
+        if args.binaries_dir:
+            command += ["--binaries-dir", str(args.binaries_dir)]
+        runner.run(command, cwd=source, name=suite["id"], timeout=1500)
+    elif kind == "verifier":
+        if context.archive is None or not context.archive.is_file():
+            raise RunnerError("Plugin Verifier requires the exact built ZIP (--archive for a CI suite)")
+        run_plugin_verifier(runner, source, context.env, context.temp, context.archive,
+                            context.java_home, suite["version"], context.deps, args)
+    elif kind == "database":
+        run_database_suite(suite, context)
+    else:
+        raise RunnerError(f"Unsupported suite adapter: {kind}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--java-home", type=Path,
-                        help="Use this full JDK 21; otherwise use JAVA_HOME/PATH, then download a temporary JDK 21")
+    parser.add_argument("--java-home", type=Path, help="Full JDK 21; discover/download when missing")
+    parser.add_argument("--windows-ui", action="store_true",
+                        help="Include every Windows-supported UI suite; requires an interactive 1440x800+ desktop")
+    parser.add_argument("--suite", dest="suites", action="append", metavar="ID",
+                        help="Execute a catalog suite; repeat to select several suites")
+    parser.add_argument('--ci-group', help='Execute every suite assigned to this CI group and host')
+    parser.add_argument("--in-place", action="store_true", help="Run in this checkout (CI); default: isolated source copy")
+    parser.add_argument("--archive", type=Path, help="Exact plugin ZIP to verify, without rebuilding it")
+    parser.add_argument("--list-suites", action="store_true", help="Print the selected plan and platform exclusions; do not download/run")
+    parser.add_argument("--platform", choices=sorted(test_suites.PLATFORMS), help="Platform for --list-suites only")
+    parser.add_argument("--check-workflow", action="store_true", help="Validate CI/local suite registration and routing without running tests")
+    parser.add_argument("--github-matrices", action="store_true", help="Emit shared UI/IDE/database matrices, including GITHUB_OUTPUT when present")
     modes = parser.add_mutually_exclusive_group()
-    modes.add_argument("--skip-compatibility", action="store_true",
-                       help="Run tooling, build and live functional tests only; real IDE UI checks run separately")
-    modes.add_argument("--compatibility-only", action="store_true",
-                       help="Run the IDE verifier and JDBC compatibility matrices; build the plugin but skip ordinary tests")
-    modes.add_argument("--database-compatibility-only", action="store_true",
-                       help="Run only the JDBC/Java 8 matrix; useful when Plugin Verifier runs separately")
-    parser.add_argument('--java8-home', type=Path, help='Java 8 runtime; download if missing')
-    parser.add_argument('--ide-home', type=Path, help='Build baseline IntelliJ 2025.1 home')
-    parser.add_argument('--ide-sdk', action='append', default=[], metavar='VERSION=PATH', help='Repeat for each verification SDK')
-    parser.add_argument('--mysql-home', action='append', default=[], metavar='VERSION=PATH', help='Repeat for each native MySQL server')
-    parser.add_argument('--verifier-jar', type=Path)
-    parser.add_argument('--jdbc-dir', type=Path, help='Existing mysql/ and hsqldb/ driver folders (copied into disposable cache)')
-    parser.add_argument('--runtime-dir', type=Path)
-    parser.add_argument('--sevenzip', type=Path)
-    parser.add_argument('--docker', help='Docker CLI; selects Docker on Windows (daemon must already be running)')
-    parser.add_argument('--mysql-port', type=port_number, help='Owned MySQL fixture port; default: automatic free port for each server')
-    parser.add_argument('--hsqldb-port', type=port_number, help='Owned live HSQLDB fixture port; default: automatic free port')
+    modes.add_argument("--skip-compatibility", action="store_true", help="Run tooling, build and backend suites")
+    modes.add_argument("--compatibility-only", action="store_true", help="Run IDE/JDBC matrices; build an archive if needed")
+    modes.add_argument("--database-compatibility-only", action="store_true", help="Run only the shared JDBC/Java matrix profile")
+    parser.add_argument("--java8-home", type=Path)
+    parser.add_argument("--ide-home", type=Path, help="Baseline IntelliJ 2025.1 home")
+    parser.add_argument("--ide-sdk", action="append", default=[], metavar="VERSION=PATH")
+    parser.add_argument("--mysql-home", action="append", default=[], metavar="VERSION=PATH")
+    parser.add_argument("--verifier-jar", type=Path)
+    parser.add_argument("--jdbc-dir", type=Path)
+    parser.add_argument("--runtime-dir", type=Path)
+    parser.add_argument("--sevenzip", type=Path)
+    parser.add_argument("--docker", help="Docker CLI; selects Docker instead of native MySQL on Windows")
+    parser.add_argument("--mysql-port", type=port_number)
+    parser.add_argument("--hsqldb-port", type=port_number)
     add_dependency_options(parser, cleanup=True)
     args = parser.parse_args()
+    metadata_only = args.list_suites or args.check_workflow or args.github_matrices
+    if args.platform and not args.list_suites:
+        parser.error("--platform requires --list-suites")
+    if args.windows_ui and not metadata_only and os.name != "nt":
+        parser.error("--windows-ui is available only on Windows")
+    if (args.suites or args.ci_group) and (args.windows_ui or args.skip_compatibility or args.compatibility_only or args.database_compatibility_only):
+        parser.error("--suite cannot be combined with aggregate profile flags")
+    if args.suites and args.ci_group:
+        parser.error('--suite and --ci-group are mutually exclusive')
+    if args.windows_ui and (args.skip_compatibility or args.compatibility_only or args.database_compatibility_only):
+        parser.error("--windows-ui requires the full one-shot suite")
     try:
+        if args.check_workflow:
+            windows = test_suites.check_workflow((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+            local = selected_suites(argparse.Namespace(platform='windows', windows_ui=True,
+                                                      skip_compatibility=False, compatibility_only=False,
+                                                      database_compatibility_only=False))
+            if {s['id'] for s in local} != {s['id'] for s in windows}:
+                raise ValueError('The full local Windows plan differs from the Windows-supported CI catalog')
+            print(f"CI/local suite contract passed: {len(windows)} Windows-supported suites.")
+        if args.github_matrices:
+            matrices = test_suites.github_matrices()
+            print(json.dumps(matrices))
+            if os.environ.get("GITHUB_OUTPUT"):
+                with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
+                    for name, matrix in matrices.items():
+                        output.write(f"{name}={json.dumps(matrix, separators=(',', ':'))}\n")
+        suites = selected_suites(args) if args.list_suites or not metadata_only else []
+        if args.list_suites:
+            host = args.platform or test_suites.host_platform()
+            print(json.dumps({"platform": host, "suites": suites,
+                              "unsupported": {s["id"]: s["unsupported"][host]
+                                              for s in SUITE_CATALOG["suites"] if host not in s["platforms"]}}, indent=2))
+        if metadata_only:
+            return 0
         args.ide_homes = path_mapping(args.ide_sdk, IDE_VERSIONS)
-        args.mysql_homes = path_mapping(args.mysql_home, tuple(v for v, _ in MYSQL_MATRIX))
+        mysql_versions = {v for v, _ in MYSQL_MATRIX} | {s['mysql_native_version'] for s in SUITE_CATALOG['suites'] if s['kind'] == 'live' and 'mysql_native_version' in s}
+        args.mysql_homes = path_mapping(args.mysql_home, mysql_versions)
+        for option in ('binaries_dir', 'download_dir', 'ide_home', 'java_home', 'java8_home',
+                       'verifier_jar', 'jdbc_dir', 'runtime_dir', 'sevenzip'):
+            value = getattr(args, option)
+            if value is not None:
+                setattr(args, option, resolved_path(value))
+        if args.archive:
+            args.archive = resolved_path(args.archive)
+            if not args.archive.is_file():
+                raise ValueError("--archive must name the exact existing plugin ZIP")
+            if any(s['kind'] == 'build' for s in suites):
+                raise ValueError('--archive cannot be combined with a build suite; select verifier suites or --compatibility-only')
+        if (args.suites or args.ci_group) and any(s["kind"] == "verifier" for s in suites) and not args.archive and not any(s["kind"] == "build" for s in suites):
+            raise ValueError("An individual verifier suite requires --archive; CI must verify the built artifact")
     except ValueError as error:
         parser.error(str(error))
-    deps = Dependencies(args)
-    native = os.name == 'nt' and not args.docker or bool(args.mysql_homes)
-    run_base, run_ide_compatibility, run_database_compatibility, step_count = validation_plan(args)
-    progress = Progress(step_count)
-    active = "preflight"
-    temp_path: Path | None = None
-    logs: Path | None = None
-    source: Path | None = None
-    diagnostics: Path | None = None
-    try:
-        with progress.step("Host, Python, fixture and port preflight"):
-            active = progress.active
-            check_linux()
-            if not native and shutil.which(args.docker or "docker") is None:
-                raise RunnerError("Docker CLI is required for the disposable MySQL compatibility fixtures")
-            if not native:
-                subprocess.run([args.docker or 'docker', 'info'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-            mysql_port = fixture_port(args.mysql_port, 3306)
-            hsql_port = fixture_port(args.hsqldb_port, 9001) if run_base else None
-            required_space = 10 * 1024**3
-            volume = deps.base
-            while not volume.exists():
-                volume = volume.parent
-            if shutil.disk_usage(volume).free < required_space:
-                raise RunnerError("The download volume needs at least 10 GiB free for the isolated SDK and build downloads")
-            print(f"  Host: {platform.platform()} | Python {platform.python_version()} | fixtures preflight passed", flush=True)
 
-        build_root = ROOT / "build"
-        build_root.mkdir(parents=True, exist_ok=True)
-        diagnostics = build_root / "one-shot-test" / f".running-{uuid.uuid4().hex}"
+    deps = Dependencies(args)
+    native = (os.name == "nt" and not args.docker) or bool(args.mysql_homes)
+    _, run_ide, _, step_count = validation_plan(args)
+    build_for_verifier = run_ide and not any(s["kind"] == "build" for s in suites) and not args.archive
+    requirements = {requirement for suite in suites for requirement in suite["requires"]}
+    progress = Progress(step_count)
+    active, temp_path, logs, diagnostics = "preflight", None, None, None
+    try:
+        with progress.step("Host and required fixture preflight"):
+            if not (args.suites or args.ci_group or args.in_place):
+                check_linux()
+            if sys.version_info < (3, 11):
+                raise RunnerError("Python 3.11 or newer is required")
+            if args.mysql_port and 'mysql' in requirements:
+                require_free_port(args.mysql_port)
+            if args.hsqldb_port and any('hsqldb' in s.get('fixtures', {}).get(test_suites.host_platform(), []) for s in suites):
+                require_free_port(args.hsqldb_port)
+            needs_docker = "docker" in requirements or ("mysql" in requirements and not native)
+            needs_docker |= any("postgres" in s.get("fixtures", {}).get(test_suites.host_platform(), []) for s in suites)
+            if needs_docker:
+                if shutil.which(args.docker or "docker") is None:
+                    raise RunnerError("Docker CLI is required for the selected disposable fixtures")
+                subprocess.run([args.docker or "docker", "info"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+            if not args.in_place:
+                volume = deps.base
+                while not volume.exists():
+                    volume = volume.parent
+                if shutil.disk_usage(volume).free < 10 * 1024**3:
+                    raise RunnerError("The download volume needs at least 10 GiB free")
+            print("  Selected suites: " + ", ".join(s["id"] for s in suites), flush=True)
+
+        diagnostics = ROOT / "build/one-shot-test" / f".running-{uuid.uuid4().hex}"
         logs = diagnostics / "logs"
         logs.mkdir(parents=True, exist_ok=True)
         with deps:
             temp_path = deps.workspace()
-            tools = temp_path / "tools"
-            source = copy_source(temp_path / "source")
-            progress_runner_env: dict[str, str]
-            runner: CommandRunner
-            java_home: Path
-            java8_home: Path
-            probe_classes = temp_path / "java8-probe"
-            development_cache = temp_path / "lattice-cache"
-            jdbc_cache = temp_path / "jdbc-cache"
-
-            with progress.step("Create temporary tool, Gradle and JDBC caches"):
-                active = progress.active
-                java_home = deps.java(args.java_home)
-                if java_major(executable(java_home, "java")) != 21 or not executable(java_home, "javac").is_file():
+            with progress.step("Prepare shared dependencies and caches"):
+                source = ROOT if args.in_place else copy_source(temp_path / "source")
+                java_home = deps.java(args.java_home) if "java21" in requirements else None
+                if java_home and (java_major(executable(java_home, "java")) != 21 or not executable(java_home, "javac").is_file()):
                     raise RunnerError("Validation requires a full JDK 21")
-                progress_runner_env = prepare_proxy_environment(deps.environment(java_home), java_home, tools)
-                progress_runner_env.update({
-                    "JAVA_HOME": str(java_home),
-                    "LATTICE_DEV_CACHE": str(development_cache),
-                    "LATTICE_ONE_SHOT_TEMP": str(temp_path),
-                })
-                if args.ide_home or args.binaries_dir:
-                    progress_runner_env['LATTICE_BUILD_IDE'] = str(deps.ide(args.ide_home))
+                environment = (prepare_proxy_environment(deps.environment(java_home), java_home, temp_path / "tools")
+                               if java_home else dict(os.environ))
+                environment["LATTICE_ONE_SHOT_TEMP"] = str(temp_path)
+                if java_home and (args.ide_home or args.binaries_dir):
+                    environment["LATTICE_BUILD_IDE"] = str(deps.ide(args.ide_home))
                 if args.docker:
-                    progress_runner_env['LATTICE_DOCKER'] = args.docker
-                runner = CommandRunner(logs, progress_runner_env, progress)
-                if run_database_compatibility:
-                    java8_home = deps.java(args.java8_home, major=8, jdk=False)
-                    seed = args.jdbc_dir or (args.binaries_dir / 'jdbc' if args.binaries_dir else None)
+                    environment["LATTICE_DOCKER"] = args.docker
+                runner = CommandRunner(logs, environment, progress)
+                java8 = deps.java(args.java8_home, major=8, jdk=False) if "java8" in requirements else None
+                jdbc_cache = (args.binaries_dir / "jdbc-cache").resolve() if args.binaries_dir else temp_path / "jdbc-cache"
+                probe = temp_path / "java8-probe"
+                if java8:
+                    seed = args.jdbc_dir or (args.binaries_dir / "jdbc" if args.binaries_dir else None)
                     if seed:
                         if not seed.is_dir():
-                            raise RunnerError('--jdbc-dir must contain mysql/ and hsqldb/ folders')
-                        shutil.copytree(seed, jdbc_cache, dirs_exist_ok=True)
-                    prepare_java8_probe(source, java_home, probe_classes, runner, progress_runner_env)
-                    print(f"  JDK 21: {java_home}\n  Java 8 runtime: {java8_home}", flush=True)
-                else:
-                    print(f"  JDK 21: {java_home}", flush=True)
-
-            if run_base:
-                with progress.step("Python script regression tests"):
+                            raise RunnerError("--jdbc-dir must be a directory of cached drivers")
+                        if seed.resolve() != jdbc_cache.resolve():
+                            shutil.copytree(seed, jdbc_cache, dirs_exist_ok=True)
+                    jdbc_cache.mkdir(parents=True, exist_ok=True)
+                    prepare_java8_probe(source, java_home, probe, runner, environment)
+                context = argparse.Namespace(args=args, source=source, runner=runner, deps=deps, env=environment,
+                                             temp=temp_path, java_home=java_home, java8_home=java8,
+                                             jdbc_cache=jdbc_cache, probe_classes=probe, native=native,
+                                             archive=args.archive, stamp=time.strftime("%Y%m%d-%H%M%S", time.gmtime()))
+            if build_for_verifier:
+                with progress.step("Build exact archive for compatibility checks"):
                     active = progress.active
-                    runner.run([sys.executable, "-m", "unittest", "discover", "-s", "scripts/tests", "-v"],
-                               cwd=source, name="python-tool-tests", timeout=300)
-
-                with progress.step("Gradle unit tests and plugin build"):
-                    active = progress.active
-                    run_gradle(runner, source, "clean", "test", "buildPlugin",
-                               name="gradle-build-and-unit-tests", timeout=1200)
-                    version = project_version(source)
-                    archive = source / "build/distributions" / f"Lattice-{version}.zip"
-                    if not archive.is_file():
-                        raise RunnerError(f"Gradle completed without producing {archive}")
-                    runner.run([sys.executable, "scripts/check-release-archive.py", str(archive),
-                                "--version", version], cwd=source, name="plugin-archive-check", timeout=300)
-
-                with progress.step("Run MySQL 8.4 and HSQLDB live functional suites"):
-                    active = progress.active
-                    command = [sys.executable, 'scripts/test.py', '--live', '--mysql', '--hsqldb', '--integration-only',
-                               '--mysql-port', str(mysql_port), '--hsqldb-port', str(hsql_port),
-                               '--java-home', str(java_home), '--gradle-user-home', progress_runner_env['GRADLE_USER_HOME'],
-                               '--download-dir', str(temp_path / 'live-dependencies')]
-                    if progress_runner_env.get('LATTICE_BUILD_IDE'):
-                        command += ['--ide-home', progress_runner_env['LATTICE_BUILD_IDE']]
-                    if native:
-                        from windows.native_mysql import mysql_home
-                        command += ['--mysql-home', str(mysql_home(deps, '8.4.2', args.mysql_homes.get('8.4.2')))]
-                    if args.binaries_dir:
-                        command += ['--binaries-dir', str(args.binaries_dir)]
-                    if args.runtime_dir:
-                        command += ['--runtime-dir', str(args.runtime_dir)]
-                    if args.sevenzip:
-                        command += ['--sevenzip', str(args.sevenzip)]
-                    if args.docker:
-                        command += ['--docker', args.docker]
-                    if not args.cleanup:
-                        command += ['--no-cleanup']
-                    runner.run(command, cwd=source, name="live-functional-suites", timeout=900)
-
-            if run_ide_compatibility:
-                if not run_base:
-                    with progress.step("Build plugin archive for Plugin Verifier"):
-                        active = progress.active
-                        run_gradle(runner, source, "buildPlugin", name="gradle-plugin-package", timeout=1200)
-                        version = project_version(source)
-                        archive = source / "build/distributions" / f"Lattice-{version}.zip"
-                        if not archive.is_file():
-                            raise RunnerError(f"Gradle completed without producing {archive}")
-                        runner.run([sys.executable, "scripts/check-release-archive.py", str(archive),
-                                    "--version", version], cwd=source, name="plugin-archive-check", timeout=300)
-                with progress.step("Verify the packaged plugin against each supported IntelliJ SDK"):
-                    active = progress.active
-                    archive = source / "build/distributions" / f"Lattice-{project_version(source)}.zip"
-                    for index, version in enumerate(IDE_VERSIONS, 1):
-                        print(f"  IDE compatibility {index}/{len(IDE_VERSIONS)}: IntelliJ IDEA {version}", flush=True)
-                        run_plugin_verifier(runner, source, progress_runner_env, temp_path,
-                                            archive, java_home, version, deps, args)
-
-            if run_database_compatibility:
-                with progress.step("Run MySQL server and Connector/J matrix one server at a time"):
-                    active = progress.active
-                    for index, (server_version, driver_versions) in enumerate(MYSQL_MATRIX, 1):
-                        matrix_port = fixture_port(args.mysql_port, 3306)
-                        print(f"  MySQL compatibility {index}/{len(MYSQL_MATRIX)}: server {server_version}; drivers {', '.join(driver_versions)}",
-                              flush=True)
-                        if native:
-                            from windows.native_mysql import mysql_fixture
-                            fixture = mysql_fixture(deps, server_version, args.mysql_homes.get(server_version), logs=logs,
-                                                    runtime_dir=args.runtime_dir, sevenzip=args.sevenzip, port=matrix_port)
-                        else:
-                            fixture = mysql_server(runner, server_version, port=matrix_port, cleanup=args.cleanup)
-                        with fixture:
-                            properties = [
-                                "-Plattice.compatibility.mode=mysql",
-                                f"-Plattice.compatibility.port={matrix_port}",
-                                f"-Plattice.compatibility.server={server_version}",
-                                f"-Plattice.compatibility.java8={executable(java8_home, 'java')}",
-                                f"-Plattice.compatibility.probe={probe_classes}",
-                                f"-Plattice.compatibility.cache={jdbc_cache}",
-                                f"-Plattice.compatibility.cleanup={str(args.cleanup and os.name != 'nt').lower()}",
-                                f"-Plattice.compatibility.output={source / 'build/compatibility'}",
-                            ]
-                            run_gradle(runner, source, "databaseCompatibilityTest", properties=properties,
-                                       name=f"mysql-matrix-{server_version}", timeout=900)
-
-                with progress.step("Run HSQLDB driver and Java 8 compatibility matrix one version at a time"):
-                    active = progress.active
-                    properties = [
-                        "-Plattice.compatibility.mode=hsqldb",
-                        f"-Plattice.compatibility.java8={executable(java8_home, 'java')}",
-                        f"-Plattice.compatibility.probe={probe_classes}",
-                        f"-Plattice.compatibility.cache={jdbc_cache}",
-                                f"-Plattice.compatibility.cleanup={str(args.cleanup and os.name != 'nt').lower()}",
-                        f"-Plattice.compatibility.output={source / 'build/compatibility'}",
-                    ]
-                    run_gradle(runner, source, "databaseCompatibilityTest", properties=properties,
-                               name=f"hsqldb-matrix-{len(HSQL_VERSIONS)}-versions", timeout=1800)
-
-        if args.skip_compatibility:
-            scope = "Linux/Windows build and live functional checks (real IDE UI checks run separately)"
-        elif args.compatibility_only:
-            scope = "Linux/Windows IntelliJ and JDBC compatibility checks"
-        elif args.database_compatibility_only:
-            scope = "Linux/Windows JDBC/Java 8 compatibility matrix"
-        else:
-            scope = "all Linux/Windows one-shot validation steps"
-        print(f"\nPASS: {scope} passed; dependencies {'cleaned' if args.cleanup else 'retained'}.", flush=True)
+                    build_archive(context, [])
+            for suite in suites:
+                with progress.step(suite["id"]):
+                    active = suite["id"]
+                    execute_suite(suite, context)
+        print(f"\nPASS: {len(suites)} shared suites passed; dependencies {'cleaned' if args.cleanup else 'retained'}.", flush=True)
         if diagnostics:
             shutil.rmtree(diagnostics, ignore_errors=True)
         return 0
     except BaseException as error:
-        report: Path | None = None
+        report = None
         if temp_path and logs:
             try:
                 report = preserve_failure(ROOT, temp_path, logs, active, error)
@@ -603,8 +719,6 @@ def main() -> int:
         print(f"\nFAIL: {active}: {type(error).__name__}: {error}", file=sys.stderr, flush=True)
         if report:
             print(f"Failure report and command logs: {report}", file=sys.stderr, flush=True)
-        if isinstance(error, KeyboardInterrupt):
-            print("Interrupted by user.", file=sys.stderr, flush=True)
         return 1
 
 

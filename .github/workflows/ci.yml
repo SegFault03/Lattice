@@ -1,28 +1,45 @@
-name: Build and compatibility checks
+# Before editing, read AGENTS.md and docs/CI_TESTING.md#before-changing-ci.
+# Test selection belongs to scripts/test-suites.json and the shared runner.
+name: Build and validation
 
 on:
   push:
     branches: ['**']
   pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# Keep push and PR groups separate: a head push must not cancel validation of its merge commit.
 concurrency:
   group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  commit-checks:
-    # PR checkout tests the merge commit, including integration with the current base branch.
+  suite-plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      ui: ${{ steps.catalog.outputs.ui }}
+      ide: ${{ steps.catalog.outputs.ide }}
+      database: ${{ steps.catalog.outputs.database }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate CI and local suite parity and export matrices
+        id: catalog
+        run: python scripts/one-shot-test.py --check-workflow --github-matrices
+
+  functional-build:
+    needs: suite-plan
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, windows-2025, macos-15]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -34,53 +51,130 @@ jobs:
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
         with:
           cache-provider: enhanced
-      - name: Test development tools
-        run: python -m unittest discover -s scripts/tests -v
-      - name: Build and run unit and live functional tests
-        if: matrix.os == 'ubuntu-24.04'
-        run: python3 scripts/test.py --live --mysql --hsqldb --build
-      - name: Build and run unit tests
-        if: matrix.os != 'ubuntu-24.04'
-        run: python scripts/test.py --build
-      - name: Validate production Swing previews and action states
-        if: matrix.os == 'ubuntu-24.04'
-        run: python3 scripts/ui-preview.py --all-previews
-      - name: Render dark and light UI inside IntelliJ IDEA
-        if: matrix.os == 'ubuntu-24.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb xfwm4 x11-utils
-          ./scripts/linux/review-intellij-ui.sh ExperimentalDark
-          LATTICE_UI_STYLE_ONLY=true ./scripts/linux/review-intellij-ui.sh ExperimentalLight
-      - name: Retain plugin for PR compatibility checks
-        if: github.event_name == 'pull_request' && matrix.os == 'ubuntu-24.04'
+      - name: Run shared functional build and archive checks
+        run: python scripts/one-shot-test.py --ci-group functional-build --in-place
+      - name: Retain exact plugin for main PR verification
+        if: github.event_name == 'pull_request' && github.base_ref == 'main' && matrix.os == 'ubuntu-24.04'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: plugin-under-test
           path: build/distributions/*.zip
           if-no-files-found: error
           retention-days: 1
-      - name: Retain test reports
+      - name: Retain functional reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: tests-${{ matrix.os }}
+          name: functional-${{ matrix.os }}
+          path: |
+            build/reports/tests/functionalTest/
+            build/test-results/functionalTest/
+            build/one-shot-test/
+          retention-days: 7
+
+  tooling-tests:
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run shared tooling and workflow regressions
+        run: python scripts/one-shot-test.py --ci-group tooling-tests --in-place
+
+  backend-tests:
+    needs: functional-build
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-provider: enhanced
+      - name: Run shared backend suites for this host
+        run: python scripts/one-shot-test.py --ci-group backend-tests --in-place
+      - name: Retain backend diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: backend-${{ matrix.os }}
           path: |
             build/reports/tests/
             build/test-results/
             build/fixtures/
+            build/one-shot-test/
+          retention-days: 7
+
+  ui-tests:
+    needs: [functional-build, suite-plan]
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.suite-plan.outputs.ui) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-provider: enhanced
+      - name: Prepare IDE SDK
+        shell: bash
+        run: ./gradlew writeUiIdeHome --no-daemon
+      - name: Prepare real IDE display
+        if: matrix.os == 'ubuntu-24.04' && matrix.suite != 'ui-previews'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xfwm4 x11-utils
+      - name: Run shared UI scenario
+        shell: bash
+        env:
+          SUITE_ID: ${{ matrix.suite }}
+        run: python scripts/one-shot-test.py --suite "$SUITE_ID" --in-place --ide-home "$(cat build/ui-ide-home.txt)"
+      - name: Retain UI evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ui-${{ matrix.suite }}-${{ matrix.theme }}-${{ matrix.os }}
+          path: |
+            build/test-results/uiScreenshotTest/
             build/ui-review/
             build/ui-preview/
+            build/one-shot-test/
+            out/ide-tests/tests/**/log/idea.log
+            out/ide-tests/tests/**/log/monitoring-thread-dumps-ide/
+            out/ide-tests/tests/**/log/screenshots/
           retention-days: 7
 
   ide-compatibility:
-    needs: commit-checks
-    if: github.event_name == 'pull_request' && needs.commit-checks.result == 'success'
+    needs: [functional-build, suite-plan]
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
     strategy:
       fail-fast: false
-      matrix:
-        ide: ['2025.1', '2025.2', '2025.3']
-    runs-on: ubuntu-24.04
+      matrix: ${{ fromJSON(needs.suite-plan.outputs.ide) }}
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -94,28 +188,33 @@ jobs:
         with:
           name: plugin-under-test
           path: build/distributions
-      - name: Verify the exact tested plugin
+      - name: Verify exact functional-tested plugin
+        shell: bash
         env:
-          IDE_VERSION: ${{ matrix.ide }}
+          SUITE_ID: ${{ matrix.suite }}
         run: |
           archives=(build/distributions/*.zip)
           [[ ${#archives[@]} -eq 1 && -f "${archives[0]}" ]]
-          python3 scripts/verify-plugin.py "${archives[0]}" --ide-version "$IDE_VERSION" \
-            --java-home "$JAVA_HOME" --cache "$RUNNER_TEMP/lattice-test-binaries"
-      - name: Retain verifier reports
+          python scripts/one-shot-test.py --suite "$SUITE_ID" --in-place --archive "${archives[0]}"
+      - name: Retain IDE compatibility reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: compatibility-pr-${{ matrix.ide }}
+          name: compatibility-ide-${{ matrix.ide }}-${{ matrix.os }}
           if-no-files-found: ignore
-          path: build/compatibility/verifier-ci/
+          path: |
+            build/compatibility/verifier/
+            build/one-shot-test/
           retention-days: 7
 
   database-compatibility:
-    needs: commit-checks
-    if: github.event_name == 'pull_request' && needs.commit-checks.result == 'success'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    needs: [functional-build, suite-plan]
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.suite-plan.outputs.database) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -124,29 +223,39 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Run JDBC and Java 8 compatibility matrices
-        run: python3 scripts/one-shot-test.py --database-compatibility-only
-      - name: Retain JDBC compatibility reports
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-provider: enhanced
+      - name: Run shared JDBC server and Java runtime matrices
+        shell: bash
+        env:
+          SUITE_ID: ${{ matrix.suite }}
+        run: python scripts/one-shot-test.py --suite "$SUITE_ID" --in-place
+      - name: Retain JDBC and Java reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: compatibility-pr-jdbc
+          name: compatibility-${{ matrix.suite }}-${{ matrix.os }}
           if-no-files-found: ignore
           path: |
             build/compatibility/
             build/one-shot-test/
           retention-days: 7
 
-  compatibility:
-    needs: [commit-checks, ide-compatibility, database-compatibility]
-    if: always() && github.event_name == 'pull_request'
+  full-validation:
+    needs: [suite-plan, functional-build, tooling-tests, backend-tests, ui-tests, ide-compatibility, database-compatibility]
+    if: always() && github.event_name == 'pull_request' && github.base_ref == 'main'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Require all compatibility gates to pass
+      - name: Require every main PR suite to pass
         env:
-          BASELINE_RESULT: ${{ needs.commit-checks.result }}
-          IDE_RESULT: ${{ needs.ide-compatibility.result }}
-          JDBC_RESULT: ${{ needs.database-compatibility.result }}
+          RESULTS: ${{ toJSON(needs) }}
         run: |
-          [[ "$BASELINE_RESULT" == success && "$IDE_RESULT" == success && "$JDBC_RESULT" == success ]]
+          python3 - <<'PYCODE'
+          import json, os
+          results = json.loads(os.environ['RESULTS'])
+          failed = {name: job['result'] for name, job in results.items() if job['result'] != 'success'}
+          if failed:
+              raise SystemExit(f"Required validation did not pass: {failed}")
+          PYCODE

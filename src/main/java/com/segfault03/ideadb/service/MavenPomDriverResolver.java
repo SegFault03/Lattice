@@ -1,5 +1,7 @@
 package com.segfault03.ideadb.service;
 
+import com.segfault03.ideadb.provider.DatabaseProviders;
+
 import com.segfault03.ideadb.model.DatabaseType;
 import com.segfault03.ideadb.model.InstalledDriver;
 import com.intellij.openapi.project.Project;
@@ -86,11 +88,8 @@ public final class MavenPomDriverResolver {
     }
 
     private static List<Coordinate> driverCoordinates(DatabaseType type) {
-        return switch (type) {
-            case MYSQL -> List.of(new Coordinate("com.mysql", "mysql-connector-j"),
-                    new Coordinate("mysql", "mysql-connector-java"));
-            case HSQLDB -> List.of(new Coordinate("org.hsqldb", "hsqldb"));
-        };
+        return DatabaseProviders.get(type).driver().coordinates().stream()
+                .map(coordinate -> new Coordinate(coordinate.groupId(), coordinate.artifactId())).toList();
     }
 
     private static List<Path> projectPoms(Path rootPom, Map<Path, PomModel> models) {
@@ -221,11 +220,7 @@ public final class MavenPomDriverResolver {
     }
 
     private static boolean isDriver(DatabaseType type, String groupId, String artifactId) {
-        return switch (type) {
-            case MYSQL -> groupId.equals("com.mysql") && artifactId.equals("mysql-connector-j")
-                    || groupId.equals("mysql") && artifactId.equals("mysql-connector-java");
-            case HSQLDB -> groupId.equals("org.hsqldb") && artifactId.equals("hsqldb");
-        };
+        return driverCoordinates(type).stream().anyMatch(coordinate -> coordinate.groupId().equals(groupId) && coordinate.artifactId().equals(artifactId));
     }
 
     private static boolean isValidDriverJar(DatabaseType type, String version, Path jar) {
