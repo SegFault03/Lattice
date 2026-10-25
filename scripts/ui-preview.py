@@ -4,7 +4,7 @@
 Requires JDK 21 and an IntelliJ 2025.1 SDK (Gradle's cached SDK is discovered).
 The IntelliJ test application supplies native action-system services; preview-only
 service shadows block database work and FlatLaf approximates IDE themes.
-Refreshes the five featured screenshots/ PNGs and a local gallery under ignored build/ui-preview/.
+Refreshes the seven featured screenshots/ PNGs and a local gallery under ignored build/ui-preview/.
 """
 import argparse
 import hashlib
@@ -20,8 +20,10 @@ from common import ROOT, java_command
 from dependencies import Dependencies, add_dependency_options, executable
 
 FEATURED_SCREENSHOTS = {
-    'side-panel.png': 'light-side-panel-340.png',
+    'side-panel.png': 'light-cell-details-1440.png',
+    'welcome.png': 'light-welcome-900.png',
     'connection-dialog.png': 'light-connection-mysql-740.png',
+    'alter-table-dialog.png': 'light-schema-alter-table-800.png',
     'table-view.png': 'light-table-1100.png',
     'table-editing.png': 'light-table-new-row-1100.png',
     'sql-console.png': 'light-sql-console-1100.png',
@@ -70,9 +72,9 @@ def run():
     parser.add_argument('--java-home', type=Path, help='JDK 21 installation directory')
     parser.add_argument('--compare-with', type=Path, help='Previous output directory for before/after comparison')
     parser.add_argument('--output', type=Path, default=ROOT / 'build/ui-preview',
-                        help='Gallery/build directory; screenshots/ keeps only the five featured images')
+                        help='Gallery/build directory; screenshots/ keeps only the seven featured images')
     parser.add_argument('--all-previews', action='store_true',
-                        help='Generate the full light/dark preview gallery; by default only the five featured screens are rendered')
+                        help='Generate the full light/dark preview gallery; by default only the seven featured screens are rendered')
     parser.add_argument('--checks-only', action='store_true',
                         help='Run editor recovery assertions without rendering screenshots or updating the gallery')
     parser.add_argument('--source-filter-only', action='store_true',

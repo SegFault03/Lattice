@@ -83,11 +83,48 @@ final class CellDetailsPanel extends JPanel {
     private final JToggleButton wrap = new PresentationToggle("Wrap");
     private final JButton edit = new InspectorButton("Edit value", AllIcons.Actions.Edit, ButtonStyle.PRIMARY);
     private final JButton copy = new QuietButton("", AllIcons.Actions.Copy);
-    private final JButton setNull = new QuietButton("Set NULL", null);
-    private final JButton useDefault = new InspectorButton("Set default", null, ButtonStyle.DEFAULT);
-    private final JButton revert = new QuietButton("Revert", AllIcons.Actions.Rollback);
+    private final JButton setNull = new InspectorButton("Set NULL", null, ButtonStyle.SECONDARY);
+    private final JButton useDefault = new InspectorButton("Set default", null, ButtonStyle.SECONDARY);
+    private final JButton revert = new InspectorButton("Revert", AllIcons.Actions.Rollback, ButtonStyle.SECONDARY);
     private boolean copiedHintVisible;
+    private boolean copyHovered;
     private final javax.swing.Timer copiedTimer = new javax.swing.Timer(1800, event -> dismissCopiedHint());
+    private final javax.swing.Timer copyHoverTimer = new javax.swing.Timer(120, event -> {
+        copyHovered = false;
+        copy.getModel().setRollover(false);
+        refreshCopyIcon();
+    });
+    private final JPanel valueSurface = new JPanel(null) {
+        @Override public Dimension getPreferredSize() { return valueScroll.getPreferredSize(); }
+        @Override public Dimension getMinimumSize() { return valueScroll.getMinimumSize(); }
+        @Override public void doLayout() {
+            valueScroll.setBounds(0, 0, getWidth(), getHeight());
+            int side = Math.max(JBUI.scale(28), copy.getPreferredSize().width);
+            int height = Math.max(JBUI.scale(28), copy.getPreferredSize().height);
+            copy.setBounds(Math.max(0, getWidth() - side - JBUI.scale(4)), JBUI.scale(4), side, height);
+        }
+    };
+    private static final Icon COPIED_ICON = new Icon() {
+        @Override public int getIconWidth() { return JBUI.scale(16); }
+        @Override public int getIconHeight() { return JBUI.scale(16); }
+        @Override public void paintIcon(Component component, Graphics graphics, int x, int y) {
+            Graphics2D g = (Graphics2D)graphics.create();
+            double scale = getIconWidth() / 16.0;
+            g.translate(x, y); g.scale(scale, scale);
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(new JBColor(0x238636, 0x56D364));
+            g.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g.drawLine(3, 8, 6, 11);
+            g.drawLine(6, 11, 13, 4);
+            g.dispose();
+        }
+    };
+    private final MouseAdapter copyHoverListener = new MouseAdapter() {
+        @Override public void mouseEntered(MouseEvent event) {
+            copyHoverTimer.stop(); copyHovered = true; refreshCopyIcon();
+        }
+        @Override public void mouseExited(MouseEvent event) { copyHoverTimer.restart(); }
+    };
     private final JButton apply = new InspectorButton("Stage change", null, ButtonStyle.PRIMARY);
     private final JButton cancel = new InspectorButton("Cancel", null, ButtonStyle.DANGER);
     private final JButton editTable = new InspectorButton("Edit table", null, ButtonStyle.SECONDARY);
@@ -95,6 +132,9 @@ final class CellDetailsPanel extends JPanel {
     private Column column;
     private boolean columnMode, editing, busy, rawMode;
     private String draft;
+    private enum DraftKind { TEXT, NULL, DEFAULT }
+    private DraftKind draftKind = DraftKind.TEXT;
+    private boolean updatingDraftValue;
     private final WrappingLabel validation = new WrappingLabel("");
     private final JPanel tabs = new JPanel(new ActionLayout(2));
     private final JPanel controls = new JPanel(new GridLayout(1, 1));
@@ -199,7 +239,7 @@ final class CellDetailsPanel extends JPanel {
         text.setFont(UIManager.getFont("Label.font")); return text;
     }
 
-    private enum ButtonStyle { PRIMARY, DEFAULT, SECONDARY, DANGER, QUIET }
+    private enum ButtonStyle { PRIMARY, SECONDARY, DANGER, QUIET }
 
     private static final class InspectorButtonUI extends BasicButtonUI {
         @Override protected void paintText(Graphics graphics, AbstractButton button, Rectangle bounds, String text) {
@@ -261,8 +301,7 @@ final class CellDetailsPanel extends JPanel {
         }
         @Override public Color getForeground() {
             if (style == ButtonStyle.PRIMARY) return isEnabled() ? Color.WHITE : new JBColor(0x40536F, 0xDAE5F7);
-            if (style == ButtonStyle.DEFAULT && !isEnabled()) return Color.WHITE;
-            if (style == ButtonStyle.DEFAULT && isEnabled()) return new JBColor(0x214E94, 0xC7DDFF);
+            if (style == ButtonStyle.DANGER && !isEnabled()) return new JBColor(0x936D72, 0xCBA1A5);
             if (style == ButtonStyle.DANGER) return new JBColor(0xA32D36, 0xFFC0C5);
             return isEnabled() ? super.getForeground() : new JBColor(0x667185, 0xA8B2C1);
         }
@@ -274,9 +313,8 @@ final class CellDetailsPanel extends JPanel {
                     ? !isEnabled() ? new JBColor(0xD5E0F0, 0x3C506D)
                     : getModel().isPressed() ? new JBColor(0x124DCE, 0x2054CD)
                     : hover ? new JBColor(0x1B57DF, 0x326DFA) : new JBColor(0x1F62F2, 0x2864F6)
-                    : style == ButtonStyle.DANGER ? hover ? new JBColor(0xF6D3D6, 0x65353F) : new JBColor(0xFBE8E8, 0x522E35)
-                    : style == ButtonStyle.DEFAULT ? !isEnabled() ? new JBColor(0x828C9A, 0x758191)
-                    : hover ? new JBColor(0xD1E0F8, 0x3A587D) : new JBColor(0xE0EAFB, 0x31496C)
+                    : style == ButtonStyle.DANGER ? !isEnabled() ? new JBColor(0xF0E3E4, 0x49383C)
+                    : hover ? new JBColor(0xF6D3D6, 0x65353F) : new JBColor(0xFBE8E8, 0x522E35)
                     : hover ? new JBColor(0xE8ECF2, 0x35383F)
                     : style == ButtonStyle.SECONDARY ? new JBColor(0xFFFFFF, 0x2B2D30) : null;
             int arc = JBUI.scale(10);
@@ -285,9 +323,9 @@ final class CellDetailsPanel extends JPanel {
                 if (style != ButtonStyle.QUIET) {
                     g.setColor(style == ButtonStyle.PRIMARY
                             ? isEnabled() ? new JBColor(0x1753D5, 0x3B73FC) : new JBColor(0x90A1BA, 0x6C819C)
-                            : style == ButtonStyle.DANGER ? new JBColor(0xD89EA4, 0x99505B)
-                            : style == ButtonStyle.DEFAULT ? !isEnabled() ? new JBColor(0x828C9A, 0x8591A1)
-                            : new JBColor(0xAAC1E4, 0x5879A1) : new JBColor(0xD4D9E1, 0x484C54));
+                            : style == ButtonStyle.DANGER ? !isEnabled() ? new JBColor(0xD3BFC1, 0x755B60)
+                            : new JBColor(0xD89EA4, 0x99505B)
+                            : new JBColor(0xD4D9E1, 0x484C54));
                     g.draw(new java.awt.geom.RoundRectangle2D.Float(0.5f, 0.5f, getWidth() - 1f, getHeight() - 1f, arc, arc));
                 }
             }
@@ -392,24 +430,32 @@ final class CellDetailsPanel extends JPanel {
         valueLabelRow.setBorder(JBUI.Borders.empty(16, 0, 8, 0));
         JPanel valuePresentation = new JPanel(new ColumnLayout()); valuePresentation.setOpaque(false);
         valuePresentation.add(valueLabelRow); valuePresentation.add(tabs);
+        valueSurface.setOpaque(false);
+        valueSurface.add(valueScroll);
+        valueSurface.add(copy);
+        valueSurface.setComponentZOrder(copy, 0);
+        for (Component hoverTarget : new Component[]{valueArea, valueScroll.getViewport(), valueScroll, copy})
+            hoverTarget.addMouseListener(copyHoverListener);
         JPanel valueCard = new JPanel(new WidthAwareBorderLayout()); valueCard.setOpaque(false);
-        valueCard.add(valuePresentation, BorderLayout.NORTH); valueCard.add(valueScroll, BorderLayout.CENTER);
+        valueCard.add(valuePresentation, BorderLayout.NORTH); valueCard.add(valueSurface, BorderLayout.CENTER);
         valueCard.add(valueResizeHandle, BorderLayout.SOUTH);
         actionsRow.setOpaque(false);
         copy.setToolTipText("Copy the raw cell value");
+        copyHoverTimer.setRepeats(false);
         copy.getAccessibleContext().setAccessibleName("Copy value");
         copy.addActionListener(e -> copyText());
+        refreshCopyIcon();
         edit.setToolTipText("Edit selected cell value");
         edit.getAccessibleContext().setAccessibleName("Edit selected cell value");
         apply.setToolTipText("Stage this value; Commit saves it to the database");
         apply.getAccessibleContext().setAccessibleName("Stage this value; Commit saves it to the database");
         edit.addActionListener(e -> beginEdit());
-        setNull.setToolTipText("Set SQL NULL"); setNull.addActionListener(e -> actions.setNull(cell));
-        useDefault.setToolTipText("Use database default"); useDefault.addActionListener(e -> actions.useDefault(cell));
+        setNull.setToolTipText("Use SQL NULL in this draft"); setNull.addActionListener(e -> selectSpecialValue(DraftKind.NULL));
+        useDefault.setToolTipText("Use database default"); useDefault.addActionListener(e -> selectSpecialValue(DraftKind.DEFAULT));
         revert.setToolTipText("Revert this pending value"); revert.addActionListener(e -> actions.revert(cell));
         apply.addActionListener(e -> applyDraft()); cancel.addActionListener(e -> cancelEdit());
-        actionsRow.add(apply); actionsRow.add(cancel); actionsRow.add(edit); actionsRow.add(useDefault); actionsRow.add(copy);
-        actionsRow.add(revert); actionsRow.add(setNull);
+        actionsRow.add(apply); actionsRow.add(useDefault); actionsRow.add(setNull); actionsRow.add(cancel);
+        actionsRow.add(edit); actionsRow.add(revert);
         actionGroup.setOpaque(false);
         actionGroup.add(actionsRow);
         valueBlock = new JPanel(new WidthAwareBorderLayout()); valueBlock.setOpaque(false);
@@ -450,7 +496,7 @@ final class CellDetailsPanel extends JPanel {
         getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.CTRL_DOWN_MASK), "apply");
         getActionMap().put("apply", new AbstractAction() { public void actionPerformed(ActionEvent e) { if (editing) applyDraft(); } });
         valueArea.addMouseListener(new MouseAdapter() { public void mouseClicked(MouseEvent e) { if (e.getClickCount() == 2 && cell != null && cell.editable()) beginEdit(); } });
-        DatabaseUi.onTextChange(valueArea, () -> { if (editing) { summary.setText(valueSummary(valueArea.getText())); updateValueTools(); updateEnabled(); actions.draftChanged(); } });
+        DatabaseUi.onTextChange(valueArea, () -> { if (editing && !updatingDraftValue) { draftKind = DraftKind.TEXT; updateValueTools(); updateEnabled(); actions.draftChanged(); } });
         renderEmpty();
         lastLookAndFeel = UIManager.getLookAndFeel();
         refreshTheme();
@@ -469,6 +515,7 @@ final class CellDetailsPanel extends JPanel {
     }
 
     @Override public void removeNotify() {
+        copyHoverTimer.stop(); copyHovered = false;
         dismissCopiedHint();
         super.removeNotify();
     }
@@ -496,7 +543,7 @@ final class CellDetailsPanel extends JPanel {
         // Selection may change while typing; keep the draft attached to its original cell.
         if (!same && editing) return false;
         if (!same) dismissCopiedHint();
-        if (!same) { editing = false; draft = null; }
+        if (!same) { editing = false; draft = null; draftKind = DraftKind.TEXT; }
         this.cell = cell; this.column = null; columnMode = false; rebuild();
         return true;
     }
@@ -522,15 +569,28 @@ final class CellDetailsPanel extends JPanel {
         updateFooter(); valueArea.requestFocusInWindow();
         return false;
     }
-    boolean hasDraftChange() { return editing && !Objects.equals(draft, valueArea.getText()); }
+    boolean hasDraftChange() {
+        return editing && switch (draftKind) {
+            case TEXT -> !Objects.equals(draft, valueArea.getText());
+            case NULL -> cell == null || cell.value() != null;
+            case DEFAULT -> cell == null || cell.value() != RowDefaults.Value.USE_DEFAULT;
+        };
+    }
     String draftText() { return hasDraftChange() ? valueArea.getText() : null; }
+    String draftKind() { return draftKind.name(); }
     void restoreDraft(Cell cell, String text) {
+        restoreDraft(cell, text, "TEXT");
+    }
+    void restoreDraft(Cell cell, String text, String kind) {
         showCell(cell);
         // Recovery must not depend on metadata being available yet. Staging still
         // requires a fresh editable snapshot, so recovered text cannot bypass validation.
         draft = CellValuePresentation.editable(cell.value());
         viewingActionsHeight = actionGroup.getPreferredSize().height;
-        editing = true; valueArea.setEditable(true); valueArea.setText(text); updateEnabled();
+        editing = true; valueArea.setEditable(true); valueArea.setText(text);
+        try { draftKind = DraftKind.valueOf(kind == null ? "TEXT" : kind); }
+        catch (IllegalArgumentException ignored) { draftKind = DraftKind.TEXT; }
+        updateEnabled();
     }
     void cancelEditing() { cancelEdit(); }
     int inspectedRow() { return cell == null ? -1 : cell.modelRow(); }
@@ -662,48 +722,69 @@ final class CellDetailsPanel extends JPanel {
     private void beginEdit() { if (cell == null || !cell.editable() || busy || editing) return; viewingActionsHeight = actionGroup.getPreferredSize().height; draft = CellValuePresentation.editable(cell.value()); editing = true; valueArea.setEditable(true); valueArea.setText(draft); summary.setText(valueSummary(draft)); valueArea.requestFocusInWindow(); valueArea.setCaretPosition(valueArea.getDocument().getLength()); updateEnabled(); }
     private void applyDraft() { if (!editing || busy || cell == null || !cell.editable() || !hasDraftChange()) return; stageCurrentEdit(); }
     private void stageCurrentEdit() {
-        String text = valueArea.getText(); Cell target = cell;
-        editing = false; draft = null; valueArea.setEditable(false); updateEnabled();
-        if (target != null) actions.apply(target, text);
+        String text = valueArea.getText(); Cell target = cell; DraftKind kind = draftKind;
+        editing = false; draft = null; draftKind = DraftKind.TEXT; valueArea.setEditable(false); updateEnabled();
+        if (target != null) switch (kind) {
+            case TEXT -> actions.apply(target, text);
+            case NULL -> actions.setNull(target);
+            case DEFAULT -> actions.useDefault(target);
+        }
     }
-    private void cancelEdit() { if (!editing) return; editing = false; draft = null; renderValue(); updateEnabled(); actions.draftChanged(); }
+    private void selectSpecialValue(DraftKind kind) {
+        if (!editing || cell == null || busy || !cell.editable()) return;
+        updatingDraftValue = true;
+        try {
+            valueArea.setText(kind == DraftKind.NULL ? "NULL" : "(Default)");
+            draftKind = kind;
+        } finally { updatingDraftValue = false; }
+        updateEnabled(); actions.draftChanged();
+    }
+    private void cancelEdit() { if (!editing) return; editing = false; draft = null; draftKind = DraftKind.TEXT; renderValue(); updateEnabled(); actions.draftChanged(); }
     private void copyText() { copyToClipboard(Toolkit.getDefaultToolkit().getSystemClipboard()); }
     void copyToClipboard(java.awt.datatransfer.Clipboard clipboard) {
         String text = editing ? valueArea.getText() : CellValuePresentation.raw(cell == null ? null : cell.value());
         clipboard.setContents(new StringSelection(text), null);
         dismissCopiedHint();
         copiedHintVisible = true;
-        updateCopyLabel("Copied!");
         copy.getAccessibleContext().setAccessibleDescription("Copied!");
+        refreshCopyIcon();
         copiedTimer.setRepeats(false); copiedTimer.restart();
     }
     void dismissCopiedHint() {
         copiedTimer.stop(); copiedHintVisible = false;
-        updateCopyLabel("");
         copy.getAccessibleContext().setAccessibleDescription(null);
+        refreshCopyIcon();
     }
-    private void updateCopyLabel(String text) {
-        copy.setText(text); copy.setPreferredSize(null);
-        Dimension preferred = copy.getPreferredSize();
-        copy.setPreferredSize(new Dimension(preferred.width, Math.max(preferred.height, edit.getPreferredSize().height)));
-        actionsRow.revalidate(); content.revalidate(); repaint();
+    private void refreshCopyIcon() {
+        if (copy == null) return;
+        copy.setVisible(copyHovered);
+        copy.setIcon(copiedHintVisible ? COPIED_ICON : AllIcons.Actions.Copy);
+        copy.setToolTipText(copiedHintVisible ? "Copied!" : "Copy the raw cell value");
+        copy.repaint();
     }
     private void updateValueStates() {
-        boolean available = cell != null && !columnMode && !editing && cell.editable();
-        setNull.setVisible(available && cell.column() != null && cell.column().isNullable());
+        boolean editableCell = cell != null && !columnMode && cell.editable();
+        boolean available = editableCell && !editing;
+        boolean nullable = cell != null && cell.column() != null && cell.column().isNullable();
+        setNull.setVisible(editing && !columnMode);
         boolean hasDefault = cell != null && cell.column() != null
                 && (cell.column().getDefaultValue() != null || cell.column().isAutoIncrement());
-        useDefault.setVisible(cell != null && !columnMode && !editing);
-        useDefault.setEnabled(available && cell.newRow() && hasDefault && !busy);
+        boolean defaultApplicable = cell != null && cell.column() != null
+                && (cell.newRow() ? hasDefault : cell.column().getDefaultValue() != null);
+        useDefault.setVisible(editing && !columnMode);
+        useDefault.setEnabled(editableCell && defaultApplicable && !busy);
         useDefault.setToolTipText(!hasDefault ? "No database default is defined for this column"
-                : !cell.newRow() ? "Database defaults are available when inserting a new row"
+                : !cell.newRow() && cell.column().getDefaultValue() == null
+                ? "Generated defaults are available when inserting a new row"
+                : !cell.newRow() ? "Use this column's default for the row; Commit applies it"
                 : "Use the database default for this new-row cell; Commit saves it");
         revert.setVisible(available && cell.modified());
-        for (JButton button : new JButton[]{setNull, revert}) button.setEnabled(!busy);
+        setNull.setEnabled(editableCell && nullable && !busy);
+        revert.setEnabled(!busy);
     }
     private void updateEnabled() {
         edit.setEnabled(cell != null && cell.editable() && !busy && !editing);
-        edit.setVisible(cell != null && !columnMode && !editing);
+        edit.setVisible(cell != null && !columnMode && !editing && !cell.modified());
         apply.setEnabled(hasDraftChange() && !busy && cell != null && cell.editable()); cancel.setEnabled(editing && !busy);
         updateValueStates();
         formattedTab.setEnabled(!editing); rawTab.setEnabled(!editing);
@@ -711,7 +792,11 @@ final class CellDetailsPanel extends JPanel {
         editTable.setEnabled(!busy && (cell != null && !cell.view() || column != null && !column.view()));
         refreshTextToggle(formattedTab); refreshTextToggle(rawTab); refreshTextToggle(wrap);
         updateValueTools();
-        if (editing) summary.setText(hasDraftChange() ? valueSummary(valueArea.getText()) : valueSummary(cell.value()) + " · Unchanged");
+        if (editing) summary.setText(hasDraftChange() ? switch (draftKind) {
+            case TEXT -> valueSummary(valueArea.getText());
+            case NULL -> "SQL NULL";
+            case DEFAULT -> "Database default";
+        } : valueSummary(cell.value()) + " · Unchanged");
         close.setToolTipText(editing ? "Cancel edit and close details" : "Close details");
         close.getAccessibleContext().setAccessibleDescription(close.getToolTipText());
         updateFooter();
@@ -769,8 +854,8 @@ final class CellDetailsPanel extends JPanel {
             sizeControl(button);
         }
         int actionHeight = JBUI.scale(28);
-        for (JButton button : new JButton[]{edit, useDefault, apply, cancel, copy}) actionHeight = Math.max(actionHeight, button.getPreferredSize().height);
-        for (JButton button : new JButton[]{edit, useDefault, apply, cancel, copy})
+        for (JButton button : new JButton[]{edit, useDefault, setNull, apply, cancel, copy}) actionHeight = Math.max(actionHeight, button.getPreferredSize().height);
+        for (JButton button : new JButton[]{edit, useDefault, setNull, apply, cancel, copy})
             button.setPreferredSize(new Dimension(button.getPreferredSize().width, actionHeight));
         title.setForeground(JBColor.foreground());
         summary.setForeground(new JBColor(0x667185, 0xAAB3C1));
@@ -796,7 +881,25 @@ final class CellDetailsPanel extends JPanel {
         Color color = cell != null && cell.validationError() != null && !cell.validationError().isBlank()
                 ? JBColor.namedColor("Label.errorForeground", new JBColor(0xB83232, 0xFF8282))
                 : new JBColor(0xD4D9E1, 0x41454D);
-        valueScroll.setBorder(BorderFactory.createLineBorder(color));
+        valueScroll.setBorder(new RoundedValueBorder(color));
+    }
+
+    private static final class RoundedValueBorder extends javax.swing.border.AbstractBorder {
+        private final Color color;
+        private RoundedValueBorder(Color color) { this.color = color; }
+        @Override public Insets getBorderInsets(Component component) { return JBUI.insets(1); }
+        @Override public Insets getBorderInsets(Component component, Insets insets) {
+            insets.set(JBUI.scale(1), JBUI.scale(1), JBUI.scale(1), JBUI.scale(1));
+            return insets;
+        }
+        @Override public void paintBorder(Component component, Graphics graphics, int x, int y, int width, int height) {
+            Graphics2D g = (Graphics2D)graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(color);
+            int arc = JBUI.scale(12);
+            g.drawRoundRect(x, y, width - 1, height - 1, arc, arc);
+            g.dispose();
+        }
     }
     private void refreshSectionBorder() {
         Color separator = new JBColor(0xD4D9E1, 0x41454D);

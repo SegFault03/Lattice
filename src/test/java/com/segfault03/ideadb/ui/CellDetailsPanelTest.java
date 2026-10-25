@@ -22,9 +22,9 @@ class CellDetailsPanelTest {
 
     static final class RecordingActions implements CellDetailsPanel.Actions {
         final List<String> applied = new ArrayList<>();
-        int closes, defaults;
+        int closes, defaults, nulls;
         public void apply(CellDetailsPanel.Cell cell, String text) { applied.add(text); }
-        public void setNull(CellDetailsPanel.Cell cell) {}
+        public void setNull(CellDetailsPanel.Cell cell) { nulls++; }
         public void useDefault(CellDetailsPanel.Cell cell) { defaults++; }
         public void revert(CellDetailsPanel.Cell cell) {}
         public void editTable() {}
@@ -182,31 +182,75 @@ class CellDetailsPanelTest {
         });
     }
 
+    @Test void specialChoicesStayInDraftUntilStageAndThenOnlyRevertRemains() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            RecordingActions actions = new RecordingActions();
+            CellDetailsPanel panel = new CellDetailsPanel(actions);
+            var original = cell("before", 0); panel.showCell(original);
+            click(panel, "edit");
+            var row = field(panel, "actionsRow", JPanel.class);
+            var visible = java.util.Arrays.stream(row.getComponents()).filter(Component::isVisible)
+                    .map(component -> ((JButton)component).getText()).toList();
+            assertEquals(List.of("Stage change", "Set default", "Set NULL", "Cancel"), visible);
+            assertFalse(field(panel, "apply", JButton.class).isEnabled());
+            click(panel, "setNull");
+            assertTrue(panel.hasDraftChange()); assertEquals(0, actions.nulls);
+            assertEquals("NULL", panel.draftKind());
+            click(panel, "cancel"); assertEquals(0, actions.nulls);
+            assertEquals("before", field(panel, "valueArea", JTextArea.class).getText());
+            click(panel, "edit"); click(panel, "setNull"); click(panel, "apply");
+            assertEquals(1, actions.nulls); assertFalse(panel.isEditing());
+            panel.showCell(new CellDetailsPanel.Cell(original.tableName(), 0, 0, original.column(), null,
+                    false, true, true, false, null, "Row 1", ""));
+            visible = java.util.Arrays.stream(row.getComponents()).filter(Component::isVisible)
+                    .map(component -> ((JButton)component).getText()).toList();
+            assertEquals(List.of("Revert"), visible);
+            assertNotNull(field(panel, "revert", JButton.class).getIcon());
+        });
+    }
+
+    @Test void specialDraftRecoveryPreservesItsKindWithoutStaging() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            for (String kind : new String[]{"NULL", "DEFAULT"}) {
+                RecordingActions actions = new RecordingActions();
+                CellDetailsPanel panel = new CellDetailsPanel(actions);
+                panel.restoreDraft(cell("before", 0), kind.equals("NULL") ? "NULL" : "(Default)", kind);
+                assertTrue(panel.hasDraftChange()); assertEquals(kind, panel.draftKind());
+                assertEquals(0, actions.nulls + actions.defaults);
+                click(panel, "apply");
+                assertEquals(1, actions.nulls + actions.defaults);
+                assertTrue(actions.applied.isEmpty());
+            }
+        });
+    }
+
     @Test void databaseDefaultIsExplicitAndUnavailableDefaultsCannotDispatch() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             RecordingActions actions = new RecordingActions(); CellDetailsPanel panel = new CellDetailsPanel(actions);
             var persisted = cell(null, 0);
             panel.showCell(persisted);
             JButton defaults = field(panel, "useDefault", JButton.class);
-            assertTrue(defaults.isVisible()); assertFalse(defaults.isEnabled());
+            assertFalse(defaults.isVisible());
+            click(panel, "edit"); field(panel, "valueArea", JTextArea.class).setText("edited");
+            assertTrue(defaults.isVisible()); assertTrue(defaults.isEnabled());
             defaults.doClick(0); assertEquals(0, actions.defaults);
+            assertTrue(panel.isEditing()); assertTrue(field(panel, "apply", JButton.class).isEnabled());
+            click(panel, "apply"); assertEquals(1, actions.defaults);
             panel.showCell(new CellDetailsPanel.Cell(persisted.tableName(), 0, 0, persisted.column(), null,
                     true, false, true, false, null, "New row", ""));
+            assertFalse(defaults.isVisible());
+            click(panel, "edit"); field(panel, "valueArea", JTextArea.class).setText("edited");
+            assertTrue(defaults.isVisible());
             assertTrue(defaults.isEnabled()); defaults.doClick(0);
-            assertEquals(1, actions.defaults); assertTrue(actions.applied.isEmpty());
+            assertEquals(1, actions.defaults); click(panel, "apply");
+            assertEquals(2, actions.defaults); assertTrue(actions.applied.isEmpty());
             var noDefault = new ColumnMetadata("value", "VARCHAR", Types.VARCHAR, 100, 0, true, false, false, null);
             panel.showCell(new CellDetailsPanel.Cell("customers", 0, 0, noDefault, null,
                     true, false, true, false, null, "New row", ""));
-            assertFalse(defaults.isEnabled()); defaults.doClick(0); assertEquals(1, actions.defaults);
-            assertEquals(Color.WHITE, defaults.getForeground());
-            defaults.setSize(defaults.getPreferredSize());
-            var image = new java.awt.image.BufferedImage(defaults.getWidth(), defaults.getHeight(),
-                    java.awt.image.BufferedImage.TYPE_INT_RGB);
-            Graphics2D graphics = image.createGraphics(); defaults.paint(graphics); graphics.dispose();
-            Color surface = new Color(image.getRGB(4, defaults.getHeight() / 2));
-            int shade = Math.max(surface.getRed(), Math.max(surface.getGreen(), surface.getBlue()));
-            assertTrue(shade >= 145 && shade < 170,
-                    "Unavailable database defaults must use the lighter grey surface");
+            click(panel, "edit"); field(panel, "valueArea", JTextArea.class).setText("edited");
+            assertTrue(defaults.isVisible());
+            assertFalse(defaults.isEnabled()); defaults.doClick(0); assertEquals(2, actions.defaults);
+            click(panel, "cancel"); assertFalse(defaults.isVisible());
         });
     }
 
@@ -238,16 +282,26 @@ class CellDetailsPanelTest {
         SwingUtilities.invokeAndWait(() -> {
             CellDetailsPanel panel = new CellDetailsPanel(new RecordingActions()); reference.set(panel);
             panel.showCell(cell("{\"raw\":true}", 0));
-            JButton copy = field(panel, "copy", JButton.class); Icon icon = copy.getIcon();
+            JButton copy = field(panel, "copy", JButton.class);
             assertEquals("", copy.getText(), "Copy must be icon-only before use");
+            assertFalse(copy.isVisible(), "Copy stays hidden without hover");
+            var area = field(panel, "valueArea", JTextArea.class);
+            var entered = new java.awt.event.MouseEvent(area, java.awt.event.MouseEvent.MOUSE_ENTERED, 0, 0, 4, 4, 0, false);
+            for (var listener : area.getMouseListeners()) listener.mouseEntered(entered);
+            assertTrue(copy.isVisible());
             var clipboard = new java.awt.datatransfer.Clipboard("inspector-copy-test");
             panel.copyToClipboard(clipboard);
             try { assertEquals("{\"raw\":true}", clipboard.getData(java.awt.datatransfer.DataFlavor.stringFlavor)); }
             catch (Exception error) { throw new AssertionError(error); }
             assertTrue(field(panel, "copiedHintVisible", Boolean.class));
-            assertSame(icon, copy.getIcon()); assertEquals("Copied!", copy.getText());
-            assertTrue(copy.getPreferredSize().width > com.intellij.util.ui.JBUI.scale(28), "Feedback must fit beside the icon");
+            assertSame(field(panel, "COPIED_ICON", Icon.class), copy.getIcon()); assertEquals("", copy.getText());
             assertEquals("Copied!", copy.getAccessibleContext().getAccessibleDescription());
+            var exited = new java.awt.event.MouseEvent(copy, java.awt.event.MouseEvent.MOUSE_EXITED, 0, 0, -1, -1, 0, false);
+            for (var listener : copy.getMouseListeners()) listener.mouseExited(exited);
+            var hoverTimer = field(panel, "copyHoverTimer", javax.swing.Timer.class);
+            for (var listener : hoverTimer.getActionListeners()) listener.actionPerformed(null);
+            hoverTimer.stop();
+            assertFalse(copy.isVisible(), "A successful copy must hide as soon as hover ends");
             javax.swing.Timer timer = field(panel, "copiedTimer", javax.swing.Timer.class);
             assertFalse(timer.isRepeats()); assertTrue(timer.getInitialDelay() > 0 && timer.getInitialDelay() <= 2000);
             timer.addActionListener(event -> closed.countDown());
@@ -257,6 +311,7 @@ class CellDetailsPanelTest {
             SwingUtilities.invokeAndWait(() -> {
                 assertFalse(field(reference.get(), "copiedHintVisible", Boolean.class));
                 assertEquals("", field(reference.get(), "copy", JButton.class).getText());
+                assertFalse(field(reference.get(), "copy", JButton.class).isVisible());
             });
         } finally { SwingUtilities.invokeAndWait(() -> reference.get().dismissCopiedHint()); }
     }
@@ -327,15 +382,14 @@ class CellDetailsPanelTest {
             JButton edit = field(panel, "edit", JButton.class), defaults = field(panel, "useDefault", JButton.class),
                     copy = field(panel, "copy", JButton.class), apply = field(panel, "apply", JButton.class),
                     cancel = field(panel, "cancel", JButton.class);
-            assertEquals(edit.getY(), defaults.getY()); assertEquals(edit.getY(), copy.getY());
-            assertTrue(edit.getX() < defaults.getX() && defaults.getX() < copy.getX());
+            assertFalse(defaults.isVisible());
+            assertSame(field(panel, "valueSurface", JPanel.class), copy.getParent());
             edit.doClick(0);
             for (int pass = 0; pass < 4; pass++) layout(panel);
             assertFalse(apply.isEnabled()); assertTrue(cancel.isVisible());
-            assertEquals(copy.getHeight(), apply.getHeight()); assertEquals(copy.getHeight(), cancel.getHeight());
-            assertEquals(copy.getY(), apply.getY()); assertEquals(copy.getY(), cancel.getY());
-            assertTrue(apply.getY() >= 0 && apply.getY() + apply.getHeight() <= apply.getParent().getHeight());
+            assertEquals(apply.getHeight(), cancel.getHeight());
             field(panel, "valueArea", JTextArea.class).append(" ");
+            assertTrue(defaults.isVisible()); assertTrue(field(panel, "setNull", JButton.class).isVisible());
             assertTrue(apply.isEnabled(), "Typing into a JSON draft must enable staging");
             field(panel, "valueArea", JTextArea.class).setText("changed");
             assertTrue(apply.isEnabled()); assertEquals(Color.WHITE, apply.getForeground());

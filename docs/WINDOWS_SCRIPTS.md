@@ -620,13 +620,7 @@ Default themes: ExperimentalDark, ExperimentalLight, ExperimentalLightWithLightH
 
 `windows-common.ps1`, `windows-script-dependencies.py` and `native_mysql.py` are internal helpers, not additional public commands. The first serializes native PowerShell arguments; the second prepares the JDK/SDK/JDBC inputs, launches the UI script and owns cleanup; the third initializes and stops portable MySQL fixtures. There are no workstation-specific paths in public scripts.
 
-Only the five README PNGs under screenshots/ are tracked generated artifacts. Other screenshots, archives, JDBC/server/IDE binaries and reports are ignored. Authored branding/plugin icons and the committed Gradle wrapper JAR remain source infrastructure. The fallback-driver test stages Maven-resolved JDBC drivers under build/fallback-drivers/; a checked-in lib/ directory is unnecessary.
-
-## Validation of the consolidated layout
-
-The Windows validation passed 81 Python tooling tests, Gradle unit and live MySQL/HSQLDB tests, fallback-driver loading/disposal, plugin packaging and archive checks, all four trimmed MySQL initializers, the HSQLDB cancellation diagnostic, UI test compilation and 106 Swing gallery variants. Every Python PowerShell launcher was exercised from another directory with both the default interpreter and an explicit -Python. PowerShell parsing and Bash syntax checks passed. The five README images were preserved unchanged. Validation build/cache outputs were removed afterward.
-
-Real interactive IDE capture/review was not rerun during this cleanup. Those commands need the test IDE to stay in the foreground; the earlier attempt was interrupted by another foreground application.
+The five README PNGs under `screenshots/` are the tracked product previews; design-concept renders under `design/` are retained references. Other screenshots, archives, JDBC/server/IDE binaries and validation reports belong under ignored `build/`. Authored branding/plugin icons and the committed Gradle wrapper JAR remain source infrastructure. The fallback-driver test stages Maven-resolved JDBC drivers under build/fallback-drivers/; a checked-in lib/ directory is unnecessary.
 
 ## H2 functional and compatibility checks
 

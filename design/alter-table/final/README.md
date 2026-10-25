@@ -20,28 +20,9 @@ crops of the live modal window. No replacement look and feel is used.
 - Prepare SQL and run database operations in the background with busy feedback.
 - Retain remaining drafts after a partial failure without replaying successful steps; refresh the explorer after success.
 
-## Validation
-
-162 Java tests pass. Native IntelliJ scenarios pass in Dark and Light; the Swing
-preview suite rendered 124 states successfully. Plugin packaging and archive
-validation also pass.
-
-The native IntelliJ scenario applies a batch that modifies and renames the same
-column, changes another type, adds two columns, drops one and renames the table.
-A second batch fails after earlier steps succeed and verifies that retry applies
-only the retained remainder. JDBC metadata and retained data are checked.
-
-Java coverage includes persistent drafts, hidden validation errors, stale whole
-batch previews, final-name collisions, rename chains, drop/restore/revert,
-embedded HSQLDB/H2 execution, partial failure and PostgreSQL transaction rollback.
-MySQL and PostgreSQL have SQL contract coverage; this review does not run live
-servers for those engines.
-
-PostgreSQL batches run in one transaction. Other supported engines may commit DDL
-incrementally. The dialog reloads actual metadata and retains remaining edits
-when a batch stops. Rename cycles need an intermediate name in a separate Apply.
-
 See [UI preview instructions](../../../docs/UI_PREVIEW.md#column-inspector) to
-repeat the native review. Build output under `build/alter-table-batch/` contains
-test logs, theme-specific runtime evidence, JUnit results, busy/error captures
-and the complete Swing gallery.
+See [UI preview instructions](../../../docs/UI_PREVIEW.md#column-inspector) for
+the current interaction model and repeatable native review steps. PostgreSQL
+batches use one transaction; MySQL, HSQLDB and H2 may commit DDL incrementally.
+After a partial failure, the dialog reloads metadata and retains the remaining
+edits. Rename cycles require an intermediate name in a separate Apply.

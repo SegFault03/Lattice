@@ -130,7 +130,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 if (draft.inspectorText != null) {
                     CellDetailsPanel.Cell cell = cellSnapshot(draft.inspectorRow, draft.inspectorColumn);
                     if (cell != null) {
-                        cellDetails.restoreDraft(cell, draft.inspectorText);
+                        cellDetails.restoreDraft(cell, draft.inspectorText, draft.inspectorKind);
                         setInspectorVisible(true);
                     }
                 }
@@ -342,8 +342,9 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             @Override public void apply(CellDetailsPanel.Cell cell, String text) { changeInspectedCell(cell, text); }
             @Override public void setNull(CellDetailsPanel.Cell cell) { changeInspectedCell(cell, null); }
             @Override public void useDefault(CellDetailsPanel.Cell cell) {
-                if (cell != null && cell.newRow() && cell.column() != null
-                        && (cell.column().getDefaultValue() != null || cell.column().isAutoIncrement()))
+                if (cell != null && cell.column() != null
+                        && (cell.column().getDefaultValue() != null
+                        || cell.newRow() && cell.column().isAutoIncrement()))
                     changeInspectedCell(cell, RowDefaults.Value.USE_DEFAULT);
             }
             @Override public void revert(CellDetailsPanel.Cell cell) {
@@ -545,7 +546,9 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             }
         }
         return new CellDetailsPanel.Cell(tableMetadata.getName(), row, col, column, tableModel.getValueAt(row, col),
-                newRow, tableModel.isCellModified(row, col), editable, tableMetadata.isView(),
+                newRow, tableModel.isCellModified(row, col) || newRow
+                        && !sameDatabaseValue(column, RowDefaults.initialValue(column), tableModel.getValueAt(row, col)),
+                editable, tableMetadata.isView(),
                 tableModel.getValidationError(new CellCoord(row, col)), rowLabel.toString(), hint);
     }
 
@@ -803,6 +806,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 recovery.inspectorRow = cellDetails.inspectedRow();
                 recovery.inspectorColumn = cellDetails.inspectedColumn();
                 recovery.inspectorText = cellDetails.draftText();
+                recovery.inspectorKind = cellDetails.draftKind();
             }
             if (hasPending || recovery.inspectorText != null) TableDraftState.getInstance(project).put(draftKey(), recovery);
             else TableDraftState.getInstance(project).remove(draftKey());

@@ -7,55 +7,61 @@
 [![Rating](https://img.shields.io/jetbrains/plugin/r/rating/34772.svg)](https://plugins.jetbrains.com/plugin/34772)
 [![Get from JetBrains Marketplace](https://img.shields.io/badge/JetBrains%20Marketplace-Lattice-087CFA?logo=intellij-idea&logoColor=white)](https://plugins.jetbrains.com/plugin/34772)
 
-Lattice is a database management plugin for IntelliJ IDEA. Connect to MySQL, HSQLDB, PostgreSQL or H2, browse schemas, run SQL, edit table data, design tables and export results from your IDE.
-
-Built with help from **Gemini 3.8**, **GPT-6 Luna** and **GPT-6.1 Sol**.
+Lattice is a database client for IntelliJ IDEA. Connect to MySQL, PostgreSQL, HSQLDB or H2; browse schemas, work with table data, run SQL and manage database definitions without leaving your IDE.
 
 ## Features
 
-- Explorer for schemas, tables, views, columns and primary keys.
+- Explorer groups connections by database type, with search and filters for sources, schemas, tables and columns.
 - SQL console with results, history, row limits, timeouts and cancellation.
+- Value Workspace for formatted/raw inspection, column details, pinning, editing and explicit change staging.
 - Editable table grids with pagination, filtering, batch saves, explicit NULL/default values and draft recovery.
-- Create/alter table dialogs and database/schema maintenance.
+- Create/alter table dialogs with a full SQL preview, batched changes and recovery after partial DDL failures.
 - CSV, JSON, SQL INSERT and CREATE TABLE exports.
-- JDBC driver selection: bundled release, verified download from Maven Central, or local JAR.
+- Bundled, checksum-verified downloadable and local JAR drivers, with cached driver reuse.
 - Server and driver version information through **Test Connection**.
+- Offline schema browsing from cached metadata; changes refresh the explorer and affected editors.
 - Passwords and custom JDBC URLs stored through IntelliJ PasswordSafe.
 
-## 0.0.2-alpha highlights
+## Updates since 0.0.2-alpha
 
-- **JDBC drivers:** Reuse verified downloads across IDE restarts, discover Maven-cached drivers and project defaults, and report missing or corrupt drivers. Discovery runs in the background and preserves manual selections.
-- **UI and themes:** Native toolbars, compact connection forms, responsive filters and schema dialogs, improved light/dark palettes, clearer loading feedback and refreshed previews. Disabled icons match labels; mouse clicks no longer leave focus outlines, while keyboard focus stays visible.
-- **Tables and SQL:** Click a table cell for the integrated Value Workspace, or a header for column type and constraint details. Inspect formatted/raw values, pin a cell or column, edit by double-clicking the value, and stage NULL/default/revert actions alongside grid edits. State-aware row, export, Apply, Run and Clear actions; Clear for table filters; headers bounded to columns; typed edit validation and editable auto-generated columns. Cancellation has neutral feedback, and session changes retire old connections.
-- **Development tools:** Shared dependency reuse and cleanup, tracked child processes, portable Windows MySQL fixtures, local IDE deployment, and consolidated Linux/Windows commands and documentation.
-- **Build and validation:** Updated Gradle, IntelliJ build tooling, JDBC drivers and protobuf runtime; migrated the Java namespace to `com.segfault03`. Cross-platform CI now includes production Swing assertions, real-IDE theme/action reviews and compatibility checks against the PR merge build.
-- **Releases:** Signed ZIPs with verified signatures, formatted What's New notes, and automatic publication to GitHub and submission to JetBrains Marketplace after validation.
+- **PostgreSQL and H2:** PostgreSQL adds schema browsing and transactional DDL. H2 supports memory, file and TCP connections, with service workflows for MySQL/PostgreSQL compatibility modes.
+- **Explorer:** Group and filter connections by engine, search across sources and database objects, identify key columns, and keep the last successful metadata available for offline browsing.
+- **Table work:** Inspect formatted or raw values and column definitions, pin a cell or column, stage edits explicitly, recover drafts, and apply create/alter batches with SQL previews.
+- **Drivers and sessions:** Reuse verified downloads, discover Maven-cached and project-default drivers in the background, and safely retire connections when sessions change.
+- **Welcome screen:** A refreshed starting point now reflects all four supported databases and current query, edit and export workflows.
 
-See the [changelog](docs/CHANGELOG.md) and [commits since the last release](https://github.com/SegFault03/Lattice/compare/v0.0.1-alpha...main) for details.
+See the [changelog](docs/CHANGELOG.md) and [commits since the last release](https://github.com/SegFault03/Lattice/compare/v0.0.2-alpha...main) for details.
 
 ## Screenshots
 
-Previews use sample data. These five screens are the featured UI previews.
+Previews use sample data and show the current production Swing screens.
 
-### Side panel
+### Welcome and value inspector
 
-<img src="screenshots/side-panel.png" alt="Database side panel with schemas, tables, views and columns" width="340">
+<img src="screenshots/welcome.png" alt="Welcome screen with four supported database sources and current workflows" width="900">
 
-### Connection dialog
+<img src="screenshots/side-panel.png" alt="Table editor with the Value Workspace inspector open beside a selected cell" width="900">
 
-<img src="screenshots/connection-dialog.png" alt="Connection dialog with a scrollable data source picker and grouped connection settings" width="740">
+### Connection and schema
 
-### Table view
+<p>
+<img src="screenshots/connection-dialog.png" alt="Connection dialog with a scrollable data source picker and grouped settings" width="740">
+</p>
+<p>
+<img src="screenshots/alter-table-dialog.png" alt="Alter table dialog with a column inspector and SQL preview" width="800">
+</p>
 
-<img src="screenshots/table-view.png" alt="Table data grid with filtering and pagination" width="1100">
+### Table data and SQL
 
-### Editing a table
-
-<img src="screenshots/table-editing.png" alt="Table editor with modified cells, a new row and pending changes" width="1100">
-
-### SQL console
-
-<img src="screenshots/sql-console.png" alt="SQL console with a query and its results" width="1100">
+<p>
+<img src="screenshots/table-view.png" alt="Table data grid with filtering and pagination" width="900">
+</p>
+<p>
+<img src="screenshots/table-editing.png" alt="Table editor with modified cells, a new row and pending changes" width="900">
+</p>
+<p>
+<img src="screenshots/sql-console.png" alt="SQL console with a query and its results" width="900">
+</p>
 
 ## Requirements and compatibility
 
@@ -134,7 +140,7 @@ Use `python3` if that is your system's Python command. All optional development/
 
 ### Quick local UI testing
 
-To render the five featured production Swing screens in light mode, run `python scripts/ui-preview.py` with optional JDK 21 and IntelliJ SDK paths (missing inputs are downloaded), then open `build/ui-preview/index.html`. It uses a headless IntelliJ test application for platform services without opening an IDE window. Pass `--all-previews` for the light/dark gallery. The five README images in `screenshots/` are refreshed by default; review them and commit them with UI changes. See [UI previews](docs/UI_PREVIEW.md) for setup and the full-IDE capture commands.
+To render the seven featured production Swing screens in light mode, run `python scripts/ui-preview.py` with optional JDK 21 and IntelliJ SDK paths (missing inputs are downloaded), then open `build/ui-preview/index.html`. It uses a headless IntelliJ test application for platform services without opening an IDE window. Pass `--all-previews` for the light/dark gallery. The seven README images in `screenshots/` are refreshed by default; review them and commit them with UI changes. See [UI previews](docs/UI_PREVIEW.md) for setup and the full-IDE capture commands.
 
 To run the tooling and pure Java tests, build the ZIP, find an installed IntelliJ IDEA, and deploy the freshly built plugin:
 
@@ -177,13 +183,14 @@ focused commands, prerequisites and report paths.
 |---|---|
 | `src/` | Plugin source, resources and Java tests |
 | [docs/](docs/README.md) | Development, release, support and compatibility guides |
+| `design/` | Create/alter table concept galleries and presentation prototypes |
 | `scripts/` | Portable development and release helpers; tooling tests in `scripts/tests/` |
 | `.github/` | GitHub issue forms, pull request template and workflows |
 | `assets/`, `licenses/` | Branding and dependency license texts |
-| `build/` | Ignored generated output, distribution ZIPs and validation reports |
-| `screenshots/` | The five tracked README preview images |
+| `build/` | Ignored build output, distribution ZIPs and validation reports |
+| `screenshots/` | The seven tracked README preview images |
 
-Legacy workstation helpers are preserved outside the repository; private notes remain in ignored `docs/local/`. README, LICENSE, agent instructions and the Gradle wrapper launchers retain their root entry points. The five README screenshots are the only tracked generated artifacts.
+The seven README screenshots are the featured product previews. Concept renders under `design/` are retained design references; validation output and other generated files belong under ignored `build/`.
 
 ## Releases and support
 

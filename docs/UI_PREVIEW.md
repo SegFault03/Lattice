@@ -1,5 +1,14 @@
 # Swing UI previews
 
+## Welcome screen
+
+The welcome screen lists MySQL, PostgreSQL, H2 and HSQLDB, and summarizes the
+current browse, edit, query and export workflows. **Add connection** retains
+the source picker; **Open SQL console** becomes available when a saved
+connection exists. The startup preference is still available below the source
+list. `--all-previews` captures the screen in both themes and at wide and narrow
+editor widths.
+
 ## Cell inspector interaction
 
 Use **Inspect** in the table toolbar or **Alt+Enter** to toggle the inspector.
@@ -21,15 +30,22 @@ unconfirmed draft separately in the existing local project draft store and
 restores it in edit mode, outside the commit batch.
 
 Untouched values disable Stage change. SQL NULL, an empty string and a database
-default are distinct. Edit, Set default, Copy, Revert and NULL share one wrapping
-action row; actions wrap only when the available width requires it. Set default
-uses the database default for new rows and is disabled when unavailable; an empty
-string can be entered through Edit. NULL and Revert appear when applicable. Character
-counts follow the draft, and invalid values show feedback beside the editor.
-Unavailable defaults have a lighter muted grey surface with white text. Copy is
-icon-only at rest; "Copied!" appears inline beside that icon for 1.8 seconds after
-a successful copy. No popup is shown. Closing or disposing the inspector clears
-the feedback immediately. The value viewport
+default are distinct. Edit mode shows **Stage change**, **Set default**,
+**Set NULL**, **Cancel**, in that order. Set default and Set NULL change only
+the inspector draft and enable Stage change when the chosen value differs.
+Cancel discards those choices. Staging replaces the action row with only
+**Revert**; reverting restores Edit value. Set default applies a column's defined default to saved rows with
+`UPDATE ... SET column = DEFAULT`; new-row inserts omit that column. Identity
+defaults are available for new rows. The action is disabled when no applicable
+default exists. Set NULL is disabled for nonnullable columns. Set default,
+Set NULL and Revert use the same neutral outlined style as Edit table;
+Revert retains its rollback icon. An empty
+string can be entered through Edit. Character counts follow the draft, and
+invalid values show feedback beside the editor.
+Copy sits inside the value box and appears only on hover. After a
+successful copy, its icon becomes a green check for 1.8 seconds while hovered;
+leaving the value box hides the control even while it has focus. No popup is
+shown. Closing or disposing the inspector clears the feedback immediately. The value viewport
 keeps its dimensions across formatted/raw viewing, editing and cancellation;
 the surrounding body scrolls when space is limited. Buttons show a focus cue
 for keyboard navigation, while mouse clicks leave no persistent focus outline.
@@ -62,8 +78,7 @@ The desktop-text samples render directly at 125% with smoothing hints supplied o
 Swing components while the incoming graphics has text smoothing off. This catches
 custom button painters that bypass the IDE's per-component font rendering hints;
 the ordinary preview's global smoothing can otherwise hide that defect.
-The native focused scenario checks that header and cell clicks keep a closed inspector closed. See the
-[prioritized implementation checklist](design/data-cell-refresh-plan.md).
+The native focused scenario checks that header and cell clicks keep a closed inspector closed.
 Cached options menus and submenus refresh their Swing UI when opened so their
 surface, text and separators follow the current theme. Focused previews include
 light/dark theme round trips for these cached menus.
@@ -79,15 +94,17 @@ Run the preview helper from the repository root on Windows, Linux or macOS:
 python scripts/ui-preview.py
 ```
 
-It paints the plugin's production Swing screens with fixture data and a headless IntelliJ test application for platform services such as the Action System. It does not open an IDE window or recreate the screens in separate UI code. The default run uses a light look and feel and refreshes these five tracked README images:
+It paints the plugin's production Swing screens with fixture data and a headless IntelliJ test application for platform services such as the Action System. It does not open an IDE window or recreate the screens in separate UI code. The default run uses a light look and feel and refreshes these seven tracked README images:
 
 - `screenshots/side-panel.png`
+- `screenshots/welcome.png`
 - `screenshots/connection-dialog.png`
+- `screenshots/alter-table-dialog.png`
 - `screenshots/table-view.png`
 - `screenshots/table-editing.png`
 - `screenshots/sql-console.png`
 
-The five featured images are painted directly at higher pixel density: at least 2×, or a larger integer scale to meet the Marketplace recommendation of 1200 × 760 pixels. Component layout and aspect ratio stay unchanged. The README sets their original display widths (340, 740 and 1100 pixels), with height determined automatically. Upload the same PNGs under `screenshots/` to Marketplace; no separate export is needed. The featured light/dark variants in `--all-previews` also use this resolution; other gallery variants keep their original resolution.
+The featured images are painted directly at higher pixel density: at least 2×, or a larger integer scale to meet the Marketplace recommendation of 1200 × 760 pixels. Component layout and aspect ratio stay unchanged. The README scales images for its layout, with height determined automatically. Upload the same PNGs under `screenshots/` to Marketplace; no separate export is needed. The featured light/dark variants in `--all-previews` also use this resolution; other gallery variants keep their original resolution.
 
 It also writes `build/ui-preview/index.html` and a ZIP of the generated preview set. Open the gallery to inspect the captures before committing changed README images.
 
@@ -109,7 +126,7 @@ python scripts/ui-preview.py --all-previews --output build/ui-after --compare-wi
 python scripts/ui-preview.py --java-home /path/to/jdk-21 --ide-home /path/to/intellij-sdk
 ```
 
-`--all-previews` adds light and dark variants to the gallery; `--output` changes generated build output but still refreshes the five README images; `--compare-with` adds a before/after gallery. The helper requires the IntelliJ 2025.1 SDK and JUnit/Hamcrest runtime jars in the selected Gradle cache, or explicit JDK/SDK paths.
+`--all-previews` adds light and dark variants to the gallery; `--output` changes generated build output but still refreshes the seven README images; `--compare-with` adds a before/after gallery. The helper requires the IntelliJ 2025.1 SDK and JUnit/Hamcrest runtime jars in the selected Gradle cache, or explicit JDK/SDK paths.
 
 These previews show component layout and Swing painting with fixture data. For IDE chrome, live plugin loading, tool-window behavior and database-backed flows, Linux users can use [`capture-intellij-ui.sh`](../scripts/linux/capture-intellij-ui.sh) or [`review-intellij-ui.sh`](../scripts/linux/review-intellij-ui.sh). Windows users can use [`capture-intellij-ui.ps1`](../scripts/windows/capture-intellij-ui.ps1) or [`review-intellij-ui.ps1`](../scripts/windows/review-intellij-ui.ps1) from an interactive desktop session; captures use the primary display, which must be at least 1440×800. Windows capture automatically restores the newly launched `lattice-ui-test` IDE when another application takes the foreground, preserving focus in IDE dialogs and popups. Allow the capture script to use the desktop while it runs; a locked desktop still prevents capture. Their setup and output paths are documented in the [script reference](SCRIPTS.md).
 

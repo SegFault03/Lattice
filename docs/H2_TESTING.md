@@ -87,59 +87,9 @@ PRs targeting `main` run TCP/TLS suites on all three host platforms, one dark pr
 on Linux and the H2 compatibility matrix. Tag releases run functional/build
 checks before signing. See [CI test groups](CI_TESTING.md).
 
-## Local validation on 15 October 2026
+## Metadata boundary
 
-Validated the implementation at `5ded52c` on Linux using JDK 21.0.12.1, Java
-8u504, IDEA Community 2025.1 (251.23774.435, JBR 21.0.6), Xvfb and XFWM:
-
-| Check | Result |
-|---|---|
-| Ordinary Java / embedded / regression suite | 100 passed, no skips |
-| H2 file/TCP/TLS functional integration | 4 passed, no skips |
-| Packaged fallback in a JVM without parent JDBC drivers | Passed query, caching, deregistration and disposal |
-| H2 compatibility matrix | 21 positive cases and expected Java 8 rejection; zero failures |
-| Full production UI | Dark and light both passed, with JUnit, screenshots, saved exports and runtime evidence |
-| Tooling regression suite | 123 tests; 114 passed, 9 platform-dependent skips |
-| Plugin build / archive validation | Passed |
-| Plugin Verifier against IDEA 2025.1 | Compatible; existing deprecated/experimental API notices |
-
-The backend and UI phases were executed separately using the focused commands
-above. No hosted CI run, Windows/macOS execution, IDEA 2025.2/2025.3 verification,
-Java 11 execution or H2 1.x migration is claimed by this local run.
-
-### Integration with staging PR #9
-
-H2 uses the source picker, grouped explorer, source filter, metadata search and
-solid table-tab badge. The shared provider contract checks composite primary and
-foreign keys, repeated SQL aliases, calculated columns and clearing stale badges
-across embedded/file/TCP/TLS and the driver/server matrix. The isolated packaged
-driver runs the same key contract. Search snapshot and connected-source visibility
-checks run against both H2 and HSQLDB. Full dark/light IDE scenarios exercise H2
-picker defaults, explorer paths and live table/SQL key header rendering.
-
-H2's `MODE=PostgreSQL` intentionally reports column aliases as source names and
-omits the source table for aliased columns. Lattice leaves their optional key
-badges empty rather than guessing. Unaliased SQL columns and table-editor columns
-retain key metadata in this mode; the compatibility matrix checks both cases.
-
-### Local validation after merging PR #9
-
-Merged staging `8df0d36` in `0529008`; H2 adaptations are in `069ef96` and
-Swing-preview adaptations in `bcfbc88`. Using the same Linux/JDK/IDE setup as
-above:
-
-| Check | Result |
-|---|---|
-| Ordinary Java / embedded / regression suite | 129 passed, no skips |
-| H2 file/TCP/TLS integration | 4 passed, no skips |
-| Packaged H2 driver with no parent JDBC drivers | Query, aliased/composite primary and foreign keys, cache and disposal passed |
-| Driver/server/runtime matrix | 21 positive cases and expected Java 8 rejection; zero failures |
-| Production Swing previews | 124 light/dark captures; picker defaults and opaque source badges passed |
-| Full real-IDE H2 UI | Dark and light passed, including persisted edits/exports, cancellation recovery and rendered primary/foreign/combined key headers |
-| Tooling regressions | 128 tests; 119 passed, 9 platform-dependent skips |
-| Plugin archive | Build and driver/license/bytecode validation passed |
-| Plugin Verifier, IDEA 2025.1 | Compatible; 2 existing deprecated API and 1 experimental API notices |
-
-Reports for this merged run are under `build/h2-staging-validation/`; backend
-JUnit reports remain under `build/test-results/`. The local execution boundaries
-listed above still apply.
+In H2 PostgreSQL compatibility mode, aliased SQL columns may report their alias
+as the source name and omit the source table. Lattice leaves optional key badges
+empty when the driver does not identify the source column. Unaliased columns and
+table-editor columns retain their available key metadata.

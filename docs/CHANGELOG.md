@@ -4,32 +4,22 @@ Patch notes are selected by the exact release version, including prerelease suff
 
 ## [Unreleased]
 
-- Trim release validation to distinct safety contracts: remove cosmetic-only checks and duplicate CRUD/theme runs, and sample JDBC compatibility at documented version/feature boundaries.
-- Restore the normal table-header pointer after UI/theme refreshes; show the resize cursor only at column boundaries.
-- Add PostgreSQL connections with bundled pgJDBC, schema browsing, SQL consoles, grid editing, DDL and exports; validate current and legacy server/driver combinations.
-- Inspect cell values and column definitions in a resizable overlay, with stable value editors, formatted/raw views, inline copy feedback, explicit staging, and recovery of unconfirmed edits. Restored inspector text remains separate from the pending database batch and survives delayed or failed metadata loading.
-- Keep selection exclusive between column headers and data cells, preserve grid sizing when inspecting values, and improve inspector spacing, button contrast, text smoothing, keyboard focus and popup styling after theme changes.
-- Add `dev-deploy --min` to build and deploy the plugin without running tooling or Java test suites, retaining exact-ZIP validation, replacement rollback and graceful IDE restart.
-- Use one suite catalog for CI and the full local Windows runner, including platform support, dependency requirements and focused suite/group selection.
-- Redesign create/alter table dialogs with a column navigator and complete SQL preview. Apply additions, property changes, renames and drops in a batch, with validation and recovery after partially committed DDL.
-- Refresh explorer metadata and affected editors after database mutations, preserving unsaved edits until they are committed or reverted.
-- Retain the last successful metadata for offline browsing and cached SQL generation. Connected INSERT generation loads unknown columns before creating its template.
-- Preserve H2 ON UPDATE expressions and identity mode, increment and sequence state when altering other column properties. Keep MySQL type attributes only when compatible with the target type.
-- Run focused native cell-inspector interaction and draft-recovery checks once at 125% UI scale on main-targeted PRs, with both-theme behavior checks and retained evidence.
-- Integrate H2 with the staging source picker, explorer grouping/search/filter and table-tab badges; cover aliased/composite primary and foreign keys with packaged and selected drivers.
-- Add H2 2.x provider and bundled 2.3.232 driver, memory/file/TCP connection forms, schema/table operations, generated-column metadata and native table DDL exports. Add file/TCP/TLS functional and data regression suites, a driver/server/runtime compatibility matrix, and full dark/light real-IDE H2 scenarios. H2 2.3 requires Java 11+; H2 2.1/2.2 also pass real Java 8 probes.
+### Data sources and explorer
 
-- Redesign the connection dialog with a scrollable data source picker and provider-specific defaults.
-- Group explorer connections by database type with SVG labels and a View only picker for selecting one or more types.
-- Search connected sources by data source, schema, table and all column names, combine focused filters, and highlight every match with responsive drawer and inline layouts.
-- Overlay solid data source badges on the bottom-left of table tab icons.
-- Highlight primary, foreign and combined key headers in table editors and SQL results; preserve source-column identity for aliased queries and clear stale badges.
-- Improve live loading indicators, driver-download UI synchronization and query-session recovery before SQL submission.
-- Make PostgreSQL UI-wrapper tests portable across Windows paths and wait for the real-IDE Revert reload before filtering; exercise the busy reload with a gated database response.
+- Add PostgreSQL with schema browsing, table editing, SQL consoles, DDL and exports; add H2 memory, file and TCP connections, with MySQL and PostgreSQL compatibility-mode workflows.
+- Group connections by database type, filter visible sources, and search across connections, schemas, tables and columns. Show key metadata in table and SQL result grids.
+- Cache the last successful metadata for offline browsing and SQL generation, and refresh the explorer and affected editors after database changes.
 
-- Run only embedded functional and plugin build/archive checks on commits. Group tooling, regression/integration, UI and Java/JDBC/IDE compatibility under main-targeted PR validation; staging PRs use the commit tier. Parallelize UI scenarios and remove duplicate H2 integration/build work. Keep release signing/publishing gated on new version tags reachable from main.
-- Retry cancellation during slower remote statement startup and synchronize H2 TLS cancellation regressions with server execution. Validate Windows launcher inventories on every host.
-- Release only from newly created version tags reachable from main; gate all release jobs on ancestry and disable manual release/Marketplace smoke publishing.
+### Table and SQL tools
+
+- Add the Value Workspace for formatted/raw values, column details, pinning, inline copy feedback and explicitly staged edits. Unconfirmed drafts can be recovered without joining the pending database batch.
+- Redesign create/alter dialogs around column navigation and complete SQL previews. Apply changes in batches and retain uncompleted edits after partial DDL failure.
+- Improve cancellation and session recovery, preserve generated/default values during schema changes, and keep table actions available as the selection and editor state change.
+
+### Drivers and interface
+
+- Discover Maven-cached and project-default drivers in the background, preserve manual selections, reuse verified downloads across IDE restarts, and report missing or corrupt artifacts.
+- Refresh the connection form and explorer controls for multiple sources, improve theme-aware menus and feedback, and update the welcome screen to show all supported databases and current workflows.
 
 ## [0.0.2-alpha]
 

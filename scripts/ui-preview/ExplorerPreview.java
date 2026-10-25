@@ -29,9 +29,7 @@ public final class ExplorerPreview {
         DefaultMutableTreeNode root = new DefaultMutableTreeNode(TreeNodeData.root());
         java.util.Set<DatabaseType> sourceTypes = new java.util.TreeSet<>(
                 java.util.Comparator.comparing(DatabaseType::getDisplayName, String.CASE_INSENSITIVE_ORDER));
-        sourceTypes.add(config.getType());
-        sourceTypes.add(DatabaseType.MYSQL);
-        sourceTypes.add(DatabaseType.HSQLDB);
+        sourceTypes.addAll(java.util.Arrays.asList(DatabaseType.values()));
         java.util.Map<DatabaseType, DefaultMutableTreeNode> sourceGroups = new java.util.EnumMap<>(DatabaseType.class);
         for (DatabaseType type : sourceTypes) {
             DefaultMutableTreeNode group = node(root, TreeNodeData.sourceType(type));
@@ -57,12 +55,18 @@ public final class ExplorerPreview {
         DefaultMutableTreeNode views = node(database, TreeNodeData.viewsFolder(config, "shop", 1));
         node(views, TreeNodeData.table(config, "shop", new TableMetadata("shop", null, "active_customers", "VIEW")));
         node(connection, TreeNodeData.database(config, "analytics"));
-        ConnectionConfig secondMysql = new ConnectionConfig(DatabaseType.MYSQL, "Analytics server");
-        node(sourceGroups.get(DatabaseType.MYSQL), TreeNodeData.connection(secondMysql, false))
-                .add(new DefaultMutableTreeNode(TreeNodeData.placeholder("")));
-        ConnectionConfig scratch = new ConnectionConfig(DatabaseType.HSQLDB, "Scratch database");
-        node(sourceGroups.get(DatabaseType.HSQLDB), TreeNodeData.connection(scratch, false))
-                .add(new DefaultMutableTreeNode(TreeNodeData.placeholder("")));
+        for (DatabaseType type : sourceTypes) {
+            if (type == config.getType()) continue;
+            String name = switch (type) {
+                case MYSQL -> "Analytics server";
+                case HSQLDB -> "Scratch database";
+                case POSTGRESQL -> "Reporting cluster";
+                case H2 -> "Local H2 database";
+            };
+            ConnectionConfig other = new ConnectionConfig(type, name);
+            node(sourceGroups.get(type), TreeNodeData.connection(other, false))
+                    .add(new DefaultMutableTreeNode(TreeNodeData.placeholder("")));
+        }
         // IntelliJ's Tree requires application services; JTree shares its Swing
         // layout contract and still uses Lattice's production node renderer.
         JTree tree = new JTree(new DatabaseSourceTreeModel(root));

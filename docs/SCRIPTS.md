@@ -213,7 +213,7 @@ Default user plugin locations follow [JetBrains' IDE directory documentation](ht
 
 Downloaded development assets use the OS user-cache directory: LocalAppData on Windows, Library/Caches on macOS, XDG_CACHE_HOME or ~/.cache on Linux. Set `LATTICE_DEV_CACHE` or pass a script's `--cache` override to relocate downloads. Build outputs remain in ignored `build/`.
 
-The root `gradlew` / `gradlew.bat` are the standard Gradle wrapper launchers. Public Python helpers live in `scripts/`; platform launchers live in `scripts/windows/` and `scripts/linux/`. Keep workstation-specific instructions and private tools outside the repository. SDKs and native test binaries stay outside this repository. The five README screenshots remain tracked; other generated screenshots and build outputs are ignored. See the [documentation index](README.md) for the project layout.
+The root `gradlew` / `gradlew.bat` are the standard Gradle wrapper launchers. Public Python helpers live in `scripts/`; platform launchers live in `scripts/windows/` and `scripts/linux/`. Keep workstation-specific instructions and private tools outside the repository. SDKs and native test binaries stay outside this repository. The five README screenshots and the design-concept renders under `design/` are tracked references; other generated screenshots and build outputs are ignored. See the [documentation index](README.md) for the project layout.
 
 ## GitHub Actions policy
 

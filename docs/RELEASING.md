@@ -6,7 +6,7 @@ Before changing the release workflow, read the
 release tooling, workflow-policy tests and these guides aligned in the same
 change.
 
-## Before the first release
+## Release prerequisites
 
 Enable Actions and configure signing secrets before tagged releases; see [signing and Marketplace publishing](MARKETPLACE.md). The publish job uses the repository's `GITHUB_TOKEN` with `contents: write`.
 

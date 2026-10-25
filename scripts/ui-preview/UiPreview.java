@@ -27,7 +27,8 @@ public final class UiPreview {
     static Path output;
     static final List<String> snapshots = new ArrayList<>();
     static final Set<String> FEATURED_PREVIEWS = Set.of(
-            "side-panel-340", "connection-mysql-740", "table-1100", "table-new-row-1100", "sql-console-1100");
+            "cell-details-1440", "welcome-900", "connection-mysql-740", "schema-alter-table-800", "table-1100",
+            "table-new-row-1100", "sql-console-1100");
     static boolean featuredOnly;
     private static Font previewFont() {
         Set<String> available = Set.of(GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames());
@@ -54,6 +55,26 @@ public final class UiPreview {
         for (Component component : container.getComponents())
             if (component instanceof Container nested) layout(nested);
     }
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    static void prepareListRenderers(Container container) {
+        if (container instanceof JList list && !Boolean.TRUE.equals(list.getClientProperty("lattice.preview.rendererLayout"))) {
+            ListCellRenderer renderer = list.getCellRenderer();
+            list.setCellRenderer((owner, value, index, selected, focus) -> {
+                Component cell = renderer.getListCellRendererComponent(owner, value, index, selected, focus);
+                if (cell instanceof Container nested) {
+                    Dimension preferred = cell.getPreferredSize();
+                    int width = owner.getWidth() > 0 ? owner.getWidth() : preferred.width;
+                    int height = owner.getFixedCellHeight() > 0 ? owner.getFixedCellHeight() : preferred.height;
+                    cell.setBounds(0, 0, width, height);
+                    layout(nested);
+                }
+                return cell;
+            });
+            list.putClientProperty("lattice.preview.rendererLayout", true);
+        }
+        for (Component component : container.getComponents())
+            if (component instanceof Container nested) prepareListRenderers(nested);
+    }
     static void updateToolbars(Container container) throws Exception {
         if (container instanceof com.intellij.openapi.actionSystem.impl.ActionToolbarImpl toolbar) {
             // Native action expansion can finish asynchronously, especially for the
@@ -79,6 +100,7 @@ public final class UiPreview {
         component.setSize(width, height);
         updateToolbars(component);
         for (int pass = 0; pass < 4; pass++) layout(component);
+        prepareListRenderers(component);
         verifyInputs(component);
         boolean featured = FEATURED_PREVIEWS.contains(name.replaceFirst("^(light|dark)-", ""));
         if (featuredOnly && !featured) return;
@@ -214,15 +236,20 @@ public final class UiPreview {
         CreateTableDialog create = new CreateTableDialog(null, config(DatabaseType.MYSQL), "shop");
         JPanel createPanel = create.previewPanel();
         render(createPanel, theme + "-schema-create-table-1040", 1040, createPanel.getPreferredSize().height);
-        TableMetadata metadata = (TableMetadata)field(table(false), "tableMetadata");
-        AlterTableDialog alter = new AlterTableDialog(null, config(DatabaseType.MYSQL), "shop", metadata);
+        AlterTableDialog alter = alterTableDialog();
         com.segfault03.ideadb.dialog.AlterTablePanel inspector = (com.segfault03.ideadb.dialog.AlterTablePanel)field(alter, "editor");
-        inspector.columnList().setSelectedIndex(2);
         render(alter.previewPanel(), theme + "-schema-alter-table-800", 800, alter.previewPanel().getPreferredSize().height);
         findButton(alter.previewPanel(), "Drop column").doClick(0);
         inspector.showPreview(inspector.batch(), com.segfault03.ideadb.service.DdlService.getInstance()
                 .previewAlterBatch(null, config(DatabaseType.MYSQL), "shop", inspector.batch()));
         render(alter.previewPanel(), theme + "-schema-drop-column-800", 800, alter.previewPanel().getPreferredSize().height);
+    }
+    static AlterTableDialog alterTableDialog() throws Exception {
+        TableMetadata metadata = (TableMetadata)field(table(false), "tableMetadata");
+        AlterTableDialog alter = new AlterTableDialog(null, config(DatabaseType.MYSQL), "shop", metadata);
+        com.segfault03.ideadb.dialog.AlterTablePanel inspector = (com.segfault03.ideadb.dialog.AlterTablePanel)field(alter, "editor");
+        inspector.columnList().setSelectedIndex(2);
+        return alter;
     }
     static void connection(String theme, String variant, int width) throws Exception {
         ConnectionConfig config = config(variant.contains("hsql") ? DatabaseType.HSQLDB : variant.equals("postgresql") ? DatabaseType.POSTGRESQL : DatabaseType.MYSQL);
@@ -423,6 +450,16 @@ public final class UiPreview {
         ((JLabel) field(panel, "statusLabel")).setText("12 rows · 18 ms · Total: not counted");
         return panel;
     }
+    static TableDataEditorPanel valueWorkspacePreview() throws Exception {
+        TableDataEditorPanel editor = table(false);
+        JTable grid = (JTable)field(editor, "dataTable");
+        grid.changeSelection(0, 2, false, false);
+        invoke(editor, "toggleInspector", new Class<?>[0]);
+        JComponent details = (JComponent)field(editor, "cellDetails");
+        if (!(Boolean)field(editor, "inspectorVisible") || (Boolean)invokeResult(details, "isColumnMode"))
+            throw new AssertionError("Featured value workspace must open on a selected table cell");
+        return editor;
+    }
     static void renderCellDetails(String theme) throws Exception {
         renderApprovedInspector(theme);
         renderCachedMenuThemeRefresh(theme);
@@ -622,14 +659,22 @@ public final class UiPreview {
                 new ColumnMetadata("METADATA_JSON", "VARCHAR", java.sql.Types.VARCHAR, 500, 0, false, false, false, "'{}'"),
                 "{}", true, false, true, false, null, "New row", "");
         invoke(panel, "showCell", new Class<?>[]{cellType}, newCell);
-        if (!((JButton)field(panel, "useDefault")).isEnabled())
-            throw new AssertionError("A new-row column with a database default must enable Set default");
+        if (((JButton)field(panel, "useDefault")).isVisible())
+            throw new AssertionError("Set default must stay hidden until the cell has an edit");
+        invoke(panel, "beginEdit", new Class<?>[0]);
+        ((JTextArea)field(panel, "valueArea")).setText("{\"edited\":true}");
+        if (!((JButton)field(panel, "useDefault")).isVisible() || !((JButton)field(panel, "useDefault")).isEnabled())
+            throw new AssertionError("An edited new-row cell with a database default must expose Set default");
         render(panel, theme + "-inspector-default-available", 388, 730);
         renderDesktopText(panel, theme + "-inspector-desktop-text-125");
         invoke(panel, "copyToClipboard", new Class<?>[]{java.awt.datatransfer.Clipboard.class},
                 new java.awt.datatransfer.Clipboard("preview-copy"));
-        if (!"Copied!".equals(((JButton)field(panel, "copy")).getText()))
-            throw new AssertionError("Copy feedback must appear inline beside its icon");
+        JButton copyButton = (JButton)field(panel, "copy");
+        var hover = new java.awt.event.MouseEvent(copyButton, java.awt.event.MouseEvent.MOUSE_ENTERED,
+                0, 0, 4, 4, 0, false);
+        for (var listener : copyButton.getMouseListeners()) listener.mouseEntered(hover);
+        if (((JButton)field(panel, "copy")).getIcon() == null)
+            throw new AssertionError("Copy must replace its icon with the success check");
         renderDesktopText(panel, theme + "-inspector-inline-copy-feedback-125");
         invoke(panel, "dismissCopiedHint", new Class<?>[0]);
         invoke(panel, "beginEdit", new Class<?>[0]);
@@ -742,7 +787,8 @@ public final class UiPreview {
             invoke(details, "refreshTheme", new Class<?>[0]);
             render(editor, theme + "-cell-large-font-1100", 1100, 800);
             JButton edit = (JButton)field(details, "edit"), copy = (JButton)field(details, "copy");
-            if (edit.getHeight() != copy.getHeight()) throw new AssertionError("Action targets must share a height at larger fonts");
+            if (edit.getPreferredSize().height != copy.getPreferredSize().height)
+                throw new AssertionError("Action targets must share a preferred height at larger fonts");
         } finally {
             UIManager.put("Label.font", label); UIManager.put("Button.font", button);
         }
@@ -1065,7 +1111,10 @@ public final class UiPreview {
     }
 
     static void renderFeatured(String theme) throws Exception {
-        render(ExplorerPreview.create(config(DatabaseType.MYSQL), false), theme + "-side-panel-340", 340, 620);
+        render(welcome(false), theme + "-welcome-900", 900, 680);
+        render(valueWorkspacePreview(), theme + "-cell-details-1440", 1440, 900);
+        AlterTableDialog alter = alterTableDialog();
+        render(alter.previewPanel(), theme + "-schema-alter-table-800", 800, alter.previewPanel().getPreferredSize().height);
         connection(theme, "mysql", 740);
         render(console(), theme + "-sql-console-1100", 1100, 620);
         TableDataEditorPanel editor = table(false);
@@ -1244,6 +1293,7 @@ public final class UiPreview {
                 renderSourceFilter(theme);
                 renderExplorerSearch(theme);
                 renderTableTabIcons(theme);
+                render(valueWorkspacePreview(), theme + "-cell-details-1440", 1440, 900);
                 render(ExplorerPreview.create(config(DatabaseType.MYSQL), true), theme + "-side-panel-empty-340", 340, 620);
                 connectionMenuPreview(ExplorerPreview.create(config(DatabaseType.MYSQL), true),
                         "Add a connection…", theme + "-side-panel-connection-menu-340", 340, 620);

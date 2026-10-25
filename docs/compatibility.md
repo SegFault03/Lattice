@@ -11,7 +11,6 @@ The build-tool baseline is Gradle 9.8.0 through the checksum-pinned wrapper and 
 | 2025.1 Community | 251.23774.435 | Compatible |
 | 2025.2 Community | 252.23892.409 | Compatible |
 | 2025.3 Unified/Ultimate | 253.28294.334 | Compatible |
-| 2026.2.3 Ultimate | 262.10968.63 | Compatible in earlier compatibility validation |
 
 Only PRs targeting `main` run the IntelliJ and JDBC compatibility matrices. IDE
 jobs verify the exact ZIP produced by the PR merge build against each of the
@@ -25,7 +24,7 @@ locally; `--compatibility-only` runs both matrices. Ordinary builds use the
 checksum-pinned Gradle wrapper and downloaded Maven/IntelliJ dependencies. See
 the [script reference](SCRIPTS.md).
 
-These results establish binary/API compatibility for the named builds. They do not establish every patch/future IDE release, interactive UI behavior, project-close behavior or dynamic unload. The Windows build/test path has been executed locally. Hosted results are reported by the workflow checks on each PR; local results do not imply that every hosted suite has run.
+These results establish binary/API compatibility for the named builds. They do not establish every patch/future IDE release, interactive UI behavior, project-close behavior or dynamic unload. Hosted results are reported by the workflow checks on each PR; local results do not imply that every hosted suite has run.
 
 ## Database and Java 8 matrix
 
@@ -62,10 +61,6 @@ Space-constrained Docker VFS hosts can add `--host-compiler` for the historic so
 
 Each of the 14 PostgreSQL cases checks selected/downloaded/local-JAR identity and Java 8 connectivity, then runs production CRUD, pagination, metadata, schema/table/column DDL, native CREATE replay with sequence state, all three exports, SQL reimport with binary/temporal/UUID/array values, savepoint rollback, cancellation and recovery from an aborted transaction. JSONB is tested from 9.4, identity from 10 and computed columns from 12, matching the server's capabilities. PostgreSQL schemas are explorer namespaces within the connection's selected physical database.
 
-
-Checks cover selected JAR/classloader identity, download/local-JAR modes, metadata, schema/table creation, pagination/count, insert/update/delete, failed-batch rollback, column changes, native CREATE export and SQL export/reimport row/timestamp preservation. The baseline suite also passed 11 JUnit methods, 300 functional assertions and fallback-driver lifecycle checks.
-
-Validation on 2026-10-13 passed all 34 PostgreSQL cases and all 23 existing MySQL/HSQLDB cases. The PostgreSQL bundled-driver suite also passed against an authenticated 18.6 server. After normalizing serial aliases and unbounded TEXT metadata, the 8.4.22 and 10.23 cases were rerun with both selected drivers, and the current-server regression suite was repeated. The real IntelliJ 2025.1 PostgreSQL scenario passed schema/table/column DDL, grid validation and rollback, all three persisted exports, native CREATE display, SQL outcomes, cancellation and recovery. Plugin Verifier passed the exact packaged candidate on all three 2025 IDE targets.
 
 The floor exercised is MySQL 5.5, HSQLDB 2.2.9 and PostgreSQL 8.4. MySQL text export requires utf8mb4. Historical patches and arbitrary driver/server pairings are not exhaustively tested. Match HSQLDB drivers to server/file formats and choose a compatible Connector/J for MySQL.
 

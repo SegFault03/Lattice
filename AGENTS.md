@@ -36,4 +36,11 @@ run, an isolated YAML comment or a helper's default command.
   the same change. Follow the validation procedure in `docs/CI_TESTING.md` before
   committing; report what ran and any remaining limits.
 
+## Documentation maintenance
+
+- Before every release and after each task, update docs to reflect the current
+  state and remove audits, progress plans, historical QA reports, dated
+  validation narratives and associated review evidence. Keep maintained docs,
+  instructions and guides.
+
 Explicit task instructions take precedence over these repository conventions.

@@ -4,6 +4,7 @@ import com.segfault03.ideadb.provider.DatabaseProviders;
 
 import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.model.QueryResult;
+import com.segfault03.ideadb.model.RowDefaults;
 
 import java.sql.*;
 import java.util.ArrayList;
@@ -62,9 +63,18 @@ public class DataService {
         StringBuilder sb = new StringBuilder("UPDATE ");
         sb.append(DdlService.formatTable(config, dbName, tableName)).append(" SET ");
         List<String> columns = new ArrayList<>(changes.keySet());
+        List<String> boundColumns = new ArrayList<>();
+        boolean usesDefault = false;
         for (int i = 0; i < columns.size(); i++) {
             String column = columns.get(i);
-            sb.append(DdlService.quoteIdentifier(config,column)).append(" = ?");
+            sb.append(DdlService.quoteIdentifier(config,column)).append(" = ");
+            if (changes.get(column) == RowDefaults.Value.USE_DEFAULT) {
+                sb.append("DEFAULT");
+                usesDefault = true;
+            } else {
+                sb.append("?");
+                boundColumns.add(column);
+            }
             if (i < columns.size() - 1) sb.append(", ");
         }
 
@@ -76,12 +86,33 @@ public class DataService {
             if (i < pkKeys.size() - 1) sb.append(" AND ");
         }
 
+        int affected;
         try (PreparedStatement ps = conn.prepareStatement(sb.toString())) {
-            for (int i = 0; i < columns.size(); i++) bind(config,ps,i + 1, changes.get(columns.get(i)));
-            for (int i = 0; i < pkKeys.size(); i++) {
-                bind(config,ps,i + columns.size() + 1, pkVals.get(pkKeys.get(i)));
+            int parameter = 1;
+            for (String column : boundColumns) bind(config, ps, parameter++, changes.get(column));
+            for (String key : pkKeys) {
+                bind(config, ps, parameter++, pkVals.get(key));
             }
-            requireOneRow(ps.executeUpdate());
+            affected = ps.executeUpdate();
+        }
+        // Some drivers report changed rows rather than matched rows. DEFAULT may
+        // legitimately leave a value unchanged, so distinguish that from a lost row.
+        if (affected == 0 && usesDefault && rowExists(conn, config, dbName, tableName, pkVals)) return;
+        requireOneRow(affected);
+    }
+
+    private boolean rowExists(Connection conn, ConnectionConfig config, String dbName, String tableName,
+                              Map<String, Object> pkVals) throws SQLException {
+        StringBuilder sql = new StringBuilder("SELECT 1 FROM ")
+                .append(DdlService.formatTable(config, dbName, tableName)).append(" WHERE ");
+        List<String> keys = new ArrayList<>(pkVals.keySet());
+        for (int i = 0; i < keys.size(); i++) {
+            if (i > 0) sql.append(" AND ");
+            sql.append(DdlService.quoteIdentifier(config, keys.get(i))).append(" = ?");
+        }
+        try (PreparedStatement statement = conn.prepareStatement(sql.toString())) {
+            for (int i = 0; i < keys.size(); i++) bind(config, statement, i + 1, pkVals.get(keys.get(i)));
+            try (ResultSet result = statement.executeQuery()) { return result.next(); }
         }
     }
 

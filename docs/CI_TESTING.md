@@ -161,7 +161,6 @@ rebuilds it in a verifier job.
   cases retain artifact identity, Java-runtime and real SQL
   behavior checks at the boundaries listed in [compatibility](compatibility.md).
   A provider workflow is not rerun alongside another full CRUD contract.
-  [The suite audit](TEST_SUITE_AUDIT.md) records removed coverage and owners.
 
 Representative local commands:
 
@@ -215,15 +214,3 @@ integration, UI and compatibility validation belongs to the main PR and is not
 repeated on tags. The maintainer must merge the validated release commit to main
 before tagging it. This workflow does not change repository branch-protection
 settings.
-
-## CI failures addressed in this change
-
-The initial Windows failure was a stale assertion for nine launchers after the
-H2 commands raised the inventory to eleven. That inventory now runs on every
-host, with actual launcher execution on Windows. The subsequent failure was the
-TLS cancellation test requesting cancellation after client attachment but before
-server execution. Cancellation retries now tolerate a slower remote startup; a
-unit regression simulates this delay. The H2 transport regression separately
-checks pre-submission cancellation and observes server execution before testing
-active cancellation and recovery, rather than relying on a CPU spin or three
-identical races.
