@@ -288,13 +288,14 @@ options:
 
 ## dev-deploy.ps1
 
-Validate/build the plugin, deploy into an installed IDEA and reopen it if it was running.
+Build the plugin, deploy it into an installed IDEA and reopen it if it was running.
 
 ```powershell
 .\scripts\windows\dev-deploy.ps1 --dry-run --ide-home "$assets\ides\2025.1" @deps
+.\scripts\windows\dev-deploy.ps1 --min --build-ide-home "$assets\ides\2025.1" --binaries-dir $assets --download-dir "$assets\downloads" --gradle-user-home "$env:USERPROFILE\.gradle" --cleanup
 ```
 
-Remove `--dry-run` to deploy. `--list-ides` lists detected installations. These inspection modes do not download/build/deploy. `--ide-home` selects the deployment target; `--build-ide-home` selects the 2025.1 compilation SDK. `--plugins-dir` selects a custom user plugin directory. `--project` chooses what opens after restart. `--shutdown-timeout` defaults to 120 seconds, `--startup-timeout` to 60. Save IDE work before deployment: the script requests a graceful shutdown and waits for save prompts. Only Lattice is replaced; a failed replacement rolls back. `--no-color` disables terminal colors.
+Remove `--dry-run` to deploy. `--min` skips the Python tooling tests and Java test suites; it runs Gradle's `buildPlugin`, validates the resulting ZIP, then deploys it. Deployment still closes and restarts the selected IDEA when it is running. `--list-ides` lists detected installations. These inspection modes do not download/build/deploy. `--ide-home` selects the deployment target; `--build-ide-home` selects the 2025.1 compilation SDK. `--plugins-dir` selects a custom user plugin directory. `--project` chooses what opens after restart. `--shutdown-timeout` defaults to 120 seconds, `--startup-timeout` to 60. Save IDE work before deployment: the script requests a graceful shutdown and waits for save prompts. Only Lattice is replaced; a failed replacement rolls back. `--no-color` disables terminal colors.
 
 Complete options (forwarded unchanged to Python):
 
@@ -304,11 +305,11 @@ usage: dev-deploy.py [-h] [--ide-home IDE_HOME] [--plugins-dir PLUGINS_DIR]
                      [--download-dir DOWNLOAD_DIR] [--cleanup] [--no-cleanup]
                      [--binaries-dir BINARIES_DIR]
                      [--gradle-user-home GRADLE_USER_HOME] [--project PROJECT]
-                     [--dry-run] [--list-ides] [--shutdown-timeout SECONDS]
+                     [--min] [--dry-run] [--list-ides] [--shutdown-timeout SECONDS]
                      [--startup-timeout SECONDS] [--no-color]
 
-Test, build and deploy Lattice to a local IDEA installation using standard-
-library tools.
+Build and deploy Lattice to a local IDEA installation using standard-library
+tools.
 
 options:
   -h, --help            show this help message and exit
@@ -334,6 +335,8 @@ options:
   --gradle-user-home GRADLE_USER_HOME
                         Reuse this Gradle cache; otherwise honor
                         GRADLE_USER_HOME or use an owned cache
+  --min                 Skip tooling and Java tests; build the plugin ZIP,
+                        validate it and deploy it
   --project PROJECT     Project to open after restart (otherwise IDEA's reopen
                         setting applies)
   --dry-run             Print targets and planned steps without building,

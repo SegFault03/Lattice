@@ -68,7 +68,7 @@ Common Python commands stay at the root of `scripts/`. PowerShell commands and h
 | `postgres-ui-review.py` | Full real-IDE UI flow against an owned PostgreSQL 18 fixture | Linux Docker/X11; same UI dependencies as the native review runner |
 | `one-shot-test.py` | Shared CI/local suite runner with full, routine-check, compatibility-only and focused suite/group modes; `--windows-ui` includes real IDE validation | Aggregate on Linux or Windows; individual suites on catalog-supported hosts; Python 3.11+, network for missing assets, at least 10 GiB free for isolated runs; Docker required only for Docker fixtures |
 | `ui-preview.py` | Render production Swing screens and refresh the five README screenshots; optionally build a light/dark gallery | Windows, Linux or macOS; JDK 21; local/cached IntelliJ 2025.1 SDK, JUnit, Hamcrest and FlatLaf, or network to download missing assets |
-| `dev-deploy.py` | Test, build, discover a local IDEA, deploy Lattice and restart a running IDE | Installed IntelliJ IDEA 2025.1+; JDK 21; Git for tooling tests |
+| `dev-deploy.py` | Build, discover a local IDEA, deploy Lattice and restart a running IDE | Installed IntelliJ IDEA 2025.1+; JDK 21; Git for full tooling tests |
 | `release.py` | Validate a version/tag and generate Markdown GitHub notes plus HTML Marketplace headings/bullets, paragraphs and inline code; `--marketplace-smoke` requires an explicit prerelease version without a tag | Git |
 | `check-release-archive.py` | Check ZIP layout, descriptor, bytecode, licenses; generate checksums | Built plugin ZIP |
 | `prepare-source-asset.py` | Download/check the pinned corresponding MySQL source archive | Network on first use |
@@ -186,9 +186,9 @@ From PowerShell, cmd, bash or zsh, run:
 python scripts/dev-deploy.py
 ```
 
-The helper prints seven numbered steps, elapsed times, success/failure statuses and subprocess output. Colors are enabled in supported terminals; `--no-color` or `NO_COLOR` disables them. It discovers installed IDEA editions from standard installation directories, JetBrains Toolbox, Windows uninstall metadata, PATH and running IDEA processes. It prefers a running installation; otherwise it selects the newest compatible installation. Multiple running installations require `--ide-home` so the target is explicit.
+The helper prints numbered steps, elapsed times, success/failure statuses and subprocess output. Colors are enabled in supported terminals; `--no-color` or `NO_COLOR` disables them. It discovers installed IDEA editions from standard installation directories, JetBrains Toolbox, Windows uninstall metadata, PATH and running IDEA processes. It prefers a running installation; otherwise it selects the newest compatible installation. Multiple running installations require `--ide-home` so the target is explicit.
 
-It runs the development tooling tests, then the pure Java tests and `buildPlugin` through the committed Gradle wrapper. Compilation still uses the pinned IntelliJ 2025.1 SDK resolved by Gradle; the deployment target does not change that baseline. Java 21 is found through `JAVA_HOME`, PATH, the selected IDE's bundled runtime and standard JDK installation directories. `--java-home` overrides that search. Downloads may be needed on the first build. Live database suites and Plugin Verifier are separate checks.
+By default it runs the development tooling tests, then the pure Java tests and `buildPlugin` through the committed Gradle wrapper. Pass `--min` to skip both test groups and run only `buildPlugin`; ZIP validation, deployment and the existing IDE close/restart behavior remain. Compilation still uses the pinned IntelliJ 2025.1 SDK resolved by Gradle; the deployment target does not change that baseline. Java 21 is found through `JAVA_HOME`, PATH, the selected IDE's bundled runtime and standard JDK installation directories. `--java-home` overrides that search. Downloads may be needed on the first build. Live database suites and Plugin Verifier are separate checks.
 
 The exact ZIP for the version in `gradle.properties` is checked for packaging, licenses and Java bytecode before extraction. Staging happens outside the plugins directory. Only an installation whose descriptor ID is `com.segfault03.lattice` is replaced; other plugins and IDE settings are preserved. Replacement failures restore the previous plugin. Linked installations, duplicate Lattice installations and unrelated folders named `Lattice` are rejected.
 
@@ -202,6 +202,7 @@ python scripts/dev-deploy.py --list-ides
 python scripts/dev-deploy.py --ide-home "/path/to/IntelliJ IDEA" --java-home "/path/to/jdk-21"
 python scripts/dev-deploy.py --ide-home "/Applications/IntelliJ IDEA.app" --project "/path/to/project"
 python scripts/dev-deploy.py --plugins-dir "/path/to/custom/IDE/plugins" --shutdown-timeout 180
+python scripts/dev-deploy.py --min --build-ide-home "/path/to/IntelliJ 2025.1"
 ```
 
 `--dry-run` only inspects the target and prints the planned steps: it does not run tests/builds, change plugin files or restart the IDE. `--list-ides` lists compatible installations without requiring Java 21. `--startup-timeout` controls how long to wait for the restarted IDE (default 60 seconds); `--shutdown-timeout` defaults to 120 seconds. `--project` opens an explicit project after restart; otherwise IDEA's reopen-project setting applies. Launcher output is saved under ignored `build/dev-deploy/`.
