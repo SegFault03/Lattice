@@ -7,7 +7,10 @@ Patch notes are selected by the exact release version, including prerelease suff
 - Trim release validation to distinct safety contracts: remove cosmetic-only checks and duplicate CRUD/theme runs, and sample JDBC compatibility at documented version/feature boundaries.
 - Restore the normal table-header pointer after UI/theme refreshes; show the resize cursor only at column boundaries.
 - Add PostgreSQL connections with bundled pgJDBC, schema browsing, SQL consoles, grid editing, DDL and exports; validate current and legacy server/driver combinations.
-- Inspect cell values and column definitions beside the grid, with formatted/raw views, pinning, copying, explicit staging, and recovery of unconfirmed edits. Restored inspector text remains separate from the pending database batch and survives delayed or failed metadata loading.
+- Inspect cell values and column definitions in a resizable overlay, with stable value editors, formatted/raw views, inline copy feedback, explicit staging, and recovery of unconfirmed edits. Restored inspector text remains separate from the pending database batch and survives delayed or failed metadata loading.
+- Keep selection exclusive between column headers and data cells, preserve grid sizing when inspecting values, and improve inspector spacing, button contrast, text smoothing, keyboard focus and popup styling after theme changes.
+- Add `dev-deploy --min` to build and deploy the plugin without running tooling or Java test suites, retaining exact-ZIP validation, replacement rollback and graceful IDE restart.
+- Use one suite catalog for CI and the full local Windows runner, including platform support, dependency requirements and focused suite/group selection.
 - Redesign create/alter table dialogs with a column navigator and complete SQL preview. Apply additions, property changes, renames and drops in a batch, with validation and recovery after partially committed DDL.
 - Refresh explorer metadata and affected editors after database mutations, preserving unsaved edits until they are committed or reverted.
 - Retain the last successful metadata for offline browsing and cached SQL generation. Connected INSERT generation loads unknown columns before creating its template.
