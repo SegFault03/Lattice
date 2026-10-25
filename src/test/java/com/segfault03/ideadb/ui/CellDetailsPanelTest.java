@@ -204,8 +204,71 @@ class CellDetailsPanelTest {
                     java.awt.image.BufferedImage.TYPE_INT_RGB);
             Graphics2D graphics = image.createGraphics(); defaults.paint(graphics); graphics.dispose();
             Color surface = new Color(image.getRGB(4, defaults.getHeight() / 2));
-            assertTrue(Math.max(surface.getRed(), Math.max(surface.getGreen(), surface.getBlue())) < 120,
-                    "Unavailable database defaults must use a deep grey surface");
+            int shade = Math.max(surface.getRed(), Math.max(surface.getGreen(), surface.getBlue()));
+            assertTrue(shade >= 120 && shade < 145,
+                    "Unavailable database defaults must use the lighter grey surface");
+        });
+    }
+
+    @Test void revertUsesTheMainRowAndItsMarginsAreBalanced() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            CellDetailsPanel panel = new CellDetailsPanel(new RecordingActions());
+            var column = new ColumnMetadata("price", "INTEGER", Types.INTEGER, 10, 0, false, false, false, null);
+            panel.showCell(new CellDetailsPanel.Cell("products", 0, 0, column, 13,
+                    false, true, true, false, null, "Row 1", ""));
+            panel.setSize(520, 730);
+            for (int pass = 0; pass < 4; pass++) layout(panel);
+            JButton edit = field(panel, "edit", JButton.class), revert = field(panel, "revert", JButton.class);
+            assertSame(edit.getParent(), revert.getParent()); assertEquals(edit.getY(), revert.getY());
+            JComponent value = field(panel, "valueScroll", JComponent.class),
+                    row = field(panel, "actionsRow", JComponent.class), lower = field(panel, "lower", JComponent.class);
+            Rectangle valueBounds = SwingUtilities.convertRectangle(value.getParent(), value.getBounds(), panel),
+                    rowBounds = SwingUtilities.convertRectangle(row.getParent(), row.getBounds(), panel),
+                    lowerBounds = SwingUtilities.convertRectangle(lower.getParent(), lower.getBounds(), panel);
+            int above = rowBounds.y - valueBounds.y - valueBounds.height;
+            int below = lowerBounds.y - rowBounds.y - rowBounds.height;
+            assertEquals(com.intellij.util.ui.JBUI.scale(8), above); assertEquals(above, below);
+            assertEquals(com.intellij.util.ui.JBUI.scale(144), value.getHeight());
+        });
+    }
+
+    @Test void copyKeepsItsIconAndAutomaticallyDismissesItsHint() throws Exception {
+        var closed = new java.util.concurrent.CountDownLatch(1);
+        var reference = new java.util.concurrent.atomic.AtomicReference<CellDetailsPanel>();
+        SwingUtilities.invokeAndWait(() -> {
+            CellDetailsPanel panel = new CellDetailsPanel(new RecordingActions()); reference.set(panel);
+            panel.showCell(cell("{\"raw\":true}", 0));
+            JButton copy = field(panel, "copy", JButton.class); Icon icon = copy.getIcon();
+            var clipboard = new java.awt.datatransfer.Clipboard("inspector-copy-test");
+            panel.copyToClipboard(clipboard);
+            try { assertEquals("{\"raw\":true}", clipboard.getData(java.awt.datatransfer.DataFlavor.stringFlavor)); }
+            catch (Exception error) { throw new AssertionError(error); }
+            assertTrue(field(panel, "copiedHintVisible", Boolean.class));
+            assertSame(icon, copy.getIcon()); assertEquals("Copy", copy.getText());
+            assertEquals("Copied!", copy.getAccessibleContext().getAccessibleDescription());
+            javax.swing.Timer timer = field(panel, "copiedTimer", javax.swing.Timer.class);
+            assertFalse(timer.isRepeats()); assertTrue(timer.getInitialDelay() > 0 && timer.getInitialDelay() <= 2000);
+            timer.addActionListener(event -> closed.countDown());
+        });
+        try {
+            assertTrue(closed.await(3, java.util.concurrent.TimeUnit.SECONDS), "The copy hint must auto-dismiss");
+            SwingUtilities.invokeAndWait(() -> assertFalse(field(reference.get(), "copiedHintVisible", Boolean.class)));
+        } finally { SwingUtilities.invokeAndWait(() -> reference.get().dismissCopiedHint()); }
+    }
+
+    @Test void valueResizeHandleChangesHeightAndPreservesItThroughEditing() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            CellDetailsPanel panel = new CellDetailsPanel(new RecordingActions()); panel.showCell(cell("value", 0));
+            panel.setSize(388, 730); for (int pass = 0; pass < 4; pass++) layout(panel);
+            JComponent handle = field(panel, "valueResizeHandle", JComponent.class);
+            handle.getActionMap().get("DOWN").actionPerformed(null);
+            for (int pass = 0; pass < 4; pass++) layout(panel);
+            int resized = field(panel, "valueScroll", JScrollPane.class).getHeight();
+            assertEquals(com.intellij.util.ui.JBUI.scale(160), resized);
+            click(panel, "edit"); for (int pass = 0; pass < 4; pass++) layout(panel);
+            assertEquals(resized, field(panel, "valueScroll", JScrollPane.class).getHeight());
+            click(panel, "cancel"); for (int pass = 0; pass < 4; pass++) layout(panel);
+            assertEquals(resized, field(panel, "valueScroll", JScrollPane.class).getHeight());
         });
     }
 

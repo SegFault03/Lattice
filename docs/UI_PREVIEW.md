@@ -21,11 +21,14 @@ unconfirmed draft separately in the existing local project draft store and
 restores it in edit mode, outside the commit batch.
 
 Untouched values disable Stage change. SQL NULL, an empty string and a database
-default are distinct. Edit, Set default and Copy share one action row. Set default
+default are distinct. Edit, Set default, Copy, Revert and NULL share one wrapping
+action row; actions wrap only when the available width requires it. Set default
 uses the database default for new rows and is disabled when unavailable; an empty
 string can be entered through Edit. NULL and Revert appear when applicable. Character
 counts follow the draft, and invalid values show feedback beside the editor.
-Unavailable defaults have a deep grey surface with white text. The value viewport
+Unavailable defaults have a muted grey surface with white text. Copy keeps its
+icon and shows a transient “Copied!” hint for 1.8 seconds after a successful copy;
+closing or disposing the inspector dismisses it immediately. The value viewport
 keeps its dimensions across formatted/raw viewing, editing and cancellation;
 the surrounding body scrolls when space is limited. Buttons show a focus cue
 for keyboard navigation, while mouse clicks leave no persistent focus outline.
@@ -40,7 +43,13 @@ uses the IDE label font size, and actions use its button font size; the inspecto
 does not enlarge normal text. Header controls occupy real layout space so their
 complete hover targets fit at all scales. Action targets have a compact
 28-logical-pixel minimum with two-pixel vertical padding. The editor/action gap
-is eight pixels, metadata rows use four-pixel vertical padding, and the footer
+is eight pixels, matching the gap below the action row before column details.
+The value viewport starts at 144 logical pixels high. Drag its lower resize rail
+vertically, or use Up/Down while the rail has keyboard focus. Drag the inspector's
+left resize rail horizontally, or use Left/Right, to change the sidebar width.
+Chosen sizes survive editing, selection changes and closing/reopening within the
+editor; the grid's bounds and column widths remain unchanged. Metadata rows use
+four-pixel vertical padding, and the footer
 uses symmetric 12-pixel padding. Metadata and identifiers wrap and can
 be selected/copied.
 

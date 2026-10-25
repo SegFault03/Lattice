@@ -503,6 +503,25 @@ public final class UiPreview {
         if (overlay.getLayer(details) <= overlay.getLayer(dataScroll) || details.getX() <= 0
                 || details.getX() + details.getWidth() != overlay.getWidth())
             throw new AssertionError("The inspector must overlay the right edge of the grid");
+        JComponent widthHandle = (JComponent)field(editor, "inspectorResizeHandle");
+        int initialWidth = details.getWidth();
+        widthHandle.dispatchEvent(new java.awt.event.MouseEvent(widthHandle, java.awt.event.MouseEvent.MOUSE_PRESSED,
+                0, 0, 3, 20, 1, false, java.awt.event.MouseEvent.BUTTON1));
+        widthHandle.dispatchEvent(new java.awt.event.MouseEvent(widthHandle, java.awt.event.MouseEvent.MOUSE_DRAGGED,
+                0, java.awt.event.InputEvent.BUTTON1_DOWN_MASK, -93, 20, 0, false));
+        widthHandle.dispatchEvent(new java.awt.event.MouseEvent(widthHandle, java.awt.event.MouseEvent.MOUSE_RELEASED,
+                0, 0, -93, 20, 1, false, java.awt.event.MouseEvent.BUTTON1));
+        render(editor, theme + "-inspector-width-resized-1440", 1440, 900);
+        int resizedWidth = details.getWidth();
+        if (resizedWidth != initialWidth + 96 || !gridBounds.equals(dataScroll.getBounds())
+                || columnsWidth != grid.getColumnModel().getTotalColumnWidth())
+            throw new AssertionError("Dragging the sidebar must change only its overlay width");
+        invoke(editor, "toggleInspector", new Class<?>[0]); invoke(editor, "toggleInspector", new Class<?>[0]);
+        for (int pass = 0; pass < 4; pass++) layout(editor);
+        if (details.getWidth() != resizedWidth) throw new AssertionError("Reopening must retain the chosen sidebar width");
+        for (int step = 0; step < 6; step++) widthHandle.getActionMap().get("RIGHT").actionPerformed(null);
+        for (int pass = 0; pass < 4; pass++) layout(editor);
+        if (details.getWidth() != initialWidth) throw new AssertionError("Repeated keyboard resizing must accumulate before layout");
         renderAdversarialCellDetails(editor, theme);
     }
 
@@ -636,6 +655,12 @@ public final class UiPreview {
         render(editor, theme + "-cell-json-cancelled-1100", 1100, 700);
         if (!viewingBounds.equals(SwingUtilities.convertRectangle(valueViewport.getParent(), valueViewport.getBounds(), details)))
             throw new AssertionError("Cancellation must keep the value viewport's geometry");
+        JComponent heightHandle = (JComponent)field(details, "valueResizeHandle");
+        for (int step = 0; step < 6; step++) heightHandle.getActionMap().get("DOWN").actionPerformed(null);
+        render(editor, theme + "-cell-value-height-resized-1100", 1100, 700);
+        if (valueViewport.getHeight() != viewingBounds.height + 96)
+            throw new AssertionError("The value resize rail must change the viewport height");
+        for (int step = 0; step < 6; step++) heightHandle.getActionMap().get("UP").actionPerformed(null);
         for (int width : new int[]{960, 760}) {
             render(editor, theme + "-cell-json-compact-" + width, width, 600);
             JComponent formatted = (JComponent)field(details, "formattedTab"), summary = (JComponent)field(details, "summary");
