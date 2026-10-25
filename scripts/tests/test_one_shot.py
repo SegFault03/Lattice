@@ -16,34 +16,31 @@ spec.loader.exec_module(one_shot)
 
 class OneShotTests(unittest.TestCase):
     def test_modes_split_routine_checks_from_compatibility_work(self):
-        self.assertEqual(one_shot.validation_plan(Namespace(
-            skip_compatibility=False, compatibility_only=False, database_compatibility_only=False)),
-            (True, True, True, 9 + int(sys.platform == "linux")))
-        self.assertEqual(one_shot.validation_plan(Namespace(
-            skip_compatibility=True, compatibility_only=False, database_compatibility_only=False)),
-            (True, False, False, 5))
-        self.assertEqual(one_shot.validation_plan(Namespace(
-            skip_compatibility=False, compatibility_only=True, database_compatibility_only=False)),
-            (False, True, True, 7 + int(sys.platform == "linux")))
-        self.assertEqual(one_shot.validation_plan(Namespace(
-            skip_compatibility=False, compatibility_only=False, database_compatibility_only=True)),
-            (False, False, True, 5 + int(sys.platform == "linux")))
+        for flags, expected in [((False, False, False), (True, True, True)),
+                                ((True, False, False), (True, False, False)),
+                                ((False, True, False), (False, True, True)),
+                                ((False, False, True), (False, False, True))]:
+            args = Namespace(skip_compatibility=flags[0], compatibility_only=flags[1],
+                             database_compatibility_only=flags[2])
+            self.assertEqual(expected, one_shot.validation_plan(args)[:3])
 
     def test_windows_full_plan_adds_each_windows_supported_ui_scenario(self):
         with patch.object(one_shot.sys, "platform", "win32"):
-            plan = one_shot.validation_plan(Namespace(
+            args = Namespace(
                 skip_compatibility=False, compatibility_only=False,
-                database_compatibility_only=False, windows_ui=True))
-        self.assertEqual((True, True, True, 15), plan)
-        self.assertEqual(tuple(suite for suite, _, _ in one_shot.WINDOWS_UI_SCENARIOS),
-                         ("hsqldb", "alter-table", "table-dialogs", "cell-inspector-scaled", "search"))
+                database_compatibility_only=False, windows_ui=True)
+            plan = one_shot.validation_plan(args)
+            selected = one_shot.selected_suites(args)
+        self.assertEqual((True, True, True), plan[:3])
+        self.assertEqual(2 + len(selected), plan[3])
+        self.assertTrue({'hsqldb', 'alter-table', 'table-dialogs', 'cell-inspector-scaled', 'search'} <=
+                        {suite for suite, _, _ in one_shot.WINDOWS_UI_SCENARIOS})
 
     def test_declared_matrix_covers_server_floors_driver_generations_and_current_versions(self):
-        self.assertEqual(tuple(server for server, _ in one_shot.MYSQL_MATRIX),
-                         ("5.5.62", "5.6.51", "5.7.44", "8.4.2"))
-        self.assertEqual(sum(len(drivers) for _, drivers in one_shot.MYSQL_MATRIX), 7)
-        self.assertEqual(len(one_shot.HSQL_VERSIONS), 6)
-        self.assertEqual(one_shot.IDE_VERSIONS, ("2025.1", "2025.2", "2025.3"))
+        self.assertTrue({'5.5.62', '5.6.51', '5.7.44', '8.4.2'} <= {server for server, _ in one_shot.MYSQL_MATRIX})
+        self.assertGreaterEqual(sum(len(drivers) for _, drivers in one_shot.MYSQL_MATRIX), 7)
+        self.assertGreaterEqual(len(one_shot.HSQL_VERSIONS), 6)
+        self.assertTrue({'2025.1', '2025.2', '2025.3'} <= set(one_shot.IDE_VERSIONS))
 
     def test_isolated_source_copy_excludes_generated_ide_installations(self):
         with tempfile.TemporaryDirectory(prefix="lattice-copy-test-") as directory:

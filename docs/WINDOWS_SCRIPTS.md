@@ -2,6 +2,21 @@
 
 All public Windows entry points live in `scripts/windows/`. Common Python commands stay in `scripts/`; Linux Bash commands live in `scripts/linux/`. Run these commands from PowerShell in the repository root. Absolute launcher paths also work from another directory. Python 3.11+ must be installed; PowerShell 5.1 or later is supported. Java, IDEs, fixture servers and required JARs are reused or downloaded as needed.
 
+The full local suite and CI consume `scripts/test-suites.json`. Supported suites,
+selectors, UI flags and matrix additions are picked up from that catalog;
+Windows exclusions require explicit reasons. Use the following metadata commands
+without downloads:
+
+```powershell
+.\scripts\windows\one-shot-test.ps1 --list-suites --platform windows --windows-ui
+.\scripts\windows\one-shot-test.ps1 --check-workflow
+```
+
+`--windows-ui` remains required for the interactive portion of a full local run.
+CI runs the shared adapters with `--ci-group GROUP --in-place` or `--suite ID
+--in-place`. A focused verifier suite additionally requires `--archive PATH` and
+does not rebuild the ZIP. See [suite maintenance](CI_TESTING.md#shared-ci-and-local-suite-contract).
+
 ```powershell
 Set-Location 'C:\path\to\Lattice'
 $assets = 'C:\path\to\test-binaries'
@@ -47,8 +62,10 @@ Run the CI functional and IntelliJ-hosted regression tasks, optional packaging a
 Complete options (forwarded unchanged to Python):
 
 ```text
-usage: test.py [-h] [--live] [--hsqldb] [--mysql] [--build] [--functional-only]
-               [--integration-only] [--ide-home IDE_HOME]
+usage: test.py [-h] [--live] [--hsqldb] [--postgres]
+               [--postgres-port POSTGRES_PORT] [--mysql] [--build]
+               [--functional-only] [--integration-only]
+               [--suite {backend-live}] [--ide-home IDE_HOME]
                [--java-home JAVA_HOME] [--version VERSION]
                [--notes-file NOTES_FILE] [--mysql-home MYSQL_HOME]
                [--docker DOCKER] [--runtime-dir RUNTIME_DIR]
@@ -64,12 +81,20 @@ options:
   -h, --help            show this help message and exit
   --live                Run integration and fallback-driver checks
   --hsqldb              Own an in-memory HSQLDB fixture for this run
+  --postgres            Own a PostgreSQL 18.6 Docker fixture
+  --postgres-port POSTGRES_PORT
+                        PostgreSQL fixture port; default: automatic when
+                        owned, otherwise 5432
   --mysql               Own a MySQL fixture (native 8.4.2 on Windows; Docker
                         8.4 on Linux/macOS)
   --build               Also package the plugin ZIP
-  --functional-only     Run only the embedded provider commit-tier checks
+  --functional-only     Run only embedded provider functional checks, without
+                        regression, UI or server suites
   --integration-only    With --live, run only the integration and fallback-
                         driver suites
+  --suite {backend-live}
+                        Select exact live-suite tasks from the shared CI/local
+                        catalog
   --ide-home IDE_HOME   Optional local IntelliJ 2025.1 SDK; otherwise Gradle
                         downloads it
   --java-home JAVA_HOME
@@ -127,6 +152,10 @@ Complete options (forwarded unchanged to Python):
 
 ```text
 usage: one-shot-test.py [-h] [--java-home JAVA_HOME] [--windows-ui]
+                        [--suite ID] [--ci-group CI_GROUP] [--in-place]
+                        [--archive ARCHIVE] [--list-suites]
+                        [--platform {linux,macos,windows}] [--check-workflow]
+                        [--github-matrices]
                         [--skip-compatibility | --compatibility-only | --database-compatibility-only]
                         [--java8-home JAVA8_HOME] [--ide-home IDE_HOME]
                         [--ide-sdk VERSION=PATH] [--mysql-home VERSION=PATH]
@@ -138,50 +167,50 @@ usage: one-shot-test.py [-h] [--java-home JAVA_HOME] [--windows-ui]
                         [--no-cleanup] [--binaries-dir BINARIES_DIR]
                         [--gradle-user-home GRADLE_USER_HOME]
 
-Run Lattice's Linux/Windows validation in disposable tool/cache directories.
-The runner checks tooling, CI functional/regression tasks, package integrity,
-live database behavior, supported IntelliJ targets, and the Windows-supported
-Java 8/JDBC compatibility matrix. By default it does not start an IDE. On
-Windows, --windows-ui additionally runs the production editor checks and the
-HSQLDB, alter-table, table-dialogs, scaled cell-inspector and search scenarios.
-PostgreSQL and H2 real-IDE UI flows are Linux-only. Downloaded scratch is
-removed by default; compatibility JAR and prepared UI fixture caches remain in
-the supplied binaries directory.
+Run Lattice's shared CI/local suites in disposable tool/cache directories. The
+runner checks tooling, Java unit tests, package integrity, live database
+behavior, all supported IntelliJ targets, and the documented Java 8/JDBC
+compatibility matrix. Use --windows-ui for the complete Windows scope,
+including real IDE validation. CI executes individual catalog entries with
+--suite ID --in-place. Downloaded assets are removed by default; --no-cleanup
+retains them for reuse.
 
 options:
   -h, --help            show this help message and exit
   --java-home JAVA_HOME
-                        Use this full JDK 21; otherwise use JAVA_HOME/PATH,
-                        then download a temporary JDK 21
-  --windows-ui          Run Windows-supported UI CI scenarios on an
+                        Full JDK 21; discover/download when missing
+  --windows-ui          Include every Windows-supported UI suite; requires an
                         interactive 1440x800+ desktop
-  --skip-compatibility  Run tooling, build and live functional tests only;
-                        real IDE UI checks run separately
-  --compatibility-only  Run the IDE verifier and JDBC compatibility matrices;
-                        build the plugin but skip ordinary tests
+  --suite ID            Execute a catalog suite; repeat to select several
+                        suites
+  --ci-group CI_GROUP   Execute every suite assigned to this CI group and host
+  --in-place            Run in this checkout (CI); default: isolated source
+                        copy
+  --archive ARCHIVE     Exact plugin ZIP to verify, without rebuilding it
+  --list-suites         Print the selected plan and platform exclusions; do
+                        not download/run
+  --platform {linux,macos,windows}
+                        Platform for --list-suites only
+  --check-workflow      Validate CI/local suite registration and routing
+                        without running tests
+  --github-matrices     Emit shared UI/IDE/database matrices, including
+                        GITHUB_OUTPUT when present
+  --skip-compatibility  Run tooling, build and backend suites
+  --compatibility-only  Run IDE/JDBC matrices; build an archive if needed
   --database-compatibility-only
-                        Run only the JDBC/Java 8 matrix; useful when Plugin
-                        Verifier runs separately
+                        Run only the shared JDBC/Java matrix profile
   --java8-home JAVA8_HOME
-                        Java 8 runtime; download if missing
-  --ide-home IDE_HOME   Build baseline IntelliJ 2025.1 home
+  --ide-home IDE_HOME   Baseline IntelliJ 2025.1 home
   --ide-sdk VERSION=PATH
-                        Repeat for each verification SDK
   --mysql-home VERSION=PATH
-                        Repeat for each native MySQL server
   --verifier-jar VERIFIER_JAR
-  --jdbc-dir JDBC_DIR   Existing mysql/ and hsqldb/ driver folders (copied
-                        into disposable cache)
+  --jdbc-dir JDBC_DIR
   --runtime-dir RUNTIME_DIR
   --sevenzip SEVENZIP
-  --docker DOCKER       Docker CLI; selects Docker on Windows (daemon must
-                        already be running)
+  --docker DOCKER       Docker CLI; selects Docker instead of native MySQL on
+                        Windows
   --mysql-port MYSQL_PORT
-                        Owned MySQL fixture port; default: automatic free port
-                        for each server
   --hsqldb-port HSQLDB_PORT
-                        Owned live HSQLDB fixture port; default: automatic
-                        free port
   --download-dir DOWNLOAD_DIR
                         Download/cache parent; only directories created by
                         this run are cleaned

@@ -24,6 +24,7 @@ import zipfile
 from dependencies import Dependencies, add_dependency_options, temporary_environment
 from common import ROOT, gradle_command
 from release import validate_version
+from test_suites import gradle_tasks
 
 PLUGIN_ID = "com.segfault03.lattice"
 PLUGIN_FOLDER = "Lattice"
@@ -440,8 +441,9 @@ def build_plugin(java_home, version):
     if sys.platform == "win32" and any(c in str(ROOT) for c in '\"&|<>^%!\r\n'):
         raise ValueError("Windows checkout paths must not contain batch shell metacharacters")
     environment = {**os.environ, "JAVA_HOME": str(java_home)}
-    build_args = ["--console=plain", "--no-daemon", "functionalTest", "regressionTest",
-                  "buildPlugin", f"-PreleaseVersion={version}"]
+    build_args = ["--console=plain", "--no-daemon", *gradle_tasks('functional-build'),
+                  *gradle_tasks('backend-regression'), *gradle_tasks('functional-build', packaging=True),
+                  f"-PreleaseVersion={version}"]
     if os.environ.get('LATTICE_BUILD_IDE'):
         sdk = os.environ['LATTICE_BUILD_IDE']
         if sys.platform == 'win32' and any(c in sdk for c in '\"&|<>^%!\r\n'):

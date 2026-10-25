@@ -9,6 +9,15 @@ Before changing a runner used by CI, read the
 platform, command and cleanup sections of this guide. Keep runner options,
 workflow invocations, portability tests and documentation aligned.
 
+CI and local validation share `scripts/test-suites.json` and the execution
+adapters in `one-shot-test.py`. Register suites there rather than copying commands
+into workflow YAML or another Windows list. The `suite-plan` CI guard checks this
+contract on every branch/PR. See [suite maintenance](CI_TESTING.md#shared-ci-and-local-suite-contract).
+Use `one-shot-test.py --list-suites --platform windows --windows-ui` to inspect
+the full Windows plan without downloads, and `--check-workflow` to check routing.
+CI uses `--ci-group GROUP --in-place` or `--suite ID --in-place`; verifier suites
+also receive `--archive PATH` to consume the exact built ZIP.
+
 ## Binary paths, downloads and cleanup
 
 Every dependency-using Python CLI supports `--download-dir PATH`, `--cleanup` / `--no-cleanup`, `--binaries-dir PATH` and `--gradle-user-home PATH`. Supply individual paths to avoid downloads; invalid explicit paths fail with an error. Omitted dependencies are discovered in the environment/PATH or the supplied asset collection, then downloaded when needed. Python 3.11+ and PowerShell on Windows are entry-point prerequisites. The build always uses the committed Gradle wrapper, whose distribution and Maven dependencies go to the selected Gradle cache.
@@ -44,7 +53,7 @@ The two Windows UI scripts use native PowerShell flags: `-JavaHome`, `-IdeHome` 
 |---|---|---|
 | Windows, Linux and macOS | `test.py`, `dev-deploy.py`, `release.py`, `check-release-archive.py`, `prepare-source-asset.py`, `verify-plugin.py`, `ui-preview.py` | Python entry points use the standard library. `test.py`, `dev-deploy.py`, `prepare-source-asset.py`, `verify-plugin.py` and `ui-preview.py` reuse `common.py`; `test.py` and `dev-deploy.py` reuse release helpers, and deployment imports the archive checker. `ui-preview.py` compiles the production Swing UI and finds or downloads missing SDK/runtime jars. Every public Python CLI has a matching `.ps1` launcher. |
 | Windows, Linux and macOS (imported module) | `common.py` | Shared cache paths, Java discovery and Gradle wrapper selection; it is not a command-line entry point. |
-| Linux and Windows | `one-shot-test.py` / `one-shot-test.ps1` | Same isolated build, live and compatibility matrix. Windows uses native ZIP MySQL servers by default; Linux uses Docker. |
+| Linux and Windows (aggregate); catalog-supported hosts (individual suites) | `one-shot-test.py` / `one-shot-test.ps1` | Shared CI/local execution; isolated locally, `--in-place` in CI. Windows uses native ZIP MySQL servers by default; Linux uses Docker. `--windows-ui` includes the interactive Windows suites. Metadata/list modes do not download tools. |
 | Linux with X11/Xvfb | `capture-intellij-ui.sh`, `review-intellij-ui.sh` | Bash launchers for the real IDE UI suite. Headless mode needs Xvfb and X11 tools; review also uses `curl` and Python. They share the Gradle UI test but currently duplicate theme and JDBC fixture metadata with the PowerShell wrappers. |
 | Windows interactive desktop | `capture-intellij-ui.ps1`, `review-intellij-ui.ps1` | PowerShell launchers for the same real IDE UI suite. The primary display must be at least 1440×800 and the test IDE must remain in the foreground. |
 | Windows, Linux and macOS | `probe-hsqldb-cancellation.py` / `.ps1` / `.sh` | One bounded diagnostic JVM; Python handles the timeout, with no GNU coreutils requirement. |
@@ -57,7 +66,7 @@ Common Python commands stay at the root of `scripts/`. PowerShell commands and h
 | `test.py` / `.ps1` | Gradle tests and optional packaging; owns optional database fixtures | JDK 21 is found/downloaded; native MySQL on Windows, Docker on Linux/macOS |
 | `postgres-compatibility.py` | PostgreSQL 8.4–18 / Java 8 driver feature matrix, with selectable server cases | Linux Docker; optional GCC 14+/make host compiler for VFS storage |
 | `postgres-ui-review.py` | Full real-IDE UI flow against an owned PostgreSQL 18 fixture | Linux Docker/X11; same UI dependencies as the native review runner |
-| `one-shot-test.py` | Headless Linux/Windows validation runner with full, routine-check and compatibility-only modes; real IDE UI checks run separately | Linux or Windows, Python 3.11+, network for missing assets, at least 10 GiB free; Docker required only for Docker fixtures |
+| `one-shot-test.py` | Shared CI/local suite runner with full, routine-check, compatibility-only and focused suite/group modes; `--windows-ui` includes real IDE validation | Aggregate on Linux or Windows; individual suites on catalog-supported hosts; Python 3.11+, network for missing assets, at least 10 GiB free for isolated runs; Docker required only for Docker fixtures |
 | `ui-preview.py` | Render production Swing screens and refresh the five README screenshots; optionally build a light/dark gallery | Windows, Linux or macOS; JDK 21; local/cached IntelliJ 2025.1 SDK, JUnit, Hamcrest and FlatLaf, or network to download missing assets |
 | `dev-deploy.py` | Test, build, discover a local IDEA, deploy Lattice and restart a running IDE | Installed IntelliJ IDEA 2025.1+; JDK 21; Git for tooling tests |
 | `release.py` | Validate a version/tag and generate Markdown GitHub notes plus HTML Marketplace headings/bullets, paragraphs and inline code; `--marketplace-smoke` requires an explicit prerelease version without a tag | Git |

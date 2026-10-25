@@ -242,6 +242,9 @@ tasks.register<JavaExec>("databaseCompatibilityTest") {
         providers.gradleProperty("lattice.compatibility.cache").orNull?.let {
             systemProperty("lattice.jdbc.cache", it)
         }
+        providers.gradleProperty("lattice.compatibility.drivers").orNull?.let {
+            systemProperty("lattice.test.compatibility.drivers", it)
+        }
         providers.gradleProperty("lattice.compatibility.output").orNull?.let {
             systemProperty("lattice.test.output", it)
         }

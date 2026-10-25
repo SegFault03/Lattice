@@ -46,6 +46,12 @@ when using an assistant. Update policy tests and affected documentation alongsid
 behavior changes; report the focused validation in the PR. Do not use historical
 workflow runs as a substitute for the current documented policy.
 
+Register suite changes in `scripts/test-suites.json`; CI and local Windows
+validation share its selectors, platform support, fixtures and UI parameters.
+The lightweight `suite-plan` guard runs on every branch and PR, including
+staging. See [the shared suite contract](CI_TESTING.md#shared-ci-and-local-suite-contract)
+for adding suites and inspecting the Windows plan.
+
 ## Dependencies and packaging
 
 Gradle resolves packaged production dependencies from Maven Central and stages fallback-test drivers under ignored `build/fallback-drivers/`. JDBC JARs are not tracked. Keep dependency versions aligned with `build.gradle.kts`, notices, license texts and source-asset metadata. A Connector/J upgrade also requires updating its pinned corresponding-source URL/checksum in `scripts/prepare-source-asset.py`.

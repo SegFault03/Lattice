@@ -5,6 +5,8 @@ manual CI run executes embedded functional tests and builds/validates the plugin
 on Linux, Windows and macOS. The remaining suites run only on `pull_request`
 events whose base branch is exactly `main`. PRs to `staging` receive the commit
 tier. PR validation checks GitHub's prospective merge commit.
+The lightweight suite catalog/workflow contract is checked before that tier on
+every event; it does not execute the extended test suites.
 
 ## Before changing CI
 
@@ -33,6 +35,9 @@ Use these conventions for every CI change:
   and update this guide and its policy tests together.
 - Put a check in its existing suite group and confirm it does not repeat another
   tier or a nested runner's work. Keep functional/regression selection disjoint.
+- Define executable suites in `scripts/test-suites.json`; both CI and local
+  runners use that catalog. Keep test commands and UI/IDE/database matrix lists
+  out of the workflow. Record a reason for every unsupported platform.
 - Use documented portable runners and the committed Gradle wrapper. Reuse the
   build SDK/cache and verify the exact built artifact instead of rebuilding it.
 - Pin Actions to commit SHAs with version comments. Keep permissions scoped to
@@ -47,7 +52,9 @@ Use these conventions for every CI change:
 For every workflow change, run the workflow-policy and documentation checks:
 
 ```bash
+python scripts/one-shot-test.py --check-workflow
 python -m unittest discover -s scripts/tests -p 'test_ci_workflow.py' -v
+python -m unittest discover -s scripts/tests -p 'test_suite_parity.py' -v
 python -m unittest discover -s scripts/tests -p 'test_layout.py' -v
 actionlint .github/workflows/ci.yml .github/workflows/release.yml
 ```
@@ -62,17 +69,71 @@ in the PR. Repository agent instructions are in [AGENTS.md](../AGENTS.md).
 
 | Group | Coverage | Hosts / scope |
 |---|---|---|
+| `suite-plan` | Validate catalog/workflow routing and emit shared UI, IDE and database matrices | Every event; metadata only |
 | `functional-build` | Provider registration, URLs, defaults, driver selection, embedded H2/HSQLDB schema and table operations, CRUD, exports and key metadata; plugin ZIP drivers, licenses and bytecode | Every commit; Linux, Windows, macOS |
 | `tooling-tests` | Python runners, fixture ownership, Windows launcher execution, archive/release tooling, workflow event routing and release ancestry | Main PR only; Linux, Windows, macOS |
 | `backend-tests` | Remaining model/service/Swing regressions; transactions, validation, cancellation and recovery; H2 file/TCP/TLS and isolated drivers; owned MySQL/HSQLDB/PostgreSQL integration on Linux | Main PR only; three hosts, live external-engine fixtures on Linux |
 | `ui-tests` | Headless editor recovery assertions; HSQLDB full flow; mixed alter/recovery; create/mutation refresh at 125%; inspector recovery at 125% with both themes; one search, PostgreSQL and H2 flow | Main PR only; independent Linux matrix jobs |
 | `ide-compatibility` | Plugin Verifier against IDEA 2025.1, 2025.2 and 2025.3 using the exact ZIP from `functional-build` | Main PR only; one Linux job per IDE |
-| `database-compatibility` | MySQL, HSQLDB, PostgreSQL and H2 server/JDBC matrices with real Java 8/21 probes and explicit unsupported-runtime checks | Main PR only; Linux |
+| `database-compatibility` | MySQL, HSQLDB, PostgreSQL and H2 server/JDBC matrices with real Java 8/21 probes and explicit unsupported-runtime checks | Main PR only; independent Linux job per engine |
 | `full-validation` | Requires all preceding groups to succeed; failures, cancellations and unexpected skipped groups fail the gate | Main PR only |
 
 The plugin itself targets Java 21 / IntelliJ build 251. Java 8 probes validate
 compatible JDBC drivers and server runtimes, not running the plugin on Java 8.
 H2 2.3's expected Java 8 rejection is part of that matrix.
+
+## Shared CI and local suite contract
+
+`scripts/test-suites.json` is the executable suite inventory. Each entry defines
+its ID, CI group, local phase, execution adapter, supported platforms, CI hosts,
+dependency requirements and selectors. `platforms` describes where the maintained
+adapter can run; `ci_hosts` describes where CI currently pays to run it. Thus a
+Linux CI suite can still enter the full Windows local plan when its adapter
+supports Windows. Every excluded platform has an explicit reason.
+
+`scripts/one-shot-test.py` executes these entries for both environments. CI uses
+`--ci-group GROUP --in-place` for grouped checks and `--suite ID --in-place` for
+matrix cases. UI themes/flags and IDE/database matrix entries come from the
+catalog. The local aggregate discovers every compatible entry automatically;
+there is no separate Windows allowlist. `--windows-ui` includes the interactive
+portion; omitting it deliberately selects the headless profile.
+Parity applies to the checked-out commit. Pull repository updates normally to
+receive catalog/test changes before running locally; the runner does not modify
+Git branches or fetch another revision during validation.
+
+When adding or changing a suite:
+
+1. Update its catalog entry, selecting an existing adapter or implementing a
+   shared adapter when new fixture behavior is needed. New tests within an
+   existing Gradle selector need no catalog change.
+2. Declare Windows support and dependency requirements, or record the concrete
+   unsupported-platform reason. CI host choice does not imply platform support.
+3. Run the contract and parity tests above. A new compatible entry is discovered
+   by the local runner and its CI group/matrix without another orchestration edit.
+4. Update affected documentation and run the relevant real suite. Registering a
+   platform cannot establish that a new binary or fixture works there.
+
+Inspect a complete Windows plan or a focused CI plan without downloads:
+
+```powershell
+.\scripts\windows\one-shot-test.ps1 --list-suites --platform windows --windows-ui
+.\scripts\windows\one-shot-test.ps1 --ci-group backend-tests --list-suites
+.\scripts\windows\one-shot-test.ps1 --check-workflow
+```
+
+The guard rejects unregistered workflow jobs, manually copied matrices, bypass
+test commands and conditional group dispatch. It runs on every event, including
+staging PRs. Regression tests add synthetic suites and change selectors to check
+that the actual CI/local execution paths pick them up. Actions syntax is checked
+separately with actionlint.
+
+Dependencies keep their existing owned-workspace and cache rules. Versioned
+MySQL/HSQLDB matrix selections are passed from the catalog to the Java checks;
+H2 and PostgreSQL share their existing matrix implementations on both entry paths.
+With `--binaries-dir`, the local runner reuses native fixtures and IDEs and retains
+JDBC/UI fixture caches. A new kind of binary still needs resolver support once.
+Verifier matrix suites require the exact existing ZIP via `--archive`; CI never
+rebuilds it in a verifier job.
 
 ## Avoiding redundant execution
 
@@ -94,8 +155,10 @@ H2 2.3's expected Java 8 rejection is part of that matrix.
   themes; search runs once in dark mode. Create/alter controls retain native
   reachability checks at 125%. Exact colors, icon dimensions, text baselines,
   rounded-corner pixels and approved-design captures are not release gates.
-- The JDBC compatibility runner uses `--database-compatibility-only`; Plugin
-  Verifier runs separately against the built ZIP. Compatibility cases retain artifact identity, Java-runtime and real SQL
+- JDBC compatibility runs as independent catalog matrix jobs with `fail-fast:
+  false` and unique artifacts; `--database-compatibility-only` aggregates them
+  locally. Plugin Verifier runs separately against the built ZIP. Compatibility
+  cases retain artifact identity, Java-runtime and real SQL
   behavior checks at the boundaries listed in [compatibility](compatibility.md).
   A provider workflow is not rerun alongside another full CRUD contract.
   [The suite audit](TEST_SUITE_AUDIT.md) records removed coverage and owners.
@@ -122,7 +185,8 @@ For the full CI-supported Windows scope, use the Windows one-shot runner with
 `--windows-ui` and the shared asset/cache options. It runs the functional and
 regression tasks, tooling suite, packaging/archive validation, native MySQL and
 HSQLDB plus H2 backend checks, IDEA/JDBC compatibility checks, and the five
-interactive UI scenarios supported on Windows. Linux-only PostgreSQL and H2 UI
+interactive UI scenarios supported on Windows. The isolated H2 fallback check
+also runs, matching Windows CI. Linux-only PostgreSQL and H2 UI
 fixtures remain in Linux CI. `--binaries-dir` retains compatibility JARs in
 `jdbc-cache/`; the UI fixture Maven repository is retained beside it.
 

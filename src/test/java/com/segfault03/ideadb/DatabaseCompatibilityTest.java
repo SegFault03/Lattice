@@ -12,6 +12,10 @@ import java.util.concurrent.TimeUnit;
 public final class DatabaseCompatibilityTest {
     private static final List<String> MYSQL = List.of("5.1.49", "6.0.6", "8.0.33", "26.7.0");
     private static final List<String> HSQL = List.of("2.2.9", "2.3.6", "2.4.1", "2.5.2", "2.6.1-jdk8", "2.7.4-jdk8");
+    private static List<String> selectedVersions(List<String> defaults) {
+        String selected = System.getProperty("lattice.test.compatibility.drivers");
+        return selected == null ? defaults : List.of(selected.split(","));
+    }
     private static final DatabaseConnectionManager MANAGER = DatabaseConnectionManager.getInstance();
     private static final DataService DATA = DataService.getInstance();
     private static final DdlService DDL = DdlService.getInstance();
@@ -97,7 +101,7 @@ public final class DatabaseCompatibilityTest {
             int port=Integer.parseInt(args[1]); String server=args[2];
             Path java8=args.length > 3 ? Path.of(args[3]) : null;
             Path tests=args.length > 4 ? Path.of(args[4]) : null;
-            for(String version:server.startsWith("8.") ? List.of("8.0.33","26.7.0") : server.startsWith("5.5.") ? List.of("5.1.49","6.0.6","8.0.33") : List.of("8.0.33")) {
+            for(String version:selectedVersions(server.startsWith("8.") ? List.of("8.0.33","26.7.0") : server.startsWith("5.5.") ? List.of("5.1.49","6.0.6","8.0.33") : List.of("8.0.33"))) {
                 Path jar=null;
                 try {
                     jar=DriverCatalog.download(DatabaseType.MYSQL,version);
@@ -108,7 +112,7 @@ public final class DatabaseCompatibilityTest {
             }
         } else {
             Path java8=Path.of(args[1]), tests=Path.of(args[2]);
-            for(String version:args.length > 3 ? List.of(args[3]) : HSQL) {
+            for(String version:selectedVersions(args.length > 3 ? List.of(args[3]) : HSQL)) {
                 Path jar=null;
                 int selectedPort;
                 try(var listener=new java.net.ServerSocket(0,0,java.net.InetAddress.getByName("127.0.0.1"))) {
