@@ -41,6 +41,13 @@ nearest surviving parent. Failed reads restore cached metadata with the same vie
 Active search updates its matches without reopening collapsed branches; editing
 the search query or navigating its results still reveals matches explicitly.
 
+Native UI tests reveal explorer paths one parent at a time and wait for lazy
+metadata before interacting with a child. They must not assume fixed row numbers
+or automatic expansion after adding a source or refreshing a schema. Busy-state
+captures reveal only the parent before pausing JDBC responses, then expand the
+target to start the measured read. The search flow also checks that a refresh
+retains the visible branches while updating its matches.
+
 ## Cell inspector interaction
 
 Use **Inspect** in the table toolbar or **Alt+Enter** to toggle the inspector.

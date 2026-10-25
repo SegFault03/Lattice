@@ -81,6 +81,9 @@ in the PR. Repository agent instructions are in [AGENTS.md](../AGENTS.md).
 The plugin itself targets Java 21 / IntelliJ build 251. Java 8 probes validate
 compatible JDBC drivers and server runtimes, not running the plugin on Java 8.
 H2 2.3's expected Java 8 rejection is part of that matrix.
+The local plan is platform-specific: macOS has functional, regression and IDE
+verification adapters but no JDBC matrix adapters. Planner tests explicitly cover
+Linux, Windows and macOS rather than inheriting the test runner's host.
 
 ## Shared CI and local suite contract
 

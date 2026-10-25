@@ -20,9 +20,14 @@ class OneShotTests(unittest.TestCase):
                                 ((True, False, False), (True, False, False)),
                                 ((False, True, False), (False, True, True)),
                                 ((False, False, True), (False, False, True))]:
-            args = Namespace(skip_compatibility=flags[0], compatibility_only=flags[1],
-                             database_compatibility_only=flags[2])
-            self.assertEqual(expected, one_shot.validation_plan(args)[:3])
+            for platform in ('linux', 'windows', 'macos'):
+                with self.subTest(flags=flags, platform=platform):
+                    args = Namespace(skip_compatibility=flags[0], compatibility_only=flags[1],
+                                     database_compatibility_only=flags[2], platform=platform)
+                    # macOS has no registered JDBC matrix adapters; do not infer
+                    # database coverage from the machine running this test.
+                    supported = (expected[0], expected[1], expected[2] and platform != 'macos')
+                    self.assertEqual(supported, one_shot.validation_plan(args)[:3])
 
     def test_windows_full_plan_adds_each_windows_supported_ui_scenario(self):
         with patch.object(one_shot.sys, "platform", "win32"):

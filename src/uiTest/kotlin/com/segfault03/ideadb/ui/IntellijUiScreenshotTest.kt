@@ -312,13 +312,13 @@ class IntellijUiScreenshotTest {
                 }
                 ideFrame { waitForNoOpenedDialogs() }
                 val tree = pluginRoot.x(JTreeUiComponent::class.java) { byJavaClass("com.intellij.ui.treeStructure.Tree") }.waitFound()
-                tree.fixture.expandRow(2)
                 val schema = arrayOf("Data Sources", "HSQLDB", "Lattice search demo", "PUBLIC")
+                expandExplorerPath(tree, schema.take(3).joinToString(tree.fixture.separator()))
                 waitUntil("search fixture schema connected") { tree.pathExists(*schema) }
-                tree.fixture.expandPath(schema.joinToString(tree.fixture.separator()))
+                expandExplorerPath(tree, schema.joinToString(tree.fixture.separator()))
                 waitUntil("search fixture tables loaded") { tree.pathExists(*(schema + "Tables (0)")) }
                 for (name in listOf("SEARCH_CUSTOMERS", "SEARCH_ORDERS")) {
-                    tree.fixture.rightClickPath(schema.joinToString(tree.fixture.separator()))
+                    rightClickExplorerPath(tree, schema.joinToString(tree.fixture.separator()))
                     frame.x { byVisibleText("Create table…") }.waitFound().click()
                     frame.x(DialogUiComponent::class.java) { byTitle("Create table in PUBLIC") }.waitFound().also { dialog ->
                         inspectorInput(dialog, "Table name").text = name
@@ -396,10 +396,15 @@ class IntellijUiScreenshotTest {
                     drawer.component.getLocationOnScreen().y == toolbar.component.getLocationOnScreen().y
                 }
                 captureScreen(screenshotsDirectory.resolve("explorer-search-wide-inline.png"))
-                tree.fixture.rightClickPath(schema.joinToString(tree.fixture.separator()))
+                rightClickExplorerPath(tree, schema.joinToString(tree.fixture.separator()))
+                val viewBeforeRefresh = tree.collectExpandedPaths().map { it.path }
                 frame.x { byVisibleText("Refresh tables") }.waitFound().click()
-                Thread.sleep(400)
+                val status = cast(pluginRoot.x { byAccessibleName("Database explorer status") }.waitFound().component, LiveLabel::class)
+                waitUntil("search refresh complete") { status.getText().startsWith("Loaded ") }
                 waitForMatches(2)
+                check(tree.collectExpandedPaths().map { it.path } == viewBeforeRefresh) {
+                    "Refreshing with active search must preserve the visible explorer branches"
+                }
                 drawer.x { byAccessibleName("Close explorer search") }.waitFound().click()
                 waitUntil("search drawer closed") {
                     pluginRoot.xx { byJavaClass("com.segfault03.ideadb.ui.DatabaseExplorerSearchBar") }.list().isEmpty()
@@ -830,12 +835,13 @@ class IntellijUiScreenshotTest {
                     byJavaClass("com.intellij.ui.treeStructure.Tree")
                 }.waitFound()
             }
+            val connectionPath = arrayOf("Data Sources", if (h2) "H2" else if (postgres) "PostgreSQL" else "HSQLDB", "Lattice UI demo")
+            expandExplorerPath(databaseTree, connectionPath.take(2).joinToString(databaseTree.fixture.separator()))
             if (jdbcFixture != null) {
                 captureBusyState(jdbcFixture, pluginRoot, "Connecting to database…", "explorer-connecting.png", screenshotsDirectory) {
-                    withContext(OnDispatcher.EDT) { cast(databaseTree.component, LiveTree::class).expandRow(2) }
+                    expandExplorerPath(databaseTree, connectionPath.joinToString(databaseTree.fixture.separator()))
                 }
-            } else databaseTree.fixture.expandRow(2)
-            val connectionPath = arrayOf("Data Sources", if (h2) "H2" else if (postgres) "PostgreSQL" else "HSQLDB", "Lattice UI demo")
+            } else expandExplorerPath(databaseTree, connectionPath.joinToString(databaseTree.fixture.separator()))
             val schemaName = if (postgres) "public" else "PUBLIC"
             val publicSchemaPath = connectionPath + schemaName
             waitUntil("connected schema in the explorer") {
@@ -857,13 +863,13 @@ class IntellijUiScreenshotTest {
                 waitUntil("MySQL section alongside the live HSQLDB section") {
                     databaseTree.pathExists("Data Sources", "MySQL")
                 }
-                databaseTree.fixture.expandPath(connectionPath.joinToString(databaseTree.fixture.separator()))
+                expandExplorerPath(databaseTree, connectionPath.joinToString(databaseTree.fixture.separator()))
                 waitUntil("HSQLDB connection restored after adding the second source type") {
                     databaseTree.pathExists(*publicSchemaPath)
                 }
                 captureScreen(screenshotsDirectory.resolve("data-source-groups-open.png"))
                 if (review && !styleOnly) {
-                    databaseTree.fixture.rightClickPath(connectionPath.joinToString(databaseTree.fixture.separator()))
+                    rightClickExplorerPath(databaseTree, connectionPath.joinToString(databaseTree.fixture.separator()))
                     captureScreen(screenshotsDirectory.resolve("connection-context-menu.png"))
                     frame.x { byVisibleText("Edit connection…") }.waitFound().click()
                     frame.x(DialogUiComponent::class.java) { byTitle("Edit connection") }.waitFound().also {
@@ -882,7 +888,7 @@ class IntellijUiScreenshotTest {
                                 Files.move(jar, backup, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
                                 backups.add(jar to backup)
                             }
-                            databaseTree.fixture.rightClickPath(connectionPath.joinToString(databaseTree.fixture.separator()))
+                            rightClickExplorerPath(databaseTree, connectionPath.joinToString(databaseTree.fixture.separator()))
                             frame.x { byVisibleText("Edit connection…") }.waitFound().click()
                             frame.x(DialogUiComponent::class.java) { byTitle("Edit connection") }.waitFound().also {
                                 assertDriverSummary(it, "2.7.3-jdk8 · UNAVAILABLE")
@@ -899,7 +905,7 @@ class IntellijUiScreenshotTest {
                             }
                         }
                     }
-                    databaseTree.fixture.rightClickPath(connectionPath.joinToString(databaseTree.fixture.separator()))
+                    rightClickExplorerPath(databaseTree, connectionPath.joinToString(databaseTree.fixture.separator()))
                     frame.x { byVisibleText("Create schema…") }.waitFound().click()
                     frame.x(DialogUiComponent::class.java) { byTitle("Create schema") }.waitFound().also {
                         captureScreen(screenshotsDirectory.resolve("create-schema.png"))
@@ -908,7 +914,7 @@ class IntellijUiScreenshotTest {
                         captureScreen(screenshotsDirectory.resolve("create-schema-invalid.png"))
                         it.pressButton("Cancel")
                     }
-                    databaseTree.fixture.rightClickPath(connectionPath.joinToString(databaseTree.fixture.separator()))
+                    rightClickExplorerPath(databaseTree, connectionPath.joinToString(databaseTree.fixture.separator()))
                     frame.x { byVisibleText("Create schema…") }.waitFound().click()
                     val schemaDialog = frame.x(DialogUiComponent::class.java) { byTitle("Create schema") }.waitFound()
                     schemaDialog.x(JTextFieldUI::class.java) { byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField") }.waitFound().text = "UI_REVIEW_SCHEMA"
@@ -918,7 +924,7 @@ class IntellijUiScreenshotTest {
                     frame.x(DialogUiComponent::class.java) { byTitle("Created") }.waitFound().pressButton("OK")
                     val createdSchemaPath = connectionPath + "UI_REVIEW_SCHEMA"
                     waitUntil("created schema is visible") { databaseTree.pathExists(*createdSchemaPath) }
-                    databaseTree.fixture.rightClickPath(createdSchemaPath.joinToString(databaseTree.fixture.separator()))
+                    rightClickExplorerPath(databaseTree, createdSchemaPath.joinToString(databaseTree.fixture.separator()))
                     frame.x { byVisibleText("Drop schema…") }.waitFound().click()
                     val dropSchema = frame.x(DialogUiComponent::class.java) { byTitle("Drop schema") }.waitFound()
                     captureBusyState(jdbcFixture, pluginRoot, "Dropping schema…", "explorer-dropping-schema.png", screenshotsDirectory) {
@@ -930,18 +936,18 @@ class IntellijUiScreenshotTest {
 
             }
             val publicSchemaPathText = publicSchemaPath.joinToString(databaseTree.fixture.separator())
-            databaseTree.fixture.expandPath(publicSchemaPathText)
+            expandExplorerPath(databaseTree, publicSchemaPathText)
             val tablesPath = publicSchemaPath + "Tables (0)"
             waitUntil("empty Tables folder") { databaseTree.pathExists(*tablesPath) }
             if (jdbcFixture != null) {
                 // Path lookup can already expand the schema; Refresh always starts a real metadata read.
-                databaseTree.fixture.rightClickPath(publicSchemaPathText)
+                rightClickExplorerPath(databaseTree, publicSchemaPathText)
                 captureBusyState(jdbcFixture, pluginRoot, "Loading tables…", "explorer-loading-tables.png", screenshotsDirectory) {
                     frame.x { byVisibleText("Refresh tables") }.waitFound().click()
                 }
                 waitUntil("refreshed Tables folder") { databaseTree.pathExists(*tablesPath) }
             }
-            databaseTree.fixture.rightClickPath(publicSchemaPathText)
+            rightClickExplorerPath(databaseTree, publicSchemaPathText)
             frame.x { byVisibleText("Create table…") }.waitFound().click()
 
             val createTableDialog = frame.x(DialogUiComponent::class.java) {
@@ -989,7 +995,7 @@ class IntellijUiScreenshotTest {
             waitUntil("created LATTICE_PEOPLE table in the explorer") {
                 databaseTree.pathExists(*peoplePath)
             }
-            databaseTree.fixture.rightClickPath(peoplePath.joinToString(databaseTree.fixture.separator()))
+            rightClickExplorerPath(databaseTree, peoplePath.joinToString(databaseTree.fixture.separator()))
             frame.x { byVisibleText("Open data editor") }.waitFound().click()
 
             // Keep the normal editor flow independent of remembered IDE sidebars.
@@ -1221,7 +1227,7 @@ class IntellijUiScreenshotTest {
                 // cannot rely on the original editor's populated TableMetadata object.
                 val recoveryPath = peoplePath
                 ideFrame { invokeAction("com.segfault03.lattice.open") }
-                databaseTree.fixture.rightClickPath(recoveryPath.joinToString(databaseTree.fixture.separator()))
+                rightClickExplorerPath(databaseTree, recoveryPath.joinToString(databaseTree.fixture.separator()))
                 frame.x { byVisibleText("Open data editor") }.waitFound().click()
                 ideFrame { invokeAction("HideAllWindows") }
                 val recoveryEditor = frame.x { byJavaClass("com.segfault03.ideadb.ui.TableDataEditorPanel") }.waitFound()
@@ -1236,13 +1242,13 @@ class IntellijUiScreenshotTest {
                 waitUntil("table editor closes with an unconfirmed inspector draft") { !closingComponent.isShowing() }
                 ideFrame { invokeAction("com.segfault03.lattice.open") }
                 val refreshedExplorerStatus = cast(frame.x { byAccessibleName("Database explorer status") }.waitFound().component, LiveLabel::class)
-                databaseTree.fixture.rightClickPath(publicSchemaPathText)
+                rightClickExplorerPath(databaseTree, publicSchemaPathText)
                 frame.x { byVisibleText("Refresh tables") }.waitFound().click()
                 waitUntil("fresh table metadata available after closing the editor") {
                     databaseTree.component.isEnabled() && refreshedExplorerStatus.getText().startsWith("Loaded ") &&
                         databaseTree.pathExists(*recoveryPath)
                 }
-                databaseTree.fixture.rightClickPath(recoveryPath.joinToString(databaseTree.fixture.separator()))
+                rightClickExplorerPath(databaseTree, recoveryPath.joinToString(databaseTree.fixture.separator()))
                 frame.x { byVisibleText("Open data editor") }.waitFound().click()
                 ideFrame { invokeAction("HideAllWindows") }
                 val reopened = frame.x { byJavaClass("com.segfault03.ideadb.ui.TableDataEditorPanel") }.waitFound()
@@ -1355,7 +1361,7 @@ class IntellijUiScreenshotTest {
                     closeToolbarOverflow(it)
                 }
                 frame.resize(normalWidth, normalHeight)
-                databaseTree.fixture.rightClickPath(peoplePath.joinToString(databaseTree.fixture.separator()))
+                rightClickExplorerPath(databaseTree, peoplePath.joinToString(databaseTree.fixture.separator()))
                 frame.x { byVisibleText("Open in SQL console") }.waitFound().click()
                 val console = frame.x { byJavaClass("com.segfault03.ideadb.ui.SqlQueryConsolePanel") }.waitFound()
                 waitUntil("console database picker ready") { console.x { byVisibleText("Run") }.waitFound().component.isEnabled() }
@@ -1376,7 +1382,7 @@ class IntellijUiScreenshotTest {
                         val themeDirectory = screenshotsDirectory.resolve(lightTheme)
                         Files.createDirectories(themeDirectory)
                         captureScreen(themeDirectory.resolve("sql-console-ready.png"))
-                        databaseTree.fixture.rightClickPath(peoplePath.joinToString(databaseTree.fixture.separator()))
+                        rightClickExplorerPath(databaseTree, peoplePath.joinToString(databaseTree.fixture.separator()))
                         frame.x { byVisibleText("Open data editor") }.waitFound().click()
                         captureScreen(themeDirectory.resolve("table-filters.png"))
                         tableEditor.x { byAccessibleName("Export data") }.waitFound().click()
@@ -1389,7 +1395,7 @@ class IntellijUiScreenshotTest {
                         captureScreen(themeDirectory.resolve("table-export-sql-submenu.png"))
                         pressEscape()
                         pressEscape()
-                        databaseTree.fixture.rightClickPath(peoplePath.joinToString(databaseTree.fixture.separator()))
+                        rightClickExplorerPath(databaseTree, peoplePath.joinToString(databaseTree.fixture.separator()))
                         frame.x { byVisibleText("Open in SQL console") }.waitFound().click()
                         reviewedLightThemes.add(lightTheme)
                     }
@@ -1489,13 +1495,13 @@ class IntellijUiScreenshotTest {
                 check(applyButton.component.isEnabled()) { "Clearing an applied filter must allow resetting the data" }
                 tableEditor.x { byVisibleText("Apply") }.waitFound().click()
                 waitUntil("filter reset") { dataGrid.rowCount() == 1 }
-                databaseTree.fixture.rightClickPath(pathText)
+                rightClickExplorerPath(databaseTree, pathText)
                 pressEscape()
                 captureBusyState(jdbcFixture, pluginRoot, "Loading columns…", "explorer-loading-columns.png", screenshotsDirectory) {
                     pluginRoot.x { byAccessibleName("Refresh") }.waitFound().click()
                 }
                 waitUntil("column metadata loaded") { pluginRoot.hasSubtext("Loaded columns") }
-                databaseTree.fixture.rightClickPath(pathText)
+                rightClickExplorerPath(databaseTree, pathText)
                 captureScreen(screenshotsDirectory.resolve("table-context-menu.png"))
                 frame.x { byVisibleText("Alter table…") }.waitFound().click()
                 val alter = frame.x(DialogUiComponent::class.java) { byTitle("Edit table: LATTICE_PEOPLE") }.waitFound()
@@ -1521,13 +1527,13 @@ class IntellijUiScreenshotTest {
                 alter.x { byAccessibleName("Rename table") }.waitFound().click()
                 captureScreen(screenshotsDirectory.resolve("alter-rename-table.png"))
                 alter.pressButton("Close")
-                databaseTree.fixture.rightClickPath(pathText)
+                rightClickExplorerPath(databaseTree, pathText)
                 frame.x { byVisibleText("Drop table…") }.waitFound().click()
                 frame.x(DialogUiComponent::class.java) { byTitle("Drop table") }.waitFound().also {
                     captureScreen(screenshotsDirectory.resolve("drop-table-confirmation.png"))
                     it.pressButton("Cancel")
                 }
-                databaseTree.fixture.rightClickPath(publicSchemaPathText)
+                rightClickExplorerPath(databaseTree, publicSchemaPathText)
                 frame.x { byVisibleText("Drop schema…") }.waitFound().click()
                 frame.x(DialogUiComponent::class.java) { byTitle("Drop schema") }.waitFound().also {
                     captureScreen(screenshotsDirectory.resolve("drop-schema-confirmation.png"))
@@ -1619,7 +1625,7 @@ class IntellijUiScreenshotTest {
                 frame.resize(narrowWidth, narrowHeight)
                 assertEditorControlsVisible(tableEditor, "minimum-width table")
                 frame.resize(normalWidth, normalHeight)
-                databaseTree.fixture.rightClickPath(pathText)
+                rightClickExplorerPath(databaseTree, pathText)
                 jdbcFixture.pauseResponses()
                 frame.x { byVisibleText("Open in SQL console") }.waitFound().click()
                 val console = frame.x { byJavaClass("com.segfault03.ideadb.ui.SqlQueryConsolePanel") }.waitFound()
@@ -1721,13 +1727,13 @@ class IntellijUiScreenshotTest {
                 frame.resize(narrowWidth, narrowHeight)
                 assertEditorControlsVisible(console, "minimum-width SQL console")
                 frame.resize(normalWidth, normalHeight)
-                databaseTree.fixture.rightClickPath(connectionPath.joinToString(databaseTree.fixture.separator()))
+                rightClickExplorerPath(databaseTree, connectionPath.joinToString(databaseTree.fixture.separator()))
                 frame.x { byVisibleText("Remove connection") }.waitFound().click()
                 frame.x(DialogUiComponent::class.java) { byTitle("Remove connection") }.waitFound().also {
                     captureScreen(screenshotsDirectory.resolve("remove-connection-confirmation.png"))
                     it.pressButton("Cancel")
                 }
-                databaseTree.fixture.rightClickPath(connectionPath.joinToString(databaseTree.fixture.separator()))
+                rightClickExplorerPath(databaseTree, connectionPath.joinToString(databaseTree.fixture.separator()))
                 frame.x { byVisibleText("Disconnect") }.waitFound().click()
                 captureScreen(screenshotsDirectory.resolve("disconnected-explorer.png"))
             }
@@ -1792,6 +1798,24 @@ class IntellijUiScreenshotTest {
             check(field.text == port) { "$source must select its default port $port" }
         }
         println("Source switching and MySQL/HSQLDB/PostgreSQL/H2 ports verified")
+    }
+
+    /** Refresh keeps branches collapsed: reveal each parent before native fixture interaction. */
+    private fun expandExplorerPath(tree: JTreeUiComponent, path: String) {
+        val separator = tree.fixture.separator()
+        val names = path.split(separator)
+        for (depth in 1..names.size) {
+            val prefix = names.take(depth).toTypedArray()
+            waitUntil("explorer path available: ${prefix.joinToString(" / ")}") { tree.pathExists(*prefix) }
+            tree.fixture.expandPath(prefix.joinToString(separator))
+        }
+    }
+
+    private fun rightClickExplorerPath(tree: JTreeUiComponent, path: String) {
+        val separator = tree.fixture.separator()
+        expandExplorerPath(tree, path.substringBeforeLast(separator, path))
+        waitUntil("explorer target available: $path") { tree.pathExists(*path.split(separator).toTypedArray()) }
+        tree.fixture.rightClickPath(path)
     }
 
     private fun captureBusyState(fixture: JdbcUiFixture, root: UiComponent, message: String, filename: String,
@@ -2044,11 +2068,11 @@ class IntellijUiScreenshotTest {
         val tree = root.x(JTreeUiComponent::class.java) { byJavaClass("com.intellij.ui.treeStructure.Tree") }.waitFound()
         val separator = tree.fixture.separator()
         val schema = arrayOf("Data Sources", "HSQLDB", "Local development", "PUBLIC")
-        tree.fixture.expandPath(schema.take(3).joinToString(separator))
+        expandExplorerPath(tree, schema.take(3).joinToString(separator))
         waitUntil("Composer schema connected") { tree.pathExists(*schema) }
-        tree.fixture.expandPath(schema.joinToString(separator))
+        expandExplorerPath(tree, schema.joinToString(separator))
         fun open(): DialogUiComponent {
-            tree.fixture.rightClickPath(schema.joinToString(separator))
+            rightClickExplorerPath(tree, schema.joinToString(separator))
             frame.x { byVisibleText("Create table…") }.waitFound().click()
             return frame.x(DialogUiComponent::class.java) { byTitle("Create table in PUBLIC") }.waitFound()
         }
@@ -2129,6 +2153,7 @@ class IntellijUiScreenshotTest {
         val tablePath = schema + arrayOf("Tables (2)", "customers")
         val explorerStatus = frame.driver.cast(frame.x { byAccessibleName("Database explorer status") }.waitFound().component, LiveLabel::class)
         fun menu(label: String) {
+            expandExplorerPath(tree, tablePath.dropLast(1).joinToString(tree.fixture.separator()))
             // pathExists uses substring matching: customers also matches customers_archive.
             var targetRow: Int? = null
             waitUntil("refresh target present and metadata read finished") {
@@ -2235,14 +2260,14 @@ class IntellijUiScreenshotTest {
         val tree = root.x(JTreeUiComponent::class.java) { byJavaClass("com.intellij.ui.treeStructure.Tree") }.waitFound()
         val separator = tree.fixture.separator()
         val schema = arrayOf("Data Sources", "HSQLDB", "Local development", "PUBLIC")
-        tree.fixture.expandPath(schema.take(3).joinToString(separator))
+        expandExplorerPath(tree, schema.take(3).joinToString(separator))
         waitUntil("inspector schema connected") { tree.pathExists(*schema) }
-        tree.fixture.expandPath(schema.joinToString(separator))
+        expandExplorerPath(tree, schema.joinToString(separator))
         waitUntil("customers loaded") { tree.pathExists(*(schema + arrayOf("Tables (1)", "customers"))) }
         fun open(table: String = "customers"): DialogUiComponent {
             waitUntil("$table in explorer") { tree.pathExists(*(schema + arrayOf("Tables (1)", table))) }
             val path = (schema + arrayOf("Tables (1)", table)).joinToString(separator)
-            tree.fixture.rightClickPath(path)
+            rightClickExplorerPath(tree, path)
             frame.x { byVisibleText("Alter table…") }.waitFound().click()
             return frame.x(DialogUiComponent::class.java) { byTitle("Edit table: $table") }.waitFound()
         }
