@@ -8,6 +8,8 @@ Patch notes are selected by the exact release version, including prerelease suff
 
 ### Data sources and explorer
 
+- Preserve expanded and collapsed branches, selection and scroll position across startup, manual and database-change refreshes, including when explorer search is active.
+
 - Add PostgreSQL with schema browsing, table editing, SQL consoles, DDL and exports; add H2 memory, file and TCP connections, with MySQL and PostgreSQL compatibility-mode workflows.
 - Group connections by database type, filter visible sources, and search across connections, schemas, tables and columns. Show key metadata in table and SQL result grids.
 - Cache the last successful metadata for offline browsing and SQL generation, and refresh the explorer and affected editors after database changes.

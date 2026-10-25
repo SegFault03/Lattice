@@ -31,8 +31,9 @@ final class DatabaseExplorerSearchController implements AutoCloseable {
     private final Map<DefaultMutableTreeNode, List<String>> errors = new IdentityHashMap<>();
     private final Timer debounce, repaint;
     private DatabaseExplorerSearch query = new DatabaseExplorerSearch("", Set.of());
-    private List<TreePath> matches = List.of(), originalExpansion;
-    private TreePath originalSelection;
+    private List<TreePath> matches = List.of();
+    private ExplorerTreeViewState originalView;
+    private boolean revealMetadataMatches;
     private DatabaseTaskScope work;
     private boolean indexing, merging, revealing, closed;
     private int current = -1;
@@ -40,6 +41,7 @@ final class DatabaseExplorerSearchController implements AutoCloseable {
     private final TreeModelListener listener = new TreeModelListener() {
         private void changed(TreeModelEvent event) {
             if (merging || closed) return;
+            revealMetadataMatches = false;
             if (indexing) cancel();
             if (event.getTreePath().getPathCount() >= 3) indexed.remove(event.getTreePath().getPathComponent(2));
             if (query.isActive()) { repaint.restart(); debounce.restart(); }
@@ -57,7 +59,7 @@ final class DatabaseExplorerSearchController implements AutoCloseable {
         this.bar = bar;
         debounce = new Timer(250, event -> ensureMetadata());
         debounce.setRepeats(false);
-        repaint = new Timer(60, event -> refreshMatches());
+        repaint = new Timer(60, event -> refreshMatches(revealMetadataMatches));
         repaint.setRepeats(false);
         model.addTreeModelListener(listener);
     }
@@ -76,12 +78,10 @@ final class DatabaseExplorerSearchController implements AutoCloseable {
             tree.repaint();
             return;
         }
-        if (originalExpansion == null) {
-            originalExpansion = expandedPaths();
-            originalSelection = tree.getSelectionPath();
-        }
+        if (originalView == null) originalView = ExplorerTreeViewState.capture(tree);
         if (query.metadataDepth() == 0 && indexing) cancel();
-        refreshMatches();
+        revealMetadataMatches = true;
+        refreshMatches(true);
         debounce.restart();
     }
 
@@ -89,34 +89,17 @@ final class DatabaseExplorerSearchController implements AutoCloseable {
         cancel();
         indexed.clear();
         errors.clear();
-        originalExpansion = null;
-        originalSelection = null;
-        if (query.isActive()) changed(query);
-    }
-
-    private List<TreePath> expandedPaths() {
-        var expanded = tree.getExpandedDescendants(new TreePath(root.getPath()));
-        return expanded == null ? List.of() : Collections.list(expanded);
-    }
-
-    private boolean visible(TreePath path) {
-        return path.getPathCount() < 2 || model.getVisibleTypes().contains(
-                ((TreeNodeData) ((DefaultMutableTreeNode) path.getPathComponent(1)).getUserObject()).getDatabaseType());
+        revealMetadataMatches = false;
+        if (query.isActive()) { refreshMatches(false); debounce.restart(); }
     }
 
     private void restoreExpansion() {
-        if (originalExpansion == null) return;
+        if (originalView == null) return;
         revealing = true;
         try {
-            for (int row = tree.getRowCount() - 1; row >= 0; row--) tree.collapseRow(row);
-            for (TreePath path : originalExpansion) {
-                if (((DefaultMutableTreeNode) path.getLastPathComponent()).getRoot() == root && visible(path)) tree.expandPath(path);
-            }
-            if (originalSelection != null && ((DefaultMutableTreeNode) originalSelection.getLastPathComponent()).getRoot() == root
-                    && visible(originalSelection)) tree.setSelectionPath(originalSelection);
+            originalView.restore(tree);
         } finally { revealing = false; }
-        originalExpansion = null;
-        originalSelection = null;
+        originalView = null;
     }
 
     private List<DefaultMutableTreeNode> searchableSources(boolean includeCached) {
@@ -134,7 +117,7 @@ final class DatabaseExplorerSearchController implements AutoCloseable {
         return sources;
     }
 
-    private void refreshMatches() {
+    private void refreshMatches(boolean reveal) {
         if (closed || !query.isActive()) return;
         Map<TreeNodeData, List<DatabaseExplorerSearch.Range>> highlights = new IdentityHashMap<>();
         List<TreePath> paths = new ArrayList<>();
@@ -150,7 +133,7 @@ final class DatabaseExplorerSearchController implements AutoCloseable {
         current = -1;
         tree.putClientProperty(DatabaseExplorerSearch.MATCHES_PROPERTY, highlights);
         revealing = true;
-        try { for (TreePath path : paths) if (path.getParentPath() != null) tree.expandPath(path.getParentPath()); }
+        try { if (reveal) for (TreePath path : paths) if (path.getParentPath() != null) tree.expandPath(path.getParentPath()); }
         finally { revealing = false; }
         List<String> failures = query.metadataDepth() == 0 ? List.of()
                 : sources.stream().flatMap(source -> errors.getOrDefault(source, List.of()).stream()).toList();
@@ -184,7 +167,7 @@ final class DatabaseExplorerSearchController implements AutoCloseable {
         DatabaseTaskScope scope = work;
         indexing = true;
         sources.forEach(errors::remove);
-        refreshMatches();
+        refreshMatches(false);
         scope.submit(() -> {
             try {
                 for (int i = 0; i < sources.size(); i++) {
@@ -199,12 +182,12 @@ final class DatabaseExplorerSearchController implements AutoCloseable {
                             if (closed || generation.get() != token || source.getRoot() != root
                                     || !DatabaseConnectionManager.getInstance().isConnected(config.getId())) return;
                             merging = true;
-                            List<TreePath> expanded = expandedPaths();
                             try {
-                                merge(source, snapshot);
-                                model.nodeStructureChanged(source);
                                 revealing = true;
-                                for (TreePath path : expanded) if (visible(path)) tree.expandPath(path);
+                                ExplorerTreeViewState.preserving(tree, () -> {
+                                    merge(source, snapshot);
+                                    model.nodeStructureChanged(source);
+                                });
                             } finally { revealing = false; merging = false; }
                             indexed.put(source, depth);
                             errors.put(source, snapshot.errors().stream().map(message -> config.getName() + ": " + message).toList());
@@ -224,7 +207,8 @@ final class DatabaseExplorerSearchController implements AutoCloseable {
                     if (closed || generation.get() != token) return;
                     work = null;
                     indexing = false;
-                    refreshMatches();
+                    refreshMatches(revealMetadataMatches);
+                    revealMetadataMatches = false;
                     ensureMetadata();
                 });
             }

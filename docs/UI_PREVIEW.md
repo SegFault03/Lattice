@@ -30,6 +30,17 @@ connection exists. The startup preference is still available below the source
 list. `--all-previews` captures the screen in both themes and at wide and narrow
 editor widths.
 
+## Explorer refresh behavior
+
+Startup refresh, toolbar refresh and refreshes after database changes retain the
+current expanded and collapsed branches, selected object and scroll position.
+Existing metadata stays browsable while loading; results respect navigation made
+during the read. Rebuilt folders are matched by object identity rather than their
+displayed counts. If the selected object was deleted, selection moves to its
+nearest surviving parent. Failed reads restore cached metadata with the same view.
+Active search updates its matches without reopening collapsed branches; editing
+the search query or navigating its results still reveals matches explicitly.
+
 ## Cell inspector interaction
 
 Use **Inspect** in the table toolbar or **Alt+Enter** to toggle the inspector.

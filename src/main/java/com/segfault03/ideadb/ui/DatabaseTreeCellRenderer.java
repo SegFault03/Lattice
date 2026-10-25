@@ -117,6 +117,7 @@ public class DatabaseTreeCellRenderer extends ColoredTreeCellRenderer {
                 append(data.getName(), SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES);
                 break;
         }
+        if (data.isLoading()) setIcon(com.intellij.ui.AnimatedIcon.Default.INSTANCE);
         if (data.isCached()) {
             setToolTipText((getToolTipText() == null ? data.getName() : getToolTipText())
                     + " · Cached metadata · Disconnected · Refresh to reconnect");
