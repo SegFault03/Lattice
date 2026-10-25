@@ -298,6 +298,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         dataTable = new DatabaseTable(tableModel);
         dataTable.putClientProperty("lattice.showColumnIcons", Boolean.TRUE);
         dataTable.setCellSelectionEnabled(true);
+        dataTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        dataTable.getColumnModel().getSelectionModel().setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         dataTable.setDefaultRenderer(Object.class, new CellHighlightRenderer());
         JPopupMenu cellMenu = DatabaseUi.popupMenu();
         cellMenu.add(nullBtn);
@@ -393,7 +395,6 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 if (event.getX() - bounds.x <= resizeZone && viewCol > 0
                         || bounds.x + bounds.width - event.getX() <= resizeZone) return;
                 if (!finishGridCellEditing()) return;
-                dataTable.clearSelection();
                 dataTable.setSelectedHeaderColumn(dataTable.convertColumnIndexToModel(viewCol));
                 if (inspectorVisible) openColumnDetails(viewCol);
             }
@@ -1588,6 +1589,10 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
                                                        boolean hasFocus, int row, int column) {
+            if (dataTable.getSelectedHeaderColumn() >= 0) {
+                isSelected = false;
+                hasFocus = false;
+            }
             Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
 
             setFont(table.getFont());
@@ -1662,7 +1667,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                         JBUI.Borders.customLine(JBColor.namedColor("Component.focusColor", new JBColor(0x3574F0, 0x548AF7))),
                         JBUI.Borders.empty(0, 7)));
             }
-            if (inspectorVisible && cellDetails != null && !cellDetails.isColumnMode()
+            if (dataTable.getSelectedHeaderColumn() < 0 && inspectorVisible && cellDetails != null && !cellDetails.isColumnMode()
                     && modelRow == cellDetails.inspectedRow() && modelCol == cellDetails.inspectedColumn()
                     && errorMsg == null) {
                 if (!isModified && !isNewRow) {

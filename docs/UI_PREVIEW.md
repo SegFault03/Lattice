@@ -9,6 +9,8 @@ is on. Inspect opens the selected header or data cell. Selecting a data cell whi
 the inspector is open returns the panel to that cell. The inspector overlays the right edge of the grid
 without changing grid bounds or column widths. Its body owns its side padding so
 IDE scroll-pane border cleanup cannot remove the gutters.
+Only one body cell or column header can be selected at a time. Header selection
+also clears the former body cell's focus position so it cannot retain an outline.
 
 **Edit value** starts an unstaged draft. While editing, the inspector stays on
 that cell. **Stage change** explicitly adds the draft to the pending batch;
@@ -23,6 +25,10 @@ default are distinct. Edit, Set default and Copy share one action row. Set defau
 uses the database default for new rows and is disabled when unavailable; an empty
 string can be entered through Edit. NULL and Revert appear when applicable. Character
 counts follow the draft, and invalid values show feedback beside the editor.
+Unavailable defaults have a deep grey surface with white text. The value viewport
+keeps its dimensions across formatted/raw viewing, editing and cancellation;
+the surrounding body scrolls when space is limited. Buttons show a focus cue
+for keyboard navigation, while mouse clicks leave no persistent focus outline.
 Compact presentation controls appear for structured/long values, with an underline
 on selected options. Stage change retains readable text when disabled; Cancel has
 a red surface and text. Column metadata stays

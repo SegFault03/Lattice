@@ -427,11 +427,24 @@ public final class UiPreview {
         renderApprovedInspector(theme);
         TableDataEditorPanel editor = table(false);
         JTable grid = (JTable) field(editor, "dataTable");
+        grid.changeSelection(0, 0, false, false);
+        grid.changeSelection(3, 4, false, true);
+        if (grid.getSelectedRowCount() != 1 || grid.getSelectedColumnCount() != 1)
+            throw new AssertionError("The table editor must permit only one selected body cell");
         grid.changeSelection(0, 2, false, false);
         clickColumnHeader(grid, 3);
         JComponent details = (JComponent)field(editor, "cellDetails");
         if ((Boolean)field(editor, "inspectorVisible") || ((DatabaseTable)grid).getSelectedHeaderColumn() != 3)
             throw new AssertionError("A header click must select the header without opening a closed inspector");
+        if (grid.getSelectedRowCount() != 0 || grid.getSelectedColumnCount() != 0
+                || grid.getSelectionModel().getLeadSelectionIndex() != -1
+                || grid.getColumnModel().getSelectionModel().getLeadSelectionIndex() != -1)
+            throw new AssertionError("Selecting a header must clear both body selection and its former focus cell");
+        JComponent bodyRenderer = (JComponent)grid.getCellRenderer(0, 2)
+                .getTableCellRendererComponent(grid, grid.getValueAt(0, 2), false, true, 0, 2);
+        if (!(bodyRenderer.getBorder() instanceof javax.swing.border.EmptyBorder))
+            throw new AssertionError("A selected header must suppress a stale body-cell focus outline");
+        render(editor, theme + "-header-selected-inspector-closed-1440", 1440, 900);
         invoke(editor, "toggleInspector", new Class<?>[0]);
         if (!(Boolean)invokeResult(details, "isColumnMode"))
             throw new AssertionError("Inspect must open the selected column header");
@@ -606,8 +619,12 @@ public final class UiPreview {
         grid.changeSelection(0, 2, false, false);
         invoke(editor, "openCellDetails", new Class<?>[]{int.class, int.class}, 0, 2);
         render(editor, theme + "-cell-json-1100", 1100, 700);
+        JComponent valueViewport = (JComponent)field(details, "valueScroll");
+        Rectangle viewingBounds = SwingUtilities.convertRectangle(valueViewport.getParent(), valueViewport.getBounds(), details);
         invoke(details, "beginEdit", new Class<?>[0]);
         render(editor, theme + "-cell-json-editing-unchanged-1100", 1100, 700);
+        if (!viewingBounds.equals(SwingUtilities.convertRectangle(valueViewport.getParent(), valueViewport.getBounds(), details)))
+            throw new AssertionError("Editing must keep the formatted value viewport's geometry");
         ((JTextArea)field(details, "valueArea")).append(" ");
         if (!(Boolean)invokeResult(details, "hasDraftChange") || !((JButton)field(details, "apply")).isEnabled())
             throw new AssertionError("Changing the JSON draft must enable Stage change");
@@ -616,6 +633,9 @@ public final class UiPreview {
             throw new AssertionError("JSON staging became disabled during rendering; draft=" + field(details, "draft")
                     + ", text=" + ((JTextArea)field(details, "valueArea")).getText());
         invoke(details, "cancelEditing", new Class<?>[0]);
+        render(editor, theme + "-cell-json-cancelled-1100", 1100, 700);
+        if (!viewingBounds.equals(SwingUtilities.convertRectangle(valueViewport.getParent(), valueViewport.getBounds(), details)))
+            throw new AssertionError("Cancellation must keep the value viewport's geometry");
         for (int width : new int[]{960, 760}) {
             render(editor, theme + "-cell-json-compact-" + width, width, 600);
             JComponent formatted = (JComponent)field(details, "formattedTab"), summary = (JComponent)field(details, "summary");

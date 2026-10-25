@@ -20,7 +20,21 @@ public final class DatabaseTable extends JBTable {
 
     public void setSelectedHeaderColumn(int modelColumn) {
         selectedHeaderColumn = modelColumn;
+        if (modelColumn >= 0) {
+            clearSelection();
+            // clearSelection leaves JTable's former focus/lead cell behind.
+            getSelectionModel().setAnchorSelectionIndex(-1);
+            getSelectionModel().setLeadSelectionIndex(-1);
+            getColumnModel().getSelectionModel().setAnchorSelectionIndex(-1);
+            getColumnModel().getSelectionModel().setLeadSelectionIndex(-1);
+        }
         getTableHeader().repaint();
+        repaint();
+    }
+
+    @Override public void changeSelection(int row, int column, boolean toggle, boolean extend) {
+        setSelectedHeaderColumn(-1);
+        super.changeSelection(row, column, toggle, extend);
     }
 
     public DatabaseTable(TableModel model) {

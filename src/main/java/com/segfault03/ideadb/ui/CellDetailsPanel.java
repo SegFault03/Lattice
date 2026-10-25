@@ -60,6 +60,15 @@ final class CellDetailsPanel extends JPanel {
     private JPanel valueBlock;
     private JPanel tableNote;
     private final JPanel actionsRow = new JPanel(new ActionLayout());
+    private int viewingActionsHeight;
+    private final JPanel actionGroup = new JPanel(new ColumnLayout()) {
+        @Override public Dimension getPreferredSize() {
+            Dimension size = super.getPreferredSize();
+            // Keep the secondary-action space when switching into edit mode.
+            if (editing) size.height = Math.max(size.height, viewingActionsHeight);
+            return size;
+        }
+    };
     private final JPanel tableNoteText = new JPanel(new BorderLayout());
     private final WrappingLabel tableNoteLabel = new WrappingLabel("Review or change table structure");
     private final JPanel metadata = new JPanel();
@@ -200,9 +209,15 @@ final class CellDetailsPanel extends JPanel {
     }
 
     private static final class PresentationToggle extends JToggleButton {
-        PresentationToggle(String text) { super(text); setRolloverEnabled(true); }
+        PresentationToggle(String text) {
+            super(text); setRolloverEnabled(true); DatabaseUi.installFocusVisibility(this);
+        }
         @Override public void updateUI() {
             setUI(new javax.swing.plaf.basic.BasicToggleButtonUI() {
+                @Override protected void paintFocus(Graphics graphics, AbstractButton button, Rectangle view,
+                                                    Rectangle text, Rectangle icon) {
+                    if (DatabaseUi.isFocusVisible(button)) super.paintFocus(graphics, button, view, text, icon);
+                }
                 @Override protected void paintText(Graphics graphics, AbstractButton button, Rectangle bounds, String text) {
                     graphics.setColor(button.getForeground());
                     javax.swing.plaf.basic.BasicGraphicsUtils.drawStringUnderlineCharAt(button, (Graphics2D)graphics, text,
@@ -230,6 +245,7 @@ final class CellDetailsPanel extends JPanel {
         InspectorButton(String text, Icon icon, ButtonStyle style) {
             super(text, icon); this.style = style;
             DatabaseUi.configureActionSizing(this); setRolloverEnabled(true);
+            DatabaseUi.installFocusVisibility(this);
             getModel().addChangeListener(e -> repaint());
             addFocusListener(new FocusAdapter() {
                 @Override public void focusGained(FocusEvent e) { repaint(); }
@@ -242,6 +258,7 @@ final class CellDetailsPanel extends JPanel {
         }
         @Override public Color getForeground() {
             if (style == ButtonStyle.PRIMARY) return isEnabled() ? Color.WHITE : new JBColor(0x40536F, 0xDAE5F7);
+            if (style == ButtonStyle.DEFAULT && !isEnabled()) return Color.WHITE;
             if (style == ButtonStyle.DEFAULT && isEnabled()) return new JBColor(0x214E94, 0xC7DDFF);
             if (style == ButtonStyle.DANGER) return new JBColor(0xA32D36, 0xFFC0C5);
             return isEnabled() ? super.getForeground() : new JBColor(0x667185, 0xA8B2C1);
@@ -255,7 +272,7 @@ final class CellDetailsPanel extends JPanel {
                     : getModel().isPressed() ? new JBColor(0x124DCE, 0x2054CD)
                     : hover ? new JBColor(0x1B57DF, 0x326DFA) : new JBColor(0x1F62F2, 0x2864F6)
                     : style == ButtonStyle.DANGER ? hover ? new JBColor(0xF6D3D6, 0x65353F) : new JBColor(0xFBE8E8, 0x522E35)
-                    : style == ButtonStyle.DEFAULT ? !isEnabled() ? new JBColor(0xE3EAF5, 0x344153)
+                    : style == ButtonStyle.DEFAULT ? !isEnabled() ? new JBColor(0x5B616B, 0x464D58)
                     : hover ? new JBColor(0xD1E0F8, 0x3A587D) : new JBColor(0xE0EAFB, 0x31496C)
                     : hover ? new JBColor(0xE8ECF2, 0x35383F)
                     : style == ButtonStyle.SECONDARY ? new JBColor(0xFFFFFF, 0x2B2D30) : null;
@@ -266,11 +283,12 @@ final class CellDetailsPanel extends JPanel {
                     g.setColor(style == ButtonStyle.PRIMARY
                             ? isEnabled() ? new JBColor(0x1753D5, 0x3B73FC) : new JBColor(0x90A1BA, 0x6C819C)
                             : style == ButtonStyle.DANGER ? new JBColor(0xD89EA4, 0x99505B)
-                            : style == ButtonStyle.DEFAULT ? new JBColor(0xAAC1E4, 0x5879A1) : new JBColor(0xD4D9E1, 0x484C54));
+                            : style == ButtonStyle.DEFAULT ? !isEnabled() ? new JBColor(0x5B616B, 0x5B6573)
+                            : new JBColor(0xAAC1E4, 0x5879A1) : new JBColor(0xD4D9E1, 0x484C54));
                     g.draw(new java.awt.geom.RoundRectangle2D.Float(0.5f, 0.5f, getWidth() - 1f, getHeight() - 1f, arc, arc));
                 }
             }
-            if (isFocusOwner()) {
+            if (isFocusOwner() && DatabaseUi.isFocusVisible(this)) {
                 g.setColor(new JBColor(0x356EDE, 0x8AAFFF)); g.setStroke(new BasicStroke(JBUI.scale(2f)));
                 g.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, arc, arc);
             }
@@ -290,6 +308,7 @@ final class CellDetailsPanel extends JPanel {
         HeaderIconButton(Icon icon) {
             super(icon); setOpaque(false); setContentAreaFilled(false); setBorderPainted(false);
             setRolloverEnabled(true); setFocusable(true); DatabaseUi.configureActionSizing(this);
+            DatabaseUi.installFocusVisibility(this);
             getModel().addChangeListener(e -> repaint());
         }
         @Override public void updateUI() {
@@ -299,7 +318,7 @@ final class CellDetailsPanel extends JPanel {
         @Override protected void paintComponent(Graphics graphics) {
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            if (getModel().isRollover() || getModel().isPressed() || isFocusOwner()) {
+            if (getModel().isRollover() || getModel().isPressed() || isFocusOwner() && DatabaseUi.isFocusVisible(this)) {
                 g.setColor(getModel().isPressed() ? new JBColor(0xD3D7DF, 0x42454C)
                         : new JBColor(0xE9ECF1, 0x303339));
                 g.fillRoundRect(0, 0, getWidth(), getHeight(), JBUI.scale(6), JBUI.scale(6));
@@ -387,7 +406,7 @@ final class CellDetailsPanel extends JPanel {
         valueStates.add(setNull); valueStates.add(revert);
         apply.addActionListener(e -> applyDraft()); cancel.addActionListener(e -> cancelEdit());
         actionsRow.add(apply); actionsRow.add(cancel); actionsRow.add(edit); actionsRow.add(useDefault); actionsRow.add(copy);
-        JPanel actionGroup = new JPanel(new ColumnLayout()); actionGroup.setOpaque(false);
+        actionGroup.setOpaque(false);
         actionGroup.add(actionsRow); actionGroup.add(valueStates);
         valueBlock = new JPanel(new WidthAwareBorderLayout()); valueBlock.setOpaque(false);
         valueBlock.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -445,21 +464,8 @@ final class CellDetailsPanel extends JPanel {
         if (bodyScroll.getVerticalScrollBar().isVisible())
             contentWidth = Math.max(1, contentWidth - bodyScroll.getVerticalScrollBar().getPreferredSize().width);
         content.setSize(contentWidth, content.getHeight());
-        if (!columnMode && valueBlock != null && getHeight() > 0) {
-            int fixedHeight = header.getPreferredSize().height + bottomDock.getPreferredSize().height
-                    + lower.getPreferredSize().height
-                    + valueBlock.getPreferredSize().height
-                    - valueScroll.getPreferredSize().height;
-            boolean large = valueArea.getLineCount() > 1 || structuredValue;
-            int lineHeight = valueArea.getFontMetrics(valueArea.getFont()).getHeight();
-            int desired = large ? Math.min(JBUI.scale(320), Math.max(JBUI.scale(144), lineHeight * Math.min(12, valueArea.getLineCount()) + JBUI.scale(24)))
-                    : Math.max(JBUI.scale(164), lineHeight * 2 + JBUI.scale(32));
-            int editorHeight = Math.max(JBUI.scale(64), Math.min(desired, getHeight() - fixedHeight));
-            if (valueScroll.getPreferredSize().height != editorHeight) {
-                valueScroll.setPreferredSize(new Dimension(100, editorHeight));
-                resizeContentBlocks();
-            }
-        }
+        // Keep the value viewport stable across formatted/raw, editing and cancellation.
+        // The surrounding body scrolls when the inspector is too short for its content.
         super.doLayout();
     }
 
@@ -505,6 +511,7 @@ final class CellDetailsPanel extends JPanel {
         // Recovery must not depend on metadata being available yet. Staging still
         // requires a fresh editable snapshot, so recovered text cannot bypass validation.
         draft = CellValuePresentation.editable(cell.value());
+        viewingActionsHeight = actionGroup.getPreferredSize().height;
         editing = true; valueArea.setEditable(true); valueArea.setText(text); updateEnabled();
     }
     void cancelEditing() { cancelEdit(); }
@@ -634,7 +641,7 @@ final class CellDetailsPanel extends JPanel {
         updateTabs();
         tabs.setVisible(structured || wrap.isVisible());
     }
-    private void beginEdit() { if (cell == null || !cell.editable() || busy || editing) return; draft = CellValuePresentation.editable(cell.value()); editing = true; valueArea.setEditable(true); valueArea.setText(draft); summary.setText(valueSummary(draft)); valueArea.requestFocusInWindow(); valueArea.setCaretPosition(valueArea.getDocument().getLength()); updateEnabled(); }
+    private void beginEdit() { if (cell == null || !cell.editable() || busy || editing) return; viewingActionsHeight = actionGroup.getPreferredSize().height; draft = CellValuePresentation.editable(cell.value()); editing = true; valueArea.setEditable(true); valueArea.setText(draft); summary.setText(valueSummary(draft)); valueArea.requestFocusInWindow(); valueArea.setCaretPosition(valueArea.getDocument().getLength()); updateEnabled(); }
     private void applyDraft() { if (!editing || busy || cell == null || !cell.editable() || !hasDraftChange()) return; stageCurrentEdit(); }
     private void stageCurrentEdit() {
         String text = valueArea.getText(); Cell target = cell;

@@ -9,6 +9,22 @@ import java.awt.event.MouseEvent;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DatabaseTableTest {
+    @Test void headerSelectionClearsBodySelectionAndItsFormerFocusCell() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            var table = new DatabaseTable(new DefaultTableModel(new Object[][]{{1, "one"}, {2, "two"}},
+                    new Object[]{"id", "name"}));
+            table.setCellSelectionEnabled(true);
+            table.changeSelection(1, 1, false, false);
+            assertEquals(1, table.getSelectionModel().getLeadSelectionIndex());
+            table.setSelectedHeaderColumn(1);
+            assertEquals(0, table.getSelectedRowCount()); assertEquals(0, table.getSelectedColumnCount());
+            assertEquals(-1, table.getSelectionModel().getLeadSelectionIndex());
+            assertEquals(-1, table.getColumnModel().getSelectionModel().getLeadSelectionIndex());
+            table.changeSelection(0, 0, false, false);
+            assertEquals(-1, table.getSelectedHeaderColumn());
+            assertEquals(1, table.getSelectedRowCount()); assertEquals(1, table.getSelectedColumnCount());
+        });
+    }
     @Test void selectedHeaderUsesBlueCellTreatmentWithoutChangingColumnSizing() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             var table = new DatabaseTable(new DefaultTableModel(new Object[]{"id", "name"}, 0));

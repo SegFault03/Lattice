@@ -198,6 +198,56 @@ class CellDetailsPanelTest {
             panel.showCell(new CellDetailsPanel.Cell("customers", 0, 0, noDefault, null,
                     true, false, true, false, null, "New row", ""));
             assertFalse(defaults.isEnabled()); defaults.doClick(0); assertEquals(1, actions.defaults);
+            assertEquals(Color.WHITE, defaults.getForeground());
+            defaults.setSize(defaults.getPreferredSize());
+            var image = new java.awt.image.BufferedImage(defaults.getWidth(), defaults.getHeight(),
+                    java.awt.image.BufferedImage.TYPE_INT_RGB);
+            Graphics2D graphics = image.createGraphics(); defaults.paint(graphics); graphics.dispose();
+            Color surface = new Color(image.getRGB(4, defaults.getHeight() / 2));
+            assertTrue(Math.max(surface.getRed(), Math.max(surface.getGreen(), surface.getBlue())) < 120,
+                    "Unavailable database defaults must use a deep grey surface");
+        });
+    }
+
+    @Test void formattedRawEditingAndCancelKeepTheSameValueViewportBounds() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            String json = "{\"items\":[" + java.util.stream.IntStream.range(0, 20)
+                    .mapToObj(i -> "{\"id\":" + i + "}").collect(java.util.stream.Collectors.joining(",")) + "]}";
+            for (Dimension size : new Dimension[]{new Dimension(320, 600), new Dimension(388, 730), new Dimension(520, 800)}) {
+                CellDetailsPanel panel = new CellDetailsPanel(new RecordingActions());
+                panel.showCell(cell(json, 0)); panel.setSize(size);
+                for (int pass = 0; pass < 4; pass++) layout(panel);
+                JScrollPane value = field(panel, "valueScroll", JScrollPane.class);
+                Rectangle original = SwingUtilities.convertRectangle(value.getParent(), value.getBounds(), panel);
+                click(panel, "edit");
+                for (int pass = 0; pass < 4; pass++) layout(panel);
+                assertEquals(original, SwingUtilities.convertRectangle(value.getParent(), value.getBounds(), panel),
+                        "Entering raw edit mode must preserve the formatted viewport at " + size);
+                field(panel, "valueArea", JTextArea.class).setText("changed\n".repeat(30));
+                for (int pass = 0; pass < 4; pass++) layout(panel);
+                assertEquals(original, SwingUtilities.convertRectangle(value.getParent(), value.getBounds(), panel));
+                click(panel, "cancel");
+                for (int pass = 0; pass < 4; pass++) layout(panel);
+                assertEquals(original, SwingUtilities.convertRectangle(value.getParent(), value.getBounds(), panel));
+            }
+        });
+    }
+
+    @Test void mouseClicksHideFocusCuesAndKeyboardTraversalRestoresThem() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            CellDetailsPanel panel = new CellDetailsPanel(new RecordingActions());
+            for (String name : new String[]{"edit", "copy", "apply", "cancel", "useDefault", "editTable",
+                    "formattedTab", "rawTab", "wrap", "close"}) {
+                AbstractButton button = field(panel, name, AbstractButton.class);
+                var mouse = new java.awt.event.MouseEvent(button, java.awt.event.MouseEvent.MOUSE_PRESSED,
+                        0, 0, 5, 5, 1, false, java.awt.event.MouseEvent.BUTTON1);
+                for (var listener : button.getMouseListeners()) listener.mousePressed(mouse);
+                assertFalse(DatabaseUi.isFocusVisible(button), name + " must not retain a mouse focus ring");
+                var traversal = new java.awt.event.FocusEvent(button, java.awt.event.FocusEvent.FOCUS_GAINED,
+                        false, null, java.awt.event.FocusEvent.Cause.TRAVERSAL_FORWARD);
+                for (var listener : button.getFocusListeners()) listener.focusGained(traversal);
+                assertTrue(DatabaseUi.isFocusVisible(button), name + " must keep keyboard focus visible");
+            }
         });
     }
 
