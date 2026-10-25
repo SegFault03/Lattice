@@ -82,11 +82,10 @@ final class CellDetailsPanel extends JPanel {
     private final JToggleButton rawTab = new PresentationToggle("Raw");
     private final JToggleButton wrap = new PresentationToggle("Wrap");
     private final JButton edit = new InspectorButton("Edit value", AllIcons.Actions.Edit, ButtonStyle.PRIMARY);
-    private final JButton copy = new QuietButton("Copy", AllIcons.Actions.Copy);
+    private final JButton copy = new QuietButton("", AllIcons.Actions.Copy);
     private final JButton setNull = new QuietButton("Set NULL", null);
     private final JButton useDefault = new InspectorButton("Set default", null, ButtonStyle.DEFAULT);
     private final JButton revert = new QuietButton("Revert", AllIcons.Actions.Rollback);
-    private Popup copiedPopup;
     private boolean copiedHintVisible;
     private final javax.swing.Timer copiedTimer = new javax.swing.Timer(1800, event -> dismissCopiedHint());
     private final JButton apply = new InspectorButton("Stage change", null, ButtonStyle.PRIMARY);
@@ -276,7 +275,7 @@ final class CellDetailsPanel extends JPanel {
                     : getModel().isPressed() ? new JBColor(0x124DCE, 0x2054CD)
                     : hover ? new JBColor(0x1B57DF, 0x326DFA) : new JBColor(0x1F62F2, 0x2864F6)
                     : style == ButtonStyle.DANGER ? hover ? new JBColor(0xF6D3D6, 0x65353F) : new JBColor(0xFBE8E8, 0x522E35)
-                    : style == ButtonStyle.DEFAULT ? !isEnabled() ? new JBColor(0x6F7784, 0x626C7B)
+                    : style == ButtonStyle.DEFAULT ? !isEnabled() ? new JBColor(0x828C9A, 0x758191)
                     : hover ? new JBColor(0xD1E0F8, 0x3A587D) : new JBColor(0xE0EAFB, 0x31496C)
                     : hover ? new JBColor(0xE8ECF2, 0x35383F)
                     : style == ButtonStyle.SECONDARY ? new JBColor(0xFFFFFF, 0x2B2D30) : null;
@@ -287,7 +286,7 @@ final class CellDetailsPanel extends JPanel {
                     g.setColor(style == ButtonStyle.PRIMARY
                             ? isEnabled() ? new JBColor(0x1753D5, 0x3B73FC) : new JBColor(0x90A1BA, 0x6C819C)
                             : style == ButtonStyle.DANGER ? new JBColor(0xD89EA4, 0x99505B)
-                            : style == ButtonStyle.DEFAULT ? !isEnabled() ? new JBColor(0x6F7784, 0x737E8E)
+                            : style == ButtonStyle.DEFAULT ? !isEnabled() ? new JBColor(0x828C9A, 0x8591A1)
                             : new JBColor(0xAAC1E4, 0x5879A1) : new JBColor(0xD4D9E1, 0x484C54));
                     g.draw(new java.awt.geom.RoundRectangle2D.Float(0.5f, 0.5f, getWidth() - 1f, getHeight() - 1f, arc, arc));
                 }
@@ -398,6 +397,7 @@ final class CellDetailsPanel extends JPanel {
         valueCard.add(valueResizeHandle, BorderLayout.SOUTH);
         actionsRow.setOpaque(false);
         copy.setToolTipText("Copy the raw cell value");
+        copy.getAccessibleContext().setAccessibleName("Copy value");
         copy.addActionListener(e -> copyText());
         edit.setToolTipText("Edit selected cell value");
         edit.getAccessibleContext().setAccessibleName("Edit selected cell value");
@@ -673,20 +673,20 @@ final class CellDetailsPanel extends JPanel {
         clipboard.setContents(new StringSelection(text), null);
         dismissCopiedHint();
         copiedHintVisible = true;
+        updateCopyLabel("Copied!");
         copy.getAccessibleContext().setAccessibleDescription("Copied!");
         copiedTimer.setRepeats(false); copiedTimer.restart();
-        if (copy.isShowing()) {
-            JToolTip hint = copy.createToolTip(); hint.setTipText("Copied!");
-            Dimension size = hint.getPreferredSize(); Point point = copy.getLocationOnScreen();
-            copiedPopup = PopupFactory.getSharedInstance().getPopup(copy, hint,
-                    point.x + (copy.getWidth() - size.width) / 2, point.y - size.height - JBUI.scale(4));
-            copiedPopup.show();
-        }
     }
     void dismissCopiedHint() {
         copiedTimer.stop(); copiedHintVisible = false;
-        if (copiedPopup != null) { copiedPopup.hide(); copiedPopup = null; }
+        updateCopyLabel("");
         copy.getAccessibleContext().setAccessibleDescription(null);
+    }
+    private void updateCopyLabel(String text) {
+        copy.setText(text); copy.setPreferredSize(null);
+        Dimension preferred = copy.getPreferredSize();
+        copy.setPreferredSize(new Dimension(preferred.width, Math.max(preferred.height, edit.getPreferredSize().height)));
+        actionsRow.revalidate(); content.revalidate(); repaint();
     }
     private void updateValueStates() {
         boolean available = cell != null && !columnMode && !editing && cell.editable();

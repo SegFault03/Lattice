@@ -425,6 +425,7 @@ public final class UiPreview {
     }
     static void renderCellDetails(String theme) throws Exception {
         renderApprovedInspector(theme);
+        renderCachedMenuThemeRefresh(theme);
         TableDataEditorPanel editor = table(false);
         JTable grid = (JTable) field(editor, "dataTable");
         grid.changeSelection(0, 0, false, false);
@@ -625,10 +626,54 @@ public final class UiPreview {
             throw new AssertionError("A new-row column with a database default must enable Set default");
         render(panel, theme + "-inspector-default-available", 388, 730);
         renderDesktopText(panel, theme + "-inspector-desktop-text-125");
+        invoke(panel, "copyToClipboard", new Class<?>[]{java.awt.datatransfer.Clipboard.class},
+                new java.awt.datatransfer.Clipboard("preview-copy"));
+        if (!"Copied!".equals(((JButton)field(panel, "copy")).getText()))
+            throw new AssertionError("Copy feedback must appear inline beside its icon");
+        renderDesktopText(panel, theme + "-inspector-inline-copy-feedback-125");
+        invoke(panel, "dismissCopiedHint", new Class<?>[0]);
         invoke(panel, "beginEdit", new Class<?>[0]);
         renderDesktopText(panel, theme + "-inspector-desktop-text-disabled-125");
         ((JTextArea)field(panel, "valueArea")).setText("{\"quantity\":2}");
         renderDesktopText(panel, theme + "-inspector-desktop-text-enabled-125");
+    }
+
+    static void renderCachedMenuThemeRefresh(String theme) throws Exception {
+        JPopupMenu menu = com.segfault03.ideadb.ui.DatabaseUi.popupMenu();
+        menu.add(new JMenuItem("Count rows")); menu.addSeparator(); menu.add(new JMenuItem("Truncate table..."));
+        JMenu nested = com.segfault03.ideadb.ui.DatabaseUi.submenu("More");
+        nested.add(new JMenuItem("Nested action")); menu.add(nested);
+        LookAndFeel original = UIManager.getLookAndFeel();
+        boolean dark = theme.equals("dark");
+        try {
+            UIManager.setLookAndFeel(dark ? new FlatIntelliJLaf() : new FlatDarculaLaf());
+            JBColor.setDark(!dark);
+            for (var listener : menu.getPopupMenuListeners())
+                listener.popupMenuWillBecomeVisible(new javax.swing.event.PopupMenuEvent(menu));
+        } finally {
+            UIManager.setLookAndFeel(original); JBColor.setDark(dark);
+        }
+        for (var listener : menu.getPopupMenuListeners())
+            listener.popupMenuWillBecomeVisible(new javax.swing.event.PopupMenuEvent(menu));
+        JPopupMenu child = nested.getPopupMenu();
+        for (var listener : child.getPopupMenuListeners())
+            listener.popupMenuWillBecomeVisible(new javax.swing.event.PopupMenuEvent(child));
+        if (!menu.getBackground().equals(UIManager.getColor("PopupMenu.background"))
+                || !child.getBackground().equals(UIManager.getColor("PopupMenu.background")))
+            throw new AssertionError("Cached popup surfaces must follow the current theme after a round trip");
+        renderMenuSurface(menu, theme + "-cached-options-after-theme-switch");
+        renderMenuSurface(child, theme + "-cached-submenu-after-theme-switch");
+    }
+
+    private static void renderMenuSurface(JPopupMenu menu, String name) throws Exception {
+        Dimension size = menu.getPreferredSize(); menu.setSize(size); layout(menu);
+        JComponent surface = new JComponent() {
+            @Override protected void paintComponent(Graphics graphics) {
+                graphics.setColor(UIManager.getColor("PopupMenu.background"));
+                graphics.fillRect(0, 0, getWidth(), getHeight()); menu.paint(graphics);
+            }
+        };
+        render(surface, name, size.width, size.height);
     }
 
     static void renderAdversarialCellDetails(TableDataEditorPanel editor, String theme) throws Exception {

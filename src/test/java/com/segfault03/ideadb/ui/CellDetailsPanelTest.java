@@ -205,7 +205,7 @@ class CellDetailsPanelTest {
             Graphics2D graphics = image.createGraphics(); defaults.paint(graphics); graphics.dispose();
             Color surface = new Color(image.getRGB(4, defaults.getHeight() / 2));
             int shade = Math.max(surface.getRed(), Math.max(surface.getGreen(), surface.getBlue()));
-            assertTrue(shade >= 120 && shade < 145,
+            assertTrue(shade >= 145 && shade < 170,
                     "Unavailable database defaults must use the lighter grey surface");
         });
     }
@@ -239,12 +239,14 @@ class CellDetailsPanelTest {
             CellDetailsPanel panel = new CellDetailsPanel(new RecordingActions()); reference.set(panel);
             panel.showCell(cell("{\"raw\":true}", 0));
             JButton copy = field(panel, "copy", JButton.class); Icon icon = copy.getIcon();
+            assertEquals("", copy.getText(), "Copy must be icon-only before use");
             var clipboard = new java.awt.datatransfer.Clipboard("inspector-copy-test");
             panel.copyToClipboard(clipboard);
             try { assertEquals("{\"raw\":true}", clipboard.getData(java.awt.datatransfer.DataFlavor.stringFlavor)); }
             catch (Exception error) { throw new AssertionError(error); }
             assertTrue(field(panel, "copiedHintVisible", Boolean.class));
-            assertSame(icon, copy.getIcon()); assertEquals("Copy", copy.getText());
+            assertSame(icon, copy.getIcon()); assertEquals("Copied!", copy.getText());
+            assertTrue(copy.getPreferredSize().width > com.intellij.util.ui.JBUI.scale(28), "Feedback must fit beside the icon");
             assertEquals("Copied!", copy.getAccessibleContext().getAccessibleDescription());
             javax.swing.Timer timer = field(panel, "copiedTimer", javax.swing.Timer.class);
             assertFalse(timer.isRepeats()); assertTrue(timer.getInitialDelay() > 0 && timer.getInitialDelay() <= 2000);
@@ -252,7 +254,10 @@ class CellDetailsPanelTest {
         });
         try {
             assertTrue(closed.await(3, java.util.concurrent.TimeUnit.SECONDS), "The copy hint must auto-dismiss");
-            SwingUtilities.invokeAndWait(() -> assertFalse(field(reference.get(), "copiedHintVisible", Boolean.class)));
+            SwingUtilities.invokeAndWait(() -> {
+                assertFalse(field(reference.get(), "copiedHintVisible", Boolean.class));
+                assertEquals("", field(reference.get(), "copy", JButton.class).getText());
+            });
         } finally { SwingUtilities.invokeAndWait(() -> reference.get().dismissCopiedHint()); }
     }
 

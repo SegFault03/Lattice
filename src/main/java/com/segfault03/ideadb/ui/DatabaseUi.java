@@ -20,7 +20,26 @@ public final class DatabaseUi {
     private DatabaseUi() {}
 
     /** Native IDEA popup painting, palette, borders and window handling in every theme. */
-    public static JPopupMenu popupMenu() { return new com.intellij.openapi.ui.JBPopupMenu(); }
+    public static JPopupMenu popupMenu() { return configurePopup(new com.intellij.openapi.ui.JBPopupMenu()); }
+
+    private static JPopupMenu configurePopup(JPopupMenu popup) {
+        popup.setOpaque(false);
+        popup.setLightWeightPopupEnabled(false);
+        if (!Boolean.TRUE.equals(popup.getClientProperty("lattice.popupThemeRefresh"))) {
+            popup.putClientProperty("lattice.popupThemeRefresh", Boolean.TRUE);
+            popup.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
+                @Override public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent event) {
+                    // Cached popup menus live outside the editor's component tree, so IDE
+                    // theme switches do not necessarily update their UI or child items.
+                    SwingUtilities.updateComponentTreeUI(popup);
+                    popup.setOpaque(false); popup.setLightWeightPopupEnabled(false);
+                }
+                @Override public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent event) {}
+                @Override public void popupMenuCanceled(javax.swing.event.PopupMenuEvent event) {}
+            });
+        }
+        return popup;
+    }
 
     /** Match JBPopupMenu's surface/window settings for Swing's internally owned submenus. */
     public static JMenu submenu(String text) {
@@ -29,9 +48,7 @@ public final class DatabaseUi {
                 JPopupMenu popup = super.getPopupMenu();
                 // IDEA's popup UI paints the theme surface; Swing's opaque fill can
                 // cover it with a black rectangle in native light themes.
-                popup.setOpaque(false);
-                popup.setLightWeightPopupEnabled(false);
-                return popup;
+                return configurePopup(popup);
             }
         };
     }

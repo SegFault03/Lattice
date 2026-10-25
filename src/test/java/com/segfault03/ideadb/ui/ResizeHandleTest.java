@@ -15,6 +15,11 @@ class ResizeHandleTest {
                         size::get, size::set);
                 JPanel parent = new JPanel(null); parent.setSize(500, 500);
                 parent.add(handle); handle.setBounds(20, 20, 100, 20);
+                assertNull(handle.getToolTipText(), "Resize areas must not display hints");
+                var image = new java.awt.image.BufferedImage(100, 20, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+                var graphics = image.createGraphics(); handle.paint(graphics); graphics.dispose();
+                for (int y = 0; y < image.getHeight(); y++) for (int x = 0; x < image.getWidth(); x++)
+                    assertEquals(0, image.getRGB(x, y) >>> 24, "Resize areas must not paint handles or lines");
                 handle.dispatchEvent(new MouseEvent(handle, MouseEvent.MOUSE_PRESSED, 0, 0, 5, 5, 1, false, MouseEvent.BUTTON1));
                 handle.dispatchEvent(new MouseEvent(handle, MouseEvent.MOUSE_DRAGGED, 0, MouseEvent.BUTTON1_DOWN_MASK,
                         horizontal ? 35 : 5, horizontal ? 5 : 35, 0, false, MouseEvent.NOBUTTON));

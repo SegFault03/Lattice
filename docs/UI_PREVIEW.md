@@ -26,9 +26,10 @@ action row; actions wrap only when the available width requires it. Set default
 uses the database default for new rows and is disabled when unavailable; an empty
 string can be entered through Edit. NULL and Revert appear when applicable. Character
 counts follow the draft, and invalid values show feedback beside the editor.
-Unavailable defaults have a muted grey surface with white text. Copy keeps its
-icon and shows a transient “Copied!” hint for 1.8 seconds after a successful copy;
-closing or disposing the inspector dismisses it immediately. The value viewport
+Unavailable defaults have a lighter muted grey surface with white text. Copy is
+icon-only at rest; "Copied!" appears inline beside that icon for 1.8 seconds after
+a successful copy. No popup is shown. Closing or disposing the inspector clears
+the feedback immediately. The value viewport
 keeps its dimensions across formatted/raw viewing, editing and cancellation;
 the surrounding body scrolls when space is limited. Buttons show a focus cue
 for keyboard navigation, while mouse clicks leave no persistent focus outline.
@@ -44,9 +45,10 @@ does not enlarge normal text. Header controls occupy real layout space so their
 complete hover targets fit at all scales. Action targets have a compact
 28-logical-pixel minimum with two-pixel vertical padding. The editor/action gap
 is eight pixels, matching the gap below the action row before column details.
-The value viewport starts at 144 logical pixels high. Drag its lower resize rail
-vertically, or use Up/Down while the rail has keyboard focus. Drag the inspector's
-left resize rail horizontally, or use Left/Right, to change the sidebar width.
+The value viewport starts at 144 logical pixels high. Its bottom edge and the
+inspector's left edge are invisible resize areas: the cursor changes to indicate
+vertical or horizontal dragging, with no painted handle or hover hint. Focused
+resize areas also support Up/Down or Left/Right.
 Chosen sizes survive editing, selection changes and closing/reopening within the
 editor; the grid's bounds and column widths remain unchanged. Metadata rows use
 four-pixel vertical padding, and the footer
@@ -62,6 +64,9 @@ custom button painters that bypass the IDE's per-component font rendering hints;
 the ordinary preview's global smoothing can otherwise hide that defect.
 The native focused scenario checks that header and cell clicks keep a closed inspector closed. See the
 [prioritized implementation checklist](design/data-cell-refresh-plan.md).
+Cached options menus and submenus refresh their Swing UI when opened so their
+surface, text and separators follow the current theme. Focused previews include
+light/dark theme round trips for these cached menus.
 
 All preview modes assert inspector-only draft recovery through the production
 table-editor constructor, including initially missing metadata, metadata failure,
