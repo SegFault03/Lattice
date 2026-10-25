@@ -14,6 +14,29 @@ import java.awt.event.MouseEvent;
 
 /** Shared database grids with column-aligned headers and no hover surfaces. */
 public final class DatabaseTable extends JBTable {
+    private int selectedHeaderColumn = -1;
+
+    public int getSelectedHeaderColumn() { return selectedHeaderColumn; }
+
+    public void setSelectedHeaderColumn(int modelColumn) {
+        selectedHeaderColumn = modelColumn;
+        if (modelColumn >= 0) {
+            clearSelection();
+            // clearSelection leaves JTable's former focus/lead cell behind.
+            getSelectionModel().setAnchorSelectionIndex(-1);
+            getSelectionModel().setLeadSelectionIndex(-1);
+            getColumnModel().getSelectionModel().setAnchorSelectionIndex(-1);
+            getColumnModel().getSelectionModel().setLeadSelectionIndex(-1);
+        }
+        getTableHeader().repaint();
+        repaint();
+    }
+
+    @Override public void changeSelection(int row, int column, boolean toggle, boolean extend) {
+        setSelectedHeaderColumn(-1);
+        super.changeSelection(row, column, toggle, extend);
+    }
+
     public DatabaseTable(TableModel model) {
         super(model);
         setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
@@ -127,6 +150,12 @@ public final class DatabaseTable extends JBTable {
             setBorder(BorderFactory.createCompoundBorder(
                     BorderFactory.createMatteBorder(0, 0, JBUI.scale(2), JBUI.scale(1), table.getGridColor()),
                     JBUI.Borders.empty(4, 8)));
+            if (table instanceof DatabaseTable grid && grid.getSelectedHeaderColumn() == table.convertColumnIndexToModel(column)) {
+                setBackground(new JBColor(0xE8F1FF, 0x283447));
+                setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(new JBColor(0x3868CC, 0x6EA3FF), JBUI.scale(2)),
+                        JBUI.Borders.empty(2, 6, 4, 7)));
+            }
             return this;
         }
     }

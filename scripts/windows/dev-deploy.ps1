@@ -1,4 +1,4 @@
-# All remaining arguments are forwarded unchanged to the portable Python CLI.
+# All remaining arguments, including --min, are forwarded unchanged to the portable Python CLI.
 [CmdletBinding(PositionalBinding = $false)]
 param(
     [string]$Python = 'python',

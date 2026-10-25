@@ -95,6 +95,31 @@ public final class UiPreview {
         snapshots.add(name + ".png");
         System.out.println(name + ": " + image.getWidth() + " x " + image.getHeight());
     }
+    private static void desktopTextHints(Component component) {
+        if (component instanceof JComponent swing) {
+            swing.putClientProperty(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_LCD_HRGB);
+            swing.putClientProperty(RenderingHints.KEY_TEXT_LCD_CONTRAST, 140);
+        }
+        if (component instanceof Container container)
+            for (Component child : container.getComponents()) desktopTextHints(child);
+    }
+    private static void renderDesktopText(JComponent component, String name) throws Exception {
+        component.setSize(388, 730);
+        for (int pass = 0; pass < 4; pass++) layout(component);
+        desktopTextHints(component);
+        double scale = 1.25;
+        BufferedImage image = new BufferedImage((int)Math.ceil(component.getWidth() * scale),
+                (int)Math.ceil(component.getHeight() * scale), BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = image.createGraphics();
+        graphics.scale(scale, scale);
+        // Match a desktop host that supplies text AA on Swing components, not on Graphics.
+        graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
+        component.printAll(graphics);
+        graphics.dispose();
+        ImageIO.write(image, "png", output.resolve(name + ".png").toFile());
+        snapshots.add(name + ".png");
+        System.out.println(name + ": " + image.getWidth() + " x " + image.getHeight());
+    }
     static ConnectionConfig config(DatabaseType type) {
         ConnectionConfig config = new ConnectionConfig(type, type == DatabaseType.MYSQL ? "Local development" : "Scratch database");
         config.setHost("localhost");
@@ -400,36 +425,53 @@ public final class UiPreview {
     }
     static void renderCellDetails(String theme) throws Exception {
         renderApprovedInspector(theme);
+        renderCachedMenuThemeRefresh(theme);
         TableDataEditorPanel editor = table(false);
         JTable grid = (JTable) field(editor, "dataTable");
+        grid.changeSelection(0, 0, false, false);
+        grid.changeSelection(3, 4, false, true);
+        if (grid.getSelectedRowCount() != 1 || grid.getSelectedColumnCount() != 1)
+            throw new AssertionError("The table editor must permit only one selected body cell");
         grid.changeSelection(0, 2, false, false);
-        invoke(editor, "openCellDetails", new Class<?>[]{int.class, int.class}, 0, 2);
-        JComponent details = (JComponent) field(editor, "cellDetails");
+        clickColumnHeader(grid, 3);
+        JComponent details = (JComponent)field(editor, "cellDetails");
+        if ((Boolean)field(editor, "inspectorVisible") || ((DatabaseTable)grid).getSelectedHeaderColumn() != 3)
+            throw new AssertionError("A header click must select the header without opening a closed inspector");
+        if (grid.getSelectedRowCount() != 0 || grid.getSelectedColumnCount() != 0
+                || grid.getSelectionModel().getLeadSelectionIndex() != -1
+                || grid.getColumnModel().getSelectionModel().getLeadSelectionIndex() != -1)
+            throw new AssertionError("Selecting a header must clear both body selection and its former focus cell");
+        JComponent bodyRenderer = (JComponent)grid.getCellRenderer(0, 2)
+                .getTableCellRendererComponent(grid, grid.getValueAt(0, 2), false, true, 0, 2);
+        if (!(bodyRenderer.getBorder() instanceof javax.swing.border.EmptyBorder))
+            throw new AssertionError("A selected header must suppress a stale body-cell focus outline");
+        render(editor, theme + "-header-selected-inspector-closed-1440", 1440, 900);
+        invoke(editor, "toggleInspector", new Class<?>[0]);
+        if (!(Boolean)invokeResult(details, "isColumnMode"))
+            throw new AssertionError("Inspect must open the selected column header");
+        grid.changeSelection(0, 2, false, false);
+        if ((Integer)invokeResult(details, "inspectedRow") != 0 ||
+                (Integer)invokeResult(details, "inspectedColumn") != 2)
+            throw new AssertionError("Inspect must open the currently selected cell");
         render(editor, theme + "-cell-details-1440", 1440, 900);
-        JButton pin = (JButton) field(details, "pin");
-        pin.doClick();
-        grid.changeSelection(1, 1, false, false);
-        if (!(Boolean) invokeResult(details, "isPinned") ||
-                (Integer) invokeResult(details, "inspectedRow") != 0 ||
-                (Integer) invokeResult(details, "inspectedColumn") != 2)
-            throw new AssertionError("Pinned cell details must stay on the original cell");
-        render(editor, theme + "-cell-details-pinned-1440", 1440, 900);
-        pin.doClick();
-        invoke(editor, "openColumnDetails", new Class<?>[]{int.class}, 3);
-        if (!(Boolean) invokeResult(details, "isColumnMode"))
-            throw new AssertionError("Column click must open column details");
-        pin.doClick();
+        clickColumnHeader(grid, 3);
+        if (!(Boolean)invokeResult(details, "isColumnMode"))
+            throw new AssertionError("A column header must open column details while Inspect is on");
         grid.changeSelection(2, 2, false, false);
-        if (!(Boolean) invokeResult(details, "isColumnMode") ||
-                (Integer) invokeResult(details, "inspectedColumn") != 3)
-            throw new AssertionError("Pinned column details must stay on the header");
-        render(editor, theme + "-column-details-pinned-1440", 1440, 900);
+        if ((Boolean)invokeResult(details, "isColumnMode") ||
+                (Integer)invokeResult(details, "inspectedRow") != 2 ||
+                (Integer)invokeResult(details, "inspectedColumn") != 2)
+            throw new AssertionError("Column details must follow the next selected data cell");
+        render(editor, theme + "-cell-details-follow-selection-1440", 1440, 900);
+        clickColumnHeader(grid, 3);
+        if (!(Boolean)invokeResult(details, "isColumnMode"))
+            throw new AssertionError("Column click must open column details");
+        render(editor, theme + "-column-details-1440", 1440, 900);
         JPanel metadata = (JPanel) field(details, "metadata");
         JComponent title = (JComponent) field(details, "title");
         if (metadata.getComponentCount() < 7 || title.getWidth() < title.getPreferredSize().width)
             throw new AssertionError("Column details were clipped: rows=" + metadata.getComponentCount()
                     + ", title=" + title.getWidth() + "/" + title.getPreferredSize().width);
-        pin.doClick();
         invoke(editor, "openCellDetails", new Class<?>[]{int.class, int.class}, 1, 1);
         JTextArea value = (JTextArea) field(details, "valueArea");
         value.dispatchEvent(new java.awt.event.MouseEvent(value, java.awt.event.MouseEvent.MOUSE_CLICKED,
@@ -437,6 +479,10 @@ public final class UiPreview {
         if (!(Boolean) invokeResult(details, "isEditing"))
             throw new AssertionError("Double-clicking the value must enable editing");
         render(editor, theme + "-cell-details-editing-1440", 1440, 900);
+        value.setText(value.getText() + " updated");
+        if (!((JButton)field(details, "apply")).isEnabled())
+            throw new AssertionError("Stage change must enable after changing the draft");
+        render(editor, theme + "-cell-details-editing-changed-1440", 1440, 900);
         ((JButton)field(details, "close")).doClick(0);
         grid.changeSelection(2, 2, false, false);
         Rectangle target = grid.getCellRect(2, 2, true);
@@ -446,13 +492,53 @@ public final class UiPreview {
         if ((Boolean)field(editor, "inspectorVisible"))
             throw new AssertionError("Ordinary cell selection must keep a closed inspector closed");
         invoke(editor, "toggleInspector", new Class<?>[0]);
-        var splitter = (com.intellij.ui.OnePixelSplitter)field(editor, "cellDetailsSplitter");
-        splitter.setProportion(0.58f);
+        JLayeredPane overlay = (JLayeredPane)field(editor, "gridOverlay");
+        JScrollPane dataScroll = (JScrollPane)field(editor, "dataScroll");
+        Rectangle gridBounds = dataScroll.getBounds();
+        int columnsWidth = grid.getColumnModel().getTotalColumnWidth();
         invoke(editor, "toggleInspector", new Class<?>[0]);
         invoke(editor, "toggleInspector", new Class<?>[0]);
-        if (Math.abs(splitter.getProportion() - 0.58f) > 0.01f)
-            throw new AssertionError("Reopening must keep the user's divider position");
+        for (int pass = 0; pass < 4; pass++) layout(editor);
+        if (!gridBounds.equals(dataScroll.getBounds()) || columnsWidth != grid.getColumnModel().getTotalColumnWidth())
+            throw new AssertionError("Opening the overlay must preserve grid bounds and column widths");
+        if (overlay.getLayer(details) <= overlay.getLayer(dataScroll) || details.getX() <= 0
+                || details.getX() + details.getWidth() != overlay.getWidth())
+            throw new AssertionError("The inspector must overlay the right edge of the grid");
+        JComponent widthHandle = (JComponent)field(editor, "inspectorResizeHandle");
+        int initialWidth = details.getWidth();
+        widthHandle.dispatchEvent(new java.awt.event.MouseEvent(widthHandle, java.awt.event.MouseEvent.MOUSE_PRESSED,
+                0, 0, 3, 20, 1, false, java.awt.event.MouseEvent.BUTTON1));
+        widthHandle.dispatchEvent(new java.awt.event.MouseEvent(widthHandle, java.awt.event.MouseEvent.MOUSE_DRAGGED,
+                0, java.awt.event.InputEvent.BUTTON1_DOWN_MASK, -93, 20, 0, false));
+        widthHandle.dispatchEvent(new java.awt.event.MouseEvent(widthHandle, java.awt.event.MouseEvent.MOUSE_RELEASED,
+                0, 0, -93, 20, 1, false, java.awt.event.MouseEvent.BUTTON1));
+        render(editor, theme + "-inspector-width-resized-1440", 1440, 900);
+        int resizedWidth = details.getWidth();
+        if (resizedWidth != initialWidth + 96 || !gridBounds.equals(dataScroll.getBounds())
+                || columnsWidth != grid.getColumnModel().getTotalColumnWidth())
+            throw new AssertionError("Dragging the sidebar must change only its overlay width");
+        invoke(editor, "toggleInspector", new Class<?>[0]); invoke(editor, "toggleInspector", new Class<?>[0]);
+        for (int pass = 0; pass < 4; pass++) layout(editor);
+        if (details.getWidth() != resizedWidth) throw new AssertionError("Reopening must retain the chosen sidebar width");
+        for (int step = 0; step < 6; step++) widthHandle.getActionMap().get("RIGHT").actionPerformed(null);
+        for (int pass = 0; pass < 4; pass++) layout(editor);
+        if (details.getWidth() != initialWidth) throw new AssertionError("Repeated keyboard resizing must accumulate before layout");
         renderAdversarialCellDetails(editor, theme);
+    }
+
+    private static void clickColumnHeader(JTable grid, int viewColumn) {
+        var header = grid.getTableHeader();
+        if (header.getWidth() <= 0 || header.getHeight() <= 0) {
+            Dimension preferred = header.getPreferredSize();
+            header.setSize(Math.max(preferred.width, grid.getColumnModel().getTotalColumnWidth()),
+                    Math.max(1, preferred.height));
+        }
+        Rectangle bounds = header.getHeaderRect(viewColumn);
+        header.dispatchEvent(new java.awt.event.MouseEvent(header,
+                java.awt.event.MouseEvent.MOUSE_CLICKED, System.currentTimeMillis(), 0,
+                bounds.x + bounds.width / 2, Math.max(1, header.getHeight() / 2),
+                1, false, java.awt.event.MouseEvent.BUTTON1));
+        com.intellij.util.ui.UIUtil.dispatchAllInvocationEvents();
     }
 
     static void verifyInspectorDraftRecovery() throws Exception {
@@ -520,7 +606,10 @@ public final class UiPreview {
                 new ColumnMetadata("ORDER_DATE", "DATE", java.sql.Types.DATE, 10, 0, false, false, false, null),
                 "2026-09-18", false, false, true, false, null, "Row 2 · ID = 2", "");
         invoke(panel, "showCell", new Class<?>[]{cellType}, cell);
-        ((JButton)field(panel, "pin")).doClick(0);
+        // Match the editor host and a subsequent look-and-feel refresh before capturing.
+        SwingUtilities.updateComponentTreeUI(panel);
+        com.intellij.util.ui.UIUtil.removeScrollBorder(panel);
+        invoke(panel, "refreshTheme", new Class<?>[0]);
         render(panel, theme + "-approved-inspector", 388, 730);
         if (!"Row 2 · Column 4".equals(((JTextArea)field(panel, "identity")).getText()))
             throw new AssertionError("Subtitle must contain only row and column coordinates");
@@ -529,8 +618,62 @@ public final class UiPreview {
         render(panel, theme + "-approved-inspector-close-hover", 388, 730);
         close.getModel().setRollover(false);
         render(panel, theme + "-approved-inspector-narrow", 320, 650);
-        invoke(panel, "clearPin", new Class<?>[0]);
-        render(panel, theme + "-approved-inspector-unpinned", 388, 730);
+        Object newCell = cellConstructor.newInstance("WARMUP_PRODUCTS", 0, 5,
+                new ColumnMetadata("METADATA_JSON", "VARCHAR", java.sql.Types.VARCHAR, 500, 0, false, false, false, "'{}'"),
+                "{}", true, false, true, false, null, "New row", "");
+        invoke(panel, "showCell", new Class<?>[]{cellType}, newCell);
+        if (!((JButton)field(panel, "useDefault")).isEnabled())
+            throw new AssertionError("A new-row column with a database default must enable Set default");
+        render(panel, theme + "-inspector-default-available", 388, 730);
+        renderDesktopText(panel, theme + "-inspector-desktop-text-125");
+        invoke(panel, "copyToClipboard", new Class<?>[]{java.awt.datatransfer.Clipboard.class},
+                new java.awt.datatransfer.Clipboard("preview-copy"));
+        if (!"Copied!".equals(((JButton)field(panel, "copy")).getText()))
+            throw new AssertionError("Copy feedback must appear inline beside its icon");
+        renderDesktopText(panel, theme + "-inspector-inline-copy-feedback-125");
+        invoke(panel, "dismissCopiedHint", new Class<?>[0]);
+        invoke(panel, "beginEdit", new Class<?>[0]);
+        renderDesktopText(panel, theme + "-inspector-desktop-text-disabled-125");
+        ((JTextArea)field(panel, "valueArea")).setText("{\"quantity\":2}");
+        renderDesktopText(panel, theme + "-inspector-desktop-text-enabled-125");
+    }
+
+    static void renderCachedMenuThemeRefresh(String theme) throws Exception {
+        JPopupMenu menu = com.segfault03.ideadb.ui.DatabaseUi.popupMenu();
+        menu.add(new JMenuItem("Count rows")); menu.addSeparator(); menu.add(new JMenuItem("Truncate table..."));
+        JMenu nested = com.segfault03.ideadb.ui.DatabaseUi.submenu("More");
+        nested.add(new JMenuItem("Nested action")); menu.add(nested);
+        LookAndFeel original = UIManager.getLookAndFeel();
+        boolean dark = theme.equals("dark");
+        try {
+            UIManager.setLookAndFeel(dark ? new FlatIntelliJLaf() : new FlatDarculaLaf());
+            JBColor.setDark(!dark);
+            for (var listener : menu.getPopupMenuListeners())
+                listener.popupMenuWillBecomeVisible(new javax.swing.event.PopupMenuEvent(menu));
+        } finally {
+            UIManager.setLookAndFeel(original); JBColor.setDark(dark);
+        }
+        for (var listener : menu.getPopupMenuListeners())
+            listener.popupMenuWillBecomeVisible(new javax.swing.event.PopupMenuEvent(menu));
+        JPopupMenu child = nested.getPopupMenu();
+        for (var listener : child.getPopupMenuListeners())
+            listener.popupMenuWillBecomeVisible(new javax.swing.event.PopupMenuEvent(child));
+        if (!menu.getBackground().equals(UIManager.getColor("PopupMenu.background"))
+                || !child.getBackground().equals(UIManager.getColor("PopupMenu.background")))
+            throw new AssertionError("Cached popup surfaces must follow the current theme after a round trip");
+        renderMenuSurface(menu, theme + "-cached-options-after-theme-switch");
+        renderMenuSurface(child, theme + "-cached-submenu-after-theme-switch");
+    }
+
+    private static void renderMenuSurface(JPopupMenu menu, String name) throws Exception {
+        Dimension size = menu.getPreferredSize(); menu.setSize(size); layout(menu);
+        JComponent surface = new JComponent() {
+            @Override protected void paintComponent(Graphics graphics) {
+                graphics.setColor(UIManager.getColor("PopupMenu.background"));
+                graphics.fillRect(0, 0, getWidth(), getHeight()); menu.paint(graphics);
+            }
+        };
+        render(surface, name, size.width, size.height);
     }
 
     static void renderAdversarialCellDetails(TableDataEditorPanel editor, String theme) throws Exception {
@@ -540,6 +683,29 @@ public final class UiPreview {
         grid.changeSelection(0, 2, false, false);
         invoke(editor, "openCellDetails", new Class<?>[]{int.class, int.class}, 0, 2);
         render(editor, theme + "-cell-json-1100", 1100, 700);
+        JComponent valueViewport = (JComponent)field(details, "valueScroll");
+        Rectangle viewingBounds = SwingUtilities.convertRectangle(valueViewport.getParent(), valueViewport.getBounds(), details);
+        invoke(details, "beginEdit", new Class<?>[0]);
+        render(editor, theme + "-cell-json-editing-unchanged-1100", 1100, 700);
+        if (!viewingBounds.equals(SwingUtilities.convertRectangle(valueViewport.getParent(), valueViewport.getBounds(), details)))
+            throw new AssertionError("Editing must keep the formatted value viewport's geometry");
+        ((JTextArea)field(details, "valueArea")).append(" ");
+        if (!(Boolean)invokeResult(details, "hasDraftChange") || !((JButton)field(details, "apply")).isEnabled())
+            throw new AssertionError("Changing the JSON draft must enable Stage change");
+        render(editor, theme + "-cell-json-editing-changed-1100", 1100, 700);
+        if (!((JButton)field(details, "apply")).isEnabled())
+            throw new AssertionError("JSON staging became disabled during rendering; draft=" + field(details, "draft")
+                    + ", text=" + ((JTextArea)field(details, "valueArea")).getText());
+        invoke(details, "cancelEditing", new Class<?>[0]);
+        render(editor, theme + "-cell-json-cancelled-1100", 1100, 700);
+        if (!viewingBounds.equals(SwingUtilities.convertRectangle(valueViewport.getParent(), valueViewport.getBounds(), details)))
+            throw new AssertionError("Cancellation must keep the value viewport's geometry");
+        JComponent heightHandle = (JComponent)field(details, "valueResizeHandle");
+        for (int step = 0; step < 6; step++) heightHandle.getActionMap().get("DOWN").actionPerformed(null);
+        render(editor, theme + "-cell-value-height-resized-1100", 1100, 700);
+        if (valueViewport.getHeight() != viewingBounds.height + 96)
+            throw new AssertionError("The value resize rail must change the viewport height");
+        for (int step = 0; step < 6; step++) heightHandle.getActionMap().get("UP").actionPerformed(null);
         for (int width : new int[]{960, 760}) {
             render(editor, theme + "-cell-json-compact-" + width, width, 600);
             JComponent formatted = (JComponent)field(details, "formattedTab"), summary = (JComponent)field(details, "summary");

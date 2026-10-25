@@ -22,14 +22,13 @@ class CellDetailsPanelTest {
 
     static final class RecordingActions implements CellDetailsPanel.Actions {
         final List<String> applied = new ArrayList<>();
-        int closes;
+        int closes, defaults;
         public void apply(CellDetailsPanel.Cell cell, String text) { applied.add(text); }
         public void setNull(CellDetailsPanel.Cell cell) {}
-        public void useDefault(CellDetailsPanel.Cell cell) {}
+        public void useDefault(CellDetailsPanel.Cell cell) { defaults++; }
         public void revert(CellDetailsPanel.Cell cell) {}
         public void editTable() {}
         public void close() { closes++; }
-        public void unpin() {}
     }
     static CellDetailsPanel.Cell cell(Object value, int row) {
         return new CellDetailsPanel.Cell("customers", row, 0,
@@ -69,6 +68,34 @@ class CellDetailsPanelTest {
     private static void layout(Container container) {
         container.doLayout();
         for (Component child : container.getComponents()) if (child instanceof Container nested) layout(nested);
+    }
+
+    @Test void bodyActionsAndValueKeepHeaderAlignmentAfterIdeScrollBorderCleanup() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            CellDetailsPanel panel = new CellDetailsPanel(new RecordingActions());
+            panel.setBorder(BorderFactory.createMatteBorder(0, 1, 0, 0, Color.GRAY));
+            for (int width : new int[]{320, 388, 520}) {
+                for (String value : new String[]{"2", "{\"quantity\":2}"}) {
+                    panel.showCell(cell(value, 1));
+                    SwingUtilities.updateComponentTreeUI(panel);
+                    // The editor host normalizes scroll-pane borders when embedding the panel.
+                    com.intellij.util.ui.UIUtil.removeScrollBorder(panel);
+                    panel.setSize(width, 730);
+                    for (int pass = 0; pass < 4; pass++) layout(panel);
+                    int titleX = SwingUtilities.convertPoint(field(panel, "title", JTextArea.class), 0, 0, panel).x;
+                    for (String name : new String[]{"valueHeading", "valueScroll", "edit", "tableNoteLabel"}) {
+                        JComponent component = field(panel, name, JComponent.class);
+                        assertEquals(titleX, SwingUtilities.convertPoint(component, 0, 0, panel).x,
+                                name + " must align with the header after IDE border cleanup at width " + width);
+                    }
+                    JComponent valueScroll = field(panel, "valueScroll", JComponent.class);
+                    int valueRight = SwingUtilities.convertPoint(valueScroll, valueScroll.getWidth(), 0, panel).x;
+                    int gutter = titleX - panel.getInsets().left;
+                    assertTrue(valueRight <= width - panel.getInsets().right - gutter,
+                            "The value must retain its right gutter");
+                }
+            }
+        });
     }
 
     @Test void untouchedNullDefaultAndOrdinaryValuesNeverBecomePendingChanges() throws Exception {
@@ -116,6 +143,17 @@ class CellDetailsPanelTest {
         });
     }
 
+    @Test void inspectorHeaderOffersOnlyCloseAndHasNoPinAction() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            CellDetailsPanel panel = new CellDetailsPanel(new RecordingActions());
+            panel.showCell(cell("value", 0));
+            JPanel controls = field(panel, "controls", JPanel.class);
+            assertEquals(1, controls.getComponentCount());
+            assertSame(field(panel, "close", JButton.class), controls.getComponent(0));
+            assertEquals("Close details panel", controls.getComponent(0).getAccessibleContext().getAccessibleName());
+        });
+    }
+
     @Test void recoveredDraftStaysUnstagedAndCountTracksTheDocument() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             RecordingActions actions = new RecordingActions(); CellDetailsPanel panel = new CellDetailsPanel(actions);
@@ -144,14 +182,199 @@ class CellDetailsPanelTest {
         });
     }
 
-    @Test void emptyStringRequiresAnExplicitValueStateAction() throws Exception {
+    @Test void databaseDefaultIsExplicitAndUnavailableDefaultsCannotDispatch() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             RecordingActions actions = new RecordingActions(); CellDetailsPanel panel = new CellDetailsPanel(actions);
-            panel.showCell(cell(null, 0));
-            JButton empty = field(panel, "emptyString", JButton.class);
-            assertTrue(empty.isVisible(), "Empty string must be available directly, without a More menu");
-            empty.doClick(0);
-            assertEquals(List.of(""), actions.applied);
+            var persisted = cell(null, 0);
+            panel.showCell(persisted);
+            JButton defaults = field(panel, "useDefault", JButton.class);
+            assertTrue(defaults.isVisible()); assertFalse(defaults.isEnabled());
+            defaults.doClick(0); assertEquals(0, actions.defaults);
+            panel.showCell(new CellDetailsPanel.Cell(persisted.tableName(), 0, 0, persisted.column(), null,
+                    true, false, true, false, null, "New row", ""));
+            assertTrue(defaults.isEnabled()); defaults.doClick(0);
+            assertEquals(1, actions.defaults); assertTrue(actions.applied.isEmpty());
+            var noDefault = new ColumnMetadata("value", "VARCHAR", Types.VARCHAR, 100, 0, true, false, false, null);
+            panel.showCell(new CellDetailsPanel.Cell("customers", 0, 0, noDefault, null,
+                    true, false, true, false, null, "New row", ""));
+            assertFalse(defaults.isEnabled()); defaults.doClick(0); assertEquals(1, actions.defaults);
+            assertEquals(Color.WHITE, defaults.getForeground());
+            defaults.setSize(defaults.getPreferredSize());
+            var image = new java.awt.image.BufferedImage(defaults.getWidth(), defaults.getHeight(),
+                    java.awt.image.BufferedImage.TYPE_INT_RGB);
+            Graphics2D graphics = image.createGraphics(); defaults.paint(graphics); graphics.dispose();
+            Color surface = new Color(image.getRGB(4, defaults.getHeight() / 2));
+            int shade = Math.max(surface.getRed(), Math.max(surface.getGreen(), surface.getBlue()));
+            assertTrue(shade >= 145 && shade < 170,
+                    "Unavailable database defaults must use the lighter grey surface");
+        });
+    }
+
+    @Test void revertUsesTheMainRowAndItsMarginsAreBalanced() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            CellDetailsPanel panel = new CellDetailsPanel(new RecordingActions());
+            var column = new ColumnMetadata("price", "INTEGER", Types.INTEGER, 10, 0, false, false, false, null);
+            panel.showCell(new CellDetailsPanel.Cell("products", 0, 0, column, 13,
+                    false, true, true, false, null, "Row 1", ""));
+            panel.setSize(520, 730);
+            for (int pass = 0; pass < 4; pass++) layout(panel);
+            JButton edit = field(panel, "edit", JButton.class), revert = field(panel, "revert", JButton.class);
+            assertSame(edit.getParent(), revert.getParent()); assertEquals(edit.getY(), revert.getY());
+            JComponent value = field(panel, "valueScroll", JComponent.class),
+                    row = field(panel, "actionsRow", JComponent.class), lower = field(panel, "lower", JComponent.class);
+            Rectangle valueBounds = SwingUtilities.convertRectangle(value.getParent(), value.getBounds(), panel),
+                    rowBounds = SwingUtilities.convertRectangle(row.getParent(), row.getBounds(), panel),
+                    lowerBounds = SwingUtilities.convertRectangle(lower.getParent(), lower.getBounds(), panel);
+            int above = rowBounds.y - valueBounds.y - valueBounds.height;
+            int below = lowerBounds.y - rowBounds.y - rowBounds.height;
+            assertEquals(com.intellij.util.ui.JBUI.scale(8), above); assertEquals(above, below);
+            assertEquals(com.intellij.util.ui.JBUI.scale(144), value.getHeight());
+        });
+    }
+
+    @Test void copyKeepsItsIconAndAutomaticallyDismissesItsHint() throws Exception {
+        var closed = new java.util.concurrent.CountDownLatch(1);
+        var reference = new java.util.concurrent.atomic.AtomicReference<CellDetailsPanel>();
+        SwingUtilities.invokeAndWait(() -> {
+            CellDetailsPanel panel = new CellDetailsPanel(new RecordingActions()); reference.set(panel);
+            panel.showCell(cell("{\"raw\":true}", 0));
+            JButton copy = field(panel, "copy", JButton.class); Icon icon = copy.getIcon();
+            assertEquals("", copy.getText(), "Copy must be icon-only before use");
+            var clipboard = new java.awt.datatransfer.Clipboard("inspector-copy-test");
+            panel.copyToClipboard(clipboard);
+            try { assertEquals("{\"raw\":true}", clipboard.getData(java.awt.datatransfer.DataFlavor.stringFlavor)); }
+            catch (Exception error) { throw new AssertionError(error); }
+            assertTrue(field(panel, "copiedHintVisible", Boolean.class));
+            assertSame(icon, copy.getIcon()); assertEquals("Copied!", copy.getText());
+            assertTrue(copy.getPreferredSize().width > com.intellij.util.ui.JBUI.scale(28), "Feedback must fit beside the icon");
+            assertEquals("Copied!", copy.getAccessibleContext().getAccessibleDescription());
+            javax.swing.Timer timer = field(panel, "copiedTimer", javax.swing.Timer.class);
+            assertFalse(timer.isRepeats()); assertTrue(timer.getInitialDelay() > 0 && timer.getInitialDelay() <= 2000);
+            timer.addActionListener(event -> closed.countDown());
+        });
+        try {
+            assertTrue(closed.await(3, java.util.concurrent.TimeUnit.SECONDS), "The copy hint must auto-dismiss");
+            SwingUtilities.invokeAndWait(() -> {
+                assertFalse(field(reference.get(), "copiedHintVisible", Boolean.class));
+                assertEquals("", field(reference.get(), "copy", JButton.class).getText());
+            });
+        } finally { SwingUtilities.invokeAndWait(() -> reference.get().dismissCopiedHint()); }
+    }
+
+    @Test void valueResizeHandleChangesHeightAndPreservesItThroughEditing() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            CellDetailsPanel panel = new CellDetailsPanel(new RecordingActions()); panel.showCell(cell("value", 0));
+            panel.setSize(388, 730); for (int pass = 0; pass < 4; pass++) layout(panel);
+            JComponent handle = field(panel, "valueResizeHandle", JComponent.class);
+            handle.getActionMap().get("DOWN").actionPerformed(null);
+            for (int pass = 0; pass < 4; pass++) layout(panel);
+            int resized = field(panel, "valueScroll", JScrollPane.class).getHeight();
+            assertEquals(com.intellij.util.ui.JBUI.scale(160), resized);
+            click(panel, "edit"); for (int pass = 0; pass < 4; pass++) layout(panel);
+            assertEquals(resized, field(panel, "valueScroll", JScrollPane.class).getHeight());
+            click(panel, "cancel"); for (int pass = 0; pass < 4; pass++) layout(panel);
+            assertEquals(resized, field(panel, "valueScroll", JScrollPane.class).getHeight());
+        });
+    }
+
+    @Test void formattedRawEditingAndCancelKeepTheSameValueViewportBounds() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            String json = "{\"items\":[" + java.util.stream.IntStream.range(0, 20)
+                    .mapToObj(i -> "{\"id\":" + i + "}").collect(java.util.stream.Collectors.joining(",")) + "]}";
+            for (Dimension size : new Dimension[]{new Dimension(320, 600), new Dimension(388, 730), new Dimension(520, 800)}) {
+                CellDetailsPanel panel = new CellDetailsPanel(new RecordingActions());
+                panel.showCell(cell(json, 0)); panel.setSize(size);
+                for (int pass = 0; pass < 4; pass++) layout(panel);
+                JScrollPane value = field(panel, "valueScroll", JScrollPane.class);
+                Rectangle original = SwingUtilities.convertRectangle(value.getParent(), value.getBounds(), panel);
+                click(panel, "edit");
+                for (int pass = 0; pass < 4; pass++) layout(panel);
+                assertEquals(original, SwingUtilities.convertRectangle(value.getParent(), value.getBounds(), panel),
+                        "Entering raw edit mode must preserve the formatted viewport at " + size);
+                field(panel, "valueArea", JTextArea.class).setText("changed\n".repeat(30));
+                for (int pass = 0; pass < 4; pass++) layout(panel);
+                assertEquals(original, SwingUtilities.convertRectangle(value.getParent(), value.getBounds(), panel));
+                click(panel, "cancel");
+                for (int pass = 0; pass < 4; pass++) layout(panel);
+                assertEquals(original, SwingUtilities.convertRectangle(value.getParent(), value.getBounds(), panel));
+            }
+        });
+    }
+
+    @Test void mouseClicksHideFocusCuesAndKeyboardTraversalRestoresThem() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            CellDetailsPanel panel = new CellDetailsPanel(new RecordingActions());
+            for (String name : new String[]{"edit", "copy", "apply", "cancel", "useDefault", "editTable",
+                    "formattedTab", "rawTab", "wrap", "close"}) {
+                AbstractButton button = field(panel, name, AbstractButton.class);
+                var mouse = new java.awt.event.MouseEvent(button, java.awt.event.MouseEvent.MOUSE_PRESSED,
+                        0, 0, 5, 5, 1, false, java.awt.event.MouseEvent.BUTTON1);
+                for (var listener : button.getMouseListeners()) listener.mousePressed(mouse);
+                assertFalse(DatabaseUi.isFocusVisible(button), name + " must not retain a mouse focus ring");
+                var traversal = new java.awt.event.FocusEvent(button, java.awt.event.FocusEvent.FOCUS_GAINED,
+                        false, null, java.awt.event.FocusEvent.Cause.TRAVERSAL_FORWARD);
+                for (var listener : button.getFocusListeners()) listener.focusGained(traversal);
+                assertTrue(DatabaseUi.isFocusVisible(button), name + " must keep keyboard focus visible");
+            }
+        });
+    }
+
+    @Test void primaryActionsShareARowAndStagingRetainsReadableTextAndEqualHeight() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            CellDetailsPanel panel = new CellDetailsPanel(new RecordingActions());
+            panel.showCell(cell("{\"x\":1}", 0)); panel.setSize(388, 730);
+            for (int pass = 0; pass < 4; pass++) layout(panel);
+            JButton edit = field(panel, "edit", JButton.class), defaults = field(panel, "useDefault", JButton.class),
+                    copy = field(panel, "copy", JButton.class), apply = field(panel, "apply", JButton.class),
+                    cancel = field(panel, "cancel", JButton.class);
+            assertEquals(edit.getY(), defaults.getY()); assertEquals(edit.getY(), copy.getY());
+            assertTrue(edit.getX() < defaults.getX() && defaults.getX() < copy.getX());
+            edit.doClick(0);
+            for (int pass = 0; pass < 4; pass++) layout(panel);
+            assertFalse(apply.isEnabled()); assertTrue(cancel.isVisible());
+            assertEquals(copy.getHeight(), apply.getHeight()); assertEquals(copy.getHeight(), cancel.getHeight());
+            assertEquals(copy.getY(), apply.getY()); assertEquals(copy.getY(), cancel.getY());
+            assertTrue(apply.getY() >= 0 && apply.getY() + apply.getHeight() <= apply.getParent().getHeight());
+            field(panel, "valueArea", JTextArea.class).append(" ");
+            assertTrue(apply.isEnabled(), "Typing into a JSON draft must enable staging");
+            field(panel, "valueArea", JTextArea.class).setText("changed");
+            assertTrue(apply.isEnabled()); assertEquals(Color.WHITE, apply.getForeground());
+            cancel.doClick(0); assertFalse(panel.isEditing());
+        });
+    }
+
+    @Test void buttonAndTabTextHonorComponentAntialiasingAtDesktopScales() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            CellDetailsPanel panel = new CellDetailsPanel(new RecordingActions());
+            for (String name : new String[]{"edit", "apply", "cancel", "useDefault", "formattedTab", "rawTab", "wrap"}) {
+                AbstractButton button = field(panel, name, AbstractButton.class);
+                button.putClientProperty(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                for (boolean enabled : new boolean[]{true, false}) {
+                    button.setEnabled(enabled);
+                    for (double scale : new double[]{1, 1.25, 1.5}) {
+                        var image = new java.awt.image.BufferedImage((int)(180 * scale), (int)(36 * scale),
+                                java.awt.image.BufferedImage.TYPE_INT_RGB);
+                        Graphics2D graphics = image.createGraphics();
+                        graphics.setColor(Color.MAGENTA); graphics.fillRect(0, 0, image.getWidth(), image.getHeight());
+                        graphics.scale(scale, scale); graphics.setFont(button.getFont());
+                        // Native Swing can supply AA through the component rather than the incoming Graphics.
+                        graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
+                        try {
+                            var paint = button.getUI().getClass().getDeclaredMethod("paintText", Graphics.class,
+                                    AbstractButton.class, Rectangle.class, String.class);
+                            paint.setAccessible(true);
+                            paint.invoke(button.getUI(), graphics, button, new Rectangle(4, 4, 170, 26), button.getText());
+                        } catch (ReflectiveOperationException error) { throw new AssertionError(error); }
+                        finally { graphics.dispose(); }
+                        int blended = 0;
+                        for (int y = 0; y < image.getHeight(); y++) for (int x = 0; x < image.getWidth(); x++) {
+                            int pixel = image.getRGB(x, y);
+                            if (pixel != Color.MAGENTA.getRGB() && pixel != button.getForeground().getRGB()) blended++;
+                        }
+                        assertTrue(blended > 0, name + " must retain smooth text edges at scale " + scale + ", enabled=" + enabled);
+                    }
+                }
+            }
         });
     }
 

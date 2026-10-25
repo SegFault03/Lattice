@@ -89,6 +89,16 @@ class DeploymentTests(unittest.TestCase):
         return ["--ide-home", str(ide.home), "--java-home", str(ide.home / "jbr"),
                 "--plugins-dir", str(self.root / "user/plugins"), "--no-color"]
 
+    def test_deploy_build_uses_the_ci_functional_and_regression_tasks(self):
+        with patch.object(deploy, "gradle_command", return_value=["gradle"]), \
+             patch.object(deploy.subprocess, "run") as run:
+            deploy.build_plugin(self.root / "jdk", "1.2.3")
+        command = run.call_args.args[0]
+        self.assertIn("functionalTest", command)
+        self.assertIn("regressionTest", command)
+        self.assertIn("buildPlugin", command)
+        self.assertNotIn("test", command)
+
     def test_metadata_windows_linux_and_macos_app_layouts_and_compatibility(self):
         for system in ("Windows", "Linux", "macOS"):
             with self.subTest(system=system):

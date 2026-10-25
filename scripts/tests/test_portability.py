@@ -31,6 +31,9 @@ class PortabilityTests(unittest.TestCase):
         self.assertIn("h2IntegrationTest", command)
         self.assertIn("fallbackDriverTest", command)
         self.assertIn("buildPlugin", command)
+        self.assertIn("functionalTest", command)
+        self.assertIn("regressionTest", command)
+        self.assertNotIn("test", command)
         self.assertIn("-Plattice.ide.home=" + str(args.ide_home.resolve()), command)
         args.integration_only = True
         integration_command = runner.command(args)

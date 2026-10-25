@@ -25,6 +25,11 @@ run, an isolated YAML comment or a helper's default command.
 - Preserve grouped suites, disjoint functional/regression selection, owned
   fixtures, portable launchers, exact-artifact verification and failure reports.
   Avoid nested runners that repeat tests or packaging.
+- Register CI suites, platforms, selectors, UI flags and dependency requirements
+  in `scripts/test-suites.json`. CI and the full local Windows runner consume the
+  same entries; do not add a separate local suite list or direct CI test command.
+- Run `python scripts/one-shot-test.py --check-workflow` after suite changes.
+  Every unsupported platform must have a reason in the catalog.
 - Pin Actions to commit SHAs with version comments; retain least-privilege
   permissions and keep credentials out of source, arguments and logs.
 - Keep workflow conditions, policy tests and affected documentation aligned in

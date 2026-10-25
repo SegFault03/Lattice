@@ -13,7 +13,17 @@ The build-tool baseline is Gradle 9.8.0 through the checksum-pinned wrapper and 
 | 2025.3 Unified/Ultimate | 253.28294.334 | Compatible |
 | 2026.2.3 Ultimate | 262.10968.63 | Compatible in earlier compatibility validation |
 
-Only PRs targeting `main` run the IntelliJ and JDBC compatibility matrices. IDE jobs verify the exact ZIP produced by the PR merge build against each of the three 2025 SDKs; the database job uses `python scripts/one-shot-test.py --database-compatibility-only` for MySQL, HSQLDB, PostgreSQL and H2, including Java 8/21 probes. Branch pushes and tag releases do not run compatibility matrices. Run `python scripts/one-shot-test.py` on Linux to reproduce the complete validation locally; `--compatibility-only` runs both matrices. Ordinary builds use the checksum-pinned Gradle wrapper and downloaded Maven/IntelliJ dependencies. See the [script reference](SCRIPTS.md).
+Only PRs targeting `main` run the IntelliJ and JDBC compatibility matrices. IDE
+jobs verify the exact ZIP produced by the PR merge build against each of the
+three 2025 SDKs. The shared catalog generates independent database jobs for
+MySQL, HSQLDB, PostgreSQL and H2, including Java 8/21 probes. Each uses the same
+`--suite ID` adapter as the local aggregate; one engine's failure does not cancel
+the others. `--database-compatibility-only` aggregates these entries locally.
+Branch pushes and tag releases do not run compatibility matrices. Run
+`python scripts/one-shot-test.py` on Linux to reproduce the complete validation
+locally; `--compatibility-only` runs both matrices. Ordinary builds use the
+checksum-pinned Gradle wrapper and downloaded Maven/IntelliJ dependencies. See
+the [script reference](SCRIPTS.md).
 
 These results establish binary/API compatibility for the named builds. They do not establish every patch/future IDE release, interactive UI behavior, project-close behavior or dynamic unload. The Windows build/test path has been executed locally. Hosted results are reported by the workflow checks on each PR; local results do not imply that every hosted suite has run.
 

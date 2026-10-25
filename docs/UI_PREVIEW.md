@@ -3,9 +3,14 @@
 ## Cell inspector interaction
 
 Use **Inspect** in the table toolbar or **Alt+Enter** to toggle the inspector.
-Closing it keeps it closed during ordinary cell selection. Clicking a column
-header opens column details; pinning retains the inspected value/column while
-the selection changes. Reopening restores the divider position.
+Closing it keeps it closed during cell and header selection. A single column-header
+click selects and highlights that header; column details follow only while Inspect
+is on. Inspect opens the selected header or data cell. Selecting a data cell while
+the inspector is open returns the panel to that cell. The inspector overlays the right edge of the grid
+without changing grid bounds or column widths. Its body owns its side padding so
+IDE scroll-pane border cleanup cannot remove the gutters.
+Only one body cell or column header can be selected at a time. Header selection
+also clears the former body cell's focus position so it cannot retain an outline.
 
 **Edit value** starts an unstaged draft. While editing, the inspector stays on
 that cell. **Stage change** explicitly adds the draft to the pending batch;
@@ -16,26 +21,52 @@ unconfirmed draft separately in the existing local project draft store and
 restores it in edit mode, outside the commit batch.
 
 Untouched values disable Stage change. SQL NULL, an empty string and a database
-default are distinct; direct value-state actions appear when applicable. Character
+default are distinct. Edit, Set default, Copy, Revert and NULL share one wrapping
+action row; actions wrap only when the available width requires it. Set default
+uses the database default for new rows and is disabled when unavailable; an empty
+string can be entered through Edit. NULL and Revert appear when applicable. Character
 counts follow the draft, and invalid values show feedback beside the editor.
-Presentation controls appear for structured/long values. Column metadata stays
+Unavailable defaults have a lighter muted grey surface with white text. Copy is
+icon-only at rest; "Copied!" appears inline beside that icon for 1.8 seconds after
+a successful copy. No popup is shown. Closing or disposing the inspector clears
+the feedback immediately. The value viewport
+keeps its dimensions across formatted/raw viewing, editing and cancellation;
+the surrounding body scrolls when space is limited. Buttons show a focus cue
+for keyboard navigation, while mouse clicks leave no persistent focus outline.
+Compact presentation controls appear for structured/long values, with an underline
+on selected options. Stage change retains readable text when disabled; Cancel has
+a red surface and text. Column metadata stays
 visible, with compact Edit table below the structure hint. The column name is
 the title; the subtitle contains only row and column coordinates. Fixed header
-actions use a filled gray pinned icon. Rounded inspector buttons retain Swing
+actions keep the close target in a fixed rail. Rounded inspector buttons retain Swing
 keyboard and accessibility behavior across themes and platforms. Body/value text
 uses the IDE label font size, and actions use its button font size; the inspector
 does not enlarge normal text. Header controls occupy real layout space so their
 complete hover targets fit at all scales. Action targets have a compact
 28-logical-pixel minimum with two-pixel vertical padding. The editor/action gap
-is eight pixels, metadata rows use four-pixel vertical padding, and the footer
+is eight pixels, matching the gap below the action row before column details.
+The value viewport starts at 144 logical pixels high. Its bottom edge and the
+inspector's left edge are invisible resize areas: the cursor changes to indicate
+vertical or horizontal dragging, with no painted handle or hover hint. Focused
+resize areas also support Up/Down or Left/Right.
+Chosen sizes survive editing, selection changes and closing/reopening within the
+editor; the grid's bounds and column widths remain unchanged. Metadata rows use
+four-pixel vertical padding, and the footer
 uses symmetric 12-pixel padding. Metadata and identifiers wrap and can
 be selected/copied.
 
 The focused `--cell-details-only` previews also exercise closed-state retention,
-divider restoration, compact JSON, long metadata, local validation and larger
+overlay placement and grid sizing, compact JSON, long metadata, local validation and larger
 fonts in both themes. The manual gallery includes approved date fixtures and narrow viewports.
-The native focused scenario checks the explicit toolbar toggle and leaves the inspector closed after an ordinary grid click. See the
+The desktop-text samples render directly at 125% with smoothing hints supplied on
+Swing components while the incoming graphics has text smoothing off. This catches
+custom button painters that bypass the IDE's per-component font rendering hints;
+the ordinary preview's global smoothing can otherwise hide that defect.
+The native focused scenario checks that header and cell clicks keep a closed inspector closed. See the
 [prioritized implementation checklist](design/data-cell-refresh-plan.md).
+Cached options menus and submenus refresh their Swing UI when opened so their
+surface, text and separators follow the current theme. Focused previews include
+light/dark theme round trips for these cached menus.
 
 All preview modes assert inspector-only draft recovery through the production
 table-editor constructor, including initially missing metadata, metadata failure,
@@ -110,7 +141,7 @@ staging and cancellation. It does not generate screenshots or update the gallery
 Main PR CI uses this mode instead of the full light/dark gallery.
 
 The native inspector case runs once at 125%, switches through both themes, and
-checks navigation, pinning, explicit editing and unconfirmed draft recovery.
+checks selection following, explicit editing and unconfirmed draft recovery.
 The standalone 100% duplicate and styling-only CI case have been removed. H2 and
 search each run once in dark mode. Create/alter and partial-DDL recovery retain
 separate cases because they exercise different destructive-operation paths.

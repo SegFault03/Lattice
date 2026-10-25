@@ -1,0 +1,132 @@
+{
+  "schema": 1,
+  "mysql_matrix": [
+    ["5.5.62", ["5.1.49", "6.0.6", "8.0.33"]],
+    ["5.6.51", ["8.0.33"]],
+    ["5.7.44", ["8.0.33"]],
+    ["8.4.2", ["8.0.33", "26.7.0"]]
+  ],
+  "hsqldb_versions": ["2.2.9", "2.3.6", "2.4.1", "2.5.2", "2.6.1-jdk8", "2.7.4-jdk8"],
+  "suites": [
+    {
+      "id": "functional-build", "group": "functional-build", "phase": "base", "kind": "build",
+      "platforms": ["linux", "windows", "macos"], "ci_hosts": ["linux", "windows", "macos"],
+      "requires": ["java21"], "tasks": ["functionalTest"], "package_tasks": ["buildPlugin"]
+    },
+    {
+      "id": "tooling", "group": "tooling-tests", "phase": "base", "kind": "command",
+      "platforms": ["linux", "windows", "macos"], "ci_hosts": ["linux", "windows", "macos"],
+      "requires": [], "command": ["{python}", "-m", "unittest", "discover", "-s", "scripts/tests", "-v"]
+    },
+    {
+      "id": "backend-regression", "group": "backend-tests", "phase": "base", "kind": "gradle",
+      "platforms": ["linux", "windows", "macos"], "ci_hosts": ["linux", "windows", "macos"],
+      "requires": ["java21"], "tasks": ["regressionTest"]
+    },
+    {
+      "id": "backend-h2", "group": "backend-tests", "phase": "base", "kind": "gradle",
+      "platforms": ["linux", "windows", "macos"], "ci_hosts": ["linux", "windows", "macos"],
+      "requires": ["java21"], "tasks": ["h2IntegrationTest"]
+    },
+    {
+      "id": "backend-h2-driver", "group": "backend-tests", "phase": "base", "kind": "gradle",
+      "platforms": ["linux", "windows", "macos"], "ci_hosts": ["windows", "macos"],
+      "requires": ["java21"], "tasks": ["h2FallbackDriverTest"]
+    },
+    {
+      "id": "backend-live", "group": "backend-tests", "phase": "base", "kind": "live",
+      "platforms": ["linux", "windows", "macos"], "ci_hosts": ["linux"],
+      "requires": ["java21", "mysql"], "tasks": ["integrationTest", "fallbackDriverTest"],
+      "mysql_native_version": "8.4.2", "mysql_docker_image": "mysql:8.4",
+      "fixtures": {"linux": ["mysql", "hsqldb", "postgres"], "windows": ["mysql", "hsqldb"], "macos": ["mysql", "hsqldb"]}
+    },
+    {
+      "id": "ui-previews", "group": "ui-tests", "phase": "ui", "kind": "command", "theme": "headless",
+      "platforms": ["linux", "windows", "macos"], "ci_hosts": ["linux"],
+      "requires": ["java21", "ide"],
+      "command": ["{python}", "scripts/ui-preview.py", "--checks-only", "--java-home", "{java_home}", "--ide-home", "{ide_home}"]
+    },
+    {
+      "id": "ui-hsqldb", "group": "ui-tests", "phase": "ui", "kind": "ui", "theme": "ExperimentalDark", "env": {},
+      "platforms": ["linux", "windows"], "ci_hosts": ["linux"],
+      "unsupported": {"macos": "No native macOS real-IDE UI launcher is maintained."},
+      "requires": ["java21", "ide", "desktop", "ui-fixtures"]
+    },
+    {
+      "id": "ui-alter-table", "group": "ui-tests", "phase": "ui", "kind": "ui", "theme": "ExperimentalDark",
+      "env": {"LATTICE_UI_ALTER_TABLE_ONLY": "true"},
+      "platforms": ["linux", "windows"], "ci_hosts": ["linux"],
+      "unsupported": {"macos": "No native macOS real-IDE UI launcher is maintained."},
+      "requires": ["java21", "ide", "desktop", "ui-fixtures"]
+    },
+    {
+      "id": "ui-table-dialogs", "group": "ui-tests", "phase": "ui", "kind": "ui", "theme": "ExperimentalLight",
+      "env": {"LATTICE_UI_CREATE_TABLE_ONLY": "true", "LATTICE_UI_SCALE": "1.25"},
+      "platforms": ["linux", "windows"], "ci_hosts": ["linux"],
+      "unsupported": {"macos": "No native macOS real-IDE UI launcher is maintained."},
+      "requires": ["java21", "ide", "desktop", "ui-fixtures"]
+    },
+    {
+      "id": "ui-cell-inspector-scaled", "group": "ui-tests", "phase": "ui", "kind": "ui", "theme": "ExperimentalDark",
+      "env": {"LATTICE_UI_CELL_DETAILS_ONLY": "true", "LATTICE_UI_SCALE": "1.25"},
+      "platforms": ["linux", "windows"], "ci_hosts": ["linux"],
+      "unsupported": {"macos": "No native macOS real-IDE UI launcher is maintained."},
+      "requires": ["java21", "ide", "desktop", "ui-fixtures"]
+    },
+    {
+      "id": "ui-search", "group": "ui-tests", "phase": "ui", "kind": "ui", "theme": "ExperimentalDark",
+      "env": {"LATTICE_UI_EXPLORER_SEARCH_ONLY": "true"},
+      "platforms": ["linux", "windows"], "ci_hosts": ["linux"],
+      "unsupported": {"macos": "No native macOS real-IDE UI launcher is maintained."},
+      "requires": ["java21", "ide", "desktop", "ui-fixtures"]
+    },
+    {
+      "id": "ui-postgres", "group": "ui-tests", "phase": "ui", "kind": "postgres-ui", "theme": "ExperimentalDark",
+      "platforms": ["linux"], "ci_hosts": ["linux"],
+      "unsupported": {"windows": "The owned PostgreSQL UI fixture requires Linux Docker and X11.", "macos": "The owned PostgreSQL UI fixture requires Linux Docker and X11."},
+      "requires": ["java21", "ide", "desktop", "docker"]
+    },
+    {
+      "id": "ui-h2", "group": "ui-tests", "phase": "ui", "kind": "h2-ui", "theme": "ExperimentalDark",
+      "platforms": ["linux"], "ci_hosts": ["linux"],
+      "unsupported": {"windows": "The maintained H2 UI wrapper requires Linux and X11; native Windows execution is not verified.", "macos": "The maintained H2 UI wrapper requires Linux and X11."},
+      "requires": ["java21", "ide", "desktop"]
+    },
+    {
+      "id": "ide-2025.1", "group": "ide-compatibility", "phase": "ide", "kind": "verifier", "version": "2025.1",
+      "platforms": ["linux", "windows", "macos"], "ci_hosts": ["linux"], "requires": ["java21"]
+    },
+    {
+      "id": "ide-2025.2", "group": "ide-compatibility", "phase": "ide", "kind": "verifier", "version": "2025.2",
+      "platforms": ["linux", "windows", "macos"], "ci_hosts": ["linux"], "requires": ["java21"]
+    },
+    {
+      "id": "ide-2025.3", "group": "ide-compatibility", "phase": "ide", "kind": "verifier", "version": "2025.3",
+      "platforms": ["linux", "windows", "macos"], "ci_hosts": ["linux"], "requires": ["java21"]
+    },
+    {
+      "id": "jdbc-mysql", "group": "database-compatibility", "phase": "database", "kind": "database", "mode": "mysql",
+      "platforms": ["linux", "windows"], "ci_hosts": ["linux"],
+      "unsupported": {"macos": "The one-shot database matrix supports Linux Docker and native Windows fixtures."},
+      "requires": ["java21", "java8", "mysql", "jdbc-cache"]
+    },
+    {
+      "id": "jdbc-hsqldb", "group": "database-compatibility", "phase": "database", "kind": "database", "mode": "hsqldb",
+      "platforms": ["linux", "windows"], "ci_hosts": ["linux"],
+      "unsupported": {"macos": "The one-shot database matrix currently supports Linux and Windows."},
+      "requires": ["java21", "java8", "jdbc-cache"]
+    },
+    {
+      "id": "jdbc-h2", "group": "database-compatibility", "phase": "database", "kind": "database", "mode": "h2",
+      "platforms": ["linux", "windows"], "ci_hosts": ["linux"],
+      "unsupported": {"macos": "The one-shot database matrix currently supports Linux and Windows."},
+      "requires": ["java21", "java8", "jdbc-cache"]
+    },
+    {
+      "id": "jdbc-postgres", "group": "database-compatibility", "phase": "database", "kind": "database", "mode": "postgres",
+      "platforms": ["linux"], "ci_hosts": ["linux"],
+      "unsupported": {"windows": "Historic PostgreSQL source builds and the matrix fixture require Linux Docker.", "macos": "Historic PostgreSQL source builds and the matrix fixture require Linux Docker."},
+      "requires": ["java21", "java8", "docker", "jdbc-cache"]
+    }
+  ]
+}

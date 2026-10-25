@@ -12,6 +12,7 @@ import uuid
 
 from common import ROOT, gradle_command, java_command
 from release import validate_version
+import test_suites
 from dependencies import Dependencies, add_dependency_options
 
 
@@ -101,10 +102,10 @@ def hsqldb_fixture(java_home=None, jar=None, port=9001):
 
 
 @contextmanager
-def mysql_fixture(cleanup=True, docker="docker", port=3306):
+def mysql_fixture(cleanup=True, docker="docker", port=3306, image=None):
     require_free_port(port)
     name = "lattice-test-" + uuid.uuid4().hex
-    image = "mysql:8.4"
+    image = image or test_suites.suite_by_id('backend-live')['mysql_docker_image']
     image_preexisting = subprocess.run([docker, "image", "inspect", image],
                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                        check=False).returncode == 0
@@ -165,11 +166,23 @@ def command(args):
     if os.name == "nt" and any(character in str(ROOT) for character in '\"&|<>^%!\r\n'):
         raise ValueError("Windows checkout paths must not contain shell metacharacters")
     integration_only = getattr(args, "integration_only", False)
-    tasks = [] if integration_only else ["functionalTest" if getattr(args, "functional_only", False) else "test"]
-    if args.live:
-        tasks += ["integrationTest", "h2IntegrationTest", "fallbackDriverTest"]
+    suite_id = getattr(args, "suite", None)
+    if suite_id:
+        suite = test_suites.suite_by_id(suite_id)
+        if suite['kind'] != 'live' or not args.live or not integration_only:
+            raise ValueError('--suite selects a live catalog entry and requires --live --integration-only')
+        tasks = list(suite['tasks'])
+    elif integration_only:
+        tasks = []
+    elif getattr(args, "functional_only", False):
+        tasks = test_suites.gradle_tasks('functional-build')
+    else:
+        # Match CI's disjoint functional and IntelliJ-hosted regression tiers.
+        tasks = test_suites.gradle_tasks('functional-build') + test_suites.gradle_tasks('backend-regression')
+    if args.live and not suite_id:
+        tasks += test_suites.gradle_tasks('backend-live') + test_suites.gradle_tasks('backend-h2')
     if args.build:
-        tasks += ["buildPlugin"]
+        tasks += test_suites.gradle_tasks('functional-build', packaging=True)
     if not tasks:
         raise ValueError("No Gradle tasks selected")
     options = []
@@ -197,6 +210,8 @@ def main():
                         help="Run only embedded provider functional checks, without regression, UI or server suites")
     parser.add_argument("--integration-only", action="store_true",
                         help="With --live, run only the integration and fallback-driver suites")
+    parser.add_argument('--suite', choices=[s['id'] for s in test_suites.load_catalog()['suites'] if s['kind'] == 'live'],
+                        help='Select exact live-suite tasks from the shared CI/local catalog')
     parser.add_argument("--ide-home", type=Path, help="Optional local IntelliJ 2025.1 SDK; otherwise Gradle downloads it")
     parser.add_argument("--java-home", type=Path, help="JDK 21 directory; otherwise use JAVA_HOME or PATH")
     parser.add_argument("--version")
@@ -218,6 +233,9 @@ def main():
         parser.error("--integration-only requires --live")
     if args.integration_only and args.build:
         parser.error("--integration-only cannot be combined with --build")
+    if args.suite and not (args.live and args.integration_only):
+        parser.error('--suite requires --live --integration-only')
+    live_suite = test_suites.suite_by_id(args.suite or 'backend-live')
     with Dependencies(args) as deps:
         args.java_home = deps.java(args.java_home)
         if args.ide_home is None and args.binaries_dir:
@@ -234,10 +252,12 @@ def main():
             if args.mysql:
                 if os.name == 'nt' and not args.docker or args.mysql_home:
                     from windows.native_mysql import mysql_fixture as native_fixture
-                    fixtures.enter_context(native_fixture(deps, home=args.mysql_home, logs=ROOT / 'build/fixtures',
+                    fixtures.enter_context(native_fixture(deps, version=live_suite['mysql_native_version'],
+                                                          home=args.mysql_home, logs=ROOT / 'build/fixtures',
                                                           runtime_dir=args.runtime_dir, sevenzip=args.sevenzip, port=mysql_port))
                 else:
-                    fixtures.enter_context(mysql_fixture(args.cleanup, args.docker or 'docker', port=mysql_port))
+                    fixtures.enter_context(mysql_fixture(args.cleanup, args.docker or 'docker', port=mysql_port,
+                                                         image=live_suite['mysql_docker_image']))
             if args.postgres:
                 from postgres import postgres_fixture
                 fixtures.enter_context(postgres_fixture(postgres_port, docker=args.docker or "docker", cleanup=args.cleanup))

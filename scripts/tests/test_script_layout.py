@@ -72,6 +72,20 @@ class ScriptLayoutTests(unittest.TestCase):
         self.assertTrue((SCRIPTS / 'windows/native_mysql.py').is_file())
         self.assertTrue((SCRIPTS / 'windows/windows-script-dependencies.py').is_file())
 
+    def test_windows_ui_capture_routes_ci_focused_scenarios(self):
+        capture = (SCRIPTS / 'windows/capture-intellij-ui.ps1').read_text(encoding='utf-8-sig')
+        for variable, gradle_property in (
+            ('LATTICE_UI_EXPLORER_SEARCH_ONLY', 'explorerSearchOnly'),
+            ('LATTICE_UI_ALTER_TABLE_ONLY', 'alterTableOnly'),
+            ('LATTICE_UI_CREATE_TABLE_ONLY', 'createTableOnly'),
+            ('LATTICE_UI_CELL_DETAILS_ONLY', 'cellDetailsOnly'),
+        ):
+            with self.subTest(variable=variable):
+                self.assertIn(f'$env:{variable} -eq \'true\'', capture)
+                self.assertIn(f'-Plattice.ui.{gradle_property}=true', capture)
+        self.assertIn('$env:LATTICE_UI_SCALE', capture)
+        self.assertIn('-Plattice.ui.scale=$env:LATTICE_UI_SCALE', capture)
+
     @unittest.skipUnless(os.name == 'nt', 'Windows launcher execution')
     def test_python_launchers_work_from_an_unrelated_directory(self):
         with tempfile.TemporaryDirectory(prefix='lattice launcher ') as directory:

@@ -11,6 +11,8 @@ import textwrap
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / 'scripts'))
+import test_suites
 CI = (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')
 RELEASE = (ROOT / '.github/workflows/release.yml').read_text(encoding='utf-8')
 FULL_JOBS = ('tooling-tests', 'backend-tests', 'ui-tests', 'ide-compatibility',
@@ -35,14 +37,16 @@ class WorkflowPolicyTests(unittest.TestCase):
         baseline = job(CI, 'functional-build')
         self.assertIsNone(re.search(r'^    if:', baseline, re.M))
         self.assertIn('os: [ubuntu-24.04, windows-2025, macos-15]', baseline)
-        self.assertIn('scripts/test.py --functional-only --build', baseline)
-        self.assertIn('scripts/check-release-archive.py', baseline)
+        self.assertIn('needs: suite-plan', baseline)
+        self.assertIn('scripts/one-shot-test.py --ci-group functional-build --in-place', baseline)
+        self.assertIn('--check-workflow --github-matrices', job(CI, 'suite-plan'))
+        self.assertIsNone(re.search(r'^    if:', job(CI, 'suite-plan'), re.M))
         for forbidden in ('unittest discover', '--live', 'regressionTest', 'h2IntegrationTest',
                           'ui-preview.py', 'review-intellij-ui.sh', 'compatibility-only'):
             self.assertNotIn(forbidden, baseline)
 
     def test_all_other_suites_run_only_on_main_targeted_prs(self):
-        self.assertEqual({'functional-build', *FULL_JOBS}, set(re.findall(r'^  ([\w-]+):$', CI.split('jobs:\n', 1)[1], re.M)))
+        self.assertEqual({'suite-plan', 'functional-build', *FULL_JOBS}, set(re.findall(r'^  ([\w-]+):$', CI.split('jobs:\n', 1)[1], re.M)))
         for name in FULL_JOBS:
             expression = condition(job(CI, name)).replace('always() && ', '')
             for event in ('push', 'pull_request', 'workflow_dispatch'):
@@ -54,42 +58,46 @@ class WorkflowPolicyTests(unittest.TestCase):
 
     def test_suites_are_grouped_without_nested_full_builds(self):
         tooling = job(CI, 'tooling-tests')
-        self.assertIn('unittest discover -s scripts/tests -v', tooling)
+        self.assertIn('--ci-group tooling-tests --in-place', tooling)
         self.assertNotIn('buildPlugin', tooling)
         backend = job(CI, 'backend-tests')
-        self.assertIn('regressionTest --no-daemon', backend)
-        self.assertIn('h2IntegrationTest h2FallbackDriverTest', backend)
-        self.assertIn('--integration-only --live --mysql --hsqldb --postgres', backend)
-        self.assertIn('h2FallbackDriverTest', backend)
+        self.assertIn('--ci-group backend-tests --in-place', backend)
+        self.assertEqual(['regressionTest'], test_suites.gradle_tasks('backend-regression'))
+        self.assertEqual(['h2IntegrationTest'], test_suites.gradle_tasks('backend-h2'))
+        self.assertEqual(['integrationTest', 'fallbackDriverTest'], test_suites.gradle_tasks('backend-live'))
         self.assertNotIn('scripts/h2-test.py', backend)
         self.assertNotIn('--build', backend)
         jdbc = job(CI, 'database-compatibility')
-        self.assertIn('--database-compatibility-only', jdbc)
-        self.assertIn("ide: ['2025.1', '2025.2', '2025.3']", job(CI, 'ide-compatibility'))
+        self.assertIn('fromJSON(needs.suite-plan.outputs.database)', jdbc)
+        self.assertIn('fail-fast: false', jdbc)
+        self.assertTrue({'2025.1', '2025.2', '2025.3'} <=
+                        {row['ide'] for row in test_suites.github_matrices()['ide']['include']})
         self.assertIn('plugin-under-test', job(CI, 'ide-compatibility'))
-        self.assertIn('needs: functional-build', job(CI, 'ide-compatibility'))
+        self.assertIn('needs: [functional-build, suite-plan]', job(CI, 'ide-compatibility'))
+        self.assertIn('--archive "${archives[0]}"', job(CI, 'ide-compatibility'))
+        test_suites.check_workflow(CI)
 
     def test_ui_suites_cover_distinct_blockers_without_repeating_themes(self):
         ui = job(CI, 'ui-tests')
         self.assertIn('fail-fast: false', ui)
-        cases = re.findall(r'- suite: ([^\n]+)\n            theme: ([^\n]+)', ui)
-        self.assertEqual([
+        cases = [(row['suite'].removeprefix('ui-'), row['theme'])
+                 for row in test_suites.github_matrices()['ui']['include']]
+        self.assertTrue({
             ('previews', 'headless'), ('hsqldb', 'ExperimentalDark'),
             ('alter-table', 'ExperimentalDark'), ('table-dialogs', 'ExperimentalLight'),
             ('cell-inspector-scaled', 'ExperimentalDark'), ('search', 'ExperimentalDark'),
-            ('postgres', 'ExperimentalDark'), ('h2', 'ExperimentalDark')], cases)
-        self.assertIn("LATTICE_UI_CELL_DETAILS_ONLY: ${{ matrix.suite == 'cell-inspector-scaled' }}", ui)
-        self.assertIn("LATTICE_UI_SCALE: ${{ (matrix.suite == 'table-dialogs' || matrix.suite == 'cell-inspector-scaled') && '1.25' || '1.0' }}", ui)
+            ('postgres', 'ExperimentalDark'), ('h2', 'ExperimentalDark')} <= set(cases))
+        self.assertEqual({'LATTICE_UI_CELL_DETAILS_ONLY': 'true', 'LATTICE_UI_SCALE': '1.25'},
+                         test_suites.suite_by_id('ui-cell-inspector-scaled')['env'])
         self.assertNotIn('LATTICE_UI_STYLE_ONLY:', ui)
         self.assertNotIn('LATTICE_UI_DIALOG_AUDIT:', ui)
-        self.assertIn('scripts/ui-preview.py --checks-only', ui)
+        self.assertIn('--checks-only', test_suites.suite_by_id('ui-previews')['command'])
         self.assertNotIn('--all-previews', ui)
         for variable, suite in (('ALTER_TABLE_ONLY', 'alter-table'), ('CREATE_TABLE_ONLY', 'table-dialogs'),
                                 ('EXPLORER_SEARCH_ONLY', 'search')):
-            self.assertIn(f"LATTICE_UI_{variable}: ${{{{ matrix.suite == '{suite}' }}}}", ui)
-            self.assertIn(f"|| matrix.suite == '{suite}'", ui)
-        self.assertIn('scripts/h2-test.py --ui-only', ui)
-        self.assertIn('scripts/postgres-ui-review.py', ui)
+            self.assertEqual('true', test_suites.suite_by_id(f'ui-{suite}')['env'][f'LATTICE_UI_{variable}'])
+        self.assertEqual('h2-ui', test_suites.suite_by_id('ui-h2')['kind'])
+        self.assertEqual('postgres-ui', test_suites.suite_by_id('ui-postgres')['kind'])
         self.assertIn('name: ui-${{ matrix.suite }}-${{ matrix.theme }}', ui)
         self.assertIn('if: always()', ui)
         self.assertIn('out/ide-tests/tests/**/log/idea.log', ui)
@@ -99,7 +107,7 @@ class WorkflowPolicyTests(unittest.TestCase):
     def test_main_pr_gate_requires_every_suite_even_if_skipped_or_cancelled(self):
         gate = job(CI, 'full-validation')
         needs = re.search(r'needs: \[(.+)\]', gate).group(1).split(', ')
-        self.assertEqual({'functional-build', *FULL_JOBS[:-1]}, set(needs))
+        self.assertEqual({'suite-plan', 'functional-build', *FULL_JOBS[:-1]}, set(needs))
         self.assertTrue(condition(gate).startswith('always() && '))
         script = textwrap.dedent(gate.split("          python3 - <<'PYCODE'\n", 1)[1].split('          PYCODE', 1)[0])
         for failing_job in needs:
