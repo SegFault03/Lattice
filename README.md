@@ -22,15 +22,16 @@ Lattice is a database client for IntelliJ IDEA. Connect to MySQL, PostgreSQL, HS
 - Offline schema browsing from cached metadata; changes refresh the explorer and affected editors.
 - Passwords and custom JDBC URLs stored through IntelliJ PasswordSafe.
 
-## Updates since 0.0.2-alpha
+## 0.1.0-alpha highlights
 
-The upcoming minor release is **0.1.0-alpha**. Open **Tools → What's New in Lattice**
+**0.1.0-alpha** is a minor alpha release, with the following changes since
+**0.0.2-alpha**. Open **Tools → What's New in Lattice**
 or use the link on Lattice's welcome screen for illustrated, offline feature guides.
 A dismissible update notice appears once per version across projects; **Don't show
 again** disables future notices without hiding the guide.
 
 - **PostgreSQL and H2:** PostgreSQL adds schema browsing and transactional DDL. H2 supports memory, file and TCP connections, with service workflows for MySQL/PostgreSQL compatibility modes.
-- **Explorer:** Group and filter connections by engine, search across sources and database objects, identify key columns, and keep the last successful metadata available for offline browsing.
+- **Explorer:** Group and filter connections by engine, search across sources and database objects, identify key columns, and browse cached metadata offline. Startup and later refreshes preserve the current explorer view.
 - **Table work:** Inspect formatted or raw values and column definitions, stage edits explicitly, recover drafts, and apply create/alter batches with SQL previews.
 - **Drivers and sessions:** Reuse verified downloads, discover Maven-cached and project-default drivers in the background, and safely retire connections when sessions change.
 - **Welcome screen:** A refreshed starting point now reflects all four supported databases and current query, edit and export workflows.
@@ -108,9 +109,9 @@ Generated MySQL URLs currently disable TLS and use UTC for the driver/server ses
 
 ## Inspect and edit data
 
-Select a table cell and click **Inspect** (Alt+Enter) to open its value and column details. Click a column header for its definition, or pin the inspector to keep it on a particular cell or column. Structured values offer formatted/raw views; Copy uses raw text rather than formatted output.
+Select a table cell and click **Inspect** (Alt+Enter) to open its value and column details. Click a column header for its definition. The inspector follows selection while viewing and stays on the current cell while editing. Structured values offer formatted/raw views; Copy appears inside the value box on hover and copies raw text.
 
-Choose **Edit value**, then **Stage change** to add the edit to the grid's pending batch. **Commit** saves that batch to the database. Set NULL, Empty string and Use default are separate actions. Cancel discards the current inspector edit; X or Escape cancels it and closes the inspector. Closing the table tab preserves unconfirmed text for recovery, without staging or committing it. Recovered text stays available while metadata loads; staging requires an editable column and valid row identity.
+Choose **Edit value**, then change the text or choose **Set default** or **Set NULL**. **Stage change** adds the draft to the grid's pending batch; **Commit** saves that batch to the database. An empty string is entered as text and differs from NULL or a database default. After staging, **Revert** restores the original value. Cancel discards the current inspector edit; X or Escape cancels it and closes the inspector. Closing the table tab preserves unconfirmed text for recovery, without staging or committing it. Recovered text stays available while metadata loads; staging requires an editable column and valid row identity.
 
 Create/alter table dialogs retain changes across the column navigator and show the complete SQL before applying. Batched alterations can rename the table and add, modify, rename or drop columns. PostgreSQL batches use a transaction; MySQL, HSQLDB and H2 may commit DDL incrementally. After a failure, review the refreshed schema and remaining changes before retrying.
 
@@ -201,7 +202,7 @@ The seven README screenshots are the featured product previews. Concept renders 
 
 Every branch push and PR runs embedded functional checks and plugin build/archive validation on Linux, Windows and macOS. PRs targeting `main` additionally run grouped tooling, regression/integration, production Swing and real-IDE UI, JDBC/Java and IntelliJ 2025.1–2025.3 compatibility checks. PRs targeting `staging` run the commit tier. See [CI test groups](docs/CI_TESTING.md) for scope and commands.
 
-A new tag such as `v0.0.2-alpha` triggers the [release workflow](.github/workflows/release.yml) only after its commit is verified as reachable from `main`. Tags have no branch of their own; a tag on an unmerged feature commit is rejected before any build, signing or publication job. The tag pipeline runs release functional/build checks, ZIP validation, signing and signature verification, then publishes a GitHub Release and submits the same signed ZIP to JetBrains Marketplace. Compatibility matrices are confined to PRs. GitHub Releases include patch notes, commit history, checksums and corresponding MySQL sources. Prereleases are not designated latest; Marketplace submissions use the public Stable channel and become available after JetBrains approval. There is no manual release trigger; use the local dry-run commands in [Releasing](docs/RELEASING.md).
+A new tag such as `v0.1.0-alpha` triggers the [release workflow](.github/workflows/release.yml) only after its commit is verified as reachable from `main`. Tags have no branch of their own; a tag on an unmerged feature commit is rejected before any build, signing or publication job. The tag pipeline runs release functional/build checks, ZIP validation, signing and signature verification, then publishes a GitHub Release and submits the same signed ZIP to JetBrains Marketplace. Compatibility matrices are confined to PRs. GitHub Releases include patch notes, commit history, checksums and corresponding MySQL sources. Prereleases are not designated latest; Marketplace submissions use the public Stable channel and become available after JetBrains approval. There is no manual release trigger; use the local dry-run commands in [Releasing](docs/RELEASING.md).
 
 See [CHANGELOG](docs/CHANGELOG.md), [RELEASING](docs/RELEASING.md), [Marketplace publishing](docs/MARKETPLACE.md), [issue reporting](docs/ISSUE.md) and [security reporting](docs/SECURITY.md).
 

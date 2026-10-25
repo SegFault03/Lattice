@@ -9,7 +9,7 @@ All commands run from the repository root unless a guide says otherwise.
 | [CI test groups](CI_TESTING.md) | Required reading before CI edits, maintenance conventions, suite ownership and release gates |
 | [Scripts](SCRIPTS.md) | Test, UI, deployment and release helpers |
 | [Windows scripts](WINDOWS_SCRIPTS.md) | Every local Windows command and its complete options |
-| [UI previews](UI_PREVIEW.md) | Render production Swing screens and refresh the five README images |
+| [UI previews](UI_PREVIEW.md) | Render production Swing screens and refresh the seven README images |
 | [Releasing](RELEASING.md) | Versioning, tags, validation and publication |
 | [Marketplace](MARKETPLACE.md) | Signing, tag-only public releases and local preparation |
 | [Changelog](CHANGELOG.md) | Versioned release notes |
@@ -20,6 +20,6 @@ All commands run from the repository root unless a guide says otherwise.
 
 GitHub discovers contribution and security guidance here. Issue forms, the pull request template and workflows live under `.github/`; agent instructions and Gradle wrapper launchers stay at the repository root.
 
-Portable Python helpers live in `scripts/`; platform entry points live in `scripts/windows/` and `scripts/linux/`, and regression tests live in `scripts/tests/`. Keep SDKs, database binaries, private caches and generated validation reports under ignored `build/`. The five product screenshots live under `screenshots/`; the `design/` concept galleries retain their rendered design references.
+Portable Python helpers live in `scripts/`; platform entry points live in `scripts/windows/` and `scripts/linux/`, and regression tests live in `scripts/tests/`. Keep SDKs, database binaries, private caches and generated validation reports under ignored `build/`. The seven product screenshots live under `screenshots/`; the `design/` concept galleries retain their rendered design references.
 
 - [H2 validation](H2_TESTING.md): functional, regression, TLS, driver/runtime compatibility and full real-IDE checks.

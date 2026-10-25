@@ -21,16 +21,27 @@ Validate the change through a PR targeting `main`. That workflow runs the databa
    the three referenced README screenshots current. Gradle packages those PNGs and
    the changelog, and replaces the guide's version with the actual build version,
    including tag overrides. Keep the concise descriptor change notes aligned.
-3. Run `python scripts/test.py --live --mysql --hsqldb --postgres --build` with the isolated fixtures, plus the Python tooling tests and compatibility checks.
-4. Review the packaged plugin and commit the changes.
+3. Commit the preparation to `staging`, then open a PR from `staging` to `main`.
+   Branch pushes run functional/build/archive checks; the main-targeted PR runs
+   the full validation gate, including tooling, regression/integration, UI and
+   compatibility checks. Local dry runs are optional when CI owns validation.
+4. Review the PR's checks and packaged plugin before merging into `main`.
 5. From the merged `main` commit, create and push a new annotated tag, for example:
 
 ```bash
-git tag -a v0.0.2-alpha -m "Lattice 0.0.2-alpha"
-git push origin v0.0.2-alpha
+git tag -a v0.1.0-alpha -m "Lattice 0.1.0-alpha"
+git push origin v0.1.0-alpha
 ```
 
 These are release commands for the maintainer; no tag is created by the preparation scripts. Tags use `vX.Y.Z` or a SemVer prerelease such as `vX.Y.Z-alpha` / `vX.Y.Z-rc.1`, without numeric leading zeroes. Build metadata suffixes are not supported. Release builds derive the plugin/ZIP version from the tag, overriding the default property. Prerelease suffixes set GitHub's prerelease flag and disable latest designation. Do not reuse a published tag.
+
+The next release is **0.1.0-alpha**, a minor alpha release following
+**0.0.2-alpha**. Keep `gradle.properties`, the source plugin descriptor, the
+changelog heading and the illustrated guide's `edition` aligned. Its `since`
+remains `0.0.2-alpha`, the previous release, and its `version=${version}` is
+resolved by Gradle. Do not advance to a later development version before this
+release is tagged. A staging push or main PR does not publish the plugin;
+create the tag only after the main PR is merged and release is approved.
 
 ## Automatic pipeline
 
@@ -52,11 +63,11 @@ Build/test/verification failures publish no release. The publish job uploads ass
 Python 3.11+ is required (3.12 recommended for SDK archive extraction).
 
 ```text
-python scripts/release.py --version 1.0.0
-python scripts/test.py --live --mysql --hsqldb --postgres --build --version 1.0.0 --notes-file build/release/patch-notes.html
+python scripts/release.py --version 0.1.0-alpha
+python scripts/test.py --live --mysql --hsqldb --postgres --build --version 0.1.0-alpha --notes-file build/release/patch-notes.html
 python scripts/prepare-source-asset.py
-python scripts/check-release-archive.py build/distributions/Lattice-1.0.0.zip --version 1.0.0 --source build/release/mysql-connector-j-26.7.0-source.tar.gz --checksums build/release/SHA256SUMS
-python scripts/verify-plugin.py build/distributions/Lattice-1.0.0.zip --ide-version 2025.1
+python scripts/check-release-archive.py build/distributions/Lattice-0.1.0-alpha.zip --version 0.1.0-alpha --source build/release/mysql-connector-j-26.7.0-source.tar.gz --checksums build/release/SHA256SUMS
+python scripts/verify-plugin.py build/distributions/Lattice-0.1.0-alpha.zip --ide-version 2025.1
 ```
 
 Use `--tag vX.Y.Z` when the local tag exists and points to HEAD. Scripts generate files locally and never publish. The same commands work on Windows, Linux and macOS. Use python3 if required by your Python installation. Set JAVA_HOME to JDK 21; Docker must be running for the owned MySQL fixture. See the [script reference](SCRIPTS.md) for cache and optional SDK overrides.

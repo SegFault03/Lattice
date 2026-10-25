@@ -8,12 +8,11 @@ Patch notes are selected by the exact release version, including prerelease suff
 
 ### Data sources and explorer
 
-- Preserve expanded and collapsed branches, selection and scroll position across startup, manual and database-change refreshes, including when explorer search is active.
-
 - Add PostgreSQL with schema browsing, table editing, SQL consoles, DDL and exports; add H2 memory, file and TCP connections, with MySQL and PostgreSQL compatibility-mode workflows.
 - Group connections by database type, filter visible sources, and search across connections, schemas, tables and columns. Show key metadata in table and SQL result grids.
 - Cache the last successful metadata for offline browsing and SQL generation, and refresh the explorer and affected editors after database changes.
 - Refresh all saved connections in the background when Lattice first opens in each project session, preserving cached metadata when servers are unavailable.
+- Preserve expanded and collapsed branches, selection and scroll position across startup, manual and database-change refreshes, including when explorer search is active.
 
 ### Table and SQL tools
 
@@ -27,6 +26,12 @@ Patch notes are selected by the exact release version, including prerelease suff
 - Discover Maven-cached and project-default drivers in the background, preserve manual selections, reuse verified downloads across IDE restarts, and report missing or corrupt artifacts.
 - Refresh the connection form and explorer controls for multiple sources, improve theme-aware menus and feedback, and update the welcome screen to show all supported databases and current workflows.
 - Add an offline What's New editor tab with illustrated usage guides, a once-per-version update notice, and permanent entry points in the welcome screen and Tools menu.
+
+### Alpha limits
+
+- Multi-step MySQL, HSQLDB and H2 DDL can commit incrementally; review the refreshed schema and remaining edits after a partial failure. PostgreSQL alter batches use a transaction.
+- Cached metadata can be stale and contains no table rows. Live operations require a connection; generated MySQL URLs disable TLS, so use a custom URL when TLS is required.
+- Project-close and dynamic unload validation remains pending. Pagination without a primary key requires an explicit unique order; connection loss during commit can leave an uncertain server outcome.
 
 ## [0.0.2-alpha]
 

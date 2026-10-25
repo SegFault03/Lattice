@@ -20,7 +20,6 @@ crops of the live modal window. No replacement look and feel is used.
 - Prepare SQL and run database operations in the background with busy feedback.
 - Retain remaining drafts after a partial failure without replaying successful steps; refresh the explorer after success.
 
-See [UI preview instructions](../../../docs/UI_PREVIEW.md#column-inspector) to
 See [UI preview instructions](../../../docs/UI_PREVIEW.md#column-inspector) for
 the current interaction model and repeatable native review steps. PostgreSQL
 batches use one transaction; MySQL, HSQLDB and H2 may commit DDL incrementally.

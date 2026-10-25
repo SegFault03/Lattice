@@ -2,7 +2,7 @@
     <id>com.segfault03.lattice</id>
     <name>Lattice</name>
     <version>0.1.0-alpha</version>
-    <vendor>Lattice contributors</vendor>
+    <vendor url="https://github.com/SegFault03/Lattice">Lattice contributors</vendor>
 
     <description><![CDATA[
     <h3>Lattice — In-App Database Manager for IntelliJ IDEA</h3>
@@ -10,14 +10,17 @@
 
     <h4>Key Features:</h4>
     <ul>
-        <li><b>Supported Databases:</b> <b>MySQL</b>, <b>HSQLDB</b>, <b>PostgreSQL</b> and <b>H2</b> with a compatible JDBC driver. Tested server releases include MySQL 5.5, 5.6, 5.7 and 8.4, and HSQLDB 2.2.9 through 2.7.4 (Embedded File, In-Memory, and Server modes). PostgreSQL supports schema browsing, SQL consoles, data editing, DDL and exports with Java 8 compatible pgJDBC drivers; use 42.7.3 or 42.2.27 for servers older than 9.1. H2 drivers/servers 2.1.214, 2.2.224 and 2.3.232 cover memory/file, TCP, TLS and MySQL/PostgreSQL-mode service workflows.</li>
+        <li><b>Supported Databases:</b> MySQL, PostgreSQL, HSQLDB and H2 with bundled, downloadable or local JDBC drivers. HSQLDB supports file, memory and server connections; H2 supports memory, file and TCP connections.</li>
         <li><b>Reusable JDBC Drivers:</b> Download a driver version once and reuse it across connections and IDE restarts, or select a local JAR. Driver discovery runs in the background, supports Maven project defaults, and validates cached JARs before reuse.</li>
-        <li><b>Database Explorer:</b> Tree view of Catalogs/Databases, Schemas, Tables, Views, Columns (with data types, primary key, and auto-increment indicators).</li>
+        <li><b>Database Explorer:</b> Group and filter connections by engine; search sources, schemas, tables and columns. Browse cached metadata offline. Startup and database-change refreshes preserve expanded branches, selection and scroll position.</li>
         <li><b>Interactive Data Grid:</b> Inline cell editing with early type checking, auto-generated key protection, periodic auto-refresh, add/delete rows, batch commit, revert, filter (WHERE clause), a Clear filter action, and pagination. Actions reflect selection, pending edits and busy states.</li>
-        <li><b>SQL Query Console:</b> Execute queries with Ctrl+Enter, result tables, affected row counts, elapsed time, and query history.</li>
-        <li><b>Visual DDL Wizards:</b> Create databases, design tables, alter tables (add, rename, modify definition, and drop columns), truncate tables, and rename tables.</li>
+        <li><b>Value Inspector:</b> Inspect formatted/raw values and column details beside the grid. Edit values or choose NULL/default, explicitly stage changes, and recover unconfirmed drafts.</li>
+        <li><b>SQL Query Console:</b> Execute queries with Ctrl+Enter, result tables, affected row counts, elapsed time, query history, timeouts and cancellation.</li>
+        <li><b>Visual Table Design:</b> Create and alter tables with column navigation and complete SQL previews. Batch column changes, rename tables and retain unfinished edits after partial DDL failures.</li>
         <li><b>Export:</b> Export data directly to CSV, JSON, and SQL INSERTs, and export/view CREATE TABLE DDL.</li>
+        <li><b>What's New:</b> Illustrated, offline feature guides in an editor tab, with a dismissible once-per-version update notice.</li>
     </ul>
+    <p>Requires IntelliJ IDEA 2025.1 or later and the IDE's Java 21+ runtime. This is an alpha release; see the project documentation for database compatibility and limitations.</p>
     <h4>Coming soon:</h4>
     <p>The roadmap includes generating POJOs, DTOs and JavaBeans; SQL syntax highlighting and schema-aware inline suggestions, subject to platform feasibility; and table relationship graphs and dependency trees. These features are not available yet.</p>
     ]]></description>
@@ -27,6 +30,7 @@
         <li>Connect to PostgreSQL and H2 alongside MySQL and HSQLDB; search and filter grouped data sources.</li>
         <li>Inspect values and column details, keep NULL/default choices in drafts, and stage changes before committing.</li>
         <li>Review complete SQL previews in the redesigned create/alter table dialogs.</li>
+        <li>Browse cached metadata offline; refresh saved connections on startup while preserving the explorer's expansion, selection and scroll position.</li>
         <li>Read illustrated, offline release guides from What's New in Lattice, with a once-per-version update notice.</li>
     </ul>
     ]]></change-notes>

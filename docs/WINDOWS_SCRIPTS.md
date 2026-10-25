@@ -228,13 +228,13 @@ options:
 
 ## ui-preview.ps1
 
-Render the production Swing UI without opening an IDE; refresh the five tracked README screenshots at higher pixel density (at least 1200 × 760), preserving aspect ratios and README display sizes. The same PNGs can be uploaded to Marketplace.
+Render the production Swing UI without opening an IDE; refresh the seven tracked README screenshots at higher pixel density (at least 1200 × 760), preserving aspect ratios and README display sizes. The same PNGs can be uploaded to Marketplace.
 
 ```powershell
 .\scripts\windows\ui-preview.ps1 --all-previews @deps
 ```
 
-`--all-previews` renders a light/dark gallery. `--output` defaults to build/ui-preview/; `--compare-with` points to an earlier gallery for comparisons. Gallery HTML/ZIP files are ignored. Every successful run refreshes the five images under screenshots/; review their Git diff. JUnit 4.13.2, Hamcrest Core 1.3 and FlatLaf 3.7.2 can be supplied individually.
+`--all-previews` renders a light/dark gallery. `--output` defaults to build/ui-preview/; `--compare-with` points to an earlier gallery for comparisons. Gallery HTML/ZIP files are ignored. Every successful run refreshes the seven images under screenshots/; review their Git diff. JUnit 4.13.2, Hamcrest Core 1.3 and FlatLaf 3.7.2 can be supplied individually.
 
 Complete options (forwarded unchanged to Python):
 
