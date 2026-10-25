@@ -7,7 +7,6 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.vfs.VirtualFileWrapper;
 import com.intellij.ui.JBColor;
-import com.intellij.ui.OnePixelSplitter;
 import com.intellij.util.ui.JBUI;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -80,11 +79,10 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     private EditableTableModel tableModel;
     private WrappingLabel validationDetails;
     private CellDetailsPanel cellDetails;
-    private OnePixelSplitter cellDetailsSplitter;
+    private JLayeredPane gridOverlay;
+    private JBScrollPane dataScroll;
     private JPanel tableWorkspace;
     private boolean inspectorVisible;
-    private float inspectorProportion = 0.63f;
-    private boolean inspectorWidthInitialized;
     private JButton inspectBtn;
     private String inspectedHeaderName;
 
@@ -335,8 +333,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             @Override public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent event) {}
             @Override public void popupMenuCanceled(javax.swing.event.PopupMenuEvent event) {}
         });
-        JBScrollPane scroll = dataTable.createScrollPane();
-        tableWorkspace.add(scroll, BorderLayout.CENTER);
+        dataScroll = dataTable.createScrollPane();
         cellDetails = new CellDetailsPanel(new CellDetailsPanel.Actions() {
             @Override public void apply(CellDetailsPanel.Cell cell, String text) { changeInspectedCell(cell, text); }
             @Override public void setNull(CellDetailsPanel.Cell cell) { changeInspectedCell(cell, null); }
@@ -359,29 +356,46 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             @Override public void close() { setInspectorVisible(false); }
             @Override public void draftChanged() { updatePendingChangesState(); }
         });
-        cellDetailsSplitter = new OnePixelSplitter(false, 0.63f);
-        cellDetailsSplitter.setFirstComponent(tableWorkspace);
-        cellDetailsSplitter.setSecondComponent(null);
-        add(cellDetailsSplitter, BorderLayout.CENTER);
+        cellDetails.setBorder(JBUI.Borders.customLineLeft(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR));
+        gridOverlay = new JLayeredPane() {
+            @Override public void doLayout() {
+                dataScroll.setBounds(0, 0, getWidth(), getHeight());
+                int width = Math.min(getWidth(), Math.max(JBUI.scale(360),
+                        Math.min(JBUI.scale(520), Math.round(getWidth() * 0.28f))));
+                cellDetails.setBounds(getWidth() - width, 0, width, getHeight());
+            }
+            @Override public Dimension getPreferredSize() { return dataScroll.getPreferredSize(); }
+            @Override public Dimension getMinimumSize() { return dataScroll.getMinimumSize(); }
+        };
+        gridOverlay.add(dataScroll, JLayeredPane.DEFAULT_LAYER);
+        gridOverlay.add(cellDetails, JLayeredPane.PALETTE_LAYER);
+        cellDetails.setVisible(false);
+        tableWorkspace.add(gridOverlay, BorderLayout.CENTER);
+        add(tableWorkspace, BorderLayout.CENTER);
         dataTable.addMouseListener(new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent event) {
-                if (!SwingUtilities.isLeftMouseButton(event) || !inspectorVisible) return;
+                if (!SwingUtilities.isLeftMouseButton(event)) return;
                 int row = dataTable.rowAtPoint(event.getPoint());
                 int col = dataTable.columnAtPoint(event.getPoint());
                 if (row < 0 || col < 0) return;
+                dataTable.setSelectedHeaderColumn(-1);
+                if (!inspectorVisible) return;
                 SwingUtilities.invokeLater(() -> openCellDetails(row, col));
             }
         });
         dataTable.getTableHeader().addMouseListener(new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent event) {
-                if (!SwingUtilities.isLeftMouseButton(event) || !inspectorVisible) return;
+                if (!SwingUtilities.isLeftMouseButton(event) || event.getClickCount() != 1) return;
                 int viewCol = dataTable.getTableHeader().columnAtPoint(event.getPoint());
                 if (viewCol < 0) return;
                 Rectangle bounds = dataTable.getTableHeader().getHeaderRect(viewCol);
                 int resizeZone = JBUI.scale(4);
                 if (event.getX() - bounds.x <= resizeZone && viewCol > 0
                         || bounds.x + bounds.width - event.getX() <= resizeZone) return;
-                openColumnDetails(viewCol);
+                if (!finishGridCellEditing()) return;
+                dataTable.clearSelection();
+                dataTable.setSelectedHeaderColumn(dataTable.convertColumnIndexToModel(viewCol));
+                if (inspectorVisible) openColumnDetails(viewCol);
             }
         });
         getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(
@@ -421,12 +435,14 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             if (!event.getValueIsAdjusting()) {
                 updateValidationDetails(tableModel.getValidationErrors());
                 updateContextActions();
+                if (dataTable.getSelectedRow() >= 0) dataTable.setSelectedHeaderColumn(-1);
                 if (inspectorVisible) followGridSelection();
             }
         });
         dataTable.getColumnModel().getSelectionModel().addListSelectionListener(event -> {
             if (!event.getValueIsAdjusting()) {
                 updateValidationDetails(tableModel.getValidationErrors());
+                if (dataTable.getSelectedRow() >= 0) dataTable.setSelectedHeaderColumn(-1);
                 if (inspectorVisible) followGridSelection();
             }
         });
@@ -441,34 +457,21 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         if (cellDetails == null || inspectorVisible == visible) return;
         if (!visible && cellDetails.isEditing() && !cellDetails.finishEditing()) return;
         inspectorVisible = visible;
-        if (visible) {
-            if (!inspectorWidthInitialized && cellDetailsSplitter.getWidth() > 0) {
-                inspectorProportion = Math.max(0.3f, Math.min(0.8f,
-                        1f - (float)cellDetails.getPreferredSize().width / cellDetailsSplitter.getWidth()));
-                inspectorWidthInitialized = true;
-            }
-            cellDetailsSplitter.setSecondComponent(cellDetails);
-            cellDetailsSplitter.setProportion(inspectorProportion);
-            // A compact result set should span the available table side, as it does before
-            // the inspector opens. Keep scrolling for genuinely wide tables.
-            int available = Math.round(cellDetailsSplitter.getWidth() * inspectorProportion);
-            dataTable.setAutoResizeMode(dataTable.getColumnModel().getTotalColumnWidth() < available
-                    ? JTable.AUTO_RESIZE_ALL_COLUMNS : JTable.AUTO_RESIZE_OFF);
-        } else {
-            inspectorProportion = cellDetailsSplitter.getProportion();
-            cellDetailsSplitter.setSecondComponent(null);
-            dataTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
-            inspectedHeaderName = null;
-        }
+        cellDetails.setVisible(visible);
+        if (!visible) inspectedHeaderName = null;
         inspectBtn.setSelected(visible);
         inspectBtn.setToolTipText((visible ? "Hide" : "Show") + " cell inspector (Alt+Enter)");
-        cellDetailsSplitter.revalidate();
-        cellDetailsSplitter.repaint();
+        gridOverlay.revalidate();
+        gridOverlay.repaint();
         dataTable.repaint();
     }
 
     private void toggleInspector() {
         if (inspectorVisible) { cellDetails.handleEscape(); return; }
+        if (dataTable.getSelectedHeaderColumn() >= 0 && dataTable.getSelectedHeaderColumn() < tableModel.getColumnCount()) {
+            openColumnDetails(dataTable.convertColumnIndexToView(dataTable.getSelectedHeaderColumn()));
+            return;
+        }
         if (dataTable.getRowCount() > 0 && dataTable.getColumnCount() > 0) {
             int row = Math.max(0, dataTable.getSelectedRow());
             int column = Math.max(0, dataTable.getSelectedColumn());
@@ -485,6 +488,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         CellDetailsPanel.Cell cell = cellSnapshot(row, col);
         if (cell == null) return;
         if (!cellDetails.showCell(cell)) return;
+        dataTable.setSelectedHeaderColumn(-1);
         inspectedHeaderName = null;
         setInspectorVisible(true);
         dataTable.repaint();
@@ -495,6 +499,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 || viewColumn >= dataTable.getColumnCount()) return;
         int col = dataTable.convertColumnIndexToModel(viewColumn);
         if (!cellDetails.showColumn(columnSnapshot(col))) return;
+        dataTable.setSelectedHeaderColumn(col);
         inspectedHeaderName = tableModel.getRawColumnName(col);
         setInspectorVisible(true);
         dataTable.repaint();

@@ -22,10 +22,10 @@ class CellDetailsPanelTest {
 
     static final class RecordingActions implements CellDetailsPanel.Actions {
         final List<String> applied = new ArrayList<>();
-        int closes;
+        int closes, defaults;
         public void apply(CellDetailsPanel.Cell cell, String text) { applied.add(text); }
         public void setNull(CellDetailsPanel.Cell cell) {}
-        public void useDefault(CellDetailsPanel.Cell cell) {}
+        public void useDefault(CellDetailsPanel.Cell cell) { defaults++; }
         public void revert(CellDetailsPanel.Cell cell) {}
         public void editTable() {}
         public void close() { closes++; }
@@ -68,6 +68,34 @@ class CellDetailsPanelTest {
     private static void layout(Container container) {
         container.doLayout();
         for (Component child : container.getComponents()) if (child instanceof Container nested) layout(nested);
+    }
+
+    @Test void bodyActionsAndValueKeepHeaderAlignmentAfterIdeScrollBorderCleanup() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            CellDetailsPanel panel = new CellDetailsPanel(new RecordingActions());
+            panel.setBorder(BorderFactory.createMatteBorder(0, 1, 0, 0, Color.GRAY));
+            for (int width : new int[]{320, 388, 520}) {
+                for (String value : new String[]{"2", "{\"quantity\":2}"}) {
+                    panel.showCell(cell(value, 1));
+                    SwingUtilities.updateComponentTreeUI(panel);
+                    // The editor host normalizes scroll-pane borders when embedding the panel.
+                    com.intellij.util.ui.UIUtil.removeScrollBorder(panel);
+                    panel.setSize(width, 730);
+                    for (int pass = 0; pass < 4; pass++) layout(panel);
+                    int titleX = SwingUtilities.convertPoint(field(panel, "title", JTextArea.class), 0, 0, panel).x;
+                    for (String name : new String[]{"valueHeading", "valueScroll", "edit", "tableNoteLabel"}) {
+                        JComponent component = field(panel, name, JComponent.class);
+                        assertEquals(titleX, SwingUtilities.convertPoint(component, 0, 0, panel).x,
+                                name + " must align with the header after IDE border cleanup at width " + width);
+                    }
+                    JComponent valueScroll = field(panel, "valueScroll", JComponent.class);
+                    int valueRight = SwingUtilities.convertPoint(valueScroll, valueScroll.getWidth(), 0, panel).x;
+                    int gutter = titleX - panel.getInsets().left;
+                    assertTrue(valueRight <= width - panel.getInsets().right - gutter,
+                            "The value must retain its right gutter");
+                }
+            }
+        });
     }
 
     @Test void untouchedNullDefaultAndOrdinaryValuesNeverBecomePendingChanges() throws Exception {
@@ -154,14 +182,81 @@ class CellDetailsPanelTest {
         });
     }
 
-    @Test void emptyStringRequiresAnExplicitValueStateAction() throws Exception {
+    @Test void databaseDefaultIsExplicitAndUnavailableDefaultsCannotDispatch() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             RecordingActions actions = new RecordingActions(); CellDetailsPanel panel = new CellDetailsPanel(actions);
-            panel.showCell(cell(null, 0));
-            JButton empty = field(panel, "emptyString", JButton.class);
-            assertTrue(empty.isVisible(), "Empty string must be available directly, without a More menu");
-            empty.doClick(0);
-            assertEquals(List.of(""), actions.applied);
+            var persisted = cell(null, 0);
+            panel.showCell(persisted);
+            JButton defaults = field(panel, "useDefault", JButton.class);
+            assertTrue(defaults.isVisible()); assertFalse(defaults.isEnabled());
+            defaults.doClick(0); assertEquals(0, actions.defaults);
+            panel.showCell(new CellDetailsPanel.Cell(persisted.tableName(), 0, 0, persisted.column(), null,
+                    true, false, true, false, null, "New row", ""));
+            assertTrue(defaults.isEnabled()); defaults.doClick(0);
+            assertEquals(1, actions.defaults); assertTrue(actions.applied.isEmpty());
+            var noDefault = new ColumnMetadata("value", "VARCHAR", Types.VARCHAR, 100, 0, true, false, false, null);
+            panel.showCell(new CellDetailsPanel.Cell("customers", 0, 0, noDefault, null,
+                    true, false, true, false, null, "New row", ""));
+            assertFalse(defaults.isEnabled()); defaults.doClick(0); assertEquals(1, actions.defaults);
+        });
+    }
+
+    @Test void primaryActionsShareARowAndStagingRetainsReadableTextAndEqualHeight() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            CellDetailsPanel panel = new CellDetailsPanel(new RecordingActions());
+            panel.showCell(cell("{\"x\":1}", 0)); panel.setSize(388, 730);
+            for (int pass = 0; pass < 4; pass++) layout(panel);
+            JButton edit = field(panel, "edit", JButton.class), defaults = field(panel, "useDefault", JButton.class),
+                    copy = field(panel, "copy", JButton.class), apply = field(panel, "apply", JButton.class),
+                    cancel = field(panel, "cancel", JButton.class);
+            assertEquals(edit.getY(), defaults.getY()); assertEquals(edit.getY(), copy.getY());
+            assertTrue(edit.getX() < defaults.getX() && defaults.getX() < copy.getX());
+            edit.doClick(0);
+            for (int pass = 0; pass < 4; pass++) layout(panel);
+            assertFalse(apply.isEnabled()); assertTrue(cancel.isVisible());
+            assertEquals(copy.getHeight(), apply.getHeight()); assertEquals(copy.getHeight(), cancel.getHeight());
+            assertEquals(copy.getY(), apply.getY()); assertEquals(copy.getY(), cancel.getY());
+            assertTrue(apply.getY() >= 0 && apply.getY() + apply.getHeight() <= apply.getParent().getHeight());
+            field(panel, "valueArea", JTextArea.class).append(" ");
+            assertTrue(apply.isEnabled(), "Typing into a JSON draft must enable staging");
+            field(panel, "valueArea", JTextArea.class).setText("changed");
+            assertTrue(apply.isEnabled()); assertEquals(Color.WHITE, apply.getForeground());
+            cancel.doClick(0); assertFalse(panel.isEditing());
+        });
+    }
+
+    @Test void buttonAndTabTextHonorComponentAntialiasingAtDesktopScales() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            CellDetailsPanel panel = new CellDetailsPanel(new RecordingActions());
+            for (String name : new String[]{"edit", "apply", "cancel", "useDefault", "formattedTab", "rawTab", "wrap"}) {
+                AbstractButton button = field(panel, name, AbstractButton.class);
+                button.putClientProperty(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                for (boolean enabled : new boolean[]{true, false}) {
+                    button.setEnabled(enabled);
+                    for (double scale : new double[]{1, 1.25, 1.5}) {
+                        var image = new java.awt.image.BufferedImage((int)(180 * scale), (int)(36 * scale),
+                                java.awt.image.BufferedImage.TYPE_INT_RGB);
+                        Graphics2D graphics = image.createGraphics();
+                        graphics.setColor(Color.MAGENTA); graphics.fillRect(0, 0, image.getWidth(), image.getHeight());
+                        graphics.scale(scale, scale); graphics.setFont(button.getFont());
+                        // Native Swing can supply AA through the component rather than the incoming Graphics.
+                        graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
+                        try {
+                            var paint = button.getUI().getClass().getDeclaredMethod("paintText", Graphics.class,
+                                    AbstractButton.class, Rectangle.class, String.class);
+                            paint.setAccessible(true);
+                            paint.invoke(button.getUI(), graphics, button, new Rectangle(4, 4, 170, 26), button.getText());
+                        } catch (ReflectiveOperationException error) { throw new AssertionError(error); }
+                        finally { graphics.dispose(); }
+                        int blended = 0;
+                        for (int y = 0; y < image.getHeight(); y++) for (int x = 0; x < image.getWidth(); x++) {
+                            int pixel = image.getRGB(x, y);
+                            if (pixel != Color.MAGENTA.getRGB() && pixel != button.getForeground().getRGB()) blended++;
+                        }
+                        assertTrue(blended > 0, name + " must retain smooth text edges at scale " + scale + ", enabled=" + enabled);
+                    }
+                }
+            }
         });
     }
 

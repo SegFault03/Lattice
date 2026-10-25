@@ -59,7 +59,7 @@ final class CellDetailsPanel extends JPanel {
     private final JPanel lower = new JPanel();
     private JPanel valueBlock;
     private JPanel tableNote;
-    private JPanel staging;
+    private final JPanel actionsRow = new JPanel(new ActionLayout());
     private final JPanel tableNoteText = new JPanel(new BorderLayout());
     private final WrappingLabel tableNoteLabel = new WrappingLabel("Review or change table structure");
     private final JPanel metadata = new JPanel();
@@ -67,25 +67,24 @@ final class CellDetailsPanel extends JPanel {
     private final JPanel bottomDock = new JPanel(new BorderLayout());
     private final WrappingLabel footerLabel = new WrappingLabel("");
     private final HeaderIconButton close = new HeaderIconButton(AllIcons.Actions.CloseDarkGrey);
-    private final JToggleButton formattedTab = new JToggleButton("Formatted");
-    private final JToggleButton rawTab = new JToggleButton("Raw");
-    private final JToggleButton wrap = new JToggleButton("Wrap");
+    private final JToggleButton formattedTab = new PresentationToggle("Formatted");
+    private final JToggleButton rawTab = new PresentationToggle("Raw");
+    private final JToggleButton wrap = new PresentationToggle("Wrap");
     private final JButton edit = new InspectorButton("Edit value", AllIcons.Actions.Edit, ButtonStyle.PRIMARY);
     private final JButton copy = new QuietButton("Copy", AllIcons.Actions.Copy);
     private final JButton setNull = new QuietButton("Set NULL", null);
-    private final JButton emptyString = new QuietButton("Empty string", null);
-    private final JButton useDefault = new QuietButton("Use default", null);
+    private final JButton useDefault = new InspectorButton("Set default", null, ButtonStyle.DEFAULT);
     private final JButton revert = new QuietButton("Revert", AllIcons.Actions.Rollback);
     private final JPanel valueStates = new JPanel(new ActionLayout());
     private final JButton apply = new InspectorButton("Stage change", null, ButtonStyle.PRIMARY);
-    private final JButton cancel = new QuietButton("Cancel", null);
+    private final JButton cancel = new InspectorButton("Cancel", null, ButtonStyle.DANGER);
     private final JButton editTable = new InspectorButton("Edit table", null, ButtonStyle.SECONDARY);
     private Cell cell;
     private Column column;
     private boolean columnMode, editing, busy, rawMode;
     private String draft;
     private final WrappingLabel validation = new WrappingLabel("");
-    private final JPanel tabs = new JPanel(new ActionLayout());
+    private final JPanel tabs = new JPanel(new ActionLayout(2));
     private final JPanel controls = new JPanel(new GridLayout(1, 1));
     private LookAndFeel lastLookAndFeel;
     private boolean structuredValue;
@@ -122,13 +121,16 @@ final class CellDetailsPanel extends JPanel {
 
     /** Wrapping controls with explicit inter-control gaps and no invisible outer padding. */
     private static final class ActionLayout implements LayoutManager {
+        private final int gapSize;
+        ActionLayout() { this(8); }
+        ActionLayout(int gapSize) { this.gapSize = gapSize; }
         public void addLayoutComponent(String name, Component component) {}
         public void removeLayoutComponent(Component component) {}
         public Dimension minimumLayoutSize(Container parent) { return new Dimension(0, 0); }
         public Dimension preferredLayoutSize(Container parent) { return arrange(parent, false); }
         public void layoutContainer(Container parent) { arrange(parent, true); }
         private Dimension arrange(Container parent, boolean layout) {
-            Insets in = parent.getInsets(); int gap = JBUI.scale(8);
+            Insets in = parent.getInsets(); int gap = JBUI.scale(gapSize);
             int width = parent.getWidth() > 0 ? Math.max(1, parent.getWidth() - in.left - in.right) : Integer.MAX_VALUE;
             int x = 0, y = 0, rowHeight = 0, usedWidth = 0;
             for (Component child : parent.getComponents()) if (child.isVisible()) {
@@ -185,7 +187,42 @@ final class CellDetailsPanel extends JPanel {
         text.setFont(UIManager.getFont("Label.font")); return text;
     }
 
-    private enum ButtonStyle { PRIMARY, SECONDARY, QUIET }
+    private enum ButtonStyle { PRIMARY, DEFAULT, SECONDARY, DANGER, QUIET }
+
+    private static final class InspectorButtonUI extends BasicButtonUI {
+        @Override protected void paintText(Graphics graphics, AbstractButton button, Rectangle bounds, String text) {
+            graphics.setColor(button.getForeground());
+            // The component-aware overload preserves Swing's per-component desktop text hints.
+            javax.swing.plaf.basic.BasicGraphicsUtils.drawStringUnderlineCharAt(button, (Graphics2D)graphics, text,
+                    button.getDisplayedMnemonicIndex(), bounds.x + getTextShiftOffset(),
+                    bounds.y + button.getFontMetrics(button.getFont()).getAscent() + getTextShiftOffset());
+        }
+    }
+
+    private static final class PresentationToggle extends JToggleButton {
+        PresentationToggle(String text) { super(text); setRolloverEnabled(true); }
+        @Override public void updateUI() {
+            setUI(new javax.swing.plaf.basic.BasicToggleButtonUI() {
+                @Override protected void paintText(Graphics graphics, AbstractButton button, Rectangle bounds, String text) {
+                    graphics.setColor(button.getForeground());
+                    javax.swing.plaf.basic.BasicGraphicsUtils.drawStringUnderlineCharAt(button, (Graphics2D)graphics, text,
+                            button.getDisplayedMnemonicIndex(), bounds.x, bounds.y + button.getFontMetrics(button.getFont()).getAscent());
+                }
+            });
+            setOpaque(false); setContentAreaFilled(false); setBorderPainted(false);
+            setBorder(JBUI.Borders.empty(4, 6, 6, 6)); setMargin(new Insets(0, 0, 0, 0));
+        }
+        @Override protected void paintComponent(Graphics graphics) {
+            super.paintComponent(graphics);
+            if (isSelected()) {
+                Graphics2D g = (Graphics2D)graphics.create();
+                g.setColor(isEnabled() ? new JBColor(0x275DCD, 0x78A9FF) : new JBColor(0x8795AA, 0x8F9DB3));
+                g.fillRoundRect(JBUI.scale(6), getHeight() - JBUI.scale(2),
+                        Math.max(0, getWidth() - JBUI.scale(12)), JBUI.scale(2), JBUI.scale(2), JBUI.scale(2));
+                g.dispose();
+            }
+        }
+    }
 
     /** Stable rounded surfaces across Windows/Linux LAFs, using native button semantics. */
     private static class InspectorButton extends JButton {
@@ -200,28 +237,37 @@ final class CellDetailsPanel extends JPanel {
             });
         }
         @Override public void updateUI() {
-            setUI(new BasicButtonUI()); setOpaque(false); setContentAreaFilled(false); setBorderPainted(false);
+            setUI(new InspectorButtonUI()); setOpaque(false); setContentAreaFilled(false); setBorderPainted(false);
             DatabaseUi.configureActionSizing(this);
         }
         @Override public Color getForeground() {
-            return style == ButtonStyle.PRIMARY && isEnabled() ? Color.WHITE : super.getForeground();
+            if (style == ButtonStyle.PRIMARY) return isEnabled() ? Color.WHITE : new JBColor(0x40536F, 0xDAE5F7);
+            if (style == ButtonStyle.DEFAULT && isEnabled()) return new JBColor(0x214E94, 0xC7DDFF);
+            if (style == ButtonStyle.DANGER) return new JBColor(0xA32D36, 0xFFC0C5);
+            return isEnabled() ? super.getForeground() : new JBColor(0x667185, 0xA8B2C1);
         }
         @Override protected void paintComponent(Graphics graphics) {
             Graphics2D g = (Graphics2D)graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             boolean hover = isEnabled() && (getModel().isRollover() || getModel().isPressed());
             Color surface = style == ButtonStyle.PRIMARY
-                    ? !isEnabled() ? new JBColor(0xDCE4F2, 0x343F53)
+                    ? !isEnabled() ? new JBColor(0xD5E0F0, 0x3C506D)
                     : getModel().isPressed() ? new JBColor(0x124DCE, 0x2054CD)
                     : hover ? new JBColor(0x1B57DF, 0x326DFA) : new JBColor(0x1F62F2, 0x2864F6)
+                    : style == ButtonStyle.DANGER ? hover ? new JBColor(0xF6D3D6, 0x65353F) : new JBColor(0xFBE8E8, 0x522E35)
+                    : style == ButtonStyle.DEFAULT ? !isEnabled() ? new JBColor(0xE3EAF5, 0x344153)
+                    : hover ? new JBColor(0xD1E0F8, 0x3A587D) : new JBColor(0xE0EAFB, 0x31496C)
                     : hover ? new JBColor(0xE8ECF2, 0x35383F)
                     : style == ButtonStyle.SECONDARY ? new JBColor(0xFFFFFF, 0x2B2D30) : null;
             int arc = JBUI.scale(10);
             if (surface != null) {
                 g.setColor(surface); g.fillRoundRect(0, 0, getWidth(), getHeight(), arc, arc);
                 if (style != ButtonStyle.QUIET) {
-                    g.setColor(style == ButtonStyle.PRIMARY ? new JBColor(0x1753D5, 0x3B73FC) : new JBColor(0xD4D9E1, 0x484C54));
-                    g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, arc, arc);
+                    g.setColor(style == ButtonStyle.PRIMARY
+                            ? isEnabled() ? new JBColor(0x1753D5, 0x3B73FC) : new JBColor(0x90A1BA, 0x6C819C)
+                            : style == ButtonStyle.DANGER ? new JBColor(0xD89EA4, 0x99505B)
+                            : style == ButtonStyle.DEFAULT ? new JBColor(0xAAC1E4, 0x5879A1) : new JBColor(0xD4D9E1, 0x484C54));
+                    g.draw(new java.awt.geom.RoundRectangle2D.Float(0.5f, 0.5f, getWidth() - 1f, getHeight() - 1f, arc, arc));
                 }
             }
             if (isFocusOwner()) {
@@ -231,8 +277,9 @@ final class CellDetailsPanel extends JPanel {
             g.dispose(); super.paintComponent(graphics);
         }
         @Override public Dimension getPreferredSize() {
-            return DatabaseUi.actionPreferredSize(this);
+            return isPreferredSizeSet() ? super.getPreferredSize() : DatabaseUi.actionPreferredSize(this);
         }
+        @Override public Dimension getMinimumSize() { return getPreferredSize(); }
     }
     private static final class QuietButton extends InspectorButton {
         QuietButton(String text, Icon icon) { super(text, icon, ButtonStyle.QUIET); }
@@ -294,7 +341,9 @@ final class CellDetailsPanel extends JPanel {
         header.add(controls, actionsConstraints); add(header, BorderLayout.NORTH);
 
         content.setOpaque(true); content.setLayout(new ColumnLayout());
-        bodyScroll.setBorder(JBUI.Borders.empty(0, 24));
+        // Editor hosts strip scroll-pane borders. Keep the body gutter on its content.
+        content.setBorder(JBUI.Borders.empty(0, 24));
+        bodyScroll.setBorder(JBUI.Borders.empty());
         bodyScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         bodyScroll.getVerticalScrollBar().setUnitIncrement(JBUI.scale(16));
         add(bodyScroll, BorderLayout.CENTER);
@@ -323,7 +372,6 @@ final class CellDetailsPanel extends JPanel {
         valuePresentation.add(valueLabelRow); valuePresentation.add(tabs);
         JPanel valueCard = new JPanel(new WidthAwareBorderLayout()); valueCard.setOpaque(false);
         valueCard.add(valuePresentation, BorderLayout.NORTH); valueCard.add(valueScroll, BorderLayout.CENTER);
-        JPanel actionsRow = new JPanel(new ActionLayout());
         actionsRow.setOpaque(false); actionsRow.setBorder(JBUI.Borders.emptyTop(8));
         copy.setToolTipText("Copy the raw cell value");
         copy.addActionListener(e -> copyText());
@@ -333,17 +381,12 @@ final class CellDetailsPanel extends JPanel {
         apply.getAccessibleContext().setAccessibleName("Stage this value; Commit saves it to the database");
         edit.addActionListener(e -> beginEdit());
         setNull.setToolTipText("Set SQL NULL"); setNull.addActionListener(e -> actions.setNull(cell));
-        emptyString.setToolTipText("Set an empty string"); emptyString.addActionListener(e -> actions.apply(cell, ""));
         useDefault.setToolTipText("Use database default"); useDefault.addActionListener(e -> actions.useDefault(cell));
         revert.setToolTipText("Revert this pending value"); revert.addActionListener(e -> actions.revert(cell));
         valueStates.setOpaque(false); valueStates.setBorder(JBUI.Borders.emptyTop(4));
-        valueStates.add(setNull); valueStates.add(emptyString); valueStates.add(useDefault); valueStates.add(revert);
-        staging = new JPanel(new FlowLayout(FlowLayout.LEADING, 0, 0)); staging.setOpaque(false);
-        staging.setAlignmentX(Component.LEFT_ALIGNMENT);
+        valueStates.add(setNull); valueStates.add(revert);
         apply.addActionListener(e -> applyDraft()); cancel.addActionListener(e -> cancelEdit());
-        staging.add(apply); staging.add(Box.createHorizontalStrut(JBUI.scale(8))); staging.add(cancel);
-        actionsRow.add(staging); actionsRow.add(edit);
-        actionsRow.add(copy);
+        actionsRow.add(apply); actionsRow.add(cancel); actionsRow.add(edit); actionsRow.add(useDefault); actionsRow.add(copy);
         JPanel actionGroup = new JPanel(new ColumnLayout()); actionGroup.setOpaque(false);
         actionGroup.add(actionsRow); actionGroup.add(valueStates);
         valueBlock = new JPanel(new WidthAwareBorderLayout()); valueBlock.setOpaque(false);
@@ -397,7 +440,10 @@ final class CellDetailsPanel extends JPanel {
 
     @Override public void doLayout() {
         header.setSize(getWidth(), header.getHeight());
-        int contentWidth = Math.max(1, getWidth() - JBUI.scale(48));
+        Insets insets = getInsets();
+        int contentWidth = Math.max(1, getWidth() - insets.left - insets.right);
+        if (bodyScroll.getVerticalScrollBar().isVisible())
+            contentWidth = Math.max(1, contentWidth - bodyScroll.getVerticalScrollBar().getPreferredSize().width);
         content.setSize(contentWidth, content.getHeight());
         if (!columnMode && valueBlock != null && getHeight() > 0) {
             int fixedHeight = header.getPreferredSize().height + bottomDock.getPreferredSize().height
@@ -419,7 +465,7 @@ final class CellDetailsPanel extends JPanel {
 
     private static void styleTextToggle(AbstractButton button) {
         button.setOpaque(false); button.setFocusPainted(true);
-        button.setMargin(JBUI.insets(2, 6));
+        button.setMargin(new Insets(0, 0, 0, 0));
     }
     boolean showCell(Cell cell) {
         ensureCurrentTheme();
@@ -534,7 +580,7 @@ final class CellDetailsPanel extends JPanel {
         identity.setToolTipText(null);
         summary.setText(c == null ? "" : c.getFormattedType());
         valueBlock.setVisible(false); tableNoteText.setVisible(true); tableNote.setVisible(true); editTable.setVisible(true);
-        staging.setVisible(false);
+        apply.setVisible(false); cancel.setVisible(false);
         if (c != null) {
             addSection("Definition");
             addMetadata("SQL type", c.getFormattedType());
@@ -559,7 +605,7 @@ final class CellDetailsPanel extends JPanel {
         label.setBorder(JBUI.Borders.empty(12, 0, 8, 0));
         metadata.add(label);
     }
-    private void renderEmpty() { eyebrow.setText(""); title.setText("Cell details"); identity.setText("Select a cell to inspect its value"); summary.setText(""); valueArea.setText(""); metadata.removeAll(); if (valueBlock != null) valueBlock.setVisible(true); if (tableNote != null) tableNote.setVisible(false); if (staging != null) staging.setVisible(false); }
+    private void renderEmpty() { eyebrow.setText(""); title.setText("Cell details"); identity.setText("Select a cell to inspect its value"); summary.setText(""); valueArea.setText(""); metadata.removeAll(); if (valueBlock != null) valueBlock.setVisible(true); if (tableNote != null) tableNote.setVisible(false); apply.setVisible(false); cancel.setVisible(false); }
     private void addMetadata(String name, String value) {
         metadata.add(new MetadataRow(name, safe(value)));
     }
@@ -573,7 +619,11 @@ final class CellDetailsPanel extends JPanel {
         valueArea.setForeground(JBColor.foreground());
         valueArea.setCaretPosition(0); updateTabs();
     }
-    private void updateTabs() { formattedTab.setSelected(!editing && !rawMode); rawTab.setSelected(editing || rawMode); wrap.setSelected(valueArea.getLineWrap()); }
+    private void updateTabs() {
+        formattedTab.setSelected(!editing && !rawMode); rawTab.setSelected(editing || rawMode);
+        wrap.setSelected(valueArea.getLineWrap());
+        refreshTextToggle(formattedTab); refreshTextToggle(rawTab); refreshTextToggle(wrap);
+    }
     private void updateValueTools() {
         boolean structured = cell != null && structuredValue;
         String text = valueArea.getText();
@@ -593,23 +643,19 @@ final class CellDetailsPanel extends JPanel {
     }
     private void cancelEdit() { if (!editing) return; editing = false; draft = null; renderValue(); updateEnabled(); actions.draftChanged(); }
     private void copyText() { String text = editing ? valueArea.getText() : CellValuePresentation.raw(cell == null ? null : cell.value()); Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null); }
-    private boolean isTextColumn() {
-        return cell != null && cell.column() != null && switch (cell.column().getDataType()) {
-            case java.sql.Types.CHAR, java.sql.Types.VARCHAR, java.sql.Types.LONGVARCHAR,
-                    java.sql.Types.NCHAR, java.sql.Types.NVARCHAR, java.sql.Types.LONGNVARCHAR,
-                    java.sql.Types.CLOB, java.sql.Types.NCLOB -> true;
-            default -> false;
-        };
-    }
     private void updateValueStates() {
         boolean available = cell != null && !columnMode && !editing && cell.editable();
         setNull.setVisible(available && cell.column() != null && cell.column().isNullable());
-        emptyString.setVisible(available && isTextColumn());
-        useDefault.setVisible(available && cell.newRow() && cell.column() != null
-                && (cell.column().getDefaultValue() != null || cell.column().isAutoIncrement()));
+        boolean hasDefault = cell != null && cell.column() != null
+                && (cell.column().getDefaultValue() != null || cell.column().isAutoIncrement());
+        useDefault.setVisible(cell != null && !columnMode && !editing);
+        useDefault.setEnabled(available && cell.newRow() && hasDefault && !busy);
+        useDefault.setToolTipText(!hasDefault ? "No database default is defined for this column"
+                : !cell.newRow() ? "Database defaults are available when inserting a new row"
+                : "Use the database default for this new-row cell; Commit saves it");
         revert.setVisible(available && cell.modified());
-        for (JButton button : new JButton[]{setNull, emptyString, useDefault, revert}) button.setEnabled(!busy);
-        valueStates.setVisible(setNull.isVisible() || emptyString.isVisible() || useDefault.isVisible() || revert.isVisible());
+        for (JButton button : new JButton[]{setNull, revert}) button.setEnabled(!busy);
+        valueStates.setVisible(setNull.isVisible() || revert.isVisible());
     }
     private void updateEnabled() {
         edit.setEnabled(cell != null && cell.editable() && !busy && !editing);
@@ -617,7 +663,7 @@ final class CellDetailsPanel extends JPanel {
         apply.setEnabled(hasDraftChange() && !busy && cell != null && cell.editable()); cancel.setEnabled(editing && !busy);
         updateValueStates();
         formattedTab.setEnabled(!editing); rawTab.setEnabled(!editing);
-        staging.setVisible(editing && !columnMode);
+        apply.setVisible(editing && !columnMode); cancel.setVisible(editing && !columnMode);
         editTable.setEnabled(!busy && (cell != null && !cell.view() || column != null && !column.view()));
         refreshTextToggle(formattedTab); refreshTextToggle(rawTab); refreshTextToggle(wrap);
         updateValueTools();
@@ -670,17 +716,17 @@ final class CellDetailsPanel extends JPanel {
             tableNoteLabel.setFont(labelFont); footerLabel.setFont(labelFont); validation.setFont(labelFont);
             valueArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 1).deriveFont(labelFont.getSize2D()));
         }
-        if (buttonFont != null) for (AbstractButton button : new AbstractButton[]{formattedTab, rawTab, wrap, edit, copy, setNull, emptyString, useDefault, revert, apply, cancel, editTable}) {
+        if (buttonFont != null) for (AbstractButton button : new AbstractButton[]{formattedTab, rawTab, wrap, edit, copy, setNull, useDefault, revert, apply, cancel, editTable}) {
             button.setOpaque(false); button.setForeground(JBColor.foreground());
             button.setFont(buttonFont);
-            if (!(button instanceof InspectorButton)) {
+            if (!(button instanceof InspectorButton) && !(button instanceof PresentationToggle)) {
                 button.setIconTextGap(JBUI.scale(4)); button.setMargin(JBUI.insets(2, 6));
             }
             sizeControl(button);
         }
         int actionHeight = JBUI.scale(28);
-        for (JButton button : new JButton[]{edit, apply, cancel, copy}) actionHeight = Math.max(actionHeight, button.getPreferredSize().height);
-        for (JButton button : new JButton[]{edit, apply, cancel, copy})
+        for (JButton button : new JButton[]{edit, useDefault, apply, cancel, copy}) actionHeight = Math.max(actionHeight, button.getPreferredSize().height);
+        for (JButton button : new JButton[]{edit, useDefault, apply, cancel, copy})
             button.setPreferredSize(new Dimension(button.getPreferredSize().width, actionHeight));
         title.setForeground(JBColor.foreground());
         summary.setForeground(new JBColor(0x667185, 0xAAB3C1));
@@ -715,7 +761,8 @@ final class CellDetailsPanel extends JPanel {
     }
     private static void refreshTextToggle(AbstractButton button) {
         button.setContentAreaFilled(false); button.setBorderPainted(false); button.setOpaque(false);
-        button.setForeground(button.isSelected() ? new JBColor(0x275DCD, 0x78A9FF) : new JBColor(0x657185, 0xABB3BE));
+        button.setForeground(!button.isEnabled() ? new JBColor(0x79869A, 0x98A5B8)
+                : button.isSelected() ? new JBColor(0x275DCD, 0x78A9FF) : new JBColor(0x657185, 0xABB3BE));
     }
     private static Font bodyFont() {
         return UIManager.getFont("Label.font");

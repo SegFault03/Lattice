@@ -3,9 +3,12 @@
 ## Cell inspector interaction
 
 Use **Inspect** in the table toolbar or **Alt+Enter** to toggle the inspector.
-Closing it keeps it closed during ordinary cell selection. Clicking a column
-header opens column details only while Inspect is on; selecting a data cell
-returns the panel to that cell. Reopening restores the divider position.
+Closing it keeps it closed during cell and header selection. A single column-header
+click selects and highlights that header; column details follow only while Inspect
+is on. Inspect opens the selected header or data cell. Selecting a data cell while
+the inspector is open returns the panel to that cell. The inspector overlays the right edge of the grid
+without changing grid bounds or column widths. Its body owns its side padding so
+IDE scroll-pane border cleanup cannot remove the gutters.
 
 **Edit value** starts an unstaged draft. While editing, the inspector stays on
 that cell. **Stage change** explicitly adds the draft to the pending batch;
@@ -16,9 +19,13 @@ unconfirmed draft separately in the existing local project draft store and
 restores it in edit mode, outside the commit batch.
 
 Untouched values disable Stage change. SQL NULL, an empty string and a database
-default are distinct; direct value-state actions appear when applicable. Character
+default are distinct. Edit, Set default and Copy share one action row. Set default
+uses the database default for new rows and is disabled when unavailable; an empty
+string can be entered through Edit. NULL and Revert appear when applicable. Character
 counts follow the draft, and invalid values show feedback beside the editor.
-Presentation controls appear for structured/long values. Column metadata stays
+Compact presentation controls appear for structured/long values, with an underline
+on selected options. Stage change retains readable text when disabled; Cancel has
+a red surface and text. Column metadata stays
 visible, with compact Edit table below the structure hint. The column name is
 the title; the subtitle contains only row and column coordinates. Fixed header
 actions keep the close target in a fixed rail. Rounded inspector buttons retain Swing
@@ -32,9 +39,13 @@ uses symmetric 12-pixel padding. Metadata and identifiers wrap and can
 be selected/copied.
 
 The focused `--cell-details-only` previews also exercise closed-state retention,
-divider restoration, compact JSON, long metadata, local validation and larger
+overlay placement and grid sizing, compact JSON, long metadata, local validation and larger
 fonts in both themes. The manual gallery includes approved date fixtures and narrow viewports.
-The native focused scenario checks that header and cell clicks leave the inspector closed when Inspect is off, then exercises header details while it is on. See the
+The desktop-text samples render directly at 125% with smoothing hints supplied on
+Swing components while the incoming graphics has text smoothing off. This catches
+custom button painters that bypass the IDE's per-component font rendering hints;
+the ordinary preview's global smoothing can otherwise hide that defect.
+The native focused scenario checks that header and cell clicks keep a closed inspector closed. See the
 [prioritized implementation checklist](design/data-cell-refresh-plan.md).
 
 All preview modes assert inspector-only draft recovery through the production
