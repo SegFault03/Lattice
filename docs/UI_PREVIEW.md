@@ -45,7 +45,9 @@ Native UI tests reveal explorer paths one parent at a time and wait for lazy
 metadata before interacting with a child. They must not assume fixed row numbers
 or automatic expansion after adding a source or refreshing a schema. Busy-state
 captures reveal only the parent before pausing JDBC responses, then expand the
-target to start the measured read. The search flow also checks that a refresh
+target to start the measured read. Resolve that target's row before pausing:
+the driver's `pathExists` also expands nodes and can start the read itself.
+The path helper uses exact visible-row lookup without side effects. The search flow also checks that a refresh
 retains the visible branches while updating its matches.
 
 ## Cell inspector interaction

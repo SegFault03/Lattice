@@ -837,9 +837,10 @@ class IntellijUiScreenshotTest {
             }
             val connectionPath = arrayOf("Data Sources", if (h2) "H2" else if (postgres) "PostgreSQL" else "HSQLDB", "Lattice UI demo")
             expandExplorerPath(databaseTree, connectionPath.take(2).joinToString(databaseTree.fixture.separator()))
+            val connectionRow = explorerRow(databaseTree, connectionPath.toList())
             if (jdbcFixture != null) {
                 captureBusyState(jdbcFixture, pluginRoot, "Connecting to database…", "explorer-connecting.png", screenshotsDirectory) {
-                    expandExplorerPath(databaseTree, connectionPath.joinToString(databaseTree.fixture.separator()))
+                    withContext(OnDispatcher.EDT) { cast(databaseTree.component, LiveTree::class).expandRow(connectionRow) }
                 }
             } else expandExplorerPath(databaseTree, connectionPath.joinToString(databaseTree.fixture.separator()))
             val schemaName = if (postgres) "public" else "PUBLIC"
@@ -1800,22 +1801,30 @@ class IntellijUiScreenshotTest {
         println("Source switching and MySQL/HSQLDB/PostgreSQL/H2 ports verified")
     }
 
+    /** Unlike pathExists, collecting visible rows does not expand nodes or start JDBC reads. */
+    private fun explorerRow(tree: JTreeUiComponent, path: List<String>): Int {
+        var row: Int? = null
+        waitUntil("explorer path available: ${path.joinToString(" / ")}") {
+            row = tree.collectExpandedPaths().singleOrNull { it.path == path }?.row
+            row != null
+        }
+        return requireNotNull(row)
+    }
+
     /** Refresh keeps branches collapsed: reveal each parent before native fixture interaction. */
     private fun expandExplorerPath(tree: JTreeUiComponent, path: String) {
         val separator = tree.fixture.separator()
         val names = path.split(separator)
         for (depth in 1..names.size) {
-            val prefix = names.take(depth).toTypedArray()
-            waitUntil("explorer path available: ${prefix.joinToString(" / ")}") { tree.pathExists(*prefix) }
-            tree.fixture.expandPath(prefix.joinToString(separator))
+            val row = explorerRow(tree, names.take(depth))
+            tree.driver.withContext(OnDispatcher.EDT) { cast(tree.component, LiveTree::class).expandRow(row) }
         }
     }
 
     private fun rightClickExplorerPath(tree: JTreeUiComponent, path: String) {
         val separator = tree.fixture.separator()
         expandExplorerPath(tree, path.substringBeforeLast(separator, path))
-        waitUntil("explorer target available: $path") { tree.pathExists(*path.split(separator).toTypedArray()) }
-        tree.fixture.rightClickPath(path)
+        tree.fixture.rightClickRow(explorerRow(tree, path.split(separator)))
     }
 
     private fun captureBusyState(fixture: JdbcUiFixture, root: UiComponent, message: String, filename: String,
