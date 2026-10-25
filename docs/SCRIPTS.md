@@ -67,7 +67,7 @@ Common Python commands stay at the root of `scripts/`. PowerShell commands and h
 | `postgres-compatibility.py` | PostgreSQL 8.4–18 / Java 8 driver feature matrix, with selectable server cases | Linux Docker; optional GCC 14+/make host compiler for VFS storage |
 | `postgres-ui-review.py` | Full real-IDE UI flow against an owned PostgreSQL 18 fixture | Linux Docker/X11; same UI dependencies as the native review runner |
 | `one-shot-test.py` | Shared CI/local suite runner with full, routine-check, compatibility-only and focused suite/group modes; `--windows-ui` includes real IDE validation | Aggregate on Linux or Windows; individual suites on catalog-supported hosts; Python 3.11+, network for missing assets, at least 10 GiB free for isolated runs; Docker required only for Docker fixtures |
-| `ui-preview.py` | Render production Swing screens and refresh the five README screenshots; optionally build a light/dark gallery | Windows, Linux or macOS; JDK 21; local/cached IntelliJ 2025.1 SDK, JUnit, Hamcrest and FlatLaf, or network to download missing assets |
+| `ui-preview.py` | Render production Swing screens and refresh the seven README screenshots; optionally build a light/dark gallery | Windows, Linux or macOS; JDK 21; local/cached IntelliJ 2025.1 SDK, JUnit, Hamcrest and FlatLaf, or network to download missing assets |
 | `dev-deploy.py` | Build, discover a local IDEA, deploy Lattice and restart a running IDE | Installed IntelliJ IDEA 2025.1+; JDK 21; Git for full tooling tests |
 | `release.py` | Validate a version/tag and generate Markdown GitHub notes plus HTML Marketplace headings/bullets, paragraphs and inline code; `--marketplace-smoke` requires an explicit prerelease version without a tag | Git |
 | `check-release-archive.py` | Check ZIP layout, descriptor, bytecode, licenses; generate checksums | Built plugin ZIP |
@@ -106,9 +106,9 @@ Use `--java-home PATH`, `--java8-home PATH`, `--ide-home PATH` for the build bas
 
 ## UI previews and screenshots
 
-The five featured PNGs are rendered at higher pixel density to meet Marketplace's 1200 × 760 recommendation while retaining their aspect ratios. README display widths remain unchanged. These files can be uploaded directly to Marketplace.
+The seven featured PNGs are rendered at higher pixel density to meet Marketplace's 1200 × 760 recommendation while retaining their aspect ratios. README display widths remain unchanged. These files can be uploaded directly to Marketplace.
 
-For quick component layout feedback and the five README images, run:
+For quick component layout feedback and the seven README images, run:
 
 ```sh
 python scripts/ui-preview.py
@@ -213,7 +213,7 @@ Default user plugin locations follow [JetBrains' IDE directory documentation](ht
 
 Downloaded development assets use the OS user-cache directory: LocalAppData on Windows, Library/Caches on macOS, XDG_CACHE_HOME or ~/.cache on Linux. Set `LATTICE_DEV_CACHE` or pass a script's `--cache` override to relocate downloads. Build outputs remain in ignored `build/`.
 
-The root `gradlew` / `gradlew.bat` are the standard Gradle wrapper launchers. Public Python helpers live in `scripts/`; platform launchers live in `scripts/windows/` and `scripts/linux/`. Keep workstation-specific instructions and private tools outside the repository. SDKs and native test binaries stay outside this repository. The five README screenshots and the design-concept renders under `design/` are tracked references; other generated screenshots and build outputs are ignored. See the [documentation index](README.md) for the project layout.
+The root `gradlew` / `gradlew.bat` are the standard Gradle wrapper launchers. Public Python helpers live in `scripts/`; platform launchers live in `scripts/windows/` and `scripts/linux/`. Keep workstation-specific instructions and private tools outside the repository. SDKs and native test binaries stay outside this repository. The seven README screenshots and the design-concept renders under `design/` are tracked references; other generated screenshots and build outputs are ignored. See the [documentation index](README.md) for the project layout.
 
 ## GitHub Actions policy
 

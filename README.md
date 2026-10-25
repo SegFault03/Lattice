@@ -13,7 +13,7 @@ Lattice is a database client for IntelliJ IDEA. Connect to MySQL, PostgreSQL, HS
 
 - Explorer groups connections by database type, with search and filters for sources, schemas, tables and columns.
 - SQL console with results, history, row limits, timeouts and cancellation.
-- Value Workspace for formatted/raw inspection, column details, pinning, editing and explicit change staging.
+- Value Workspace for formatted/raw inspection, column details, editing and explicit change staging.
 - Editable table grids with pagination, filtering, batch saves, explicit NULL/default values and draft recovery.
 - Create/alter table dialogs with a full SQL preview, batched changes and recovery after partial DDL failures.
 - CSV, JSON, SQL INSERT and CREATE TABLE exports.
@@ -24,9 +24,14 @@ Lattice is a database client for IntelliJ IDEA. Connect to MySQL, PostgreSQL, HS
 
 ## Updates since 0.0.2-alpha
 
+The upcoming minor release is **0.1.0-alpha**. Open **Tools → What's New in Lattice**
+or use the link on Lattice's welcome screen for illustrated, offline feature guides.
+A dismissible update notice appears once per version across projects; **Don't show
+again** disables future notices without hiding the guide.
+
 - **PostgreSQL and H2:** PostgreSQL adds schema browsing and transactional DDL. H2 supports memory, file and TCP connections, with service workflows for MySQL/PostgreSQL compatibility modes.
 - **Explorer:** Group and filter connections by engine, search across sources and database objects, identify key columns, and keep the last successful metadata available for offline browsing.
-- **Table work:** Inspect formatted or raw values and column definitions, pin a cell or column, stage edits explicitly, recover drafts, and apply create/alter batches with SQL previews.
+- **Table work:** Inspect formatted or raw values and column definitions, stage edits explicitly, recover drafts, and apply create/alter batches with SQL previews.
 - **Drivers and sessions:** Reuse verified downloads, discover Maven-cached and project-default drivers in the background, and safely retire connections when sessions change.
 - **Welcome screen:** A refreshed starting point now reflects all four supported databases and current query, edit and export workflows.
 

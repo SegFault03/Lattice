@@ -95,4 +95,16 @@ public class DatabaseEditorManager implements com.intellij.openapi.Disposable {
             FileEditorManager.getInstance(project).openFile(vf, true);
         });
     }
+
+    public void openReleaseNotes() {
+        String key = "release-notes:" + com.segfault03.ideadb.release.ReleaseNotesContent.version();
+        ApplicationManager.getApplication().invokeLater(() -> {
+            if (disposed || project.isDisposed()) return;
+            DatabaseVirtualFile file = openFiles.get(key);
+            if (file == null || !FileEditorManager.getInstance(project).isFileOpen(file)) {
+                file = new ReleaseNotesVirtualFile(); openFiles.put(key, file);
+            }
+            FileEditorManager.getInstance(project).openFile(file, true);
+        });
+    }
 }

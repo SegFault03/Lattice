@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.segfault03.lattice</id>
     <name>Lattice</name>
-    <version>0.0.2-alpha</version>
+    <version>0.1.0-alpha</version>
     <vendor>Lattice contributors</vendor>
 
     <description><![CDATA[
@@ -19,14 +19,15 @@
         <li><b>Export:</b> Export data directly to CSV, JSON, and SQL INSERTs, and export/view CREATE TABLE DDL.</li>
     </ul>
     <h4>Coming soon:</h4>
-    <p>Support for H2 and other relational databases is planned. The roadmap also includes generating POJOs, DTOs and JavaBeans; SQL syntax highlighting and schema-aware inline suggestions, subject to platform feasibility; and table relationship graphs and dependency trees. These features are not available yet.</p>
+    <p>The roadmap includes generating POJOs, DTOs and JavaBeans; SQL syntax highlighting and schema-aware inline suggestions, subject to platform feasibility; and table relationship graphs and dependency trees. These features are not available yet.</p>
     ]]></description>
 
     <change-notes><![CDATA[
     <ul>
-        <li>Download JDBC drivers once and reuse them across connections and IDE restarts, with background discovery and cached JAR validation.</li>
-        <li>Clear table filters, use actions that reflect selection and pending edits, and work with improved layouts and light/dark styling.</li>
-        <li>Receive signed release builds with verified signatures and formatted release notes.</li>
+        <li>Connect to PostgreSQL and H2 alongside MySQL and HSQLDB; search and filter grouped data sources.</li>
+        <li>Inspect values and column details, keep NULL/default choices in drafts, and stage changes before committing.</li>
+        <li>Review complete SQL previews in the redesigned create/alter table dialogs.</li>
+        <li>Read illustrated, offline release guides from What's New in Lattice, with a once-per-version update notice.</li>
     </ul>
     ]]></change-notes>
 
@@ -37,6 +38,8 @@
     <depends>org.jetbrains.idea.maven</depends>
 
     <extensions defaultExtensionNs="com.intellij">
+        <postStartupActivity implementation="com.segfault03.ideadb.release.ReleaseNotesStartupActivity"/>
+        <notificationGroup id="Lattice updates" displayType="BALLOON"/>
         <toolWindow id="Lattice"
                     anchor="right"
                     secondary="false"
@@ -56,6 +59,12 @@
     </extensions>
 
     <actions>
+        <action id="com.segfault03.lattice.whatsNew"
+                class="com.segfault03.ideadb.ui.OpenReleaseNotesAction"
+                text="What's New in Lattice"
+                description="Read release highlights and illustrated guides for Lattice">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
         <action id="com.segfault03.lattice.open"
                 class="com.segfault03.ideadb.ui.OpenDatabaseManagerAction"
                 text="Lattice"

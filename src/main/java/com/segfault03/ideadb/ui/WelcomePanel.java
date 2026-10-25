@@ -85,6 +85,10 @@ public class WelcomePanel extends JPanel implements AutoCloseable {
         openConsole.addActionListener(e -> openSqlConsole());
         actions.add(openConsole);
 
+        com.intellij.ui.components.ActionLink whatsNew = new com.intellij.ui.components.ActionLink("What's new in Lattice");
+        whatsNew.addActionListener(event -> { if (project != null) DatabaseEditorManager.getInstance(project).openReleaseNotes(); });
+        actions.add(whatsNew);
+
         gbc.gridy++;
         gbc.insets = JBUI.insetsBottom(26);
         content.add(actions, gbc);

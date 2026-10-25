@@ -1,5 +1,26 @@
 # Swing UI previews
 
+## In-IDE release guide
+
+Open **Tools → What's New in Lattice**, search for that action with
+**Ctrl+Shift+A**, or use the link on Lattice's welcome screen. The native editor
+tab contains three short feature guides, bundled screenshots that can be enlarged,
+and an expandable list of changes from the packaged changelog. It works offline.
+
+After opening a project, an informational **Lattice updates** notification offers
+**View what's new**. Each version is announced once per IDE installation across
+projects. **Don't show again** disables future notices; the page stays available.
+The announcement state is stored separately from the welcome-screen preference,
+does not roam through Settings Sync, and survives restarts. The first rollout
+shows the 0.1.0-alpha recap since 0.0.2-alpha because previous builds did not
+record which release notes a user had seen.
+The page's **Notify me about new Lattice releases** checkbox can re-enable notices.
+
+For a local installation, build the plugin ZIP, use **Settings → Plugins → gear →
+Install Plugin from Disk**, select the ZIP, restart if requested, and invoke the
+action above. The native page follows the current IDE theme; screenshots retain
+the theme of their captured sample UI. This feature does not require JCEF.
+
 ## Welcome screen
 
 The welcome screen lists MySQL, PostgreSQL, H2 and HSQLDB, and summarizes the

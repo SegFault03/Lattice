@@ -4,15 +4,19 @@ Patch notes are selected by the exact release version, including prerelease suff
 
 ## [Unreleased]
 
+## [0.1.0-alpha]
+
 ### Data sources and explorer
 
 - Add PostgreSQL with schema browsing, table editing, SQL consoles, DDL and exports; add H2 memory, file and TCP connections, with MySQL and PostgreSQL compatibility-mode workflows.
 - Group connections by database type, filter visible sources, and search across connections, schemas, tables and columns. Show key metadata in table and SQL result grids.
 - Cache the last successful metadata for offline browsing and SQL generation, and refresh the explorer and affected editors after database changes.
+- Refresh all saved connections in the background when Lattice first opens in each project session, preserving cached metadata when servers are unavailable.
 
 ### Table and SQL tools
 
-- Add the Value Workspace for formatted/raw values, column details, pinning, inline copy feedback and explicitly staged edits. Unconfirmed drafts can be recovered without joining the pending database batch.
+- Add the Value Workspace for formatted/raw values, column details, hover-only copy feedback and explicitly staged edits. Unconfirmed drafts can be recovered without joining the pending database batch.
+- Keep NULL and database-default choices in the inspector draft until Stage change is clicked; support column defaults on existing rows. Show only Revert after staging and keep Copy inside the value box, visible on hover.
 - Redesign create/alter dialogs around column navigation and complete SQL previews. Apply changes in batches and retain uncompleted edits after partial DDL failure.
 - Improve cancellation and session recovery, preserve generated/default values during schema changes, and keep table actions available as the selection and editor state change.
 
@@ -20,6 +24,7 @@ Patch notes are selected by the exact release version, including prerelease suff
 
 - Discover Maven-cached and project-default drivers in the background, preserve manual selections, reuse verified downloads across IDE restarts, and report missing or corrupt artifacts.
 - Refresh the connection form and explorer controls for multiple sources, improve theme-aware menus and feedback, and update the welcome screen to show all supported databases and current workflows.
+- Add an offline What's New editor tab with illustrated usage guides, a once-per-version update notice, and permanent entry points in the welcome screen and Tools menu.
 
 ## [0.0.2-alpha]
 
