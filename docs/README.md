@@ -6,6 +6,7 @@ All commands run from the repository root unless a guide says otherwise.
 |---|---|
 | [Database providers](DATABASE_PROVIDERS.md) | Architecture, extension steps, connection ownership and validation |
 | [Contributing](CONTRIBUTING.md) | Build requirements, tests and development practices |
+| [Cloud builds](CLOUD_BUILDS.md) | Known failures in cloud sessions (rate limits, mirrors, UI fixtures) and their fixes |
 | [CI test groups](CI_TESTING.md) | Required reading before CI edits, maintenance conventions, suite ownership and release gates |
 | [Scripts](SCRIPTS.md) | Test, UI, deployment and release helpers |
 | [Windows scripts](WINDOWS_SCRIPTS.md) | Every local Windows command and its complete options |
