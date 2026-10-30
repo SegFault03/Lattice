@@ -60,6 +60,20 @@ class ProjectConfigScannerTest {
         assertEquals(List.of("PostgreSQL pg:5432/shop"), described("application.properties", "spring.datasource.hikari.jdbc-url=jdbc:postgresql://pg/shop\n"));
     }
 
+    @Test void escapesAsWrittenByPropertiesStoreAreUnescaped() {
+        assertEquals(List.of("MySQL localhost:3306/shop"), described("application.properties", "spring.datasource.url=jdbc\\:mysql\\://localhost\\:3306/shop\n"));
+        assertEquals(List.of("MySQL localhost:3306/shop"), described("application.properties", "spring.datasource.url\\=ignored\nspring\\.datasource\\.url = jdbc\\:mysql\\://localhost\\:3306/shop\n"));
+        assertEquals("jdbc:mysql://h/a b\t\\x", ProjectConfigScanner.properties("k=jdbc\\:mysql\\://h/a\\ b\\t\\\\x\n").get("k"));
+        assertEquals("caf\u00e9", ProjectConfigScanner.properties("k=caf\\u00e9\n").get("k"));
+        assertEquals("a=b:c d", ProjectConfigScanner.properties("a\\=b\\:c\\ d=a\\=b\\:c d\n").get("a=b:c d"));
+    }
+
+    @Test void continuationLinesAndBangCommentsInPropertiesFiles() {
+        assertEquals(List.of("PostgreSQL pg:5432/shop"), described("application.properties",
+                "! generated\n# also a comment\nspring.datasource.url=jdbc:postgresql:\\\n    //pg:5432/\\\n    shop\n"));
+        assertEquals(List.of("MySQL h:3306/shop"), described("application.properties", "! spring.datasource.url=jdbc:postgresql://x/y\nspring.datasource.url=jdbc\\:mysql\\://h\\:3306/\\\nshop\n"));
+    }
+
     @Test void placeholdersTakeTheirDefaultOrAnotherSettingOfTheFile() {
         assertEquals(List.of("PostgreSQL localhost:5432/shop"),
                 described("application.properties", "spring.datasource.url=jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:shop}\n"));

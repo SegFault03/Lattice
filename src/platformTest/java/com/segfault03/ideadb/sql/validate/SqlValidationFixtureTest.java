@@ -102,6 +102,17 @@ public class SqlValidationFixtureTest extends H2SqlFixtureTestCase {
         assertEquals("the checks come back with the fresh schema", 1, SqlValidation.diagnostics(file).stream().filter(d -> d.kind() == SqlDiagnostic.Kind.UNKNOWN_TABLE).count());
     }
 
+    public void testThePreviewOfTheQuickFixShowsTheReplacement() {
+        loadSchema();
+        myFixture.configureByText("q.sql", "select titel<caret> from books");
+        myFixture.doHighlighting();
+        var fix = myFixture.findSingleIntention("Replace with 'TITLE'");
+        assertEquals("select TITLE from books", myFixture.getIntentionPreviewText(fix));
+        myFixture.checkResult("select titel from books");
+        myFixture.checkPreviewAndLaunchAction(fix);
+        myFixture.checkResult("select TITLE from books");
+    }
+
     public void testValidationCanBeTurnedOff() {
         loadSchema();
         SqlEditorSettings.getInstance().setValidation(false);

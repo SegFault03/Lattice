@@ -22,7 +22,7 @@ abstract class JdbcMetadataAdapter implements MetadataAdapter {
         String catalog = namespace(database).catalog();
         String schema = resolveSchema(meta, namespace(database).schema());
 
-        try (ResultSet rs = meta.getTables(catalog, literalPattern(meta, schema), "%", new String[]{"TABLE", "VIEW"})) {
+        try (ResultSet rs = meta.getTables(catalog, literalPattern(meta, schema), "%", TableTypes.select(reportedTableTypes(meta)))) {
             while (rs.next()) {
                 String tableName = rs.getString("TABLE_NAME");
                 String tableType = rs.getString("TABLE_TYPE");
@@ -33,6 +33,16 @@ abstract class JdbcMetadataAdapter implements MetadataAdapter {
 
         tables.sort(Comparator.comparing(TableMetadata::getName));
         return tables;
+    }
+
+    private static List<String> reportedTableTypes(DatabaseMetaData meta) {
+        List<String> types = new ArrayList<>();
+        try (ResultSet rs = meta.getTableTypes()) {
+            while (rs.next()) types.add(rs.getString("TABLE_TYPE"));
+        } catch (java.sql.SQLException unavailable) {
+            // A driver that cannot list its table types is asked for tables and views.
+        }
+        return types;
     }
 
     public List<ColumnMetadata> getColumns(Connection conn, ConnectionConfig config, String database, String tableName) throws Exception {

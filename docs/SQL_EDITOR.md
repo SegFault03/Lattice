@@ -23,7 +23,7 @@ Completion works in `.sql` files, follows the file's dialect, and needs no short
 | Where the caret is | Suggestions |
 |---|---|
 | Start of a statement | `SELECT`, `INSERT INTO`, `UPDATE`, `DELETE FROM`, `CREATE TABLE`... plus the dialect's own (`SHOW` and `USE` for MySQL, `COPY` for PostgreSQL, `MERGE INTO` for H2 and HSQLDB) |
-| After `FROM`, `JOIN`, `UPDATE`, `INSERT INTO`, `DROP TABLE` | Tables and views of the default schema, and the other schemas |
+| After `FROM`, `JOIN`, `UPDATE`, `INSERT INTO`, `DROP TABLE` | Tables and views of the default schema, and the other schemas (partitioned and foreign tables count as tables, materialized views as views) |
 | After `schema.` | That schema's tables |
 | Select list, `WHERE`, `HAVING`, `ORDER BY`, `GROUP BY` | Columns of the tables in the statement, aliases, functions, and keywords where the word before the caret ends an expression (`IS NULL`, `ASC`, `GROUP BY`...) |
 | After `alias.` or `table.` | That table's columns |
@@ -92,7 +92,7 @@ When a `.sql` file has no choice, the project has no default and there are two o
 - **Lattice: SQL Connection for This File...** in the editor's right-click menu.
 - **Lattice: SQL Connection for Project...** in the Tools menu.
 
-Choices are stored in the project's workspace file, not in version control, because connection IDs are local to your machine. When a connection is deleted, files bound to it become unbound and a default that pointed to it is cleared; an explicit generic-SQL choice is kept.
+Choices are stored in the project's workspace file, not in version control, because connection IDs are local to your machine. A file's choice follows it when it or a folder above it is renamed or moved, and is forgotten when it is deleted. When a connection is deleted, files bound to it become unbound and a default that pointed to it is cleared; an explicit generic-SQL choice is kept.
 
 ## Validation
 
@@ -108,10 +108,11 @@ Mistakes are underlined as you type, from the same cached schema that completion
 
 It is built to be quiet when unsure:
 
-- **Needs the schema, or says nothing.** Table and column checks run only when a connection applies and its schema is cached. They are suspended while a change to the connection may have made the cache out of date (every statement run in a console reports one); the schema is then read again in the background and the checks return. Opening a file never starts a read by itself.
-- **Only names it can be sure of.** An unqualified column is judged only when every table the query can see is a real table with its columns read. A derived table, a CTE, a function that returns rows, a table the file creates, renames or alters, a `USING` or `NATURAL` join, `UPDATE` with several tables or `DELETE ... USING` make the query's unqualified names unjudged. Select list aliases, the SQL standard's words (`PRECEDING`, `ZONE`, `EPOCH`...), `ON CONFLICT`, `ON DUPLICATE KEY` and `RETURNING` clauses, window definitions and index hints are never called columns.
+- **Needs the schema, or says nothing.** Table and column checks run only when a connection applies and its schema is cached. They are suspended while a change to the connection may have made the cache out of date (every statement run in a console reports one); the schema is then read again in the background and the checks return. Completion and hover start the first read for a connection; once a connection has been read, a change that marks its schema stale is read again in the background when a file is next checked.
+- **Only names it can be sure of.** A column is judged only against a table whose columns could be read; a table whose columns could not be read is skipped. An unqualified column is judged only when every table the query can see is a real table with its columns read. A derived table, a CTE, a function that returns rows, a table the file creates, renames or alters, a `USING` or `NATURAL` join, `UPDATE` with several tables or `DELETE ... USING` make the query's unqualified names unjudged. Select list aliases, the SQL standard's words (`PRECEDING`, `ZONE`, `EPOCH`...), `ON CONFLICT`, `ON DUPLICATE KEY` and `RETURNING` clauses, window definitions and index hints are never called columns. The pseudo columns an engine adds to its tables (PostgreSQL `ctid` and `xmin`, H2 `_ROWID_`) are accepted; a generic dialect accepts every engine's.
 - **Scripts that are not plain statement lists.** A statement with `${...}` or `{{...}}` is skipped. After `DELIMITER`, a stored routine with a `BEGIN` body, `DO` or `DECLARE`, the rest of the file is skipped because one statement then spans several semicolons. After `USE`, `SET SCHEMA` or `SET search_path`, unqualified table names are not judged.
 - **Strings in code.** SQL in a Java or Kotlin string is validated like a file, except when part of it is only known at run time (`" + table + "`, `$id`), or when it contains an escape such as `\n`: then it is not judged at all.
+- **Unfinished statements.** The last statement of a script file with no `;` after it may still be being typed, so a missing final piece is not reported as incomplete. SQL in a code string is complete by itself and is checked as such.
 - **Large files.** A script over 200,000 characters is not validated.
 - **Names** match ignoring case and quoting, so a difference only in case is never reported.
 
@@ -125,7 +126,7 @@ Lattice reads the database URLs in the project's configuration files, so a Sprin
 | `persistence.xml` | `jakarta.persistence.jdbc.url`, `javax.persistence.jdbc.url`, `hibernate.connection.url` |
 | `hibernate.cfg.xml`, `hibernate.properties`, `context.xml` (Tomcat `Resource`), `jdbc*.properties`, `database*.properties`, `db*.properties` | URL properties and attributes |
 
-Only values that start with `jdbc:` for MySQL (and MariaDB), PostgreSQL, H2 or HSQLDB count. Spring placeholders resolve to their default (`${DB_HOST:localhost}`) or to another setting of the same file; the environment is not consulted, and a part that stays unknown matches any saved connection. Build output (`build`, `target`, `out`) is skipped. Each `---` document of a YAML file is read on its own, so profiles are all found.
+Only values that start with `jdbc:` for MySQL (and MariaDB), PostgreSQL, H2 or HSQLDB count. Spring placeholders resolve to their default (`${DB_HOST:localhost}`) or to another setting of the same file; the environment is not consulted, and a part that stays unknown matches any saved connection. `.properties` escapes (`jdbc\:mysql\://host`, as `Properties.store` writes them), continuation lines and `!` comments are read as Java reads them. Build output (`build`, `target`, `out`) is skipped. Each `---` document of a YAML file is read on its own, so profiles are all found.
 
 What this does:
 

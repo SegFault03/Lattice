@@ -3,7 +3,6 @@ package com.segfault03.ideadb.sql.validate;
 import com.intellij.codeInspection.*;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.TextRange;
-import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiFile;
 import com.segfault03.ideadb.sql.lang.LatticeSqlLanguage;
 import com.segfault03.ideadb.sql.validate.SqlDiagnostic.Kind;
@@ -47,7 +46,8 @@ abstract class LatticeSqlInspection extends LocalInspectionTool {
 
         @Override public void applyFix(@NotNull Project project, @NotNull ProblemDescriptor descriptor) {
             PsiFile file = descriptor.getPsiElement().getContainingFile();
-            var document = PsiDocumentManager.getInstance(project).getDocument(file);
+            // The intention preview applies the fix to a copy of the file, which the document manager has no document for.
+            var document = file.getViewProvider().getDocument();
             TextRange range = descriptor.getTextRangeInElement();
             if (document != null && range != null) document.replaceString(range.getStartOffset(), range.getEndOffset(), replacement);
         }

@@ -9,6 +9,7 @@ import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.openapi.util.Key;
 import com.segfault03.ideadb.model.ConnectionConfig;
+import com.segfault03.ideadb.sql.binding.SqlBindingsState;
 import com.segfault03.ideadb.sql.binding.SqlDialectResolver;
 import com.segfault03.ideadb.sql.dialect.SqlDialectProfile;
 import com.segfault03.ideadb.sql.schema.SqlSchema;
@@ -20,7 +21,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.List;
 
 /**
- * The findings for a Lattice SQL file, computed once per edit and per change of the cached schema, whichever
+ * The findings for a Lattice SQL file, computed once per edit, per change of the cached schema and per change of the file's binding or the settings, whichever
  * inspection asks. The schema is only what is cached: validating never connects to a database, and while a change
  * to the connection may have made the cache out of date (and a read has been asked for), only the shape of the
  * statements is checked.
@@ -49,7 +50,8 @@ public final class SqlValidation {
         List<SqlDiagnostic> found = SqlScriptValidator.validate(file.getViewProvider().getContents(), profile, schema,
                 !InjectedLanguageManager.getInstance(file.getProject()).isInjectedFragment(file));
         ModificationTracker schemaChanges = () -> schemaStamp(service, connectionId);
-        return CachedValueProvider.Result.create(found, file, schemaChanges);
+        // The file's binding, the connections and the settings decide the dialect and whether the schema applies at all.
+        return CachedValueProvider.Result.create(found, file, schemaChanges, SqlBindingsState.getInstance(file.getProject()), SqlEditorSettings.getInstance());
     }
 
     /** Changes with this connection's cached metadata and with whether that metadata may be out of date. */

@@ -46,11 +46,15 @@ public final class SqlEditorSupport {
                 announceStandDown(project);
             }
             pruneBindings(project);
+            ApplicationManager.getApplication().executeOnPooledThread(() -> {
+                if (!project.isDisposed()) SqlBindingsState.getInstance(project).pruneMissingFiles();
+            });
             com.segfault03.ideadb.sql.discovery.JdbcDiscovery.getInstance(project).refresh();
             // A deleted or retyped connection changes the dialect of the files bound to it.
-            ApplicationManager.getApplication().getMessageBus().connect(project)
+            ApplicationManager.getApplication().getMessageBus().connect(SqlEditorProjectScope.of(project))
                     .subscribe(DatabaseSettingsListener.TOPIC, (DatabaseSettingsListener) () -> {
                         pruneBindings(project);
+                        SqlBindingsState.getInstance(project).connectionsChanged();
                         SqlEditorRefresh.refreshAll(project);
                     });
         });

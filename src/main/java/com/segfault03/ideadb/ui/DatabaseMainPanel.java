@@ -448,7 +448,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
             case OPEN_TABLE -> openTableData(node, data);
             case ALTER_TABLE -> new AlterTableDialog(project, cfg, db, table).showAndGet();
             case TRUNCATE_TABLE -> doTruncateTable(cfg, db, table.getName());
-            case DROP_TABLE -> doDropTable(cfg, db, table.getName());
+            case DROP_TABLE -> doDropTable(cfg, db, table.getName(), table.isForeignTable());
             case GENERATE_SELECT, GENERATE_INSERT -> {
                 if (action == DatabaseExplorerContextMenu.Action.GENERATE_INSERT && table.getColumns().isEmpty())
                     loadColumnsForTableNode(node, data, () -> showGeneratedSql(node, data, action));
@@ -872,11 +872,11 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         Messages.showInfoMessage(project, "Table '" + tableName + "' created.", "Table created");
     }
 
-    private void doDropTable(ConnectionConfig cfg, String dbName, String tableName) {
+    private void doDropTable(ConnectionConfig cfg, String dbName, String tableName, boolean foreign) {
         if (!DatabaseUi.confirmDestructive(project, "Drop table",
                 "Drop table '" + tableName + "'?\nThe table structure and all its data will be permanently deleted.", "Drop table")) return;
         runMutation(cfg, "Dropping table…", "Drop table failed",
-                conn -> DdlService.getInstance().dropTable(conn, cfg, dbName, tableName), DatabaseChange.table(cfg.getId(), dbName, tableName), () -> {
+                conn -> { if (foreign) DdlService.getInstance().dropForeignTable(conn, cfg, dbName, tableName); else DdlService.getInstance().dropTable(conn, cfg, dbName, tableName); }, DatabaseChange.table(cfg.getId(), dbName, tableName), () -> {
                     Messages.showInfoMessage(project, "Table '" + tableName + "' dropped.", "Table dropped");
                 });
     }

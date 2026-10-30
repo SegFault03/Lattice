@@ -133,7 +133,43 @@ public final class ProjectConfigScanner {
         String value = split < 0 ? "" : line.substring(split);
         value = value.stripLeading();
         if (value.startsWith("=") || value.startsWith(":")) value = value.substring(1).stripLeading();
-        store(settings, key.strip(), value.stripTrailing());
+        store(settings, unescape(key.strip()), unescape(value.stripTrailing()));
+    }
+
+    /** Escapes as {@link java.util.Properties} reads them: {@code \:}, {@code \=}, {@code \\}, {@code \ }, {@code \t}, {@code \n}, {@code \r}, {@code \f}, four-digit unicode escapes; any other escaped character is itself. */
+    static String unescape(String raw) {
+        if (raw.indexOf('\\') < 0) return raw;
+        StringBuilder out = new StringBuilder(raw.length());
+        for (int i = 0; i < raw.length(); i++) {
+            char c = raw.charAt(i);
+            if (c != '\\') { out.append(c); continue; }
+            if (++i >= raw.length()) break;
+            char next = raw.charAt(i);
+            switch (next) {
+                case 't' -> out.append('\t');
+                case 'n' -> out.append('\n');
+                case 'r' -> out.append('\r');
+                case 'f' -> out.append('\f');
+                case 'u' -> {
+                    int code = hex(raw, i + 1);
+                    if (code >= 0) { out.append((char) code); i += 4; } else out.append('u');
+                }
+                default -> out.append(next);
+            }
+        }
+        return out.toString();
+    }
+
+    /** The value of the four hex digits after {@code from - 1}, or -1 when they are not four hex digits. */
+    private static int hex(String text, int from) {
+        if (from + 4 > text.length()) return -1;
+        int value = 0;
+        for (int i = from; i < from + 4; i++) {
+            int digit = Character.digit(text.charAt(i), 16);
+            if (digit < 0) return -1;
+            value = value * 16 + digit;
+        }
+        return value;
     }
 
     // ---- .yml ------------------------------------------------------------------------------------------------------

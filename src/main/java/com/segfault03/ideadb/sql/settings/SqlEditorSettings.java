@@ -4,18 +4,21 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.components.PersistentStateComponent;
 import com.intellij.openapi.components.State;
 import com.intellij.openapi.components.Storage;
+import com.intellij.openapi.util.ModificationTracker;
 import com.segfault03.ideadb.sql.coexist.UltimateDatabasePlugin;
 import com.segfault03.ideadb.sql.inject.SqlInjectionRules;
 import com.segfault03.ideadb.sql.inject.SqlKnownCalls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.concurrent.atomic.AtomicLong;
+
 /**
  * Application settings for SQL editor support. The master switch is "automatic" until the user decides: on in
  * Community, off where the Ultimate Database plugin already provides SQL support.
  */
 @State(name = "com.segfault03.ideadb.sql.settings.SqlEditorSettings", storages = @Storage("LatticeSqlEditor.xml"))
-public final class SqlEditorSettings implements PersistentStateComponent<SqlEditorSettings.State> {
+public final class SqlEditorSettings implements PersistentStateComponent<SqlEditorSettings.State>, ModificationTracker {
     public static class State {
         /** Null means automatic. */
         public Boolean enabled;
@@ -49,6 +52,7 @@ public final class SqlEditorSettings implements PersistentStateComponent<SqlEdit
     }
 
     private State state = new State();
+    private final AtomicLong modifications = new AtomicLong();
 
     public static SqlEditorSettings getInstance() { return ApplicationManager.getApplication().getService(SqlEditorSettings.class); }
 
@@ -58,11 +62,20 @@ public final class SqlEditorSettings implements PersistentStateComponent<SqlEdit
     }
 
     @Override public synchronized @NotNull State getState() { return state; }
-    @Override public synchronized void loadState(@NotNull State loaded) { state = loaded; }
+    @Override public synchronized void loadState(@NotNull State loaded) {
+        state = loaded;
+        modifications.incrementAndGet();
+    }
+
+    /** Changes whenever the master switch or validation is switched, or the settings are loaded. */
+    @Override public long getModificationCount() { return modifications.get(); }
 
     public synchronized boolean isEnabled() { return effectiveEnabled(state.enabled, UltimateDatabasePlugin.isActive()); }
     public synchronized boolean isExplicit() { return state.enabled != null; }
-    public synchronized void setEnabled(boolean enabled) { state.enabled = enabled; }
+    public synchronized void setEnabled(boolean enabled) {
+        state.enabled = enabled;
+        modifications.incrementAndGet();
+    }
 
     public synchronized boolean isHandleSqlFiles() { return state.handleSqlFiles; }
     public synchronized void setHandleSqlFiles(boolean value) { state.handleSqlFiles = value; }
@@ -105,7 +118,10 @@ public final class SqlEditorSettings implements PersistentStateComponent<SqlEdit
     private SqlKnownCalls parsedCalls;
 
     public synchronized boolean isValidation() { return state.validation; }
-    public synchronized void setValidation(boolean value) { state.validation = value; }
+    public synchronized void setValidation(boolean value) {
+        state.validation = value;
+        modifications.incrementAndGet();
+    }
     public synchronized boolean isValidationEffective() { return isEnabled() && state.validation; }
 
     public synchronized boolean isHoverEffective() { return isEnabled() && state.hover; }

@@ -266,4 +266,57 @@ public class SqlInjectionJavaFixtureTest extends H2SqlFixtureTestCase {
         loadSchema();
         assertEquals(List.of(), problemsIn(inClass("String q = \"select *\\nfrom authorz\";")));
     }
+
+    public void testThePreviewOfTheQuickFixShowsTheReplacementInAString() {
+        loadSchema();
+        myFixture.enableInspections(com.segfault03.ideadb.sql.validate.LatticeSqlUnknownColumnInspection.class);
+        myFixture.configureByText("A.java", inClass("String q = \"select titel<caret> from books where id = ?\";"));
+        myFixture.doHighlighting();
+        var fix = myFixture.findSingleIntention("Replace with 'TITLE'");
+        String preview = myFixture.getIntentionPreviewText(fix);
+        assertEquals("select TITLE from books where id = ?", preview);
+        myFixture.launchAction(fix);
+        assertTrue(hostDocument().getText(), hostDocument().getText().contains("\"select TITLE from books where id = ?\""));
+    }
+
+    // ---- bindings and open source files ------------------------------------------------------------------------------
+
+    private List<com.segfault03.ideadb.sql.validate.SqlDiagnostic> diagnosticsInInjected() {
+        var top = myFixture.getFile();
+        top = InjectedLanguageManager.getInstance(getProject()).getTopLevelFile(top);
+        com.intellij.psi.PsiDocumentManager.getInstance(getProject()).commitAllDocuments();
+        var host = com.intellij.psi.util.PsiTreeUtil.findChildrenOfType(top, com.intellij.psi.PsiLanguageInjectionHost.class).stream()
+                .filter(candidate -> !(candidate instanceof com.intellij.psi.PsiComment)).findFirst().orElseThrow();
+        var injected = InjectedLanguageManager.getInstance(getProject()).getInjectedPsiFiles(host).get(0).first;
+        return com.segfault03.ideadb.sql.validate.SqlValidation.diagnostics((com.intellij.psi.PsiFile) injected);
+    }
+
+    public void testChangingTheFilesBindingChangesTheValidationOfItsSqlWithoutEditingIt() {
+        loadSchema();
+        myFixture.configureByText("A.java", inClass("String q = \"select * from authorz where id = ?\";"));
+        var hostFile = InjectedLanguageManager.getInstance(getProject()).getTopLevelFile(myFixture.getFile()).getVirtualFile();
+        assertEquals("the sole connection judges the table", 1, diagnosticsInInjected().stream()
+                .filter(d -> d.kind() == com.segfault03.ideadb.sql.validate.SqlDiagnostic.Kind.UNKNOWN_TABLE).count());
+
+        SqlBindingsState.getInstance(getProject()).bindFileToDialect(hostFile, SqlDialects.POSTGRESQL.id());
+        assertEquals("a dialect without a connection has no schema to judge by", 0, diagnosticsInInjected().stream()
+                .filter(d -> d.kind() == com.segfault03.ideadb.sql.validate.SqlDiagnostic.Kind.UNKNOWN_TABLE).count());
+
+        SqlBindingsState.getInstance(getProject()).bindFileToConnection(hostFile, h2.getId());
+        assertEquals(1, diagnosticsInInjected().stream()
+                .filter(d -> d.kind() == com.segfault03.ideadb.sql.validate.SqlDiagnostic.Kind.UNKNOWN_TABLE).count());
+    }
+
+    public void testRefreshingAllRestartsTheHighlightingOfOpenSourceFiles() {
+        loadSchema();
+        myFixture.enableInspections(com.segfault03.ideadb.sql.validate.LatticeSqlUnknownTableInspection.class);
+        myFixture.configureByText("A.java", inClass("String q = \"select * from authorz where id = ?\";"));
+        var hostFile = InjectedLanguageManager.getInstance(getProject()).getTopLevelFile(myFixture.getFile()).getVirtualFile();
+        assertEquals(1, myFixture.doHighlighting().stream().filter(info -> info.getDescription() != null && info.getDescription().startsWith("Unknown table")).count());
+
+        SqlBindingsState.getInstance(getProject()).bindFileToDialect(hostFile, SqlDialects.POSTGRESQL.id());
+        com.segfault03.ideadb.sql.binding.SqlEditorRefresh.refreshAll(getProject());
+        com.intellij.testFramework.PlatformTestUtil.dispatchAllEventsInIdeEventQueue();
+        assertEquals(0, myFixture.doHighlighting().stream().filter(info -> info.getDescription() != null && info.getDescription().startsWith("Unknown table")).count());
+    }
 }
