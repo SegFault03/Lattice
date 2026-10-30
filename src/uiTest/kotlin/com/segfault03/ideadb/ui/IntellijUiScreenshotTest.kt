@@ -305,9 +305,7 @@ class IntellijUiScreenshotTest {
                 ideFrame { waitForNoOpenedDialogs() }
                 openConnectionMenu(pluginRoot, frame, "MySQL…")
                 frame.x(DialogUiComponent::class.java) { byTitle("New connection") }.waitFound().also { dialog ->
-                    dialog.x(JTextFieldUI::class.java) {
-                        and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("Name:"))
-                    }.waitFound().text = "Analytics offline"
+                    fillNewConnection(dialog, "Analytics offline", user = "root")
                     dialog.pressButton("Add connection")
                 }
                 ideFrame { waitForNoOpenedDialogs() }
@@ -420,12 +418,14 @@ class IntellijUiScreenshotTest {
                 fun checkbox(picker: UiComponent, name: String) = picker.x {
                     and(byType("javax.swing.JCheckBox"), byAccessibleName(name))
                 }.waitFound()
-                for ((type, name) in listOf("HSQLDB" to "Scratch database", "MySQL" to "Analytics server", "PostgreSQL" to "Reporting cluster")) {
+                for ((type, name, user, database) in listOf(
+                    listOf("HSQLDB", "Scratch database", "SA", "scratch"),
+                    listOf("MySQL", "Analytics server", "root", null),
+                    listOf("PostgreSQL", "Reporting cluster", "postgres", "reporting"),
+                )) {
                     openConnectionMenu(pluginRoot, frame, "$type…")
                     frame.x(DialogUiComponent::class.java) { byTitle("New connection") }.waitFound().also { dialog ->
-                        dialog.x(JTextFieldUI::class.java) {
-                            and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("Name:"))
-                        }.waitFound().text = name
+                        fillNewConnection(dialog, name!!, user!!, database)
                         dialog.pressButton("Add connection")
                     }
                     ideFrame { waitForNoOpenedDialogs() }
@@ -855,9 +855,7 @@ class IntellijUiScreenshotTest {
                 // so the actual IDE capture exercises more than one source-type section.
                 openConnectionMenu(pluginRoot, frame, "MySQL…")
                 frame.x(DialogUiComponent::class.java) { byTitle("New connection") }.waitFound().also { mysqlDialog ->
-                    mysqlDialog.x(JTextFieldUI::class.java) {
-                        and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("Name:"))
-                    }.waitFound().text = "Analytics server"
+                    fillNewConnection(mysqlDialog, "Analytics server", user = "root")
                     mysqlDialog.pressButton("Add connection")
                 }
                 ideFrame { waitForNoOpenedDialogs() }
@@ -2042,6 +2040,19 @@ class IntellijUiScreenshotTest {
     private fun inspectorInput(dialog: UiComponent, name: String): JTextFieldUI = dialog.x(JTextFieldUI::class.java) {
         and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName(name))
     }.waitFound()
+
+    /**
+     * New connections start with no user (and no database name), and the dialog keeps
+     * "Add connection" disabled until the readiness rules pass, so supply what they require.
+     */
+    private fun fillNewConnection(dialog: UiComponent, name: String, user: String, database: String? = null) {
+        inspectorInput(dialog, "Name:").text = name
+        if (database != null) inspectorInput(dialog, "Database:").text = database
+        inspectorInput(dialog, "User:").text = user
+        waitUntil("New connection '$name' ready to add") {
+            dialog.x { byVisibleText("Add connection") }.waitFound().component.isEnabled()
+        }
+    }
 
     private fun selectInspectorColumn(dialog: UiComponent, index: Int) {
         dialog.x(JListUiComponent::class.java) { byAccessibleName("Table columns") }.waitFound().clickItemAtIndex(index)
