@@ -212,6 +212,9 @@ public class SqlEditorFixtureTest extends BasePlatformTestCase {
         assertNull("No connections, nothing to offer", banner.collectNotificationData(getProject(), file));
 
         connections.addConnection(mysql);
+        assertNull("A single connection applies without being chosen", banner.collectNotificationData(getProject(), file));
+
+        connections.addConnection(postgres);
         assertNotNull(banner.collectNotificationData(getProject(), file));
         FileEditor editor = myFixture.getEditor() == null ? null : com.intellij.openapi.fileEditor.FileEditorManager.getInstance(getProject()).getSelectedEditor(file);
         assertNotNull(banner.collectNotificationData(getProject(), file).apply(editor));
@@ -226,6 +229,78 @@ public class SqlEditorFixtureTest extends BasePlatformTestCase {
         VirtualFile other = myFixture.configureByText("notes.txt", "select 1").getVirtualFile();
         SqlBindingsState.getInstance(getProject()).setDefaultConnectionId("");
         assertNull("Only SQL files get the banner", banner.collectNotificationData(getProject(), other));
+    }
+
+    // --- a sole connection, pruning and the status bar -------------------------------------------------------------
+
+    public void testASingleConnectionAppliesWithoutBeingChosen() {
+        VirtualFile file = sqlFile("select 1");
+        assertSame("No connections, nothing to apply", SqlDialects.ANSI, SqlDialectResolver.resolve(getProject(), file));
+
+        connections.addConnection(mysql);
+        assertSame(SqlDialects.MYSQL, SqlDialectResolver.resolve(getProject(), file));
+        assertEquals(mysql.getId(), SqlDialectResolver.connection(getProject(), file).getId());
+
+        SqlBindingsState bindings = SqlBindingsState.getInstance(getProject());
+        bindings.bindFileToDialect(file, SqlDialects.ANSI.id());
+        assertSame("An explicit generic choice still wins", SqlDialects.ANSI, SqlDialectResolver.resolve(getProject(), file));
+        assertNull(SqlDialectResolver.connection(getProject(), file));
+        bindings.clearFile(file);
+
+        connections.addConnection(postgres);
+        assertSame("With two connections nothing is implied", SqlDialects.ANSI, SqlDialectResolver.resolve(getProject(), file));
+        bindings.setDefaultConnectionId(postgres.getId());
+        assertSame("The project default decides among several", SqlDialects.POSTGRESQL, SqlDialectResolver.resolve(getProject(), file));
+    }
+
+    public void testBindingsToDeletedConnectionsArePrunedAndOthersKept() {
+        connections.addConnection(mysql);
+        connections.addConnection(postgres);
+        SqlEditorSupport.initialize(getProject());
+        PlatformTestUtil.dispatchAllEventsInIdeEventQueue();
+        VirtualFile toMysql = sqlFile("select 1");
+        VirtualFile toPostgres = myFixture.configureByText("two.sql", "select 2").getVirtualFile();
+        VirtualFile generic = myFixture.configureByText("three.sql", "select 3").getVirtualFile();
+        SqlBindingsState bindings = SqlBindingsState.getInstance(getProject());
+        bindings.bindFileToConnection(toMysql, mysql.getId());
+        bindings.bindFileToConnection(toPostgres, postgres.getId());
+        bindings.bindFileToDialect(generic, SqlDialects.ANSI.id());
+        bindings.setDefaultConnectionId(postgres.getId());
+
+        connections.removeConnection(postgres.getId());
+        // The real state announces this itself; the fixture's does not, so announce it as the IDE would.
+        com.intellij.openapi.application.ApplicationManager.getApplication().getMessageBus()
+                .syncPublisher(com.segfault03.ideadb.state.DatabaseSettingsListener.TOPIC).connectionsChanged();
+        PlatformTestUtil.dispatchAllEventsInIdeEventQueue();
+
+        assertNotNull(bindings.fileBinding(toMysql));
+        assertNull("The file bound to the deleted connection is unbound again", bindings.fileBinding(toPostgres));
+        assertNotNull("An explicit dialect choice does not depend on a connection", bindings.fileBinding(generic));
+        assertEquals("The default pointing at a deleted connection is cleared", "", bindings.defaultConnectionId());
+    }
+
+    public void testTheStatusBarWidgetNamesTheFilesDialectAndConnection() {
+        connections.addConnection(mysql);
+        connections.addConnection(postgres);
+        var widget = new com.segfault03.ideadb.sql.binding.SqlConnectionWidgetFactory().createWidget(getProject());
+        com.intellij.openapi.util.Disposer.register(getTestRootDisposable(), widget);
+        var presentation = (com.intellij.openapi.wm.StatusBarWidget.TextPresentation) widget.getPresentation();
+
+        myFixture.configureByText("notes.txt", "select 1");
+        assertEquals("Other files show nothing", "", presentation.getText());
+        assertNull(presentation.getTooltipText());
+
+        VirtualFile file = sqlFile("select 1");
+        assertEquals("SQL: Generic SQL", presentation.getText());
+        assertNotNull(presentation.getTooltipText());
+        assertNotNull(presentation.getClickConsumer());
+
+        SqlBindingsState.getInstance(getProject()).bindFileToConnection(file, mysql.getId());
+        assertEquals("SQL: MySQL \u00b7 shop-mysql", presentation.getText());
+        SqlBindingsState.getInstance(getProject()).bindFileToConnection(file, postgres.getId());
+        assertEquals("SQL: PostgreSQL \u00b7 shop-postgres", presentation.getText());
+        SqlBindingsState.getInstance(getProject()).bindFileToDialect(file, SqlDialects.ANSI.id());
+        assertEquals("SQL: Generic SQL", presentation.getText());
     }
 
     // --- startup reconciliation and the settings page --------------------------------------------------------------

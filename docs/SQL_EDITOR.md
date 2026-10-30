@@ -22,14 +22,16 @@ A file's dialect comes from, in order:
 
 1. The connection or dialect chosen for that file.
 2. The project's default connection.
-3. Generic SQL.
+3. The only saved connection, when there is exactly one.
+4. Generic SQL.
 
-When a `.sql` file has no choice and the project has no default, a banner offers **Choose connection**, **Use for project** and **Keep generic**. You can also use:
+When a `.sql` file has no choice, the project has no default and there are two or more connections, a banner offers **Choose connection**, **Use for project** and **Keep generic**. You can also use:
 
+- The **SQL: ...** entry in the status bar, which shows the dialect and connection of the current `.sql` file and opens the same chooser when clicked.
 - **Lattice: SQL Connection for This File...** in the editor's right-click menu.
 - **Lattice: SQL Connection for Project...** in the Tools menu.
 
-Choices are stored in the project's workspace file, not in version control, because connection IDs are local to your machine. A choice that points to a deleted connection is ignored.
+Choices are stored in the project's workspace file, not in version control, because connection IDs are local to your machine. When a connection is deleted, files bound to it become unbound and a default that pointed to it is cleared; an explicit generic-SQL choice is kept.
 
 ## Settings
 

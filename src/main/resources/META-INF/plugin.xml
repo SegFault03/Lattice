@@ -66,6 +66,8 @@
                                  instance="com.segfault03.ideadb.sql.settings.SqlEditorConfigurable"
                                  displayName="Lattice SQL Editor"/>
         <editorNotificationProvider implementation="com.segfault03.ideadb.sql.binding.SqlConnectionBanner"/>
+        <statusBarWidgetFactory id="com.segfault03.lattice.sql.connection"
+                                implementation="com.segfault03.ideadb.sql.binding.SqlConnectionWidgetFactory"/>
         <postStartupActivity implementation="com.segfault03.ideadb.sql.SqlEditorStartupActivity"/>
 
         <fileEditorProvider implementation="com.segfault03.ideadb.editor.DatabaseFileEditorProvider"/>

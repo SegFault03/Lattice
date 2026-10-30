@@ -29,6 +29,7 @@ public final class SqlEditorRefresh {
                 }
             }
             EditorNotifications.getInstance(project).updateNotifications(file);
+            SqlConnectionWidget.update(project);
         });
     }
 

@@ -13,14 +13,15 @@ import org.jetbrains.annotations.Nullable;
 import javax.swing.*;
 import java.util.function.Function;
 
-/** Offers to pick a connection when a SQL file has none, so it is highlighted for the right database. */
+/** Offers to pick a connection when a SQL file has none and there are several to choose from. */
 public final class SqlConnectionBanner implements EditorNotificationProvider {
     @Override
     public @Nullable Function<? super FileEditor, ? extends JComponent> collectNotificationData(@NotNull Project project, @NotNull VirtualFile file) {
         if (file.getFileType() != LatticeSqlFileType.INSTANCE) return null;
         SqlBindingsState bindings = SqlBindingsState.getInstance(project);
         if (bindings.fileBinding(file) != null || !bindings.defaultConnectionId().isEmpty()) return null;
-        if (DatabaseSettingsState.getInstance().getConnections().isEmpty()) return null;
+        // With no connection there is nothing to offer, and a single connection is used without being chosen.
+        if (DatabaseSettingsState.getInstance().getConnections().size() < 2) return null;
         return editor -> {
             EditorNotificationPanel panel = new EditorNotificationPanel(editor, EditorNotificationPanel.Status.Info);
             panel.setText("No Lattice connection selected. This SQL is treated as generic SQL.");

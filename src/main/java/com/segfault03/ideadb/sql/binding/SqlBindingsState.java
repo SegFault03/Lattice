@@ -54,6 +54,20 @@ public final class SqlBindingsState implements PersistentStateComponent<SqlBindi
 
     public synchronized void clearFile(@NotNull VirtualFile file) { state.files.remove(file.getUrl()); }
 
+    /**
+     * Forgets bindings to connections that were deleted: a file bound to one goes back to being unbound, and a
+     * project default pointing at one is cleared. Explicit dialect choices are kept. Returns whether anything changed.
+     */
+    public synchronized boolean pruneConnections(@NotNull java.util.Set<String> existing) {
+        boolean changed = state.files.values().removeIf(binding -> !binding.connectionId.isEmpty() && !existing.contains(binding.connectionId));
+        String chosen = defaultConnectionId();
+        if (!chosen.isEmpty() && !existing.contains(chosen)) {
+            state.defaultConnectionId = "";
+            changed = true;
+        }
+        return changed;
+    }
+
     public synchronized @NotNull String defaultConnectionId() { return state.defaultConnectionId == null ? "" : state.defaultConnectionId; }
     public synchronized void setDefaultConnectionId(@NotNull String id) { state.defaultConnectionId = id; }
 }

@@ -11,7 +11,8 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * Finds the dialect for a file. A file's own binding wins (a connection, or an explicit dialect such as generic SQL),
- * then the project's default connection, then generic SQL. A binding to a deleted connection falls through.
+ * then the project's default connection, then the only connection there is, then generic SQL. A binding to a
+ * deleted connection falls through.
  */
 public final class SqlDialectResolver {
     private SqlDialectResolver() {}
@@ -25,7 +26,7 @@ public final class SqlDialectResolver {
             if (bound != null) return SqlDialects.of(bound.getType());
             if (!binding.dialectId.isEmpty()) return SqlDialects.byId(binding.dialectId);
         }
-        ConnectionConfig fallback = connection(bindings.defaultConnectionId());
+        ConnectionConfig fallback = projectLevel(bindings);
         return fallback == null ? SqlDialects.ANSI : SqlDialects.of(fallback.getType());
     }
 
@@ -38,7 +39,15 @@ public final class SqlDialectResolver {
             if (bound != null) return bound;
             if (!binding.dialectId.isEmpty()) return null;
         }
-        return connection(bindings.defaultConnectionId());
+        return projectLevel(bindings);
+    }
+
+    /** The project's default connection, or else the single saved connection, which needs no choosing. */
+    private static @Nullable ConnectionConfig projectLevel(SqlBindingsState bindings) {
+        ConnectionConfig chosen = connection(bindings.defaultConnectionId());
+        if (chosen != null) return chosen;
+        var all = DatabaseSettingsState.getInstance().getConnections();
+        return all.size() == 1 ? all.get(0) : null;
     }
 
     private static @Nullable ConnectionConfig connection(@Nullable String id) {

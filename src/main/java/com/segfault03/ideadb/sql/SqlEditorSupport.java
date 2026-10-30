@@ -8,12 +8,15 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.options.ShowSettingsUtil;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
+import com.segfault03.ideadb.model.ConnectionConfig;
+import com.segfault03.ideadb.sql.binding.SqlBindingsState;
 import com.segfault03.ideadb.sql.binding.SqlEditorRefresh;
 import com.segfault03.ideadb.sql.coexist.UltimateDatabasePlugin;
 import com.segfault03.ideadb.sql.settings.SqlEditorConfigurable;
 import com.segfault03.ideadb.sql.settings.SqlEditorSettings;
 import com.segfault03.ideadb.sql.settings.SqlFileTypeClaim;
 import com.segfault03.ideadb.state.DatabaseSettingsListener;
+import com.segfault03.ideadb.state.DatabaseSettingsState;
 
 /** Keeps the IDE's file type mapping, the notices and open editors in step with the SQL editor settings. */
 public final class SqlEditorSupport {
@@ -42,10 +45,19 @@ public final class SqlEditorSupport {
                 settings.ultimateNoticeShown(true);
                 announceStandDown(project);
             }
+            pruneBindings(project);
             // A deleted or retyped connection changes the dialect of the files bound to it.
             ApplicationManager.getApplication().getMessageBus().connect(project)
-                    .subscribe(DatabaseSettingsListener.TOPIC, (DatabaseSettingsListener) () -> SqlEditorRefresh.refreshAll(project));
+                    .subscribe(DatabaseSettingsListener.TOPIC, (DatabaseSettingsListener) () -> {
+                        pruneBindings(project);
+                        SqlEditorRefresh.refreshAll(project);
+                    });
         });
+    }
+
+    private static void pruneBindings(Project project) {
+        var existing = DatabaseSettingsState.getInstance().getConnections().stream().map(ConnectionConfig::getId).collect(java.util.stream.Collectors.toSet());
+        SqlBindingsState.getInstance(project).pruneConnections(existing);
     }
 
     /** Applies settings the user just changed: the file type mapping and every open SQL editor. */
