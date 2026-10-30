@@ -27,6 +27,12 @@ sourceSets {
         compileClasspath += sourceSets.main.get().output
         runtimeClasspath += sourceSets.main.get().output
     }
+    // IDE fixture tests (BasePlatformTestCase) live apart from the JUnit 5 tiers: they need the platform
+    // test framework at runtime and must not be discovered by tasks that replace the test classpath.
+    create("platformTest") {
+        compileClasspath += sourceSets.main.get().output
+        runtimeClasspath += sourceSets.main.get().output
+    }
 }
 
 val uiTestImplementation = configurations.getByName("uiTestImplementation") {
@@ -34,6 +40,16 @@ val uiTestImplementation = configurations.getByName("uiTestImplementation") {
 }
 val uiTestRuntimeOnly = configurations.getByName("uiTestRuntimeOnly") {
     extendsFrom(configurations.testRuntimeOnly.get())
+}
+configurations.getByName("platformTestImplementation") { extendsFrom(configurations.testImplementation.get()) }
+configurations.getByName("platformTestRuntimeOnly") { extendsFrom(configurations.testRuntimeOnly.get()) }
+// The platform plugin attaches the IDE classes to the standard source sets only: through testCompileOnly,
+// and by tagging the resolvable classpath so its archive transforms run. Reproduce both for this source set.
+configurations.getByName("platformTestCompileOnly") { extendsFrom(configurations.testCompileOnly.get()) }
+configurations.getByName("platformTestCompileClasspath") {
+    listOf("intellijPlatformCollected", "intellijPlatformExtracted", "intellijPlatformPluginLibrariesFiltered").forEach { name ->
+        attributes.attribute(Attribute.of(name, Boolean::class.javaObjectType), true)
+    }
 }
 
 dependencies {
@@ -44,6 +60,7 @@ dependencies {
         pluginVerifier("1.410")
         zipSigner("0.1.24")
         testFramework(TestFrameworkType.Starter, configurationName = "uiTestImplementation")
+        testFramework(TestFrameworkType.Platform, configurationName = "platformTestImplementation")
     }
 
     implementation("org.postgresql:postgresql:42.7.14") { exclude(group = "org.checkerframework", module = "checker-qual") }
@@ -61,6 +78,10 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.14.4")
     // IntelliJ 2025 test logging still references JUnit 4 runtime types.
     testRuntimeOnly("junit:junit:4.13.2")
+
+    // BasePlatformTestCase is JUnit 3/4 style; the vintage engine runs it on the JUnit Platform.
+    "platformTestImplementation"("junit:junit:4.13.2")
+    "platformTestRuntimeOnly"("org.junit.vintage:junit-vintage-engine:5.14.4")
 
     uiTestImplementation(kotlin("stdlib"))
     uiTestRuntimeOnly(kotlin("reflect"))
@@ -108,6 +129,18 @@ intellijPlatformTesting.testIde.register("regressionTest") {
         testClassesDirs = sourceSets["test"].output.classesDirs
         classpath = sourceSets["test"].runtimeClasspath + sourceSets["main"].compileClasspath
         useJUnitPlatform { excludeTags("functional", "integration") }
+        systemProperty("junit.jupiter.extensions.autodetection.enabled", "false")
+    }
+}
+
+intellijPlatformTesting.testIde.register("platformTest") {
+    task {
+        description = "Run IDE fixture tests for editor features (language, completion, injection, documentation)"
+        group = "verification"
+        testClassesDirs = sourceSets["platformTest"].output.classesDirs
+        // Append, never replace: the IDE test runtime (platform test framework, sandbox) is already on the classpath.
+        classpath += sourceSets["platformTest"].runtimeClasspath
+        useJUnitPlatform { includeEngines("junit-vintage") }
         systemProperty("junit.jupiter.extensions.autodetection.enabled", "false")
     }
 }
