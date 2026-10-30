@@ -26,8 +26,12 @@ abstract class LatticeSqlInspection extends LocalInspectionTool {
         if (!file.getLanguage().isKindOf(LatticeSqlLanguage.INSTANCE)) return null;
         List<ProblemDescriptor> problems = new ArrayList<>();
         int length = file.getTextLength();
+        SqlSuppressions suppressions = LatticeSqlInspectionSuppressor.of(file);
+        String id = getShortName();
         for (SqlDiagnostic diagnostic : SqlValidation.diagnostics(file)) {
             if (diagnostic.kind() != kind || diagnostic.end() > length || diagnostic.start() >= diagnostic.end()) continue;
+            // The findings sit on the file with an exact range, so the platform cannot tell which statement one belongs to.
+            if (suppressions != null && suppressions.isSuppressed(diagnostic.start(), id)) continue;
             LocalQuickFix[] fixes = diagnostic.replacement() == null ? LocalQuickFix.EMPTY_ARRAY : new LocalQuickFix[] {new Replace(diagnostic.replacement())};
             problems.add(manager.createProblemDescriptor(file, new TextRange(diagnostic.start(), diagnostic.end()), diagnostic.message(),
                     ProblemHighlightType.GENERIC_ERROR_OR_WARNING, isOnTheFly, fixes));

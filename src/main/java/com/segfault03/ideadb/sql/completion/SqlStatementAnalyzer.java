@@ -413,7 +413,12 @@ public final class SqlStatementAnalyzer {
                     boolean slot = from == clauseAt + 1 || (clause.equals("FROM") && is(from - 1, ',') && blockOf[from - 1] == block)
                             || onlyModifiersBetween(clauseAt, from);
                     TableRef target = clause.equals("UPDATE") || clause.equals("INTO") ? refAfter(clauseAt) : null;
-                    return new Found(slot ? Position.TABLE_NAME : Position.AFTER_TABLE, target, null, List.of(), Set.of());
+                    List<TableRef> prior = List.of();
+                    if (slot && clause.equals("JOIN")) { // the tables a joined table can be related to
+                        prior = new ArrayList<>();
+                        for (TableRef ref : refs) if (ref.block() == block && ref.startIndex() < clauseAt) prior.add(ref);
+                    }
+                    return new Found(slot ? Position.TABLE_NAME : Position.AFTER_TABLE, target, null, prior, Set.of());
                 }
                 case "ON": {
                     TableRef join = null;

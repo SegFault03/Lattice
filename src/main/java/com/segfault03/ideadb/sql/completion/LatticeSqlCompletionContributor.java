@@ -18,6 +18,7 @@ import com.segfault03.ideadb.sql.lang.LatticeSqlLanguage;
 import com.segfault03.ideadb.sql.schema.SqlSchema;
 import com.segfault03.ideadb.sql.schema.SqlSchemaService;
 import com.segfault03.ideadb.sql.settings.SqlEditorSettings;
+import com.segfault03.ideadb.ui.Icons;
 import com.segfault03.ideadb.state.DatabaseSettingsState;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -88,7 +89,7 @@ public final class LatticeSqlCompletionContributor extends CompletionContributor
         LookupElementBuilder builder = LookupElementBuilder.create(suggestion, insert)
                 .withLookupString(suggestion.label())
                 .withPresentableText(suggestion.label())
-                .withIcon(icon(suggestion.kind()))
+                .withIcon(icon(suggestion))
                 .withBoldness(suggestion.kind() == SqlSuggestion.Kind.KEYWORD)
                 .withCaseSensitivity(false);
         if (suggestion.typeText() != null) builder = builder.withTypeText(suggestion.typeText(), true);
@@ -106,14 +107,21 @@ public final class LatticeSqlCompletionContributor extends CompletionContributor
         return suggestion.kind() == SqlSuggestion.Kind.FUNCTION ? "()" : " " + suggestion.tailText();
     }
 
-    private static @Nullable Icon icon(SqlSuggestion.Kind kind) {
-        return switch (kind) {
-            case TABLE, VIEW -> AllIcons.Nodes.DataTables;
-            case COLUMN -> AllIcons.Nodes.Field;
+    /** The explorer's own icons for tables, views and columns, so the popup and the tree read alike. */
+    static @Nullable Icon icon(SqlSuggestion suggestion) {
+        return switch (suggestion.kind()) {
+            case TABLE -> Icons.TABLE;
+            case VIEW -> Icons.VIEW;
+            case COLUMN -> switch (suggestion.key()) {
+                case PRIMARY, PRIMARY_FOREIGN -> Icons.KEY;
+                case FOREIGN -> Icons.FOREIGN_KEY;
+                case NONE -> Icons.COLUMN;
+            };
             case FUNCTION -> AllIcons.Nodes.Function;
-            case NAMESPACE -> AllIcons.Nodes.Package;
+            case NAMESPACE -> AllIcons.Nodes.DataSchema;
             case ALIAS -> AllIcons.Nodes.Variable;
-            case JOIN, KEYWORD, TYPE -> null;
+            case JOIN -> Icons.FOREIGN_KEY;
+            case KEYWORD, TYPE -> null;
         };
     }
 

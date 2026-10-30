@@ -45,6 +45,44 @@ public class SqlCompletionFixtureTest extends H2SqlFixtureTestCase {
         assertEquals(items.toString(), "b.AUTHOR_ID = a.ID", items.get(0));
     }
 
+    public void testAJoinSlotOffersTheForeignKeyJoinsFirst() {
+        loadSchema();
+        var items = lookups("select * from books b join <caret>");
+        assertEquals(items.toString(), "AUTHORS A ON A.ID = b.AUTHOR_ID", items.get(0));
+        var reverse = lookups("select * from authors a join <caret>");
+        assertEquals(reverse.toString(), "BOOKS B ON B.AUTHOR_ID = a.ID", reverse.get(0));
+        assertTrue(items.contains("BOOKS") && items.contains("AUTHORS"));
+    }
+
+    public void testChoosingAJoinWritesTableAliasAndCondition() {
+        loadSchema();
+        myFixture.configureByText("query.sql", "select * from books b join <caret>");
+        var items = myFixture.completeBasic();
+        myFixture.getLookup().setCurrentItem(Arrays.stream(items).filter(e -> e.getLookupString().startsWith("AUTHORS A ON")).findFirst().orElseThrow());
+        myFixture.type('\n');
+        myFixture.checkResult("select * from books b join AUTHORS A ON A.ID = b.AUTHOR_ID");
+    }
+
+    public void testColumnsShowTheirKeyRoleAndTablesAndViewsHaveDifferentIcons() {
+        loadSchema();
+        myFixture.configureByText("query.sql", "select b.<caret> from books b");
+        var items = myFixture.completeBasic();
+        var presentations = new java.util.HashMap<String, com.intellij.codeInsight.lookup.LookupElementPresentation>();
+        for (LookupElement item : items) {
+            var presentation = new com.intellij.codeInsight.lookup.LookupElementPresentation();
+            item.renderElement(presentation);
+            presentations.put(item.getLookupString(), presentation);
+        }
+        assertEquals("PK INTEGER", presentations.get("ID").getTypeText());
+        assertEquals("FK INTEGER", presentations.get("AUTHOR_ID").getTypeText());
+        assertEquals("CHARACTER VARYING(60)", presentations.get("TITLE").getTypeText());
+        assertNull("the qualifier already names the table", presentations.get("TITLE").getTailText());
+        assertNotNull(presentations.get("TITLE").getIcon());
+        assertNotSame(presentations.get("ID").getIcon(), presentations.get("TITLE").getIcon());
+        assertNotSame(presentations.get("AUTHOR_ID").getIcon(), presentations.get("TITLE").getIcon());
+        assertNotSame(com.segfault03.ideadb.ui.Icons.TABLE, com.segfault03.ideadb.ui.Icons.VIEW);
+    }
+
     public void testTheLowercaseTextTheUserTypedStillMatchesUppercaseNames() {
         loadSchema();
         myFixture.configureByText("query.sql", "select * from auth<caret>");

@@ -28,7 +28,7 @@ public final class LatticeSqlColorSettingsPage implements ColorSettingsPage {
 
     private static final String DEMO = """
             -- Orders placed this month
-            SELECT o.id, `c`.`name`, COUNT(*) AS items, SUM(o.total) AS revenue
+            SELECT o.id, `c`.`name`, COUNT(*) AS items, SUM(o.total) AS revenue, CAST(o.total AS DECIMAL(10, 2)) AS amount
               FROM orders o
               JOIN customers c ON c.id = o.customer_id
              WHERE o.created_at >= '2025-01-01' AND o.status <> "void" AND o.total > 99.50

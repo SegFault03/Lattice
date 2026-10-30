@@ -22,8 +22,8 @@ public final class SqlDocRenderer {
 
     private SqlDocRenderer() {}
 
-    /** @param source what the card says it came from, e.g. "demo-mysql, MySQL" */
-    public static @Nullable String render(@NotNull SqlTarget target, @NotNull SqlSchema schema, @NotNull String source) {
+    /** The card for one target. Where it came from is the popup's location bar, so the card does not repeat it. */
+    public static @Nullable String render(@NotNull SqlTarget target, @NotNull SqlSchema schema) {
         String connectionId = schema.connectionId();
         StringBuilder html = new StringBuilder();
         boolean found = switch (target) {
@@ -32,10 +32,7 @@ public final class SqlDocRenderer {
             case SqlTarget.Alias alias -> alias(html, alias, schema, connectionId);
             case SqlTarget.Schema namespace -> namespace(html, namespace, schema, connectionId);
         };
-        if (!found) return null;
-        html.append(DocumentationMarkup.CONTENT_START).append(DocumentationMarkup.GRAYED_START).append(esc(source))
-                .append(DocumentationMarkup.GRAYED_END).append(DocumentationMarkup.CONTENT_END);
-        return html.toString();
+        return found ? html.toString() : null;
     }
 
     // ---- table -----------------------------------------------------------------------------------------------------
@@ -47,34 +44,47 @@ public final class SqlDocRenderer {
         html.append(DocumentationMarkup.DEFINITION_START).append("<b>").append(esc(target.namespace())).append('.')
                 .append(esc(metadata.getName())).append("</b> ").append(DocumentationMarkup.GRAYED_START)
                 .append(metadata.isView() ? "view" : "table").append(DocumentationMarkup.GRAYED_END).append(DocumentationMarkup.DEFINITION_END);
-        comment(html, metadata.getComment());
-        html.append(DocumentationMarkup.SECTIONS_START);
-        section(html, "Columns", columns(table, schema, connection));
-        List<String> keys = metadata.getPrimaryKeyColumnNames();
-        if (!keys.isEmpty()) section(html, "Primary key", esc(String.join(", ", keys)));
-        section(html, "Foreign keys", foreignKeys(table, schema, connection));
-        section(html, "Referenced by", referencedBy(target, schema, connection));
-        html.append(DocumentationMarkup.SECTIONS_END);
-        html.append(DocumentationMarkup.CONTENT_START)
-                .append(link(SqlDocLinks.open(connection, target.namespace(), metadata.getName()), "Open in Lattice"))
-                .append(DocumentationMarkup.CONTENT_END);
+        tableBody(html, table, target.namespace(), target.table(), schema, connection);
         return true;
     }
 
-    private static @Nullable String columns(ExplorerMetadataSnapshot.Table table, SqlSchema schema, String connection) {
+    /** Comment, columns, keys and the link to the editor: the card of a table, and of an alias for it. */
+    private static void tableBody(StringBuilder html, ExplorerMetadataSnapshot.Table table, String namespace, String tableName,
+                                  SqlSchema schema, String connection) {
+        var metadata = table.metadata();
+        comment(html, metadata.getComment());
+        html.append(DocumentationMarkup.SECTIONS_START);
+        section(html, "Columns", columns(table));
+        section(html, "Foreign keys", foreignKeys(table, schema, connection));
+        section(html, "Referenced by", referencedBy(namespace, tableName, schema, connection));
+        html.append(DocumentationMarkup.SECTIONS_END);
+        html.append(DocumentationMarkup.CONTENT_START)
+                .append(link(SqlDocLinks.open(connection, namespace, metadata.getName()), "Open in Lattice"))
+                .append(DocumentationMarkup.CONTENT_END);
+    }
+
+    /** Names and types as two aligned columns; the key and null flags follow the type in grey. */
+    private static @Nullable String columns(ExplorerMetadataSnapshot.Table table) {
         if (!table.columnsLoaded()) return DocumentationMarkup.GRAYED_START + "not read yet" + DocumentationMarkup.GRAYED_END;
-        List<String> lines = new ArrayList<>();
+        if (table.columns().isEmpty()) return null;
+        StringBuilder rows = new StringBuilder("<table cellspacing=\"0\" cellpadding=\"0\">");
+        int shown = 0;
         for (ColumnMetadata column : table.columns()) {
-            if (lines.size() == MAX_COLUMNS) { lines.add(DocumentationMarkup.GRAYED_START + "... " + (table.columns().size() - MAX_COLUMNS) + " more" + DocumentationMarkup.GRAYED_END); break; }
-            StringBuilder line = new StringBuilder("<b>").append(esc(column.getName())).append("</b> ").append(esc(column.getFormattedType()));
+            if (shown++ == MAX_COLUMNS) {
+                rows.append("<tr><td colspan=\"2\">").append(DocumentationMarkup.GRAYED_START).append("... ").append(table.columns().size() - MAX_COLUMNS)
+                        .append(" more").append(DocumentationMarkup.GRAYED_END).append("</td></tr>");
+                break;
+            }
             List<String> flags = new ArrayList<>();
             if (column.isPrimaryKey()) flags.add("PK");
             if (column.isForeignKey()) flags.add("FK");
             if (!column.isNullable()) flags.add("not null");
-            if (!flags.isEmpty()) line.append(' ').append(DocumentationMarkup.GRAYED_START).append(esc(String.join(", ", flags))).append(DocumentationMarkup.GRAYED_END);
-            lines.add(line.toString());
+            rows.append("<tr><td valign=\"top\"><b>").append(esc(column.getName())).append("</b>&nbsp;&nbsp;&nbsp;</td><td>")
+                    .append(esc(column.getFormattedType()));
+            if (!flags.isEmpty()) rows.append(' ').append(DocumentationMarkup.GRAYED_START).append(esc(String.join(", ", flags))).append(DocumentationMarkup.GRAYED_END);
+            rows.append("</td></tr>");
         }
-        return lines.isEmpty() ? null : String.join("<br>", lines);
+        return rows.append("</table>").toString();
     }
 
     private static @Nullable String foreignKeys(ExplorerMetadataSnapshot.Table table, SqlSchema schema, String connection) {
@@ -86,15 +96,15 @@ public final class SqlDocRenderer {
         return lines.isEmpty() ? null : String.join("<br>", lines);
     }
 
-    private static @Nullable String referencedBy(SqlTarget.Table target, SqlSchema schema, String connection) {
+    private static @Nullable String referencedBy(String namespaceName, String tableName, SqlSchema schema, String connection) {
         List<String> lines = new ArrayList<>();
         int total = 0;
         for (var namespace : schema.namespaces()) {
             for (var other : namespace.tables()) {
                 for (ColumnMetadata column : other.columns()) {
                     ColumnReference reference = column.getReference();
-                    if (reference == null || !reference.table().equalsIgnoreCase(target.table())) continue;
-                    if (reference.namespace() != null && !reference.namespace().equalsIgnoreCase(target.namespace())) continue;
+                    if (reference == null || !reference.table().equalsIgnoreCase(tableName)) continue;
+                    if (reference.namespace() != null && !reference.namespace().equalsIgnoreCase(namespaceName)) continue;
                     if (++total > MAX_LISTED) continue;
                     var to = new SqlTarget.Column(namespace.name(), other.metadata().getName(), column.getName());
                     lines.add(link(SqlDocLinks.show(connection, to), other.metadata().getName() + "." + column.getName()));
@@ -118,7 +128,7 @@ public final class SqlDocRenderer {
                 .append(esc(column.getFormattedType())).append(DocumentationMarkup.DEFINITION_END);
         comment(html, column.getComment());
         html.append(DocumentationMarkup.SECTIONS_START);
-        section(html, "Nullable", column.isNullable() ? "yes" : "no");
+        section(html, "Nullability", column.isNullable() ? "nullable" : "not null");
         if (column.getDefaultValue() != null) section(html, "Default", esc(column.getDefaultValue()));
         List<String> keys = new ArrayList<>();
         if (column.isPrimaryKey()) keys.add("primary key");
@@ -143,7 +153,7 @@ public final class SqlDocRenderer {
                 .append(DocumentationMarkup.GRAYED_START).append("alias for ").append(DocumentationMarkup.GRAYED_END)
                 .append(link(SqlDocLinks.show(connection, to), target.namespace() + "." + table.metadata().getName()))
                 .append(DocumentationMarkup.DEFINITION_END);
-        comment(html, table.metadata().getComment());
+        tableBody(html, table, target.namespace(), table.metadata().getName(), schema, connection);
         return true;
     }
 

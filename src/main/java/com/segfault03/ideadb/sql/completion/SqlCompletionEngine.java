@@ -13,10 +13,12 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Turns a {@link SqlContext} into suggestions using the dialect's word lists and the schema cache. It is pure:
@@ -48,7 +50,10 @@ public final class SqlCompletionEngine {
         Position position = context.position();
         boolean quoted = context.openQuote() != 0;
         switch (position) {
-            case TABLE_NAME -> tablesAndNamespaces(null, context, profile, schema, out);
+            case TABLE_NAME -> {
+                tablesAndNamespaces(null, context, profile, schema, out);
+                relatedTables(context, profile, schema, out);
+            }
             case SELECT_LIST, CONDITION, ORDER_GROUP -> {
                 if (!context.afterOperand()) {
                     scopeColumns(context, profile, schema, out);
@@ -74,7 +79,7 @@ public final class SqlCompletionEngine {
 
     private static void bumpStatementKeywords(List<SqlSuggestion> out) {
         out.replaceAll(s -> s.kind() == Kind.KEYWORD
-                ? new SqlSuggestion(s.kind(), s.label(), s.insertText(), s.typeText(), s.tailText(), KEYWORD_HERE) : s);
+                ? new SqlSuggestion(s.kind(), s.label(), s.insertText(), s.typeText(), s.tailText(), KEYWORD_HERE, s.key()) : s);
     }
 
     private static void types(SqlContext context, SqlDialectProfile profile, List<SqlSuggestion> out) {
@@ -139,7 +144,11 @@ public final class SqlCompletionEngine {
     }
 
     private static SqlSuggestion column(ColumnMetadata column, String insert, @Nullable String owner, double priority) {
-        return new SqlSuggestion(Kind.COLUMN, column.getName(), insert, column.getFormattedType(), owner, priority);
+        boolean primary = column.isPrimaryKey(), foreign = column.isForeignKey() || column.getReference() != null;
+        String flags = primary && foreign ? "PK FK " : primary ? "PK " : foreign ? "FK " : "";
+        SqlSuggestion.Key key = primary && foreign ? SqlSuggestion.Key.PRIMARY_FOREIGN
+                : primary ? SqlSuggestion.Key.PRIMARY : foreign ? SqlSuggestion.Key.FOREIGN : SqlSuggestion.Key.NONE;
+        return new SqlSuggestion(Kind.COLUMN, column.getName(), insert, flags + column.getFormattedType(), owner, priority, key);
     }
 
     /** The tables a column may come from, nearest scope first: the caret's own query, then enclosing ones. */
@@ -186,12 +195,12 @@ public final class SqlCompletionEngine {
             String namespace = qualifier.size() == 2 ? qualifier.get(0) : null;
             String table = qualifier.get(qualifier.size() - 1);
             if (namespace != null || schema.table(null, table) != null) {
-                for (ColumnMetadata column : columnsOfNamed(namespace, table, schema)) out.add(column(column, insertion(column.getName(), context, profile), table, COLUMN));
+                for (ColumnMetadata column : columnsOfNamed(namespace, table, schema)) out.add(column(column, insertion(column.getName(), context, profile), null, COLUMN));
                 return;
             }
         }
         if (owner != null) {
-            for (ColumnMetadata column : columnsOf(owner, schema)) out.add(column(column, insertion(column.getName(), context, profile), owner.name(), COLUMN));
+            for (ColumnMetadata column : columnsOf(owner, schema)) out.add(column(column, insertion(column.getName(), context, profile), null, COLUMN));
             return;
         }
         if (qualifier.size() == 1 && schema.namespace(qualifier.get(0)) != null) {
@@ -237,6 +246,60 @@ public final class SqlCompletionEngine {
         String text = reference(left.exposedName(), context, profile) + "." + insertion(leftColumn, context, profile)
                 + " = " + reference(right.exposedName(), context, profile) + "." + insertion(rightColumn, context, profile);
         out.add(new SqlSuggestion(Kind.JOIN, text, text, "foreign key", null, JOIN));
+    }
+
+    /**
+     * After JOIN: every table related to one already in the statement by a foreign key, in either direction, written
+     * out with an alias and its condition ("customers c ON c.id = o.customer_id").
+     */
+    private static void relatedTables(SqlContext context, SqlDialectProfile profile, @Nullable SqlSchema schema, List<SqlSuggestion> out) {
+        if (schema == null || context.joinPrior().isEmpty() || context.openQuote() != 0) return;
+        Set<String> taken = new HashSet<>();
+        for (TableRef ref : context.tables()) if (ref.exposedName() != null) taken.add(ref.exposedName().toLowerCase(Locale.ROOT));
+        for (TableRef prior : context.joinPrior()) {
+            if (prior.name() == null || prior.exposedName() == null || prior.derived()) continue;
+            var priorTable = schema.table(prior.namespace(), prior.name());
+            if (priorTable == null) continue;
+            String earlier = reference(prior.exposedName(), context, profile);
+            for (var namespace : schema.namespaces()) {
+                for (var candidate : namespace.tables()) {
+                    ProgressManager.checkCanceled();
+                    String name = candidate.metadata().getName();
+                    String alias = alias(name, taken, profile);
+                    String written = (namespace.name().equals(schema.defaultNamespace()) ? "" : insertion(namespace.name(), context, profile) + ".")
+                            + insertion(name, context, profile) + " " + alias + " ON " + alias + ".";
+                    for (ColumnMetadata column : candidate.columns()) { // the new table holds the foreign key
+                        if (!points(column.getReference(), prior, schema)) continue;
+                        String text = written + insertion(column.getName(), context, profile) + " = " + earlier + "."
+                                + insertion(column.getReference().column(), context, profile);
+                        out.add(new SqlSuggestion(Kind.JOIN, text, text, "foreign key", null, JOIN));
+                    }
+                    for (ColumnMetadata column : priorTable.columns()) { // the earlier table holds it
+                        ColumnReference reference = column.getReference();
+                        if (reference == null || reference.table() == null || !reference.table().equalsIgnoreCase(name)) continue;
+                        if (reference.namespace() != null && !reference.namespace().equalsIgnoreCase(namespace.name())) continue;
+                        String text = written + insertion(reference.column(), context, profile) + " = " + earlier + "."
+                                + insertion(column.getName(), context, profile);
+                        out.add(new SqlSuggestion(Kind.JOIN, text, text, "foreign key", null, JOIN));
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * A short alias for a table: the initials of its words ("order_items" gives "oi", "customers" gives "c"), with a
+     * number when that is already a name in the statement or would be a keyword.
+     */
+    static String alias(String table, Set<String> taken, SqlDialectProfile profile) {
+        StringBuilder initials = new StringBuilder();
+        for (String word : table.split("[^A-Za-z0-9]+")) if (!word.isEmpty()) initials.append(word.charAt(0));
+        String base = initials.length() == 0 || !Character.isLetter(initials.charAt(0)) ? "t" : initials.toString();
+        String candidate = base;
+        for (int n = 2; taken.contains(candidate.toLowerCase(Locale.ROOT)) || profile.keywords().contains(candidate.toUpperCase(Locale.ROOT)); n++) {
+            candidate = base + n;
+        }
+        return candidate;
     }
 
     // ---- insertion ---------------------------------------------------------------------------------------------------

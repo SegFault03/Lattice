@@ -13,8 +13,8 @@ import static com.intellij.openapi.editor.colors.TextAttributesKey.createTextAtt
 /** Colors the tokens of one dialect. With highlighting switched off it still lexes (for the editor) but adds no color. */
 public final class LatticeSqlSyntaxHighlighter extends SyntaxHighlighterBase {
     public static final TextAttributesKey KEYWORD = createTextAttributesKey("LATTICE_SQL_KEYWORD", DefaultLanguageHighlighterColors.KEYWORD);
-    public static final TextAttributesKey FUNCTION = createTextAttributesKey("LATTICE_SQL_FUNCTION", DefaultLanguageHighlighterColors.FUNCTION_CALL);
-    public static final TextAttributesKey TYPE = createTextAttributesKey("LATTICE_SQL_TYPE", DefaultLanguageHighlighterColors.CLASS_NAME);
+    public static final TextAttributesKey FUNCTION = createTextAttributesKey("LATTICE_SQL_FUNCTION", DefaultLanguageHighlighterColors.FUNCTION_DECLARATION);
+    public static final TextAttributesKey TYPE = createTextAttributesKey("LATTICE_SQL_TYPE", DefaultLanguageHighlighterColors.CONSTANT);
     public static final TextAttributesKey STRING = createTextAttributesKey("LATTICE_SQL_STRING", DefaultLanguageHighlighterColors.STRING);
     public static final TextAttributesKey NUMBER = createTextAttributesKey("LATTICE_SQL_NUMBER", DefaultLanguageHighlighterColors.NUMBER);
     public static final TextAttributesKey QUOTED_IDENTIFIER = createTextAttributesKey("LATTICE_SQL_QUOTED_IDENTIFIER", DefaultLanguageHighlighterColors.IDENTIFIER);

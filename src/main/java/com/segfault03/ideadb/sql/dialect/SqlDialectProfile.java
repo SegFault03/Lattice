@@ -24,12 +24,35 @@ public record SqlDialectProfile(@NotNull String id, @NotNull String displayName,
 
     public enum WordKind { KEYWORD, FUNCTION, TYPE, IDENTIFIER }
 
-    /** Classifies an unquoted word. A function name only counts as one when a call parenthesis follows. */
+    /**
+     * Type names that are also keywords where the keyword use dominates: {@code SET} (UPDATE ... SET, CHARACTER SET),
+     * {@code IDENTITY} (GENERATED ... AS IDENTITY), {@code ARRAY} (the ARRAY[...] constructor) and {@code INTERVAL}
+     * (the INTERVAL '1' DAY literal). Any other word of the type list is a type, whether or not it is also a keyword.
+     */
+    private static final Set<String> KEYWORD_FIRST_TYPES = Set.of("SET", "IDENTITY", "ARRAY", "INTERVAL");
+
+    /**
+     * Function names that are syntax words before a parenthesis (IN (...), EXISTS (...), VALUES (...), ON (...)): the
+     * keyword wins even when a dialect also lists the word as a function.
+     */
+    private static final Set<String> KEYWORD_BEFORE_PARENTHESIS = Set.of("IN", "EXISTS", "VALUES", "ANY", "ALL", "SOME", "USING", "ON", "AS",
+            "OVER", "FILTER", "WITHIN", "ROW", "ARRAY", "NOT", "AND", "OR", "KEY", "PRIMARY", "UNIQUE", "CHECK", "REFERENCES", "FOREIGN",
+            "IF", "CASE", "WHEN", "THEN", "ELSE", "BETWEEN", "LIKE", "IS", "SET", "WHERE", "HAVING", "SELECT", "FROM", "JOIN");
+
+    /**
+     * Classifies an unquoted word. A type name is a type and a function name followed by a call parenthesis is a
+     * function, even when the dialect also lists the word as a keyword (the two color settings would otherwise never
+     * show for {@code BINARY} or {@code LEFT(}), except for the words that are syntax first (see the two lists above).
+     */
     public @NotNull WordKind classify(@NotNull CharSequence word, boolean followedByParenthesis) {
         String upper = word.toString().toUpperCase(Locale.ROOT);
-        if (keywords.contains(upper)) return WordKind.KEYWORD;
-        if (followedByParenthesis && functions.contains(upper)) return WordKind.FUNCTION;
-        if (types.contains(upper)) return WordKind.TYPE;
+        boolean keyword = keywords.contains(upper);
+        boolean type = types.contains(upper);
+        boolean function = followedByParenthesis && functions.contains(upper);
+        if (type && !(keyword && KEYWORD_FIRST_TYPES.contains(upper))) return WordKind.TYPE;
+        if (function && !(keyword && KEYWORD_BEFORE_PARENTHESIS.contains(upper))) return WordKind.FUNCTION;
+        if (keyword) return WordKind.KEYWORD;
+        if (type) return WordKind.TYPE;
         return WordKind.IDENTIFIER;
     }
 }

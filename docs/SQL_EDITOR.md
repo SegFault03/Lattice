@@ -14,7 +14,7 @@ Lattice edits SQL in your own project, not only in its console. Today that means
 | H2 | `//` line comments and `$$ ... $$` strings, otherwise standard |
 | Generic SQL | Standard quoting and `--` comments; used when no connection applies |
 
-Keywords, built-in functions and data types are colored from per-dialect word lists, so `RETURNING` is a keyword for PostgreSQL but an ordinary name for MySQL. A function name is colored as a function only when a call parenthesis follows it. Parameters (`?`, `:name`, `$1`, `@name`) have their own color.
+Keywords, built-in functions and data types are colored from per-dialect word lists, so `RETURNING` is a keyword for PostgreSQL but an ordinary name for MySQL. A function name is colored as a function only when a call parenthesis follows it. A data type is colored as a type and a function call as a function even where the dialect also lists the word as a keyword (`BINARY`, `LEFT(...)`), except for words that are syntax first (`SET`, `IDENTITY`, `IN (`, `EXISTS (`, `VALUES (`...). Types and functions inherit colors of their own, so they show next to keywords in any color scheme. Parameters (`?`, `:name`, `$1`, `@name`) have their own color.
 
 ## Completion
 
@@ -27,6 +27,7 @@ Completion works in `.sql` files, follows the file's dialect, and needs no short
 | After `schema.` | That schema's tables |
 | Select list, `WHERE`, `HAVING`, `ORDER BY`, `GROUP BY` | Columns of the tables in the statement, aliases, functions, and keywords where the word before the caret ends an expression (`IS NULL`, `ASC`, `GROUP BY`...) |
 | After `alias.` or `table.` | That table's columns |
+| After `JOIN`, with tables already in the statement | Every table joined to one of them by a foreign key, in either direction, first and written out with an alias and its condition: after `FROM orders o JOIN`, `customers c ON c.id = o.customer_id` and `order_items oi ON oi.order_id = o.id`. The alias is the initials of the table's words (`order_items` gives `oi`), numbered when that name is taken (`c2`) or a keyword. Plain tables follow |
 | `ON` after a `JOIN` | The foreign key equality between the joined table and an earlier one, such as `o.customer_id = c.id`, first |
 | `INSERT INTO t (`, `UPDATE t SET` | The table's columns, minus the ones already listed |
 | After `::` or `CAST(x AS` | The dialect's data types |
@@ -34,6 +35,7 @@ Completion works in `.sql` files, follows the file's dialect, and needs no short
 
 Details:
 
+- Tables, views and columns have the explorer's icons (a view differs from a table; a primary key column shows a key and a foreign key column the foreign key mark). A column's type is prefixed with `PK` or `FK`, and the table is named after the column only where the qualifier does not already say it: after `alias.` the list shows no table.
 - Tables resolve through aliases, schema-qualified names and subqueries: a subquery sees its own tables and the enclosing query's. A column that exists in several tables of the statement is inserted as `alias.column`.
 - Names are quoted only when the dialect needs it: PostgreSQL folds unquoted names to lower case and H2 and HSQLDB to upper case, so a name stored in another case is inserted quoted there; MySQL keeps case as written. If you already typed an opening quote, the suggestion closes it.
 - Keywords follow your case: type `sel` and get `select`, type `SEL` and get `SELECT`. Functions follow the same case and insert their parentheses.
@@ -43,13 +45,13 @@ Details:
 
 ## Hover details
 
-Hover over a name in a `.sql` file (or press `Ctrl+Q`, `F1` on macOS) to see what the file's connection knows about it. The card names the connection and dialect it came from.
+Hover over a name in a `.sql` file (or press `Ctrl+Q`, `F1` on macOS) to see what the file's connection knows about it. The popup's location bar names the connection and its database type (`shop-mysql · MySQL`) with the type's icon; the card itself does not repeat it.
 
 | Over | Card |
 |---|---|
-| A table or view | Comment, every column with type and `PK`/`FK`/`not null`, primary key, foreign keys (each a link to its target column), the columns that reference it, and **Open in Lattice** to open its data editor |
-| A column, bare or after `alias.`, `table.` or `schema.table.` | Type, comment, nullability, default, primary or foreign key (the target is a link), auto increment or generated |
-| An alias | The table it stands for, as a link |
+| A table or view | Comment, the columns as an aligned table of name and type with the flags `PK`, `FK` and `not null`, foreign keys (each a link to its target column), the columns that reference it, and **Open in Lattice** to open its data editor |
+| A column, bare or after `alias.`, `table.` or `schema.table.` | Type, comment, nullability (`nullable` or `not null`), default, primary or foreign key (the target is a link), auto increment or generated |
+| An alias | The table it stands for, as a link, then the table's card: comment, columns, keys and what references it |
 | A schema | Its tables, as links |
 
 Links in a card open the card of the target. Names resolve the way completion resolves them: through aliases, schema-qualified names, `UPDATE ... SET` and `INSERT` column lists, ignoring case, and with quoted names unquoted. Keywords, unknown names and derived-table aliases show nothing, as does a file with no connection or a connection whose schema has not been read yet; hovering starts that read, so the card appears on the next hover. The cards read the metadata cache and never contact the database.
@@ -107,6 +109,8 @@ Mistakes are underlined as you type, from the same cached schema that completion
 | Unknown column | A column none of the query's tables has, in a select list, condition, `ORDER BY`, `SET` or `INSERT` column list, with a fix for a likely typo. | Warning |
 | Ambiguous column | An unqualified column that more than one table of the query has. | Warning |
 | Table alias problem | A qualifier no table or alias provides, a table used by its own name after being aliased (`orders.id` after `FROM orders o`), the same alias twice in one `FROM`. | Warning |
+
+To silence one finding, put `-- noinspection <ShortName>` (several names separated by commas, or `ALL`) on its own line directly above the statement, with no blank line between. A comment at the top of the file, before the first statement and separated from it by a blank line, covers the whole file. The short names are `LatticeSqlSyntax`, `LatticeSqlUnknownTable`, `LatticeSqlUnknownColumn`, `LatticeSqlAmbiguousColumn` and `LatticeSqlAlias`. Alt+Enter on a finding offers **Suppress for statement** and **Suppress for file**, which write the comment or add the name to the one already there. In SQL inside Java and Kotlin strings, suppress through the host language instead.
 
 It is built to be quiet when unsure:
 

@@ -39,6 +39,43 @@ class LatticeSqlLexerTest {
         assertEquals(List.of("TYPE(varchar)", "PUNCTUATION(()", "NUMBER(20)", "PUNCTUATION())"), lex(SqlDialects.ANSI, "varchar(20)"));
     }
 
+    @Test void aTypeNameIsATypeEvenWhenTheDialectAlsoListsItAsAKeyword() {
+        assertEquals(List.of("TYPE(binary)", "PUNCTUATION(()", "NUMBER(16)", "PUNCTUATION())"), lex(SqlDialects.MYSQL, "binary(16)"));
+        assertEquals(List.of("IDENTIFIER(a)", "TYPE(bigint)", "KEYWORD(primary)", "KEYWORD(key)"), lex(SqlDialects.MYSQL, "a bigint primary key"));
+        assertEquals(List.of("KEYWORD(set)", "KEYWORD(identity)"), lex(SqlDialects.H2, "set identity"), "syntax words stay keywords");
+    }
+
+    @Test void aFunctionNameBeforeAParenthesisIsAFunctionEvenWhenTheDialectAlsoListsItAsAKeyword() {
+        assertEquals(List.of("FUNCTION(left)", "PUNCTUATION(()", "IDENTIFIER(a)", "PUNCTUATION(,)", "NUMBER(2)", "PUNCTUATION())"), lex(SqlDialects.MYSQL, "left(a, 2)"));
+        assertEquals(List.of("KEYWORD(left)", "KEYWORD(join)", "IDENTIFIER(t)"), lex(SqlDialects.MYSQL, "left join t"), "without a parenthesis it is the join keyword");
+        assertEquals(List.of("KEYWORD(replace)", "KEYWORD(into)", "IDENTIFIER(t)"), lex(SqlDialects.MYSQL, "replace into t"));
+        assertEquals(List.of("KEYWORD(values)", "PUNCTUATION(()", "NUMBER(1)", "PUNCTUATION())"), lex(SqlDialects.MYSQL, "values (1)"), "VALUES ( is syntax");
+        assertEquals(List.of("KEYWORD(in)", "PUNCTUATION(()", "NUMBER(1)", "PUNCTUATION())"), lex(SqlDialects.ANSI, "in (1)"));
+    }
+
+    @Test void theWordsTheEditorFeaturesReadAsKeywordsAreNeverReclassified() {
+        // Completion and validation look for these as KEYWORD tokens (clause starts, statement kinds, join words, literals).
+        var read = List.of("SELECT", "FROM", "JOIN", "ON", "WHERE", "HAVING", "BY", "SET", "VALUES", "INTO", "UPDATE", "INSERT", "DELETE", "CREATE", "ALTER",
+                "DROP", "TABLE", "WITH", "AS", "IF", "NOT", "EXISTS", "ONLY", "NULL", "TRUE", "FALSE", "UNION", "INTERSECT", "EXCEPT", "USING", "LIMIT", "OFFSET",
+                "ORDER", "GROUP", "INNER", "LEFT", "RIGHT", "FULL", "CROSS", "NATURAL", "REPLACE", "MERGE", "RETURNING", "DISTINCT", "ALL", "ANY", "OVER", "IS", "IN");
+        for (SqlDialectProfile profile : SqlDialects.all()) {
+            for (String word : read) {
+                if (!profile.keywords().contains(word)) continue;
+                for (boolean paren : new boolean[] {false}) {
+                    assertEquals(SqlDialectProfile.WordKind.KEYWORD, profile.classify(word, paren), profile.id() + " " + word);
+                }
+                assertFalse(profile.types().contains(word) && !word.equals("SET"), profile.id() + " " + word + " would become a type");
+            }
+        }
+        // before a parenthesis only the words that are also function names change, and none of the syntax words does
+        for (SqlDialectProfile profile : SqlDialects.all()) {
+            for (String word : List.of("SELECT", "FROM", "JOIN", "ON", "WHERE", "IN", "EXISTS", "VALUES", "ANY", "ALL", "USING", "AS", "OVER", "NOT", "AND", "OR", "KEY",
+                    "PRIMARY", "UNIQUE", "CHECK", "REFERENCES", "FOREIGN", "IF", "CASE", "SET", "INSERT", "UPDATE", "DELETE", "UNION", "WITH", "FILTER", "WITHIN", "ROW")) {
+                if (profile.keywords().contains(word)) assertEquals(SqlDialectProfile.WordKind.KEYWORD, profile.classify(word, true), profile.id() + " " + word + "(");
+            }
+        }
+    }
+
     @Test void mysqlTreatsHashAsCommentBackticksAsIdentifiersAndDoubleQuotesAsStrings() {
         assertEquals(List.of("LINE_COMMENT(# note)", "KEYWORD(select)", "QUOTED_IDENTIFIER(`a b`)", "PUNCTUATION(,)", "STRING(\"x\")",
                 "KEYWORD(from)", "IDENTIFIER(t)"), lex(SqlDialects.MYSQL, "# note\nselect `a b`, \"x\" from t"));

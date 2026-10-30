@@ -10,6 +10,7 @@ import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.sql.schema.SqlSchema;
 import com.segfault03.ideadb.sql.schema.SqlSchemaService;
 import com.segfault03.ideadb.state.DatabaseSettingsState;
+import com.segfault03.ideadb.ui.Icons;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -37,7 +38,7 @@ public final class SqlDocumentationTarget implements DocumentationTarget {
         if (config == null) return null;
         SqlSchema schema = SqlSchemaService.getInstance().schema(config);
         if (schema == null) return null;
-        return SqlDocRenderer.render(target, schema, config.getName() + ", " + config.getType().name());
+        return SqlDocRenderer.render(target, schema);
     }
 
     @Override public @NotNull Pointer<? extends DocumentationTarget> createPointer() { return Pointer.hardPointer(this); }
@@ -45,7 +46,9 @@ public final class SqlDocumentationTarget implements DocumentationTarget {
     @Override public @NotNull TargetPresentation computePresentation() {
         ConnectionConfig config = DatabaseSettingsState.getInstance().getConnection(connectionId);
         var builder = TargetPresentation.builder(label()).icon(icon());
-        if (config != null) builder = builder.locationText(config.getName());
+        if (config != null) {
+            builder = builder.locationText(config.getName() + " \u00b7 " + config.getType().getDisplayName(), Icons.dataSource(config.getType(), 16));
+        }
         return builder.presentation();
     }
 
@@ -65,9 +68,9 @@ public final class SqlDocumentationTarget implements DocumentationTarget {
 
     private Icon icon() {
         return switch (target) {
-            case SqlTarget.Schema ignored -> AllIcons.Nodes.Package;
-            case SqlTarget.Column ignored -> AllIcons.Nodes.Field;
-            case SqlTarget.Table ignored -> AllIcons.Nodes.DataTables;
+            case SqlTarget.Schema ignored -> AllIcons.Nodes.DataSchema;
+            case SqlTarget.Column ignored -> Icons.COLUMN;
+            case SqlTarget.Table ignored -> Icons.TABLE;
             case SqlTarget.Alias ignored -> AllIcons.Nodes.Variable;
         };
     }

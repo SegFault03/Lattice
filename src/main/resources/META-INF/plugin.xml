@@ -109,6 +109,7 @@
                          enabledByDefault="true" level="WARNING" implementationClass="com.segfault03.ideadb.sql.validate.LatticeSqlAmbiguousColumnInspection"/>
         <localInspection language="LatticeSQL" shortName="LatticeSqlAlias" displayName="Table alias problem" groupName="Lattice SQL"
                          enabledByDefault="true" level="WARNING" implementationClass="com.segfault03.ideadb.sql.validate.LatticeSqlAliasInspection"/>
+        <lang.inspectionSuppressor language="LatticeSQL" implementationClass="com.segfault03.ideadb.sql.validate.LatticeSqlInspectionSuppressor"/>
         <editorNotificationProvider implementation="com.segfault03.ideadb.sql.binding.SqlConnectionBanner"/>
         <statusBarWidgetFactory id="com.segfault03.lattice.sql.connection"
                                 implementation="com.segfault03.ideadb.sql.binding.SqlConnectionWidgetFactory"/>

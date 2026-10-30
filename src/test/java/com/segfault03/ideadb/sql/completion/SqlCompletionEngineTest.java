@@ -10,12 +10,13 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class SqlCompletionEngineTest {
     private static ColumnMetadata column(String name, boolean autoIncrement, ColumnReference reference) {
-        var column = new ColumnMetadata(name, "INTEGER", java.sql.Types.INTEGER, 10, 0, true, false, autoIncrement, null);
+        var column = new ColumnMetadata(name, "INTEGER", java.sql.Types.INTEGER, 10, 0, true, name.equals("id"), autoIncrement, null);
         return reference == null ? column : column.withReference(reference);
     }
 
@@ -29,10 +30,12 @@ class SqlCompletionEngineTest {
         var customers = table("customers", "TABLE", column("id", true, null), column("name", false, null));
         var orders = table("orders", "TABLE", column("id", true, null), column("total", false, null),
                 column("customer_id", false, new ColumnReference("PUBLIC", "customers", "id")));
+        var items = table("order_items", "TABLE", column("id", true, null), column("quantity", false, null),
+                column("order_id", false, new ColumnReference("PUBLIC", "orders", "id")));
         var summary = table("order_summary", "VIEW", column("total", false, null));
         var audit = table("log", "TABLE", column("message", false, null));
         var snapshot = new ExplorerMetadataSnapshot(List.of(
-                new ExplorerMetadataSnapshot.Namespace("PUBLIC", List.of(customers, orders, summary), true),
+                new ExplorerMetadataSnapshot.Namespace("PUBLIC", List.of(customers, orders, items, summary), true),
                 new ExplorerMetadataSnapshot.Namespace("audit", List.of(audit), true)), List.of(), 3);
         return SqlSchema.of(new ConnectionConfig(type, "engine test"), snapshot, "PUBLIC", 1);
     }
@@ -63,7 +66,7 @@ class SqlCompletionEngineTest {
 
     @Test void aTableSlotOffersTablesViewsAndOtherSchemas() {
         var suggestions = suggest("select * from ^");
-        assertEquals(List.of("customers", "orders"), labels(suggestions, Kind.TABLE));
+        assertEquals(List.of("customers", "orders", "order_items"), labels(suggestions, Kind.TABLE));
         assertEquals(List.of("order_summary"), labels(suggestions, Kind.VIEW));
         assertEquals(List.of("PUBLIC.", "\"audit\"."), inserts(suggestions, Kind.NAMESPACE), "H2 folds to upper case, so audit needs quotes");
         assertEquals(List.of("PUBLIC.", "audit."), inserts(suggest("select * from ^", SqlDialects.MYSQL), Kind.NAMESPACE));
@@ -77,14 +80,14 @@ class SqlCompletionEngineTest {
 
     @Test void tablesThatNeedQuotesAreQuotedForTheDialect() {
         // H2 folds unquoted names to upper case, so lower-case names must be quoted there and not in MySQL.
-        assertEquals(List.of("\"customers\"", "\"orders\""), inserts(suggest("select * from ^", SqlDialects.H2), Kind.TABLE));
-        assertEquals(List.of("customers", "orders"), inserts(suggest("select * from ^", SqlDialects.MYSQL), Kind.TABLE));
-        assertEquals(List.of("customers", "orders"), inserts(suggest("select * from ^", SqlDialects.POSTGRESQL), Kind.TABLE));
+        assertEquals(List.of("\"customers\"", "\"orders\"", "\"order_items\""), inserts(suggest("select * from ^", SqlDialects.H2), Kind.TABLE));
+        assertEquals(List.of("customers", "orders", "order_items"), inserts(suggest("select * from ^", SqlDialects.MYSQL), Kind.TABLE));
+        assertEquals(List.of("customers", "orders", "order_items"), inserts(suggest("select * from ^", SqlDialects.POSTGRESQL), Kind.TABLE));
     }
 
     @Test void anOpenQuoteIsClosedAndKeywordsAreWithheld() {
         var suggestions = suggest("select * from `ord^", SqlDialects.MYSQL);
-        assertEquals(List.of("customers`", "orders`"), inserts(suggestions, Kind.TABLE));
+        assertEquals(List.of("customers`", "orders`", "order_items`"), inserts(suggestions, Kind.TABLE));
         assertTrue(labels(suggestions, Kind.KEYWORD).isEmpty());
     }
 
@@ -160,6 +163,72 @@ class SqlCompletionEngineTest {
     @Test void unrelatedTablesGetNoJoinSuggestion() {
         assertTrue(labels(suggest("select * from orders o join audit.log l on ^"), Kind.JOIN).isEmpty());
         assertTrue(labels(suggest("select * from orders o where ^"), Kind.JOIN).isEmpty());
+    }
+
+    @Test void aJoinSlotOffersEveryForeignKeyJoinFirstInBothDirections() {
+        for (var profile : List.of(SqlDialects.MYSQL, SqlDialects.POSTGRESQL)) {
+            var suggestions = suggest("select * from orders o join ^", profile);
+            assertEquals(List.of("customers c ON c.id = o.customer_id", "order_items oi ON oi.order_id = o.id"), labels(suggestions, Kind.JOIN), profile.id());
+            assertEquals(Kind.JOIN, suggestions.get(0).kind(), "the joins rank above plain table names");
+            assertEquals(Kind.JOIN, suggestions.get(1).kind());
+            assertEquals(labels(suggestions, Kind.JOIN), inserts(suggestions, Kind.JOIN), "what is inserted is what is shown");
+            assertTrue(labels(suggestions, Kind.TABLE).containsAll(List.of("customers", "orders", "order_items")), "plain tables stay available");
+        }
+    }
+
+    @Test void aJoinAfterAnotherJoinIsRelatedToEveryEarlierTableAndAliasesStayUnique() {
+        var suggestions = suggest("select * from orders o join customers c on c.id = o.customer_id left join ^", SqlDialects.MYSQL);
+        assertEquals(List.of("customers c2 ON c2.id = o.customer_id", "order_items oi ON oi.order_id = o.id", "orders o2 ON o2.customer_id = c.id"), labels(suggestions, Kind.JOIN));
+        var reversed = suggest("select * from customers c join ^", SqlDialects.POSTGRESQL);
+        assertEquals(List.of("orders o ON o.customer_id = c.id"), labels(reversed, Kind.JOIN));
+    }
+
+    @Test void joinSuggestionsAreTypedByTableNameAndQuoteForTheDialect() {
+        var suggestions = suggest("select * from orders o join order_^", SqlDialects.MYSQL);
+        assertTrue(labels(suggestions, Kind.JOIN).contains("order_items oi ON oi.order_id = o.id"));
+        var context = SqlStatementAnalyzer.analyze("select * from orders o join ord", 31, SqlDialects.POSTGRESQL);
+        assertEquals("ord", context.prefix(), "the label starts with the table name, which is what the typed prefix matches");
+        // H2 folds unquoted names to upper case, so every name of this lower-case schema has to be quoted
+        var h2 = inserts(suggest("select * from \"orders\" o join ^", SqlDialects.H2), Kind.JOIN);
+        assertTrue(h2.contains("\"customers\" c ON c.\"id\" = o.\"customer_id\""), h2.toString());
+    }
+
+    @Test void onlyAJoinSlotWithTablesInScopeOffersJoins() {
+        assertTrue(labels(suggest("select * from ^"), Kind.JOIN).isEmpty());
+        assertTrue(labels(suggest("select * from orders o, ^"), Kind.JOIN).isEmpty(), "a comma list is not a join");
+        assertTrue(labels(suggest("select * from orders o join audit.^"), Kind.JOIN).isEmpty(), "a qualified name is a plain table");
+        assertTrue(labels(suggest("select * from audit.log l join ^"), Kind.JOIN).isEmpty());
+    }
+
+    @Test void aliasesAreInitialsAvoidingKeywordsAndNamesInUse() {
+        assertEquals("oi", SqlCompletionEngine.alias("order_items", Set.of(), SqlDialects.MYSQL));
+        assertEquals("c", SqlCompletionEngine.alias("customers", Set.of(), SqlDialects.MYSQL));
+        assertEquals("c2", SqlCompletionEngine.alias("customers", Set.of("c"), SqlDialects.MYSQL));
+        assertEquals("C3", SqlCompletionEngine.alias("Customers", Set.of("c", "c2"), SqlDialects.MYSQL), "names in use are compared ignoring case");
+        assertEquals("t", SqlCompletionEngine.alias("_", Set.of(), SqlDialects.MYSQL));
+        assertEquals("on2", SqlCompletionEngine.alias("open_nodes", Set.of(), SqlDialects.MYSQL), "ON is a keyword");
+    }
+
+    @Test void aQualifiedColumnListDoesNotRepeatTheTableWhileAnUnqualifiedOneDoes() {
+        var qualified = suggest("select o.^ from orders o");
+        assertEquals(List.of("id", "total", "customer_id"), labels(qualified, Kind.COLUMN));
+        assertTrue(qualified.stream().allMatch(s -> s.tailText() == null), "the qualifier already names the table");
+        var bySchema = suggest("select orders.^ from orders");
+        assertTrue(bySchema.stream().filter(s -> s.kind() == Kind.COLUMN).allMatch(s -> s.tailText() == null));
+        var bare = suggest("select ^ from orders o");
+        assertTrue(bare.stream().filter(s -> s.kind() == Kind.COLUMN).allMatch(s -> "o".equals(s.tailText())), "unqualified rows keep the table they come from");
+    }
+
+    @Test void columnsCarryTheirKeyRoleAsAFlagBeforeTheTypeAndAsAnIconKind() {
+        var columns = suggest("select o.^ from orders o").stream().filter(s -> s.kind() == Kind.COLUMN).toList();
+        var byName = new java.util.HashMap<String, SqlSuggestion>();
+        for (var column : columns) byName.put(column.label(), column);
+        assertEquals(SqlSuggestion.Key.PRIMARY, byName.get("id").key());
+        assertEquals("PK INTEGER", byName.get("id").typeText());
+        assertEquals(SqlSuggestion.Key.FOREIGN, byName.get("customer_id").key());
+        assertEquals("FK INTEGER", byName.get("customer_id").typeText());
+        assertEquals(SqlSuggestion.Key.NONE, byName.get("total").key());
+        assertEquals("INTEGER", byName.get("total").typeText());
     }
 
     // ---- keywords --------------------------------------------------------------------------------------------------------

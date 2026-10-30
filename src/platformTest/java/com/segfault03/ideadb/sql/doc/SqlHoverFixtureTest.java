@@ -40,8 +40,17 @@ public class SqlHoverFixtureTest extends H2SqlFixtureTestCase {
         loadSchema();
         String html = card("select * from <caret>authors");
         assertTrue(html, html.contains("PUBLIC.AUTHORS") && html.contains("People who write"));
-        assertTrue(html.contains("<b>ID</b> INTEGER") && html.contains("Referenced by") && html.contains("BOOKS.AUTHOR_ID"));
-        assertTrue("the card says which connection and dialect it describes", html.contains("fixture H2, H2"));
+        assertTrue(html.contains("<b>ID</b>&nbsp;&nbsp;&nbsp;</td><td>INTEGER") && html.contains("Referenced by") && html.contains("BOOKS.AUTHOR_ID"));
+        assertFalse("the source is the popup's location bar, not a line of the card", html.contains("fixture H2"));
+    }
+
+    public void testTheLocationBarNamesTheConnectionAndTheDatabaseTypeWithItsIcon() {
+        loadSchema();
+        var target = (SqlDocumentationTarget) hover("select * from <caret>authors").get(0);
+        var presentation = target.computePresentation();
+        assertEquals("AUTHORS", presentation.getPresentableText());
+        assertEquals("fixture H2 \u00b7 H2", presentation.getLocationText());
+        assertNotNull("the location carries the database type's icon", presentation.getLocationIcon());
     }
 
     public void testAColumnThroughAnAliasShowsItsCommentAndForeignKey() {
@@ -55,6 +64,7 @@ public class SqlHoverFixtureTest extends H2SqlFixtureTestCase {
         loadSchema();
         String html = card("select * from books <caret>b");
         assertTrue(html, html.contains("alias for") && html.contains("PUBLIC.BOOKS"));
+        assertTrue("the alias card has the table card's columns and keys", html.contains("<b>TITLE</b>&nbsp;&nbsp;&nbsp;</td><td>CHARACTER VARYING(60)") && html.contains("Foreign keys"));
     }
 
     public void testNothingIsShownForKeywordsUnknownNamesOrWhitespace() {
