@@ -5,6 +5,8 @@ import com.intellij.openapi.components.PersistentStateComponent;
 import com.intellij.openapi.components.State;
 import com.intellij.openapi.components.Storage;
 import com.segfault03.ideadb.sql.coexist.UltimateDatabasePlugin;
+import com.segfault03.ideadb.sql.inject.SqlInjectionRules;
+import com.segfault03.ideadb.sql.inject.SqlKnownCalls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -21,6 +23,13 @@ public final class SqlEditorSettings implements PersistentStateComponent<SqlEdit
         public boolean highlighting = true;
         public boolean completion = true;
         public boolean hover = true;
+        /** SQL inside Java and Kotlin strings: all of it, then each way a string can be recognized. */
+        public boolean injection = true;
+        public boolean injectExplicit = true;
+        public boolean injectKnownCalls = true;
+        public boolean injectContent = true;
+        /** Method names whose first argument is SQL, one per line. */
+        public String knownCalls = SqlKnownCalls.DEFAULT;
         /** The claim last applied to the platform's file type mapping; null before the first run. */
         public Boolean appliedClaim;
         public boolean takeoverNoticeShown;
@@ -56,6 +65,28 @@ public final class SqlEditorSettings implements PersistentStateComponent<SqlEdit
     public synchronized boolean isTakeoverEffective() { return isEnabled() && state.handleSqlFiles; }
     public synchronized boolean isHighlightingEffective() { return isEnabled() && state.highlighting; }
     public synchronized boolean isCompletionEffective() { return isEnabled() && state.completion; }
+    public synchronized boolean isInjection() { return state.injection; }
+    public synchronized void setInjection(boolean value) { state.injection = value; }
+    public synchronized boolean isInjectExplicit() { return state.injectExplicit; }
+    public synchronized void setInjectExplicit(boolean value) { state.injectExplicit = value; }
+    public synchronized boolean isInjectKnownCalls() { return state.injectKnownCalls; }
+    public synchronized void setInjectKnownCalls(boolean value) { state.injectKnownCalls = value; }
+    public synchronized boolean isInjectContent() { return state.injectContent; }
+    public synchronized void setInjectContent(boolean value) { state.injectContent = value; }
+    public synchronized @NotNull String knownCalls() { return state.knownCalls == null ? SqlKnownCalls.DEFAULT : state.knownCalls; }
+    public synchronized void knownCalls(@NotNull String value) { state.knownCalls = value; }
+
+    public synchronized boolean isInjectionEffective() { return isEnabled() && state.injection; }
+
+    /** Which ways of recognizing SQL strings are on, with the known-call list parsed. */
+    public synchronized @NotNull SqlInjectionRules.Tiers injectionTiers() {
+        String text = knownCalls();
+        if (!text.equals(parsedFrom)) { parsedCalls = SqlKnownCalls.parse(text); parsedFrom = text; }
+        return new SqlInjectionRules.Tiers(state.injectExplicit, state.injectKnownCalls, state.injectContent, parsedCalls);
+    }
+    private String parsedFrom;
+    private SqlKnownCalls parsedCalls;
+
     public synchronized boolean isHoverEffective() { return isEnabled() && state.hover; }
 
     public synchronized @Nullable Boolean appliedClaim() { return state.appliedClaim; }

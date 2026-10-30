@@ -69,6 +69,18 @@ public final class SqlEditorSupport {
         for (Project project : ProjectManager.getInstance().getOpenProjects()) SqlEditorRefresh.refreshAll(project);
     }
 
+    /** Re-reads which strings are SQL in the open source files after the injection settings changed. */
+    public static void injectionSettingsChanged() {
+        for (Project project : ProjectManager.getInstance().getOpenProjects()) {
+            com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater(() -> {
+                if (project.isDisposed()) return;
+                var files = java.util.Arrays.stream(com.intellij.openapi.fileEditor.FileEditorManager.getInstance(project).getOpenFiles())
+                        .filter(file -> file.getFileType() != com.segfault03.ideadb.sql.lang.LatticeSqlFileType.INSTANCE).toList();
+                com.intellij.util.FileContentUtil.reparseFiles(project, files, true);
+            });
+        }
+    }
+
     private static void announceTakeover(Project project) {
         Notification notification = group().createNotification("Lattice now highlights .sql files",
                 "It replaces the IDE's highlighting-only SQL type. You can turn this off.", NotificationType.INFORMATION);

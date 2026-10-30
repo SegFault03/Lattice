@@ -52,7 +52,18 @@ configurations.getByName("platformTestCompileClasspath") {
     }
 }
 
+// Java and Kotlin PSI come from the IDE's own plugins, which bundledPlugin() does not expose for this layout. Compile
+// against the jars in the resolved SDK; the optional plugin descriptors load that code only where the plugins exist.
+fun sdkPluginJars(directory: String) =
+    files(provider { fileTree(intellijPlatform.platformPath.resolve(directory)) { include("**/*.jar") } })
+val javaPluginJars = sdkPluginJars("plugins/java/lib")
+val kotlinPluginJars = sdkPluginJars("plugins/Kotlin/lib")
+
 dependencies {
+    compileOnly(javaPluginJars)
+    compileOnly(kotlinPluginJars)
+    testCompileOnly(javaPluginJars)
+    testCompileOnly(kotlinPluginJars)
     intellijPlatform {
         val localIde = providers.gradleProperty("lattice.ide.home").orNull
         if (localIde == null) intellijIdeaCommunity("2025.1") else local(localIde)
@@ -142,6 +153,27 @@ intellijPlatformTesting.testIde.register("platformTest") {
         classpath += sourceSets["platformTest"].runtimeClasspath
         useJUnitPlatform { includeEngines("junit-vintage") }
         systemProperty("junit.jupiter.extensions.autodetection.enabled", "false")
+        // Fixtures that need the Java or Kotlin plugin run in their own JVMs below: the two cannot share one.
+        filter { excludeTestsMatching("*JavaFixtureTest"); excludeTestsMatching("*KotlinFixtureTest") }
+    }
+}
+
+// Java and Kotlin fixtures load their plugin from the SDK jars (see sdkPluginJars); Kotlin needs Java's jars as well.
+for ((taskName, pluginJars, pattern) in listOf(
+    Triple("javaPlatformTest", listOf(javaPluginJars), "*JavaFixtureTest"),
+    Triple("kotlinPlatformTest", listOf(javaPluginJars, kotlinPluginJars), "*KotlinFixtureTest"),
+)) {
+    intellijPlatformTesting.testIde.register(taskName) {
+        task {
+            description = "Run IDE fixture tests that need the ${pattern.removePrefix("*").removeSuffix("FixtureTest")} plugin"
+            group = "verification"
+            testClassesDirs = sourceSets["platformTest"].output.classesDirs
+            classpath += sourceSets["platformTest"].runtimeClasspath
+            pluginJars.forEach { classpath += it }
+            useJUnitPlatform { includeEngines("junit-vintage") }
+            systemProperty("junit.jupiter.extensions.autodetection.enabled", "false")
+            filter { includeTestsMatching(pattern); isFailOnNoMatchingTests = false }
+        }
     }
 }
 

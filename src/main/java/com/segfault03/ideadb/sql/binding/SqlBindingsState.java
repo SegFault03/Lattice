@@ -40,19 +40,24 @@ public final class SqlBindingsState implements PersistentStateComponent<SqlBindi
     @Override public synchronized void loadState(@NotNull State loaded) { state = loaded; }
 
     public synchronized @Nullable Binding fileBinding(@NotNull VirtualFile file) {
-        Binding binding = state.files.get(file.getUrl());
+        Binding binding = state.files.get(hostOf(file).getUrl());
         return binding == null ? null : new Binding(binding.connectionId, binding.dialectId);
     }
 
     public synchronized void bindFileToConnection(@NotNull VirtualFile file, @NotNull String connectionId) {
-        state.files.put(file.getUrl(), new Binding(connectionId, ""));
+        state.files.put(hostOf(file).getUrl(), new Binding(connectionId, ""));
     }
 
     public synchronized void bindFileToDialect(@NotNull VirtualFile file, @NotNull String dialectId) {
-        state.files.put(file.getUrl(), new Binding("", dialectId));
+        state.files.put(hostOf(file).getUrl(), new Binding("", dialectId));
     }
 
-    public synchronized void clearFile(@NotNull VirtualFile file) { state.files.remove(file.getUrl()); }
+    public synchronized void clearFile(@NotNull VirtualFile file) { state.files.remove(hostOf(file).getUrl()); }
+
+    /** SQL injected into a source file is bound through that file. */
+    public static @NotNull VirtualFile hostOf(@NotNull VirtualFile file) {
+        return file instanceof com.intellij.injected.editor.VirtualFileWindow window ? window.getDelegate() : file;
+    }
 
     /**
      * Forgets bindings to connections that were deleted: a file bound to one goes back to being unbound, and a

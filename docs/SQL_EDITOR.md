@@ -1,6 +1,6 @@
 # SQL editor support
 
-Lattice edits SQL in your own project, not only in its console. Today that means dialect-aware syntax highlighting, code completion and hover details for `.sql` files. SQL inside Java and Kotlin strings is not available yet.
+Lattice edits SQL in your own project, not only in its console. Today that means dialect-aware syntax highlighting, code completion and hover details, in `.sql` files and in SQL strings of Java and Kotlin code.
 
 ## What you get
 
@@ -54,6 +54,27 @@ Hover over a name in a `.sql` file (or press `Ctrl+Q`, `F1` on macOS) to see wha
 
 Links in a card open the card of the target. Names resolve the way completion resolves them: through aliases, schema-qualified names, `UPDATE ... SET` and `INSERT` column lists, ignoring case, and with quoted names unquoted. Keywords, unknown names and derived-table aliases show nothing, as does a file with no connection or a connection whose schema has not been read yet; hovering starts that read, so the card appears on the next hover. The cards read the metadata cache and never contact the database.
 
+## SQL in Java and Kotlin strings
+
+A string that holds SQL gets the same highlighting, completion and hover as a `.sql` file, for the dialect and schema of the connection that applies to the file. A string is treated as SQL when any of these holds, each of which can be switched off in the settings:
+
+| Way | What counts |
+|---|---|
+| Marked by you | `@Language("SQL")` (or `MySQL`, `PostgreSQL`, `H2`, `HSQLDB`) on a variable, field, parameter or method, or a `// language=SQL` comment above the statement. |
+| Passed to a known call | The first argument of a method in the list under the settings: JDBC (`prepareStatement`, `executeQuery`...), Spring `JdbcTemplate` (`query`, `queryForObject`, `update`, `batchUpdate`...), JPA and Hibernate (`createNativeQuery`, `createSQLQuery`), jOOQ and Exposed (`resultQuery`, `fetch`, `exec`), and the `value` of a Spring Data `@Query(nativeQuery = true)`, `@NativeQuery` or `@NamedNativeQuery`. Names that are common outside SQL (`query`, `update`, `execute`, `fetch`, `exec`, `addBatch`) only count when the string begins like a statement. The list is editable. |
+| Looks like a statement | A strict check of the text itself: `select ... from ...` with a second sign it is not prose (a `where`, a placeholder, a join, `*`, several columns...), `insert into ... values`, `update ... set x =`, `delete from ... where`, `with ... as (select`, and `create`/`alter`/`drop table`. "Select an item from the list" is left alone. |
+
+Strings built from pieces work: Java `+` chains and text blocks, Kotlin `+` chains, raw strings (also with `trimIndent()` and `trimMargin()`) and templates. Whatever is only known at run time (`" + table + "`, `$id`, `${expr}`) is shown to the SQL support as a `?`, so `select * from ? where id = ?` still completes the columns of aliases you wrote in the literal parts.
+
+To settle a string yourself, press `Alt+Enter` inside it:
+
+- **Treat this string as SQL** adds `// language=SQL` above the statement.
+- **Do not treat this string as SQL** adds `// lattice:not-sql` above the statement. Delete the comment to undo.
+
+The connection comes from the Java or Kotlin file: its own choice (right-click in the string, **Lattice: SQL Connection for This File...**), then the project default, then the only saved connection.
+
+`@Language("SQL")` and `// language=SQL` are also honored by the IDE's own language injection, which this setting does not control; manage those under **Settings | Editor | Language Injections**. The not-SQL comment applies to Lattice's own detection only.
+
 ## Choosing a connection
 
 A file's dialect comes from, in order:
@@ -82,6 +103,8 @@ Choices are stored in the project's workspace file, not in version control, beca
 | Syntax highlighting | On |
 | Code completion | On |
 | Hover documentation | On |
+| SQL inside Java and Kotlin strings | On, as three switches: marked strings, known calls and strict content check |
+| Known calls | JDBC, Spring `JdbcTemplate`, JPA, Hibernate, jOOQ and Exposed method names, one per line |
 
 Colors are under **Settings | Editor | Color Scheme | Lattice SQL**.
 
@@ -97,6 +120,11 @@ Lattice replaces the IDE's highlighting-only SQL file type for the `.sql` extens
 The Database plugin brings its own SQL support. Where it is enabled, Lattice's SQL editor support starts off and a one-time notice offers to turn it on. Behavior with both active has not been tested, so leave it off unless you want to try.
 
 ## Limits
+
+- Strings are found by what is written at the call site. Kotlin calls are matched by name only, because Kotlin PSI cannot resolve a call here; Java also honors `@Language` on a resolved method's parameters.
+- A `StringBuilder` chain (`sb.append("select ").append(x)`) is not followed.
+- An escape such as `\n` inside a Kotlin string appears in the SQL text as written, so a keyword right after it is not recognized by the highlighter or completion.
+- The heuristic is strict on purpose: `select 1`, bare `delete from t` and similar are found only through a call, annotation or comment.
 
 - Completion does not offer the columns of a derived table or common table expression, and suggests a composite foreign key as one equality per column.
 - Hover does not describe columns of derived tables or common table expressions, and an unqualified column that exists in several tables of the statement shows the first one.
