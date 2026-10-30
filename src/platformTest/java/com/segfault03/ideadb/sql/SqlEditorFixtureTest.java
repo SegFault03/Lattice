@@ -167,6 +167,31 @@ public class SqlEditorFixtureTest extends BasePlatformTestCase {
         assertSame("In PostgreSQL # is an operator", LatticeSqlTokens.OPERATOR, firstToken());
     }
 
+    /** Opens a fresh file with the text, binds it to the connection (if any), refreshes, and returns its first token. */
+    private IElementType firstTokenWhenBound(String name, String text, ConnectionConfig config) {
+        VirtualFile file = myFixture.configureByText(name, text).getVirtualFile();
+        if (config != null) {
+            connections.addConnection(config);
+            SqlBindingsState.getInstance(getProject()).bindFileToConnection(file, config.getId());
+            SqlEditorRefresh.refresh(getProject(), file);
+            PlatformTestUtil.dispatchAllEventsInIdeEventQueue();
+        }
+        return firstToken();
+    }
+
+    public void testEveryDialectReachesTheEditorHighlighterNotJustTheFirstRebind() {
+        ConnectionConfig h2 = new ConnectionConfig(DatabaseType.H2, "shop-h2");
+        ConnectionConfig hsqldb = new ConnectionConfig(DatabaseType.HSQLDB, "shop-hsqldb");
+        assertSame(LatticeSqlTokens.IDENTIFIER, firstTokenWhenBound("a1.sql", "returning", null));
+        assertSame("PostgreSQL knows RETURNING", LatticeSqlTokens.KEYWORD, firstTokenWhenBound("a2.sql", "returning", postgres));
+        assertSame("MySQL does not", LatticeSqlTokens.IDENTIFIER, firstTokenWhenBound("a3.sql", "returning", mysql));
+        assertSame("PostgreSQL has dollar strings", LatticeSqlTokens.STRING, firstTokenWhenBound("b1.sql", "$$x$$", postgres));
+        assertSame("H2 has dollar strings", LatticeSqlTokens.STRING, firstTokenWhenBound("b2.sql", "$$x$$", h2));
+        assertNotSame("MySQL does not", LatticeSqlTokens.STRING, firstTokenWhenBound("b3.sql", "$$x$$", mysql));
+        assertSame("H2 has // comments", LatticeSqlTokens.LINE_COMMENT, firstTokenWhenBound("c1.sql", "// c", h2));
+        assertSame("HSQLDB does not", LatticeSqlTokens.OPERATOR, firstTokenWhenBound("c2.sql", "// c", hsqldb));
+    }
+
     public void testTheHighlighterFactoryResolvesTheFilesDialect() {
         connections.addConnection(postgres);
         VirtualFile file = sqlFile("select 1");

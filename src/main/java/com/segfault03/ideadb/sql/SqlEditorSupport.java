@@ -58,9 +58,8 @@ public final class SqlEditorSupport {
     }
 
     private static void announceTakeover(Project project) {
-        Notification notification = group().createNotification("Lattice SQL editor support is on",
-                "Lattice now highlights .sql files using the dialect of the connection you choose, in place of the IDE's "
-                        + "highlighting-only SQL type. You can turn this off at any time.", NotificationType.INFORMATION);
+        Notification notification = group().createNotification("Lattice now highlights .sql files",
+                "It replaces the IDE's highlighting-only SQL type. You can turn this off.", NotificationType.INFORMATION);
         notification.addAction(NotificationAction.createSimpleExpiring("Turn off", () -> {
             SqlEditorSettings.getInstance().setHandleSqlFiles(false);
             settingsChanged();
@@ -71,8 +70,7 @@ public final class SqlEditorSupport {
 
     private static void announceStandDown(Project project) {
         Notification notification = group().createNotification("Lattice SQL editor support is off",
-                "The IDE's Database plugin already provides SQL support, so Lattice leaves SQL files to it to avoid "
-                        + "duplicate features. You can turn Lattice's support on anyway.", NotificationType.INFORMATION);
+                "The Database plugin already provides SQL support here. You can turn Lattice's on anyway.", NotificationType.INFORMATION);
         notification.addAction(NotificationAction.createSimpleExpiring("Turn on anyway", () -> {
             SqlEditorSettings.getInstance().setEnabled(true);
             settingsChanged();
