@@ -486,7 +486,7 @@ class IntellijUiScreenshotTest {
                     dialog.x { byVisibleText("Driver options ▸") }.waitFound().click()
                     dialog.x(JComboBoxUiComponent::class.java) {
                         and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"), byAccessibleName("Available driver"))
-                    }.waitFound().selectItem("2.7.4 · BUNDLED")
+                    }.waitFound().selectItem("2.7.4 · Bundled")
                     dialog.x { byVisibleText("JDBC URL") }.waitFound().click()
                     inspectorInput(dialog, "JDBC URL:").text = requireNotNull(jdbcFixture).jdbcUrl
                     inspectorInput(dialog, "User:").text = "SA"
@@ -503,9 +503,9 @@ class IntellijUiScreenshotTest {
                     byTitle("New connection")
                 }.waitFound()
                 mysqlDialog.x {
-                    byVisibleText("8.4.0 · DISCOVERED")
+                    byVisibleText("8.4.0 · Local Maven repository")
                 }.waitFound()
-                assertDriverSummary(mysqlDialog, "8.4.0 · DISCOVERED")
+                assertDriverSummary(mysqlDialog, "8.4.0 · Local Maven repository")
                 if (review) {
                     captureScreen(screenshotsDirectory.resolve("mysql-standard.png"))
                     mysqlDialog.x { byVisibleText("JDBC URL") }.waitFound().click()
@@ -524,28 +524,28 @@ class IntellijUiScreenshotTest {
                 val mysqlAvailableDriverLabels = mysqlAvailableDriverCombo.listValues()
                 println("Available MySQL driver entries: ${mysqlAvailableDriverLabels.joinToString()}")
                 check(mysqlAvailableDriverLabels.containsAll(listOf(
-                    "26.7.0 · BUNDLED", "9.0.0 · DISCOVERED", "8.4.0 · DISCOVERED", "8.0.33 · DISCOVERED",
+                    "26.7.0 · Bundled", "9.0.0 · Local Maven repository", "8.4.0 · Local Maven repository", "8.0.33 · Local Maven repository",
                 ))) { "Expected bundled and Maven-discovered MySQL releases: $mysqlAvailableDriverLabels" }
                 captureScreen(screenshotsDirectory.resolve("mysql-connection-dialog-available-driver-list.png"))
                 pressEscape()
                 assertDataSourcePicker(mysqlDialog)
                 mysqlDialog.x { byAccessibleName("HSQLDB") }.waitFound().click()
-                assertDriverSummary(mysqlDialog, "2.7.2 · DISCOVERED")
+                assertDriverSummary(mysqlDialog, "2.7.2 · Local Maven repository")
                 captureScreen(screenshotsDirectory.resolve("driver-type-switch-hsql-project-default.png"))
                 mysqlDialog.x { byAccessibleName("MySQL") }.waitFound().click()
-                assertDriverSummary(mysqlDialog, "8.4.0 · DISCOVERED")
-                mysqlAvailableDriverCombo.selectItem("26.7.0 · BUNDLED")
+                assertDriverSummary(mysqlDialog, "8.4.0 · Local Maven repository")
+                mysqlAvailableDriverCombo.selectItem("26.7.0 · Bundled")
                 mysqlDialog.x { byAccessibleName("HSQLDB") }.waitFound().click()
-                assertDriverSummary(mysqlDialog, "2.7.2 · DISCOVERED")
+                assertDriverSummary(mysqlDialog, "2.7.2 · Local Maven repository")
                 mysqlDialog.x { byAccessibleName("MySQL") }.waitFound().click()
-                assertDriverSummary(mysqlDialog, "26.7.0 · BUNDLED")
+                assertDriverSummary(mysqlDialog, "26.7.0 · Bundled")
                 captureScreen(screenshotsDirectory.resolve("driver-type-switch-mysql-manual-choice.png"))
-                mysqlAvailableDriverCombo.selectItem("8.4.0 · DISCOVERED")
+                mysqlAvailableDriverCombo.selectItem("8.4.0 · Local Maven repository")
                 if (review) {
-                    mysqlAvailableDriverCombo.selectItem("26.7.0 · BUNDLED")
-                    assertDriverSummary(mysqlDialog, "26.7.0 · BUNDLED")
+                    mysqlAvailableDriverCombo.selectItem("26.7.0 · Bundled")
+                    assertDriverSummary(mysqlDialog, "26.7.0 · Bundled")
                     captureScreen(screenshotsDirectory.resolve("mysql-driver-summary-bundled.png"))
-                    mysqlAvailableDriverCombo.selectItem("8.4.0 · DISCOVERED")
+                    mysqlAvailableDriverCombo.selectItem("8.4.0 · Local Maven repository")
                 }
 
                 if (!postgres && !h2 && !System.getProperty("ui.skip.remote.downloads", "false").toBoolean()) {
@@ -568,7 +568,7 @@ class IntellijUiScreenshotTest {
                     val mysqlDownloadVersions = mysqlDriverVersionCombo.listValues()
                     println("MySQL download-version entries: ${mysqlDownloadVersions.joinToString()}")
                     check(mysqlDownloadVersions.containsAll(listOf(
-                        "9.0.0 · DISCOVERED", "8.4.0 · DISCOVERED", "8.0.33 · DISCOVERED",
+                        "9.0.0 · Local Maven repository", "8.4.0 · Local Maven repository", "8.0.33 · Local Maven repository",
                     ))) { "Expected Maven-discovered MySQL releases in the download-version list: $mysqlDownloadVersions" }
                     captureScreen(screenshotsDirectory.resolve("mysql-connection-dialog-download-version-list.png"))
                     pressEscape()
@@ -579,7 +579,7 @@ class IntellijUiScreenshotTest {
                     }
                     val mysqlProgressVersion = "5.1.49"
                     mysqlDriverVersionCombo.selectItem(mysqlProgressVersion)
-                    assertDriverSummary(mysqlDialog, "5.1.49 · DOWNLOAD")
+                    assertDriverSummary(mysqlDialog, "5.1.49 · Not downloaded")
                     val mysqlDownloadButton = mysqlDialog.x { byVisibleText("Download") }.waitFound()
                     waitUntil("MySQL version $mysqlProgressVersion can be downloaded") {
                         mysqlDownloadButton.component.isEnabled()
@@ -608,11 +608,11 @@ class IntellijUiScreenshotTest {
                         "A successfully downloaded driver should not be offered for download again"
                     }
                     if (review) {
-                        assertDriverSummary(mysqlDialog, "5.1.49 · DOWNLOADED")
+                        assertDriverSummary(mysqlDialog, "5.1.49 · Downloaded")
                         captureScreen(screenshotsDirectory.resolve("mysql-driver-downloaded.png"))
                         mysqlDriverSourceCombo.selectItem("Available drivers")
-                        mysqlAvailableDriverCombo.selectItem("5.1.49 · DOWNLOADED")
-                        assertDriverSummary(mysqlDialog, "5.1.49 · DOWNLOADED")
+                        mysqlAvailableDriverCombo.selectItem("5.1.49 · Downloaded")
+                        assertDriverSummary(mysqlDialog, "5.1.49 · Downloaded")
                         captureScreen(screenshotsDirectory.resolve("mysql-driver-summary-retained.png"))
                         mysqlDriverSourceCombo.selectItem("Download a version")
                         mysqlDialog.x { byVisibleText("JDBC URL") }.waitFound().click()
@@ -653,9 +653,9 @@ class IntellijUiScreenshotTest {
                     byTitle("New connection")
                 }.waitFound()
                 connectionDialog.x {
-                    byVisibleText("2.7.2 · DISCOVERED")
+                    byVisibleText("2.7.2 · Local Maven repository")
                 }.waitFound()
-                assertDriverSummary(connectionDialog, "2.7.2 · DISCOVERED")
+                assertDriverSummary(connectionDialog, "2.7.2 · Local Maven repository")
                 Thread.sleep(750)
                 captureScreen(screenshotsDirectory.resolve("connection-dialog-default-driver.png"))
                 val modeCombo = connectionDialog.x(JComboBoxUiComponent::class.java) {
@@ -703,7 +703,7 @@ class IntellijUiScreenshotTest {
                 val availableDriverLabels = availableDriverCombo.listValues()
                 println("Available driver entries: ${availableDriverLabels.joinToString()}")
                 check(availableDriverLabels.containsAll(listOf(
-                    "2.7.4 · BUNDLED", "2.7.3-jdk8 · DOWNLOADED", "2.7.2 · DISCOVERED", "2.6.1-jdk8 · DISCOVERED", "2.4.1 · DISCOVERED",
+                    "2.7.4 · Bundled", "2.7.3-jdk8 · Downloaded", "2.7.2 · Local Maven repository", "2.6.1-jdk8 · Local Maven repository", "2.4.1 · Local Maven repository",
                 ))) { "Expected bundled, downloaded, and Maven-discovered releases in the available-driver list: $availableDriverLabels" }
                 captureScreen(screenshotsDirectory.resolve("connection-dialog-available-driver-list.png"))
                 pressEscape()
@@ -720,7 +720,7 @@ class IntellijUiScreenshotTest {
                     val localJar = connectionDialog.x { byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputBrowseField") }.waitFound()
                     localJar.x(JTextFieldUI::class.java) { byType("javax.swing.JTextField") }.waitFound().text =
                         mavenRepository.resolve("org/hsqldb/hsqldb/2.7.2/hsqldb-2.7.2.jar").toString()
-                    assertDriverSummary(connectionDialog, "2.7.2 · LOCAL JAR")
+                    assertDriverSummary(connectionDialog, "2.7.2 · Local JAR")
                     captureScreen(screenshotsDirectory.resolve("driver-local-jar-selected.png"))
                 }
                 driverSourceCombo.selectItem("Download a version")
@@ -736,7 +736,7 @@ class IntellijUiScreenshotTest {
                 val downloadVersions = driverVersionCombo.listValues()
                 println("Download-version entries: ${downloadVersions.joinToString()}")
                 check(downloadVersions.containsAll(listOf(
-                    "2.7.2 · DISCOVERED", "2.6.1-jdk8 · DISCOVERED", "2.4.1 · DISCOVERED",
+                    "2.7.2 · Local Maven repository", "2.6.1-jdk8 · Local Maven repository", "2.4.1 · Local Maven repository",
                 ))) {
                     "Expected Maven-discovered releases in the download-version list: $downloadVersions"
                 }
@@ -745,7 +745,7 @@ class IntellijUiScreenshotTest {
                 clickComboArrow(driverVersionCombo)
                 Thread.sleep(200)
                 selectNextComboPopupRow()
-                assertDriverSummary(connectionDialog, "2.7.3-jdk8 · DOWNLOADED")
+                assertDriverSummary(connectionDialog, "2.7.3-jdk8 · Downloaded")
                 val downloadButton = connectionDialog.x { byVisibleText("Download") }.waitFound()
                 waitUntil("Download disabled for an already downloaded driver") {
                     !downloadButton.component.isEnabled()
@@ -769,13 +769,13 @@ class IntellijUiScreenshotTest {
                 waitUntil("available driver card is showing after switching source") {
                     availableDriverCombo.component.isShowing()
                 }
-                availableDriverCombo.selectItem("2.7.3-jdk8 · DOWNLOADED")
-                assertDriverSummary(connectionDialog, "2.7.3-jdk8 · DOWNLOADED")
+                availableDriverCombo.selectItem("2.7.3-jdk8 · Downloaded")
+                assertDriverSummary(connectionDialog, "2.7.3-jdk8 · Downloaded")
 
                 if (h2) {
                     connectionDialog.x { byAccessibleName("H2") }.waitFound().click()
-                    availableDriverCombo.selectItem("2.3.232 · BUNDLED")
-                    assertDriverSummary(connectionDialog, "2.3.232 · BUNDLED")
+                    availableDriverCombo.selectItem("2.3.232 · Bundled")
+                    assertDriverSummary(connectionDialog, "2.3.232 · Bundled")
                     val mode = connectionDialog.x(JComboBoxUiComponent::class.java) { and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"), byAccessibleName("Mode:")) }.waitFound()
                     mode.selectItem("In-Memory (mem)")
                     val h2MemoryName = connectionDialog.x(JTextFieldUI::class.java) { and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("Database name:")) }.waitFound()
@@ -797,8 +797,8 @@ class IntellijUiScreenshotTest {
                 }
                 if (postgres) {
                     connectionDialog.x { byAccessibleName("PostgreSQL") }.waitFound().click()
-                    availableDriverCombo.selectItem("42.7.14 · BUNDLED")
-                    assertDriverSummary(connectionDialog, "42.7.14 · BUNDLED")
+                    availableDriverCombo.selectItem("42.7.14 · Bundled")
+                    assertDriverSummary(connectionDialog, "42.7.14 · Bundled")
                     captureScreen(screenshotsDirectory.resolve("postgresql-driver-selection.png"))
                 }
 
@@ -874,7 +874,7 @@ class IntellijUiScreenshotTest {
                     captureScreen(screenshotsDirectory.resolve("connection-context-menu.png"))
                     frame.x { byVisibleText("Edit connection…") }.waitFound().click()
                     frame.x(DialogUiComponent::class.java) { byTitle("Edit connection") }.waitFound().also {
-                        assertDriverSummary(it, if (h2) "2.3.232 · BUNDLED" else if (postgres) "42.7.14 · BUNDLED" else "2.7.3-jdk8 · DOWNLOADED")
+                        assertDriverSummary(it, if (h2) "2.3.232 · Bundled" else if (postgres) "42.7.14 · Bundled" else "2.7.3-jdk8 · Downloaded")
                         captureScreen(screenshotsDirectory.resolve("edit-connection.png"))
                         it.pressButton("Cancel")
                     }
@@ -892,7 +892,7 @@ class IntellijUiScreenshotTest {
                             rightClickExplorerPath(databaseTree, connectionPath.joinToString(databaseTree.fixture.separator()))
                             frame.x { byVisibleText("Edit connection…") }.waitFound().click()
                             frame.x(DialogUiComponent::class.java) { byTitle("Edit connection") }.waitFound().also {
-                                assertDriverSummary(it, "2.7.3-jdk8 · UNAVAILABLE")
+                                assertDriverSummary(it, "2.7.3-jdk8 · Unavailable")
                                 check(!it.x { byVisibleText("Test connection") }.waitFound().component.isEnabled())
                                 val save = it.x { byVisibleText("Save") }.waitFound()
                                 if (save.component.isEnabled()) save.click()

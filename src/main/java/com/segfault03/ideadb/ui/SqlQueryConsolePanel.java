@@ -1,5 +1,7 @@
 package com.segfault03.ideadb.ui;
 
+import com.intellij.openapi.editor.colors.EditorColorsManager;
+import com.intellij.openapi.editor.colors.EditorFontType;
 import com.intellij.icons.AllIcons;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
@@ -144,7 +146,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
 
         // Editor
         editorArea = new JBTextArea();
-        editorArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, getFont().getSize()));
+        editorArea.setFont(EditorColorsManager.getInstance().getGlobalScheme().getFont(EditorFontType.PLAIN));
         editorArea.setMargin(JBUI.insets(10, 12));
         editorArea.setTabSize(4);
         editorArea.setText("-- " + config.getName() + "\n-- Write your query and press " + runShortcut + " to execute\n\n");
@@ -194,7 +196,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         messagesArea = new JBTextArea();
         messagesArea.getAccessibleContext().setAccessibleName("SQL query messages");
         messagesArea.setEditable(false);
-        messagesArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        messagesArea.setFont(EditorColorsManager.getInstance().getGlobalScheme().getFont(EditorFontType.PLAIN));
         messagesArea.setForeground(NORMAL_MSG_COLOR);
         messagesArea.setMargin(JBUI.insets(10, 12));
         JBScrollPane messagesScroll = new JBScrollPane(messagesArea);
@@ -302,7 +304,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
                 // Arbitrary SQL can change other namespaces, return rows from DML, or call procedures.
                 // Read fresh metadata/data after completion rather than guessing targets from SQL text.
                 // A failed/cancelled script may also have committed earlier statements.
-                if (current.hasStartedSql())
+                if (current.mayHaveChangedData())
                     com.segfault03.ideadb.service.DatabaseChangeListener.publish(
                             com.segfault03.ideadb.service.DatabaseChange.connection(config.getId()));
 

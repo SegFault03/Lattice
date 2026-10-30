@@ -20,5 +20,16 @@ final class MySqlMetadataAdapter extends JdbcMetadataAdapter {
         DatabaseMetaData meta = conn.getMetaData();
         if (meta.getDatabaseMajorVersion() > 5 || meta.getDatabaseMajorVersion() == 5 && meta.getDatabaseMinorVersion() >= 6)
             enrichTemporalPrecision(conn, database == null ? conn.getCatalog() : database, table, columns);
+        if (meta.getDatabaseMajorVersion() > 5 || meta.getDatabaseMajorVersion() == 5 && meta.getDatabaseMinorVersion() >= 7)
+            enrichGenerated(conn, database == null ? conn.getCatalog() : database, table, columns);
+    }
+    // Connector/J's IS_GENERATEDCOLUMN varies by driver version; EXTRA is authoritative ("DEFAULT_GENERATED" is only an expression default).
+    private static void enrichGenerated(Connection conn, String database, String table, List<ColumnMetadata> columns) throws SQLException {
+        Set<String> generated = new HashSet<>();
+        try (var statement = conn.prepareStatement("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=? AND TABLE_NAME=? AND (EXTRA LIKE '%VIRTUAL GENERATED%' OR EXTRA LIKE '%STORED GENERATED%')")) {
+            statement.setString(1, database); statement.setString(2, table);
+            try (ResultSet rows = statement.executeQuery()) { while (rows.next()) generated.add(rows.getString(1)); }
+        }
+        columns.replaceAll(c -> c.isGenerated() || !generated.contains(c.getName()) ? c : new ColumnMetadata(c.getName(), c.getTypeName(), c.getDataType(), c.getColumnSize(), c.getDecimalDigits(), c.isNullable(), c.isPrimaryKey(), c.isAutoIncrement(), c.getDefaultValue(), true));
     }
 }

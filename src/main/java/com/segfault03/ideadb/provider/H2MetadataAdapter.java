@@ -24,6 +24,6 @@ final class H2MetadataAdapter extends JdbcMetadataAdapter {
             statement.setString(1, schema); statement.setString(2, table);
             try (var rows = statement.executeQuery()) { while (rows.next()) generated.add(rows.getString(1)); }
         }
-        columns.replaceAll(c -> new ColumnMetadata(c.getName(), c.getTypeName(), c.getDataType(), c.getColumnSize(), c.getDecimalDigits(), c.isNullable(), c.isPrimaryKey(), c.isAutoIncrement(), c.getDefaultValue(), generated.contains(c.getName())));
+        columns.replaceAll(c -> new ColumnMetadata(c.getName(), c.getTypeName(), c.getDataType(), c.getColumnSize(), c.getDecimalDigits(), c.isNullable(), c.isPrimaryKey(), c.isAutoIncrement(), c.getDefaultValue(), c.isGenerated() || generated.contains(c.getName())));
     }
 }

@@ -64,7 +64,7 @@ class CreateTablePanelTest {
             p.tableNameField().setText("quoted\"table");assertTrue(p.prepared().sql().contains("\"quoted\"\"table\""));assertTrue(p.prepared().sql().contains("DECIMAL(12,3)"));
             var old=p.prepared();input(p,"Default value").setText("SQL:3.234");assertNotEquals(old,p.prepared());assertEquals("",old.definition().columns().getLast().defaultValue());
             for(int width:new int[]{860,1040,1200}){p.setSize(width,780);for(int i=0;i<5;i++)layout(p);assertTrue(p.createButton().getWidth()>0);
-                for(JTextField field:find(p,JTextField.class))if(field.getWidth()>0)assertEquals(com.segfault03.ideadb.ui.DatabaseInputs.height(field),field.getHeight());}
+                for(JTextField field:find(p,JTextField.class))if(field.getWidth()>0&&!(field.getParent() instanceof JComboBox))assertEquals(com.segfault03.ideadb.ui.DatabaseInputs.height(field),field.getHeight());}
         });
     }
     private static List<String> names(CreateTablePanel p) {return p.prepared().definition().columns().stream().map(TableCreation.Column::name).toList();}

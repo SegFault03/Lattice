@@ -41,6 +41,7 @@ final class HsqlProvider implements DatabaseProvider {
         try (Statement statement = conn.createStatement()) { statement.execute("SET SCHEMA " + dialect.quoteIdentifier(selected)); }
     }
     public int fetchSize(int requested) { return requested; }
+    public List<String> dataTypes() { return List.of("INT", "BIGINT", "SMALLINT", "TINYINT", "VARCHAR", "CHAR", "LONGVARCHAR", "CLOB", "BOOLEAN", "DECIMAL", "REAL", "DOUBLE", "DATE", "TIME", "TIMESTAMP", "TIMESTAMP WITH TIME ZONE", "VARBINARY", "BLOB", "UUID"); }
     public String sqlLiteral(Object value, String type) {
         String common = SqlLiterals.common(value); return common != null ? common : "'" + value.toString().replace("'", "''") + "'";
     }

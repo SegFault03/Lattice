@@ -17,6 +17,14 @@ public final class TableDraftState implements PersistentStateComponent<TableDraf
         public int inspectorColumn = -1;
         public String inspectorText;
         public String inspectorKind = "TEXT";
+        Draft copy() {
+            Draft copy = new Draft(); copy.columns.addAll(columns); copy.types.addAll(types);
+            for (Row row : originals) copy.originals.add(row.copy());
+            for (Row row : rows) copy.rows.add(row.copy());
+            copy.inspectorRow = inspectorRow; copy.inspectorColumn = inspectorColumn;
+            copy.inspectorText = inspectorText; copy.inspectorKind = inspectorKind;
+            return copy;
+        }
         public static Draft capture(List<String> columns, List<String> types, List<List<Object>> originals, List<List<Object>> rows) {
             Draft draft = new Draft();
             draft.columns.addAll(columns); draft.types.addAll(types);
@@ -43,6 +51,7 @@ public final class TableDraftState implements PersistentStateComponent<TableDraf
     }
     public static final class Row {
         public List<Cell> cells = new ArrayList<>();
+        Row copy() { Row copy = new Row(); for (Cell cell : cells) copy.cells.add(cell.copy()); return copy; }
         static Row capture(List<Object> values) {
             Row row = new Row(); for (Object value : values) row.cells.add(Cell.capture(value)); return row;
         }
@@ -51,6 +60,7 @@ public final class TableDraftState implements PersistentStateComponent<TableDraf
     public static final class Cell {
         public String kind = "null";
         public String text = "";
+        Cell copy() { Cell copy = new Cell(); copy.kind = kind; copy.text = text; return copy; }
         static Cell capture(Object value) {
             Cell cell = new Cell();
             if (value == null) return cell;
@@ -96,7 +106,12 @@ public final class TableDraftState implements PersistentStateComponent<TableDraf
     }
     private State state = new State();
     public static TableDraftState getInstance(Project project) { return project.getService(TableDraftState.class); }
-    @Override public synchronized State getState() { return state; }
+    /** A snapshot: the live drafts keep changing on the EDT while the IDE serializes state elsewhere. */
+    @Override public synchronized State getState() {
+        State snapshot = new State();
+        state.drafts.forEach((key, draft) -> snapshot.drafts.put(key, draft.copy()));
+        return snapshot;
+    }
     @Override public synchronized void loadState(State state) { this.state = state; }
     public synchronized Draft get(String key) { return state.drafts.get(key); }
     public synchronized void put(String key, Draft draft) { state.drafts.put(key, draft); }
@@ -106,4 +121,6 @@ public final class TableDraftState implements PersistentStateComponent<TableDraf
         Draft draft=state.drafts.remove(source); if(draft!=null) state.drafts.put(target,draft); return true;
     }
     public synchronized void remove(String key) { state.drafts.remove(key); }
+    /** Draft keys are {@code table:<connection id>:<database>:<table>}. */
+    public synchronized void removeConnection(String connectionId) { state.drafts.keySet().removeIf(key -> key.startsWith("table:" + connectionId + ":")); }
 }

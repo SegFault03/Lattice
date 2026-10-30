@@ -5,6 +5,7 @@ import com.intellij.ui.JBColor;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.components.JBTextField;
 import com.intellij.util.ui.JBUI;
+import com.intellij.util.ui.UIUtil;
 import com.segfault03.ideadb.model.*;
 import com.segfault03.ideadb.provider.*;
 import com.segfault03.ideadb.service.DdlService;
@@ -68,7 +69,7 @@ public final class CreateTablePanel extends JPanel {
     public CreateTablePanel(ConnectionConfig config, String namespace) {
         super(new BorderLayout()); this.config = config; this.namespace = namespace;
         var provider = DatabaseProviders.get(config.getType());
-        type = DatabaseInputs.comboBox(provider.dataTypes().toArray(String[]::new)); type.setEditable(provider.supportsCustomTypes());
+        type = DatabaseInputs.comboBox(provider.dataTypes().toArray(String[]::new)); type.setEditable(true);
         setMinimumSize(JBUI.size(840, 620));
         add(header(), BorderLayout.NORTH);
         JPanel body = panel(new BorderLayout()); body.add(tableIdentity(), BorderLayout.NORTH);
@@ -287,7 +288,6 @@ public final class CreateTablePanel extends JPanel {
     private static Color info() { return JBColor.namedColor("Lattice.secondaryForeground", new JBColor(0x6B7078, 0xA8ADB5)); }
     private static Color accent() { return JBColor.namedColor("Link.activeForeground", new JBColor(0x3574F0, 0x82ABFF)); }
     private static Color border() { return JBColor.namedColor("Component.borderColor", new JBColor(0xD8DBE0, 0x505358)); }
-    private static Color selectedBackground() { return JBColor.namedColor("List.selectionInactiveBackground", new JBColor(0xE8F0FF, 0x334760)); }
     private static final class RoundedPanel extends JPanel {
         RoundedPanel() { setOpaque(false); }
         @Override protected void paintComponent(Graphics graphics) {
@@ -307,15 +307,14 @@ public final class CreateTablePanel extends JPanel {
                 @Override protected void paintComponent(Graphics graphics) {
                     if (selected) {
                         Graphics2D g=(Graphics2D)graphics.create(); g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
-                        g.setColor(selectedBackground());g.fillRoundRect(0,2,getWidth()-1,getHeight()-4,JBUI.scale(8),JBUI.scale(8));
-                        if(focus){g.setColor(accent());g.drawRoundRect(0,2,getWidth()-1,getHeight()-4,JBUI.scale(8),JBUI.scale(8));}g.dispose();
+                        g.setColor(UIUtil.getListSelectionBackground(list.hasFocus()));g.fillRoundRect(0,2,getWidth()-1,getHeight()-4,JBUI.scale(8),JBUI.scale(8));g.dispose();
                     }
                     super.paintComponent(graphics);
                 }
             };
             row.setOpaque(false);row.setBorder(JBUI.Borders.empty(9,10));row.add(new JLabel(column.values.primaryKey?Icons.KEY:Icons.COLUMN),BorderLayout.WEST);
-            JPanel captions=vertical();JLabel title=new JLabel(column.getName());title.setFont(list.getFont());if(selected){title.setForeground(accent());title.setFont(title.getFont().deriveFont(Font.BOLD));}
-            stack(captions,title);gap(captions,4);JLabel dataType=muted(column.formattedType());dataType.setFont(list.getFont().deriveFont(Math.max(10f,list.getFont().getSize2D()-1)));stack(captions,dataType);row.add(captions,BorderLayout.CENTER);
+            JPanel captions=vertical();JLabel title=new JLabel(column.getName());title.setFont(list.getFont());if(selected){title.setForeground(UIUtil.getListSelectionForeground(list.hasFocus()));title.setFont(title.getFont().deriveFont(Font.BOLD));}
+            stack(captions,title);gap(captions,4);JLabel dataType=muted(column.formattedType());dataType.setFont(list.getFont().deriveFont(Math.max(10f,list.getFont().getSize2D()-1)));if(selected)dataType.setForeground(UIUtil.getListSelectionForeground(list.hasFocus()));stack(captions,dataType);row.add(captions,BorderLayout.CENTER);
             row.add(muted(String.format("%02d",columns.indexOf(column)+1)),BorderLayout.EAST);return row;
         }
     }

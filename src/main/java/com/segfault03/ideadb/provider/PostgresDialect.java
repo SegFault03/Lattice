@@ -70,15 +70,17 @@ final class PostgresDialect extends AbstractSqlDialect {
         if (original.isGenerated()) throw new IllegalArgumentException("Change a generated expression in the SQL console");
         String prefix = "ALTER TABLE " + formatTable(config,schema,table) + " ALTER COLUMN " + quoteIdentifier(requested.getName());
         boolean identity = original.isAutoIncrement() && original.getDefaultValue() == null;
-        if (identity && !requested.getDefaultValue().isBlank()) throw new IllegalArgumentException("An identity column cannot have another default");
+        String requestedDefault = Objects.toString(requested.getDefaultValue(), ""), beforeDefault = Objects.toString(original.getDefaultValue(), "");
+        if (identity && !requestedDefault.isBlank()) throw new IllegalArgumentException("An identity column cannot have another default");
+        String requestedType = type(requested), beforeType = original.getColumnSize() > 0 || original.getDataType() != Types.NUMERIC && original.getDataType() != Types.DECIMAL ? ddlType(original) : original.getTypeName();
+        boolean typeChanged = !requestedType.equalsIgnoreCase(beforeType), defaultChanged = !identity && !requestedDefault.equals(beforeDefault);
         List<String> statements = new ArrayList<>();
-        if (!identity) statements.add(prefix + " DROP DEFAULT;");
-        statements.add(prefix + " TYPE " + type(requested) + " USING " + quoteIdentifier(requested.getName()) + "::" + type(requested) + ";");
-        if (!identity && !requested.getDefaultValue().isBlank()) {
-            String value = Objects.equals(requested.getDefaultValue(),original.getDefaultValue()) ? original.getDefaultValue() : formatDefault(requested);
-            statements.add(prefix + " SET DEFAULT " + value + ";");
-        }
-        statements.add(prefix + (requested.isNullable() ? " DROP NOT NULL;" : " SET NOT NULL;"));
+        // The old default is dropped around a type change so PostgreSQL never has to cast it; unchanged ones are restored afterwards.
+        if (!identity && !beforeDefault.isBlank() && (typeChanged || defaultChanged)) statements.add(prefix + " DROP DEFAULT;");
+        if (typeChanged) statements.add(prefix + " TYPE " + requestedType + " USING " + quoteIdentifier(requested.getName()) + "::" + requestedType + ";");
+        if (!identity && !requestedDefault.isBlank() && (defaultChanged || typeChanged && !beforeDefault.isBlank()))
+            statements.add(prefix + " SET DEFAULT " + (defaultChanged ? formatDefault(requested) : original.getDefaultValue()) + ";");
+        if (requested.isNullable() != original.isNullable()) statements.add(prefix + (requested.isNullable() ? " DROP NOT NULL;" : " SET NOT NULL;"));
         return List.copyOf(statements);
     }
 

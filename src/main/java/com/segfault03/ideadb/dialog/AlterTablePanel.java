@@ -5,6 +5,7 @@ import com.intellij.ui.JBColor;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.components.JBTextField;
 import com.intellij.util.ui.JBUI;
+import com.intellij.util.ui.UIUtil;
 import com.segfault03.ideadb.model.*;
 import com.segfault03.ideadb.provider.DatabaseProviders;
 import com.segfault03.ideadb.ui.*;
@@ -80,7 +81,7 @@ public final class AlterTablePanel extends JPanel {
         super(new BorderLayout());
         this.config = config; this.tableName = tableName; this.tableDraft = tableName; this.columns = List.copyOf(columns);
         type = DatabaseInputs.comboBox(DatabaseProviders.get(config.getType()).dataTypes().toArray(String[]::new));
-        type.setEditable(DatabaseProviders.get(config.getType()).supportsCustomTypes());
+        type.setEditable(true);
         setMinimumSize(JBUI.size(780, 570));
         setBorder(JBUI.Borders.empty());
 
@@ -373,7 +374,7 @@ public final class AlterTablePanel extends JPanel {
         JLabel caption = muted("SQL preview"); caption.setFont(caption.getFont().deriveFont(Font.BOLD));
         caption.getAccessibleContext().setAccessibleName("Table SQL preview title");
         caption.setIcon(Icons.CONSOLE); caption.setIconTextGap(JBUI.scale(7));
-        title.add(caption, BorderLayout.CENTER); title.add(muted(config.getType().getDisplayName()), BorderLayout.EAST);
+        title.add(caption, BorderLayout.CENTER);
         preview.add(title, BorderLayout.NORTH);
         sql.setEditable(false); sql.setOpaque(false); sql.setBorder(JBUI.Borders.empty());
         sql.setFont(new Font(Font.MONOSPACED, Font.PLAIN, Math.round(TableDialogChrome.font(Font.PLAIN,-1).getSize2D()))); sql.getAccessibleContext().setAccessibleName("Alter table SQL preview");
@@ -406,7 +407,6 @@ public final class AlterTablePanel extends JPanel {
     private static Color info() { return JBColor.namedColor("Lattice.secondaryForeground", new JBColor(0x6B7078, 0xA8ADB5)); }
     private static Color accent() { return JBColor.namedColor("Link.activeForeground", new JBColor(0x3574F0, 0x82ABFF)); }
     private static Color border() { return JBColor.namedColor("Component.borderColor", new JBColor(0xD8DBE0, 0x505358)); }
-    private static Color selectedBackground() { return JBColor.namedColor("List.selectionInactiveBackground", new JBColor(0xE8F0FF, 0x334760)); }
     private static final class RoundedPanel extends JPanel {
         RoundedPanel() { setOpaque(false); }
         @Override protected void paintComponent(Graphics graphics) {
@@ -426,8 +426,8 @@ public final class AlterTablePanel extends JPanel {
                 @Override protected void paintComponent(Graphics graphics) {
                     if (isSelected) {
                         Graphics2D g = (Graphics2D)graphics.create(); g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                        g.setColor(selectedBackground()); g.fillRoundRect(0, 2, getWidth()-1, getHeight()-4, JBUI.scale(8), JBUI.scale(8));
-                        if (focus) { g.setColor(accent()); g.drawRoundRect(0, 2, getWidth()-1, getHeight()-4, JBUI.scale(8), JBUI.scale(8)); } g.dispose();
+                        g.setColor(UIUtil.getListSelectionBackground(list.hasFocus())); g.fillRoundRect(0, 2, getWidth()-1, getHeight()-4, JBUI.scale(8), JBUI.scale(8));
+                        g.dispose();
                     }
                     super.paintComponent(graphics);
                 }
@@ -435,8 +435,8 @@ public final class AlterTablePanel extends JPanel {
             row.setOpaque(false); row.setBorder(JBUI.Borders.empty(9, 10));
             row.add(new JLabel(column.original != null && column.original.isPrimaryKey() ? column.original != null && column.original.isForeignKey() ? Icons.PRIMARY_FOREIGN_KEY : Icons.KEY : column.original != null && column.original.isForeignKey() ? Icons.FOREIGN_KEY : Icons.COLUMN), BorderLayout.WEST);
             JPanel captions = vertical(); JLabel title = new JLabel(column.getName()); title.setFont(list.getFont());
-            if (isSelected) { title.setForeground(accent()); title.setFont(title.getFont().deriveFont(Font.BOLD)); }
-            stack(captions, title); gap(captions, 4); JLabel dataType=muted(column.getFormattedType());dataType.setFont(list.getFont().deriveFont(Math.max(10f,list.getFont().getSize2D()-1)));stack(captions,dataType); row.add(captions, BorderLayout.CENTER);
+            if (isSelected) { title.setForeground(UIUtil.getListSelectionForeground(list.hasFocus())); title.setFont(title.getFont().deriveFont(Font.BOLD)); }
+            stack(captions, title); gap(captions, 4); JLabel dataType=muted(column.getFormattedType());dataType.setFont(list.getFont().deriveFont(Math.max(10f,list.getFont().getSize2D()-1)));if (isSelected) dataType.setForeground(UIUtil.getListSelectionForeground(list.hasFocus()));stack(captions,dataType); row.add(captions, BorderLayout.CENTER);
             if (draftChanged(column)) { JLabel dot = new JLabel(column.dropped ? "Drop" : column.original == null ? "New" : "●"); dot.setFont(TableDialogChrome.font(Font.PLAIN,-2)); dot.setForeground(accent()); row.add(dot, BorderLayout.EAST); }
             row.getAccessibleContext().setAccessibleName(column.getName() + " " + column.getFormattedType()); return row;
         }

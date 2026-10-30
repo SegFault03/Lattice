@@ -39,7 +39,7 @@
 
     <!-- Maven settings identify the effective local repository used for driver discovery. -->
     <depends>com.intellij.modules.platform</depends>
-    <depends>org.jetbrains.idea.maven</depends>
+    <depends optional="true" config-file="lattice-maven.xml">org.jetbrains.idea.maven</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <postStartupActivity implementation="com.segfault03.ideadb.release.ReleaseNotesStartupActivity"/>

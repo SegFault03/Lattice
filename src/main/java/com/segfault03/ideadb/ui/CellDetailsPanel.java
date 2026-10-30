@@ -643,6 +643,7 @@ final class CellDetailsPanel extends JPanel {
             addMetadata("Default", c.getDefaultValue() == null ? "—" : c.getDefaultValue());
             if (c.isPrimaryKey()) addMetadata("Primary key", "Yes");
             if (c.isForeignKey()) addMetadata("Foreign key", "Yes");
+            if (c.isGenerated() || c.isAutoIncrement()) addMetadata("Generated", c.isAutoIncrement() ? "Auto increment" : "Yes");
         }
         boolean invalid = cell.validationError() != null && !cell.validationError().isBlank();
         validation.setText(invalid ? cell.validationError() : "");

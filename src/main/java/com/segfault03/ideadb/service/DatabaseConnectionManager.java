@@ -95,6 +95,12 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
     }
 
     /** Exclusive short-lived connection for a transaction; caller closes it. */
+    /** Rejects work for a removed or reconfigured connection without opening anything. */
+    /** Validates like a fresh open and returns the close generation, so callers holding a connection can tell it was disconnected since. */
+    int validateOpen(ConnectionConfig config) throws SQLException {
+        ConnectionGroup group = activeConnections.computeIfAbsent(config.getId(), id -> new ConnectionGroup());
+        synchronized (group) { validateConfiguration(group, config); return group.generation; }
+    }
     public Connection openConnection(ConnectionConfig config) throws Exception {
         ConnectionGroup group = activeConnections.computeIfAbsent(config.getId(), id -> new ConnectionGroup());
         synchronized (group) { validateConfiguration(group, config); }

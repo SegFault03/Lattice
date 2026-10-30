@@ -68,7 +68,7 @@ class DriverStoreTest {
                 installed.stream().skip(1).map(InstalledDriver::version).toList());
         assertTrue(installed.stream().skip(1).allMatch(driver -> driver.jar() != null && !driver.packaged()),
                 "Stored drivers expose the retained JAR they load from");
-        assertEquals("9.0.0 · DOWNLOADED", installed.get(1).label(), "Retained driver hint is uppercase in the available driver list");
+        assertEquals("9.0.0 · Downloaded", installed.get(1).label(), "Retained driver hint names its origin in the available driver list");
     }
 
     @Test void downloadsAreNeverFetchedTwiceAndUnusableFilesAreNotTrusted() throws Exception {

@@ -9,7 +9,12 @@ import java.util.Objects;
  * configured local repository.
  */
 public record InstalledDriver(DatabaseType type, String version, Kind kind, Path jar) {
-    public enum Kind { BUNDLED, DOWNLOADED, DISCOVERED }
+    public enum Kind {
+        BUNDLED("Bundled"), DOWNLOADED("Downloaded"), DISCOVERED("Local Maven repository");
+        private final String displayName;
+        Kind(String displayName) { this.displayName = displayName; }
+        public String displayName() { return displayName; }
+    }
 
     public InstalledDriver {
         Objects.requireNonNull(type);
@@ -32,7 +37,7 @@ public record InstalledDriver(DatabaseType type, String version, Kind kind, Path
 
     public String label() {
         String name = version.isBlank() ? "Packaged with plugin" : version;
-        return name + " · " + kind;
+        return name + " · " + kind.displayName();
     }
 
     @Override public String toString() {

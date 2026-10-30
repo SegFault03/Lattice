@@ -28,7 +28,8 @@ public class TableMetadata {
     }
 
     public boolean isView() {
-        return "VIEW".equalsIgnoreCase(type);
+        // Includes MATERIALIZED VIEW and FOREIGN TABLE, which PostgreSQL grid edits do not support.
+        return type.toUpperCase(java.util.Locale.ROOT).endsWith("VIEW") || "FOREIGN TABLE".equalsIgnoreCase(type);
     }
 
     public List<String> getPrimaryKeyColumnNames() {

@@ -142,14 +142,6 @@ public class ExportService {
         } finally { java.nio.file.Files.deleteIfExists(temporary); }
     }
 
-    public void exportCreateTable(String ddl, File file) throws Exception {
-        try (BufferedWriter bw = new BufferedWriter(new FileWriter(file, StandardCharsets.UTF_8))) {
-            bw.write(ddl);
-            if (!ddl.endsWith("\n")) {
-                bw.newLine();
-            }
-        }
-    }
 
     private String escapeCsv(String value) {
         if (value == null) return "";
