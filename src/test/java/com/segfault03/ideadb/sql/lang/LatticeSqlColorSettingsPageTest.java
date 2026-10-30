@@ -24,14 +24,15 @@ class LatticeSqlColorSettingsPageTest {
         }
     }
 
-    @Test void typesAndFunctionsInheritFromAttributesThatDifferFromPlainTextAndFromKeywords() {
+    @Test void typesInheritKeywordColorsAndFunctionsAnAttributeOfTheirOwn() {
         var type = LatticeSqlSyntaxHighlighter.TYPE.getFallbackAttributeKey();
         var function = LatticeSqlSyntaxHighlighter.FUNCTION.getFallbackAttributeKey();
         assertNotNull(type);
         assertNotNull(function);
         assertNotEquals(type, function);
+        assertEquals(DefaultLanguageHighlighterColors.KEYWORD, type, "a type reads like a keyword until the user colors it");
+        assertNotEquals(DefaultLanguageHighlighterColors.KEYWORD, function);
         for (var inherited : new com.intellij.openapi.editor.colors.TextAttributesKey[] {type, function}) {
-            assertNotEquals(DefaultLanguageHighlighterColors.KEYWORD, inherited);
             assertNotEquals(DefaultLanguageHighlighterColors.IDENTIFIER, inherited);
             assertNotEquals(DefaultLanguageHighlighterColors.CLASS_NAME, inherited, "class names have no color of their own in the stock schemes");
             assertNotEquals(DefaultLanguageHighlighterColors.FUNCTION_CALL, inherited, "nor do function calls");

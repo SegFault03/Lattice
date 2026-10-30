@@ -48,6 +48,8 @@ public final class SqlDocRenderer {
         return true;
     }
 
+    private static final String CELL = "<td valign=\"top\" nowrap=\"nowrap\" style=\"padding: 0 8px 0 0\">";
+
     /** Comment, columns, keys and the link to the editor: the card of a table, and of an alias for it. */
     private static void tableBody(StringBuilder html, ExplorerMetadataSnapshot.Table table, String namespace, String tableName,
                                   SqlSchema schema, String connection) {
@@ -57,13 +59,12 @@ public final class SqlDocRenderer {
         section(html, "Columns", columns(table));
         section(html, "Foreign keys", foreignKeys(table, schema, connection));
         section(html, "Referenced by", referencedBy(namespace, tableName, schema, connection));
+        // The card ends with its sections, like the column card: a trailing content block leaves a gap above the location bar.
+        section(html, "Editor", link(SqlDocLinks.open(connection, namespace, metadata.getName()), "Open in Lattice"));
         html.append(DocumentationMarkup.SECTIONS_END);
-        html.append(DocumentationMarkup.CONTENT_START)
-                .append(link(SqlDocLinks.open(connection, namespace, metadata.getName()), "Open in Lattice"))
-                .append(DocumentationMarkup.CONTENT_END);
     }
 
-    /** Names and types as two aligned columns; the key and null flags follow the type in grey. */
+    /** Names, types and flags as three aligned columns; nothing inside a cell wraps, and the flags are grey. */
     private static @Nullable String columns(ExplorerMetadataSnapshot.Table table) {
         if (!table.columnsLoaded()) return DocumentationMarkup.GRAYED_START + "not read yet" + DocumentationMarkup.GRAYED_END;
         if (table.columns().isEmpty()) return null;
@@ -71,7 +72,7 @@ public final class SqlDocRenderer {
         int shown = 0;
         for (ColumnMetadata column : table.columns()) {
             if (shown++ == MAX_COLUMNS) {
-                rows.append("<tr><td colspan=\"2\">").append(DocumentationMarkup.GRAYED_START).append("... ").append(table.columns().size() - MAX_COLUMNS)
+                rows.append("<tr><td colspan=\"3\">").append(DocumentationMarkup.GRAYED_START).append("... ").append(table.columns().size() - MAX_COLUMNS)
                         .append(" more").append(DocumentationMarkup.GRAYED_END).append("</td></tr>");
                 break;
             }
@@ -79,13 +80,17 @@ public final class SqlDocRenderer {
             if (column.isPrimaryKey()) flags.add("PK");
             if (column.isForeignKey()) flags.add("FK");
             if (!column.isNullable()) flags.add("not null");
-            rows.append("<tr><td valign=\"top\"><b>").append(esc(column.getName())).append("</b>&nbsp;&nbsp;&nbsp;</td><td>")
-                    .append(esc(column.getFormattedType()));
-            if (!flags.isEmpty()) rows.append(' ').append(DocumentationMarkup.GRAYED_START).append(esc(String.join(", ", flags))).append(DocumentationMarkup.GRAYED_END);
+            rows.append("<tr>").append(CELL).append("<b>").append(esc(column.getName())).append("</b></td>")
+                    .append(CELL).append(unbroken(column.getFormattedType())).append("</td>")
+                    .append("<td valign=\"top\" nowrap=\"nowrap\">");
+            if (!flags.isEmpty()) rows.append(DocumentationMarkup.GRAYED_START).append(unbroken(String.join(", ", flags))).append(DocumentationMarkup.GRAYED_END);
             rows.append("</td></tr>");
         }
         return rows.append("</table>").toString();
     }
+
+    /** Escaped text whose spaces do not break the line. */
+    private static String unbroken(String text) { return esc(text).replace(" ", "&nbsp;"); }
 
     private static @Nullable String foreignKeys(ExplorerMetadataSnapshot.Table table, SqlSchema schema, String connection) {
         List<String> lines = new ArrayList<>();

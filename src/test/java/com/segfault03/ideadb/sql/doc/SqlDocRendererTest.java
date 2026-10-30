@@ -1,5 +1,6 @@
 package com.segfault03.ideadb.sql.doc;
 
+import com.intellij.lang.documentation.DocumentationMarkup;
 import com.segfault03.ideadb.model.DatabaseType;
 import org.junit.jupiter.api.Test;
 
@@ -15,8 +16,8 @@ class SqlDocRendererTest {
         String html = render(new SqlTarget.Table("PUBLIC", "customers"));
         assertTrue(html.contains("PUBLIC.customers"), html);
         assertTrue(html.contains("People who buy things"));
-        assertTrue(html.contains("<b>id</b>&nbsp;&nbsp;&nbsp;</td><td>INTEGER") && html.contains("PK, not null"), html);
-        assertTrue(html.contains("<b>name</b>&nbsp;&nbsp;&nbsp;</td><td>VARCHAR(40)"));
+        assertTrue(html.contains("<b>id</b></td>") && html.contains("INTEGER</td>") && html.contains("PK,&nbsp;not&nbsp;null"), html);
+        assertTrue(html.contains("<b>name</b></td>") && html.contains("VARCHAR(40)</td>"));
         assertTrue(html.contains("Referenced by"));
         assertTrue(html.contains(SqlDocLinks.show(id, new SqlTarget.Column("PUBLIC", "orders", "customer_id")).replace("&", "&amp;")), "links to orders.customer_id");
         assertTrue(html.contains("Open in Lattice"));
@@ -30,15 +31,20 @@ class SqlDocRendererTest {
         String table = html.substring(html.indexOf("<table cellspacing"), html.indexOf("</table>", html.indexOf("<table cellspacing")));
         assertEquals(3, table.split("<tr>").length - 1, "one row per column of orders");
         assertEquals(3, table.split("</tr>", -1).length - 1, "every row is closed");
-        assertTrue(html.contains("<b>total</b>&nbsp;&nbsp;&nbsp;</td><td>DECIMAL(10,2)"), html);
-        assertTrue(html.contains("not null"), "one wording for nullability");
+        assertTrue(table.contains("<b>total</b></td>") && table.contains("DECIMAL(10,2)</td>"), html);
+        assertTrue(table.contains("not&nbsp;null"), "one wording for nullability, which never breaks");
+        assertEquals(6, table.split("padding: 0 8px 0 0", -1).length - 1, "name and type cells of each row are padded");
+        assertEquals(9, table.split("nowrap=\"nowrap\"", -1).length - 1, "no cell of the three columns wraps");
+        assertTrue(table.contains("<td valign=\"top\" nowrap=\"nowrap\"><span class='grayed'>PK,&nbsp;not&nbsp;null"), "the flags are a column of their own, in grey");
+        assertTrue(html.endsWith(DocumentationMarkup.SECTIONS_END), "no trailing block above the location bar");
+        assertFalse(html.contains(DocumentationMarkup.CONTENT_START + DocumentationMarkup.CONTENT_END), "no empty content block");
         assertFalse(html.contains("Nullable"), html);
     }
 
     @Test void aTableCardShowsForeignKeysAsLinksToTheTarget() {
         String html = render(new SqlTarget.Table("PUBLIC", "orders"));
         assertTrue(html.contains("Foreign keys"), html);
-        assertTrue(html.contains("customer_id</b>&nbsp;&nbsp;&nbsp;</td><td>INTEGER"), html);
+        assertTrue(html.contains("customer_id</b></td>") && html.contains("INTEGER</td>"), html);
         assertTrue(html.contains("PUBLIC.customers.id"), "the label names the target column");
         assertTrue(html.contains(SqlDocLinks.show(id, new SqlTarget.Column("PUBLIC", "customers", "id"))));
         assertFalse(html.contains("Referenced by"), "nothing points at orders");
@@ -78,7 +84,7 @@ class SqlDocRendererTest {
         String alias = render(new SqlTarget.Alias("c", "PUBLIC", "customers"));
         String table = render(new SqlTarget.Table("PUBLIC", "customers"));
         assertTrue(alias.contains("People who buy things"), alias);
-        assertTrue(alias.contains("<b>id</b>&nbsp;&nbsp;&nbsp;</td><td>INTEGER") && alias.contains("Referenced by") && alias.contains("Open in Lattice"), alias);
+        assertTrue(alias.contains("<b>id</b></td>") && alias.contains("Referenced by") && alias.contains("Open in Lattice"), alias);
         assertEquals(table.substring(table.indexOf("<table cellspacing")), alias.substring(alias.indexOf("<table cellspacing")), "the columns and keys are the table card's");
     }
 
