@@ -130,8 +130,15 @@ def render(args, deps, parser):
     production.mkdir(exist_ok=True)
     preview.mkdir(exist_ok=True)
     drivers = {kind: deps.jdbc(kind) for kind in ('mysql', 'hsqldb')}
-    cp = os.pathsep.join(map(str, jars + list(drivers.values()) + test_jars))
-    sources = sorted((ROOT / 'src/main/java').rglob('*.java'))
+    # Kotlin settings classes come from Gradle; the Java/Kotlin PSI injectors need language plugins
+    # that the headless platform lacks and are not used by any rendered screen.
+    kotlin_classes = ROOT / 'build/classes/kotlin/main'
+    # Always ask Gradle: its up-to-date check is quick and keeps the classes in step with the sources.
+    subprocess.run([gradle_wrapper(), '--quiet', 'compileKotlin'], check=True, cwd=ROOT, timeout=900)
+    cp = os.pathsep.join(map(str, jars + list(drivers.values()) + test_jars + [kotlin_classes]))
+    injectors = [ROOT / 'src/main/java/com/segfault03/ideadb/sql/inject' / language for language in ('java', 'kotlin')]
+    sources = sorted(path for path in (ROOT / 'src/main/java').rglob('*.java')
+                     if not any(root in path.parents for root in injectors))
     java_args(javac, ['--release', '21', '-encoding', 'UTF-8', '-cp', cp, '-d', str(production)] + list(map(str, sources)), output / 'compile-production.args')
     preview_sources = sorted((ROOT / 'scripts/ui-preview').glob('*.java'))
     java_args(javac, ['--release', '21', '-encoding', 'UTF-8', '-cp', os.pathsep.join([str(production), str(flatlaf), cp]), '-d', str(preview)] + list(map(str, preview_sources)), output / 'compile-preview.args')
