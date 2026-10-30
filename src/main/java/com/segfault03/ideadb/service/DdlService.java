@@ -113,6 +113,10 @@ public final class DdlService {
         DatabaseProviders.get(config.getType()).requireFeature(DatabaseFeature.DROP_TABLE);
         DatabaseProviders.get(config.getType()).dialect().dropTable(conn, config, dbName, tableName);
     }
+    public void dropForeignTable(Connection conn, ConnectionConfig config, String dbName, String tableName) throws Exception {
+        DatabaseProviders.get(config.getType()).requireFeature(DatabaseFeature.DROP_TABLE);
+        DatabaseProviders.get(config.getType()).dialect().dropForeignTable(conn, config, dbName, tableName);
+    }
     public void truncateTable(Connection conn, ConnectionConfig config, String dbName, String tableName) throws Exception {
         DatabaseProviders.get(config.getType()).requireFeature(DatabaseFeature.TRUNCATE_TABLE);
         DatabaseProviders.get(config.getType()).dialect().truncateTable(conn, config, dbName, tableName);

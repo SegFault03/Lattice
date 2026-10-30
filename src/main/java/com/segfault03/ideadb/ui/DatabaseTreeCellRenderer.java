@@ -70,7 +70,7 @@ public class DatabaseTreeCellRenderer extends ColoredTreeCellRenderer {
                 break;
 
             case VIEW:
-                setIcon(Icons.TABLE);
+                setIcon(Icons.VIEW);
                 appendName(tree, data, data.getName(), SimpleTextAttributes.REGULAR_ATTRIBUTES);
                 append(" (view)", SimpleTextAttributes.GRAYED_ATTRIBUTES);
                 break;

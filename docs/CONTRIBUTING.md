@@ -11,6 +11,18 @@ python -m unittest discover -s scripts/tests -v
 
 On Linux/macOS you can also use `./gradlew test buildPlugin`; on Windows use `.\gradlew.bat test buildPlugin`. Set `JAVA_HOME` to JDK 21 or put Java on PATH, or pass `--java-home /path/to/jdk-21` to `scripts/test.py`. Gradle downloads the configured SDK. `--ide-home` / `-Plattice.ide.home` optionally select your own IntelliJ 2025.1 SDK.
 
+## SQL editor fixture tests
+
+Editor features (language, completion, hover, injection, validation) have IDE fixture tests, which run a headless IDE and are not part of `./gradlew test`. They run in three separate JVMs because the Java and Kotlin plugins cannot share one:
+
+```text
+./gradlew platformTest         # .sql files, completion, hover, bindings
+./gradlew javaPlatformTest     # SQL in Java strings (tests named *JavaFixtureTest)
+./gradlew kotlinPlatformTest   # SQL in Kotlin strings (tests named *KotlinFixtureTest)
+```
+
+Java and Kotlin PSI are compiled against the jars in the resolved IntelliJ SDK (`plugins/java/lib`, `plugins/Kotlin/lib`), and the plugin loads its Java and Kotlin parts through optional descriptors (`lattice-java.xml`, `lattice-kotlin.xml`).
+
 ## Database tests
 
 ```text

@@ -9,6 +9,7 @@ import com.segfault03.ideadb.model.ConnectionConfig;
 import org.jetbrains.annotations.NotNull;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
 
 @State(name = "com.segfault03.ideadb.state.DatabaseSettingsState", storages = @Storage("LatticeSettings.xml"))
 public class DatabaseSettingsState implements PersistentStateComponent<DatabaseSettingsState.State> {
@@ -45,6 +46,13 @@ public class DatabaseSettingsState implements PersistentStateComponent<DatabaseS
         this.credentials = Objects.requireNonNull(credentials);
         this.changed = Objects.requireNonNull(changed);
     }
+    /** Counts the changes published to {@link DatabaseSettingsListener}, so caches derived from the saved connections can tell when to drop. */
+    private final AtomicLong modifications = new AtomicLong();
+    private void notifyChanged() {
+        modifications.incrementAndGet(); // before publishing: a listener that re-reads must see the new count
+        changed.run();
+    }
+    public long modificationCount() { return modifications.get(); }
     private static void publishChange() {
         var application = ApplicationManager.getApplication();
         if (application != null) application.getMessageBus().syncPublisher(DatabaseSettingsListener.TOPIC).connectionsChanged();
@@ -83,9 +91,11 @@ public class DatabaseSettingsState implements PersistentStateComponent<DatabaseS
         }
         restored.connections.forEach(manager::registerConfiguration);
         state = restored;
-        changed.run();
+        notifyChanged();
     }
     public synchronized List<ConnectionConfig> getConnections() { return state.connections.stream().map(ConnectionConfig::copy).toList(); }
+    /** How many connections are saved, without copying them. */
+    public synchronized int connectionCount() { return state.connections.size(); }
     public synchronized boolean isShowWelcomeScreen() { return state.showWelcomeScreen; }
     public synchronized void setShowWelcomeScreen(boolean show) { state.showWelcomeScreen = show; }
     public void addConnection(ConnectionConfig config) { updateConnection(config); }
@@ -95,7 +105,7 @@ public class DatabaseSettingsState implements PersistentStateComponent<DatabaseS
         state.connections.removeIf(c -> c.getId().equals(id));
         MetadataCacheState.getInstance().remove(id);
         dropDrafts(id);
-        changed.run();
+        notifyChanged();
     }
     /** Pending table edits are per project; only open projects can be reached here. */
     private static void dropDrafts(String connectionId) {
@@ -112,7 +122,7 @@ public class DatabaseSettingsState implements PersistentStateComponent<DatabaseS
         for (int i = 0; i < state.connections.size(); i++) if (state.connections.get(i).getId().equals(config.getId())) { index = i; break; }
         if (index < 0) state.connections.add(stored); else state.connections.set(index, stored);
         com.segfault03.ideadb.service.DatabaseConnectionManager.getInstance().registerConfiguration(config);
-        changed.run();
+        notifyChanged();
     }
     public synchronized ConnectionConfig getConnection(String id) {
         return state.connections.stream().filter(c -> c.getId().equals(id)).findFirst().map(ConnectionConfig::copy).orElse(null);

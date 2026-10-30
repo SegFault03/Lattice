@@ -15,6 +15,8 @@ public class Icons {
     public static final Icon PLUG_CONNECTED = loadIcon("/icons/plug-connected.svg", AllIcons.General.GreenCheckmark);
     public static final Icon PLUG_DISCONNECTED = loadIcon("/icons/plug-disconnected.svg", AllIcons.Actions.OfflineMode);
     public static final Icon TABLE = loadIcon("/icons/table.svg", AllIcons.Nodes.DataTables);
+    public static final Icon VIEW = loadIcon("/icons/view.svg", TABLE);
+    public static final Icon SQL_FILE = loadIcon("/icons/sqlFile.svg", AllIcons.FileTypes.Text);
     public static final Icon COLUMN = loadIcon("/icons/column.svg", AllIcons.Nodes.DataColumn);
     public static final Icon KEY = loadIcon("/icons/key.svg", AllIcons.Nodes.ResourceBundle);
     public static final Icon FOREIGN_KEY = loadIcon("/icons/foreign-key.svg", COLUMN);

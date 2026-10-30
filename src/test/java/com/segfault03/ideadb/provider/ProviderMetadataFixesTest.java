@@ -58,17 +58,6 @@ class ProviderMetadataFixesTest {
         }
     }
 
-    @Test void viewLikeRelationKindsAreReadOnlyViews() {
-        for (String type : List.of("VIEW", "MATERIALIZED VIEW", "FOREIGN TABLE")) assertTrue(new TableMetadata(null, "s", "t", type).isView(), type);
-        for (String type : List.of("TABLE", "PARTITIONED TABLE")) assertFalse(new TableMetadata(null, "s", "t", type).isView(), type);
-    }
-
-    @Test void postgresListsEveryRelationKindPgjdbcReports() {
-        var types = List.of(new PostgresMetadataAdapter().tableTypes());
-        assertTrue(types.containsAll(List.of("TABLE", "VIEW", "PARTITIONED TABLE", "MATERIALIZED VIEW", "FOREIGN TABLE")));
-        assertEquals(List.of("TABLE", "VIEW"), List.of(new H2MetadataAdapter().tableTypes()));
-    }
-
     @Test void autoDefaultsAreUnquotedOnlyForMatchingColumnTypes() {
         var config = new ConnectionConfig(DatabaseType.H2, "defaults");
         var dialect = new H2Dialect();

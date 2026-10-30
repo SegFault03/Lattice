@@ -1,1 +1,2 @@
+<!-- Loaded only when the Maven plugin is present; it also puts Maven's classes on this plugin's class path. -->
 <idea-plugin/>

@@ -47,6 +47,8 @@ final class PostgresDialect extends AbstractSqlDialect {
     public void createDatabase(Connection c, ConnectionConfig config, String schema) throws Exception { executeSql(c, "CREATE SCHEMA " + quoteIdentifier(schema)); }
     public void dropDatabase(Connection c, ConnectionConfig config, String schema) throws Exception { executeSql(c, "DROP SCHEMA " + quoteIdentifier(schema) + " CASCADE"); }
     public void dropTable(Connection c, ConnectionConfig config, String schema, String table) throws Exception { executeSql(c, "DROP TABLE " + formatTable(config,schema,table)); }
+    public String buildDropForeignTableSql(ConnectionConfig config, String schema, String table) { return "DROP FOREIGN TABLE " + formatTable(config, schema, table); }
+    @Override public void dropForeignTable(Connection c, ConnectionConfig config, String schema, String table) throws Exception { executeSql(c, buildDropForeignTableSql(config, schema, table)); }
     public void truncateTable(Connection c, ConnectionConfig config, String schema, String table) throws Exception { executeSql(c, "TRUNCATE TABLE " + formatTable(config,schema,table)); }
     public void alterTableAddColumn(Connection c, ConnectionConfig config, String schema, String table, ColumnDefinition column) throws Exception {
         executeSql(c, buildAddColumnSql(config, schema, table, column));

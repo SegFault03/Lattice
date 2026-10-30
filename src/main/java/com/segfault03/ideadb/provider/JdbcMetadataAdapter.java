@@ -1,6 +1,7 @@
 package com.segfault03.ideadb.provider;
 
 import com.segfault03.ideadb.model.ColumnMetadata;
+import com.segfault03.ideadb.model.ColumnReference;
 import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.model.TableMetadata;
 
@@ -12,9 +13,9 @@ import java.util.*;
 
 abstract class JdbcMetadataAdapter implements MetadataAdapter {
     protected abstract DatabaseNamespace namespace(String selected);
+    /** Whether the selected namespace is the JDBC catalog (MySQL); otherwise it is the schema. */
+    protected boolean namespaceIsCatalog() { return false; }
     protected abstract void enrichColumns(Connection conn, ConnectionConfig config, String database, String schema, String table, List<ColumnMetadata> columns) throws Exception;
-    /** JDBC TABLE_TYPE values listed in the explorer; engines with more relation kinds override. */
-    protected String[] tableTypes() { return new String[]{"TABLE", "VIEW"}; }
     public String currentSchema(Connection conn) throws java.sql.SQLException { return conn.getSchema(); }
     public List<TableMetadata> getTables(Connection conn, ConnectionConfig config, String database) throws Exception {
         List<TableMetadata> tables = new ArrayList<>();
@@ -23,17 +24,27 @@ abstract class JdbcMetadataAdapter implements MetadataAdapter {
         String catalog = namespace(database).catalog();
         String schema = resolveSchema(meta, namespace(database).schema());
 
-        try (ResultSet rs = meta.getTables(catalog, literalPattern(meta, schema), "%", tableTypes())) {
+        try (ResultSet rs = meta.getTables(catalog, literalPattern(meta, schema), "%", TableTypes.select(reportedTableTypes(meta)))) {
             while (rs.next()) {
                 String tableName = rs.getString("TABLE_NAME");
                 String tableType = rs.getString("TABLE_TYPE");
-                TableMetadata tm = new TableMetadata(catalog, schema, tableName, tableType);
+                TableMetadata tm = new TableMetadata(catalog, schema, tableName, tableType, blankToNull(rs.getString("REMARKS")));
                 tables.add(tm);
             }
         }
 
         tables.sort(Comparator.comparing(TableMetadata::getName));
         return tables;
+    }
+
+    private static List<String> reportedTableTypes(DatabaseMetaData meta) {
+        List<String> types = new ArrayList<>();
+        try (ResultSet rs = meta.getTableTypes()) {
+            while (rs.next()) types.add(rs.getString("TABLE_TYPE"));
+        } catch (java.sql.SQLException unavailable) {
+            // A driver that cannot list its table types is asked for tables and views.
+        }
+        return types;
     }
 
     public List<ColumnMetadata> getColumns(Connection conn, ConnectionConfig config, String database, String tableName) throws Exception {
@@ -47,21 +58,29 @@ abstract class JdbcMetadataAdapter implements MetadataAdapter {
         try (ResultSet rs = meta.getPrimaryKeys(catalog, schema, lookupTable)) {
             while (rs.next()) pkNames.add(rs.getString("COLUMN_NAME"));
         }
-        fetchColumnsInto(meta, catalog, schema, lookupTable, pkNames, columns);
+        Map<String, String> comments = new HashMap<>();
+        fetchColumnsInto(meta, catalog, schema, lookupTable, pkNames, columns, comments);
         enrichColumns(conn, config, database, schema, lookupTable, columns);
-        Set<String> foreignKeys = new HashSet<>();
+        // The enrichers rebuild columns from the basics, so comments and relationships are applied last.
+        Map<String, ColumnReference> foreignKeys = new HashMap<>();
+        boolean namespaceIsCatalog = namespaceIsCatalog();
         try (ResultSet rs = meta.getImportedKeys(catalog, schema, lookupTable)) {
-            if (rs != null) while (rs.next()) foreignKeys.add(rs.getString("FKCOLUMN_NAME"));
+            if (rs != null) while (rs.next()) {
+                String target = namespaceIsCatalog ? rs.getString("PKTABLE_CAT") : rs.getString("PKTABLE_SCHEM");
+                foreignKeys.putIfAbsent(rs.getString("FKCOLUMN_NAME"),
+                        new ColumnReference(target, rs.getString("PKTABLE_NAME"), rs.getString("PKCOLUMN_NAME")));
+            }
         } catch (java.sql.SQLException unavailable) {
             // Foreign-key badges are optional when a driver cannot provide relationship metadata.
         }
-        columns.replaceAll(column -> column.withForeignKey(foreignKeys.contains(column.getName())));
+        columns.replaceAll(column -> column.withForeignKey(foreignKeys.containsKey(column.getName()))
+                .withReference(foreignKeys.get(column.getName())).withComment(comments.get(column.getName())));
 
         return columns;
     }
 
     private void fetchColumnsInto(DatabaseMetaData meta, String catalog, String schema, String tablePattern,
-                                  Set<String> pkNames, List<ColumnMetadata> columns) throws java.sql.SQLException {
+                                  Set<String> pkNames, List<ColumnMetadata> columns, Map<String, String> comments) throws java.sql.SQLException {
         try (ResultSet rs = meta.getColumns(catalog, literalPattern(meta, schema), literalPattern(meta, tablePattern), "%")) {
             while (rs.next()) {
                 if (!tablePattern.equals(rs.getString("TABLE_NAME")) && !(meta.storesLowerCaseIdentifiers() && tablePattern.equalsIgnoreCase(rs.getString("TABLE_NAME")))) continue;
@@ -107,9 +126,12 @@ abstract class JdbcMetadataAdapter implements MetadataAdapter {
                 ColumnMetadata col = new ColumnMetadata(colName, typeName, dataType, colSize, decDigits,
                         nullable, isPk, autoInc, defVal, generated);
                 columns.add(col);
+                String remarks = blankToNull(rs.getString("REMARKS"));
+                if (remarks != null) comments.put(colName, remarks);
             }
         }
     }
+    private static String blankToNull(String value) { return value == null || value.isBlank() ? null : value.strip(); }
     private static String literalPattern(DatabaseMetaData meta, String value) throws java.sql.SQLException {
         if (value == null) return null;
         String escape = meta.getSearchStringEscape();

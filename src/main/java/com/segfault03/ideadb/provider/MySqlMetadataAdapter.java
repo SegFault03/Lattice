@@ -6,6 +6,7 @@ import java.util.*;
 
 final class MySqlMetadataAdapter extends JdbcMetadataAdapter {
     protected DatabaseNamespace namespace(String selected) { return new DatabaseNamespace(selected, null); }
+    @Override protected boolean namespaceIsCatalog() { return true; }
     public List<String> getDatabases(Connection conn, ConnectionConfig config) throws Exception {
         List<String> names = new ArrayList<>();
         try (Statement statement = conn.createStatement(); ResultSet rows = statement.executeQuery("SHOW DATABASES;")) {
@@ -15,6 +16,10 @@ final class MySqlMetadataAdapter extends JdbcMetadataAdapter {
             try (ResultSet rows = conn.getMetaData().getCatalogs()) { while (rows.next()) names.add(rows.getString("TABLE_CAT")); }
         }
         Collections.sort(names); return names;
+    }
+    @Override public String defaultNamespace(Connection conn, ConnectionConfig config) throws Exception {
+        String catalog = conn.getCatalog();
+        return catalog != null && !catalog.isBlank() ? catalog : config.getDatabaseName();
     }
     protected void enrichColumns(Connection conn, ConnectionConfig config, String database, String schema, String table, List<ColumnMetadata> columns) throws Exception {
         DatabaseMetaData meta = conn.getMetaData();

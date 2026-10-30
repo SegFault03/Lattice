@@ -12,6 +12,8 @@ The build-tool baseline is Gradle 9.8.0 through the checksum-pinned wrapper and 
 | 2025.2 Community | 252.23892.409 | Compatible |
 | 2025.3 Unified/Ultimate | 253.28294.334 | Compatible |
 
+The SQL editor features (highlighting, completion, hover, SQL in Java and Kotlin strings, project connection discovery) are part of that ZIP. They load their Java and Kotlin code through optional plugin descriptors, so the ZIP also works in IDEs without those plugins, and the Kotlin part reads PSI only, which both Kotlin plugin modes provide. Plugin Verifier reports nine uses of experimental platform API for 2025.1, 2025.2 and 2025.3: the documentation target API behind hover (`TargetPresentation`, `Pointer`) and one existing table renderer key. They are not compatibility errors; a future IDE release may change them. The IDE fixture tests for these features (`platformTest`, `javaPlatformTest`, `kotlinPlatformTest`) run against the 2025.1 Community SDK.
+
 Only PRs targeting `main` run the IntelliJ and JDBC compatibility matrices. IDE
 jobs verify the exact ZIP produced by the PR merge build against each of the
 three 2025 SDKs. The shared catalog generates independent database jobs for
