@@ -212,7 +212,7 @@ Planned work includes:
 
 1. Broader database compatibility coverage and support for more relational databases.
 2. More SQL and schema actions, including generating POJOs, DTOs and JavaBeans from tables and query results.
-3. SQL validation and query preview. Highlighting, completion and hover details for `.sql` files and for SQL in Java and Kotlin strings are described in [SQL editor support](docs/SQL_EDITOR.md).
+3. Query preview and running a SQL file or string in the Lattice console. Highlighting, completion and hover details for `.sql` files and for SQL in Java and Kotlin strings are described in [SQL editor support](docs/SQL_EDITOR.md).
 4. Relationship graphs and dependency trees to explore how tables connect through foreign keys.
 
 More improvements are planned as Lattice evolves. These features are not available yet, and priorities may change based on feedback and technical feasibility.

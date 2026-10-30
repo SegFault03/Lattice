@@ -28,6 +28,7 @@ public final class SqlEditorConfigurable implements SearchableConfigurable {
     private final JBCheckBox injectContent = new JBCheckBox("Strings that look like SQL statements (strict)");
     private final JBTextArea knownCalls = new JBTextArea(7, 30);
     private final javax.swing.JComboBox<SqlEditorSettings.KeywordCase> keywordCase = new javax.swing.JComboBox<>(SqlEditorSettings.KeywordCase.values());
+    private final JBCheckBox validation = new JBCheckBox("Validation: syntax errors, unknown tables and columns (severities under Editor | Inspections | Lattice SQL)");
     private JPanel panel;
 
     @Override public @NotNull String getId() { return "com.segfault03.lattice.sql.editor"; }
@@ -41,7 +42,7 @@ public final class SqlEditorConfigurable implements SearchableConfigurable {
             form.addComponent(note);
         }
         panel = form.addComponent(handleFiles, JBUI.scale(8)).addComponent(highlighting)
-                .addComponent(completion).addLabeledComponent("Keyword case when inserted:", keywordCase).addComponent(hover)
+                .addComponent(completion).addLabeledComponent("Keyword case when inserted:", keywordCase).addComponent(hover).addComponent(validation)
                 .addSeparator(JBUI.scale(8)).addComponent(injection)
                 .addComponent(injectExplicit).addComponent(injectKnownCalls).addComponent(injectContent)
                 .addLabeledComponent("Methods whose first argument is SQL, one per line:", new JBScrollPane(knownCalls), true)
@@ -59,6 +60,7 @@ public final class SqlEditorConfigurable implements SearchableConfigurable {
         completion.setEnabled(enabled.isSelected());
         keywordCase.setEnabled(enabled.isSelected() && completion.isSelected());
         hover.setEnabled(enabled.isSelected());
+        validation.setEnabled(enabled.isSelected());
         injection.setEnabled(enabled.isSelected());
         boolean tiers = enabled.isSelected() && injection.isSelected();
         injectExplicit.setEnabled(tiers);
@@ -71,7 +73,7 @@ public final class SqlEditorConfigurable implements SearchableConfigurable {
         SqlEditorSettings settings = SqlEditorSettings.getInstance();
         return enabled.isSelected() != settings.isEnabled() || handleFiles.isSelected() != settings.isHandleSqlFiles()
                 || highlighting.isSelected() != settings.isHighlighting() || completion.isSelected() != settings.isCompletion()
-                || keywordCase.getSelectedItem() != settings.keywordCase() || hover.isSelected() != settings.isHover() || injection.isSelected() != settings.isInjection()
+                || validation.isSelected() != settings.isValidation() || keywordCase.getSelectedItem() != settings.keywordCase() || hover.isSelected() != settings.isHover() || injection.isSelected() != settings.isInjection()
                 || injectExplicit.isSelected() != settings.isInjectExplicit() || injectKnownCalls.isSelected() != settings.isInjectKnownCalls()
                 || injectContent.isSelected() != settings.isInjectContent() || !knownCalls.getText().equals(settings.knownCalls());
     }
@@ -84,6 +86,7 @@ public final class SqlEditorConfigurable implements SearchableConfigurable {
         settings.setCompletion(completion.isSelected());
         settings.keywordCase((SqlEditorSettings.KeywordCase) keywordCase.getSelectedItem());
         settings.setHover(hover.isSelected());
+        settings.setValidation(validation.isSelected());
         settings.setInjection(injection.isSelected());
         settings.setInjectExplicit(injectExplicit.isSelected());
         settings.setInjectKnownCalls(injectKnownCalls.isSelected());
@@ -101,6 +104,7 @@ public final class SqlEditorConfigurable implements SearchableConfigurable {
         completion.setSelected(settings.isCompletion());
         keywordCase.setSelectedItem(settings.keywordCase());
         hover.setSelected(settings.isHover());
+        validation.setSelected(settings.isValidation());
         injection.setSelected(settings.isInjection());
         injectExplicit.setSelected(settings.isInjectExplicit());
         injectKnownCalls.setSelected(settings.isInjectKnownCalls());

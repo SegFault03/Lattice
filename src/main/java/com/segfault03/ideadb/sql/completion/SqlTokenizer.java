@@ -13,10 +13,10 @@ import java.util.List;
  * Lexes text with a dialect's rules. The editor's PSI is dialect-blind, so analysis re-lexes the text itself; comments
  * and strings are kept (the caret may sit in one), whitespace is dropped.
  */
-final class SqlTokenizer {
+public final class SqlTokenizer {
     private SqlTokenizer() {}
 
-    static @NotNull List<SqlToken> tokenize(@NotNull CharSequence text, @NotNull SqlDialectProfile profile) {
+    public static @NotNull List<SqlToken> tokenize(@NotNull CharSequence text, @NotNull SqlDialectProfile profile) {
         LatticeSqlLexer lexer = new LatticeSqlLexer(profile);
         lexer.start(text, 0, text.length(), 0);
         List<SqlToken> tokens = new ArrayList<>();

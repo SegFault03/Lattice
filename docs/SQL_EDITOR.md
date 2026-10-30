@@ -1,6 +1,6 @@
 # SQL editor support
 
-Lattice edits SQL in your own project, not only in its console. Today that means dialect-aware syntax highlighting, code completion and hover details, in `.sql` files and in SQL strings of Java and Kotlin code.
+Lattice edits SQL in your own project, not only in its console. Today that means dialect-aware syntax highlighting, code completion, hover details and local validation, in `.sql` files and in SQL strings of Java and Kotlin code.
 
 ## What you get
 
@@ -94,6 +94,27 @@ When a `.sql` file has no choice, the project has no default and there are two o
 
 Choices are stored in the project's workspace file, not in version control, because connection IDs are local to your machine. When a connection is deleted, files bound to it become unbound and a default that pointed to it is cleared; an explicit generic-SQL choice is kept.
 
+## Validation
+
+Mistakes are underlined as you type, from the same cached schema that completion uses. Nothing is sent to the database. Each kind is its own inspection under **Settings | Editor | Inspections | Lattice SQL**, so its severity and on/off state are yours to set; **Validation** in the SQL editor settings turns all of them off.
+
+| Inspection | Reports | Default |
+|---|---|---|
+| Syntax error | Unbalanced brackets; an unterminated string, quoted name or comment; a misspelled statement keyword (`selct`); clauses out of order or repeated (`WHERE` after `GROUP BY`, two `FROM`s); an empty select list; a missing table name, operand or `VALUES`/`SET`; stray commas; a missing comma between select items. | Error |
+| Unknown table | A table the cached schema does not list, with a "did you mean" fix. | Warning |
+| Unknown column | A column none of the query's tables has, in a select list, condition, `ORDER BY`, `SET` or `INSERT` column list, with a fix for a likely typo. | Warning |
+| Ambiguous column | An unqualified column that more than one table of the query has. | Warning |
+| Table alias problem | A qualifier no table or alias provides, a table used by its own name after being aliased (`orders.id` after `FROM orders o`), the same alias twice in one `FROM`. | Warning |
+
+It is built to be quiet when unsure:
+
+- **Needs the schema, or says nothing.** Table and column checks run only when a connection applies and its schema is cached. They are suspended while a change to the connection may have made the cache out of date (every statement run in a console reports one); the schema is then read again in the background and the checks return. Opening a file never starts a read by itself.
+- **Only names it can be sure of.** An unqualified column is judged only when every table the query can see is a real table with its columns read. A derived table, a CTE, a function that returns rows, a table the file creates, renames or alters, a `USING` or `NATURAL` join, `UPDATE` with several tables or `DELETE ... USING` make the query's unqualified names unjudged. Select list aliases, the SQL standard's words (`PRECEDING`, `ZONE`, `EPOCH`...), `ON CONFLICT`, `ON DUPLICATE KEY` and `RETURNING` clauses, window definitions and index hints are never called columns.
+- **Scripts that are not plain statement lists.** A statement with `${...}` or `{{...}}` is skipped. After `DELIMITER`, a stored routine with a `BEGIN` body, `DO` or `DECLARE`, the rest of the file is skipped because one statement then spans several semicolons. After `USE`, `SET SCHEMA` or `SET search_path`, unqualified table names are not judged.
+- **Strings in code.** SQL in a Java or Kotlin string is validated like a file, except when part of it is only known at run time (`" + table + "`, `$id`), or when it contains an escape such as `\n`: then it is not judged at all.
+- **Large files.** A script over 200,000 characters is not validated.
+- **Names** match ignoring case and quoting, so a difference only in case is never reported.
+
 ## Connections found in the project
 
 Lattice reads the database URLs in the project's configuration files, so a Spring or Jakarta EE project needs no setup:
@@ -126,6 +147,7 @@ The status bar entry says when a connection was chosen because of the project's 
 | Code completion | On |
 | Keyword case when inserted | As typed (or always upper or lower case) |
 | Hover documentation | On |
+| Validation | On, as five inspections whose severities you set under Editor | Inspections |
 | SQL inside Java and Kotlin strings | On, as three switches: marked strings, known calls and strict content check |
 | Known calls | JDBC, Spring `JdbcTemplate`, JPA, Hibernate, jOOQ and Exposed method names, one per line |
 
@@ -158,6 +180,7 @@ The Database plugin brings its own SQL support. Where it is enabled, Lattice's S
 
 - Strings are found by what is written at the call site. Kotlin calls are matched by name only, because Kotlin PSI cannot resolve a call here; Java also honors `@Language` on a resolved method's parameters.
 - R2DBC URLs, other databases and URLs assembled in code are not read, and a URL whose parts are all unresolved placeholders matches by type only.
+- Validation is a tolerant scanner, not a full SQL parser: it finds the mistakes above, not every way a statement can be invalid for a particular server, and it can miss a mistake that sits behind something it cannot see through.
 - A `StringBuilder` chain (`sb.append("select ").append(x)`) is not followed.
 - An escape such as `\n` inside a Kotlin string appears in the SQL text as written, so a keyword right after it is not recognized by the highlighter or completion.
 - The heuristic is strict on purpose: `select 1`, bare `delete from t` and similar are found only through a call, annotation or comment.

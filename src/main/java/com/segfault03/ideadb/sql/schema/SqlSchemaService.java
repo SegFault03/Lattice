@@ -86,6 +86,9 @@ public final class SqlSchemaService implements Disposable {
     /** Whether this connection has been read at least once, so changes to it are followed. */
     boolean isServing(@NotNull String connectionId) { return served.contains(connectionId); }
 
+    /** Whether a change to the connection since the last read may have changed its schema, so cached names cannot be trusted. */
+    public boolean isStale(@NotNull String connectionId) { return stale.contains(connectionId); }
+
     /** Whether a read for this connection is running. */
     public boolean isLoading(@NotNull String connectionId) {
         Future<?> running = loading.get(connectionId);

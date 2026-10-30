@@ -23,6 +23,8 @@ public final class SqlEditorSettings implements PersistentStateComponent<SqlEdit
         public boolean highlighting = true;
         public boolean completion = true;
         public boolean hover = true;
+        /** Local checks: syntax, and tables and columns against the cached schema. */
+        public boolean validation = true;
         /** How keywords are cased when inserted: AS_TYPED follows the text around, UPPER and LOWER force it. */
         public String keywordCase = KeywordCase.AS_TYPED.name();
         /** SQL inside Java and Kotlin strings: all of it, then each way a string can be recognized. */
@@ -101,6 +103,10 @@ public final class SqlEditorSettings implements PersistentStateComponent<SqlEdit
     }
     private String parsedFrom;
     private SqlKnownCalls parsedCalls;
+
+    public synchronized boolean isValidation() { return state.validation; }
+    public synchronized void setValidation(boolean value) { state.validation = value; }
+    public synchronized boolean isValidationEffective() { return isEnabled() && state.validation; }
 
     public synchronized boolean isHoverEffective() { return isEnabled() && state.hover; }
 

@@ -233,4 +233,37 @@ public class SqlInjectionJavaFixtureTest extends H2SqlFixtureTestCase {
             assertNull(injectedAtCaret(inClass("String s = \"x y <caret>z\";")));
         });
     }
+
+    // ---- validation inside strings -----------------------------------------------------------------------------------
+
+    private List<String> problemsIn(String source) {
+        myFixture.enableInspections(com.segfault03.ideadb.sql.validate.LatticeSqlSyntaxInspection.class,
+                com.segfault03.ideadb.sql.validate.LatticeSqlUnknownTableInspection.class, com.segfault03.ideadb.sql.validate.LatticeSqlUnknownColumnInspection.class);
+        myFixture.configureByText("A.java", source);
+        return myFixture.doHighlighting().stream().filter(info -> info.getSeverity().compareTo(com.intellij.lang.annotation.HighlightSeverity.WEAK_WARNING) >= 0)
+                .map(info -> info.getDescription()).filter(d -> d != null && (d.startsWith("Unknown") || d.contains("expected") || d.startsWith("Unmatched") || d.startsWith("Unclosed"))).toList();
+    }
+
+    public void testASqlStringIsValidatedLikeAFile() {
+        loadSchema();
+        assertEquals(List.of(), problemsIn(inClass("String q = \"select a.name from authors a join books b on b.author_id = a.id where b.title = ?\";")));
+        var found = problemsIn(inClass("String q = \"select * from authorz where id = ?\";"));
+        assertEquals(found.toString(), 1, found.size());
+        assertTrue(found.get(0), found.get(0).contains("authorz"));
+        assertEquals(1, problemsIn(inClass("String q = \"select titel from books where id = ?\";")).size());
+        assertEquals(1, problemsIn(inClass("String q = \"select * from books where\";")).size());
+    }
+
+    public void testAStringBuiltFromUnknownPartsIsNotJudged() {
+        loadSchema();
+        assertEquals(List.of(), problemsIn(inClass("String f(String cols) { return \"select \" + cols + \" from authorz where x = 1\"; }")));
+        assertEquals(List.of(), problemsIn(inClass("String f(String t) { return \"select * from \" + t + \" where\"; }")));
+        // joined literals only are one statement and are judged
+        assertEquals(1, problemsIn(inClass("String q = \"select * \" + \"from authorz\";")).size());
+    }
+
+    public void testAStringWithAnEscapeIsNotJudged() {
+        loadSchema();
+        assertEquals(List.of(), problemsIn(inClass("String q = \"select *\\nfrom authorz\";")));
+    }
 }

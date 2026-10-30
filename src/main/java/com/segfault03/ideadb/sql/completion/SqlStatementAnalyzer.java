@@ -90,6 +90,23 @@ public final class SqlStatementAnalyzer {
         return new Scan(text, stmt, caretIdx, profile, prefix, prefixStart, openQuote, allTokensForCase(all, text)).run();
     }
 
+    /**
+     * The structure of one statement's tokens, independent of any caret: which parenthesized group each token is in
+     * and the tables its FROM, JOIN, UPDATE and INTO clauses name. Used by validation.
+     *
+     * @param blockOf the group of each token; group 0 is the statement itself
+     * @param parent  the enclosing group of each group, -1 for the statement
+     * @param open    the index of the "(" that opens each group, -1 for the statement
+     */
+    public record Structure(@NotNull int[] blockOf, @NotNull List<Integer> parent, @NotNull List<Integer> open, @NotNull List<TableRef> refs) {}
+
+    public static @NotNull Structure structure(@NotNull CharSequence text, @NotNull List<SqlToken> statement, @NotNull SqlDialectProfile profile) {
+        Scan scan = new Scan(text, statement, statement.size(), profile, "", text.length(), (char) 0, List.of());
+        scan.computeBlocks();
+        scan.findReferences();
+        return new Structure(scan.blockOf, List.copyOf(scan.parent), List.copyOf(scan.open), List.copyOf(scan.refs));
+    }
+
     // ---- caret in a comment or string -----------------------------------------------------------------------------
 
     private static boolean caretInsideCommentOrString(CharSequence text, int caret, SqlToken token) {
@@ -281,6 +298,7 @@ public final class SqlStatementAnalyzer {
             // The first part may not be a clause word (WHERE is not a table); after a dot any word is a name (a.order).
             List<String> parts = new ArrayList<>();
             int k = start;
+            if (isKeyword(k, "ONLY") && nameToken(k + 1, false)) k++; // FROM ONLY t: the table without its children
             while (k < n && blockOf[k] == block && (parts.isEmpty() ? nameToken(k, true) : isWord(stmt.get(k)))) {
                 parts.add(unquote(k));
                 k++;
