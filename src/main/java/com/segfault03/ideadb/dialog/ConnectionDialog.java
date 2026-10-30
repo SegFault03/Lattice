@@ -819,7 +819,7 @@ public class ConnectionDialog extends DialogWrapper {
                     ? !driver.packaged() && !discoveryBusy && !driverInventory.getOrDefault(type, List.of()).contains(driver)
                     ? "Unavailable" : driver.kind().displayName() : "Bundled";
             case DOWNLOAD -> downloadedDriverVersions.contains(selectedDriver) ? "Downloaded"
-                    : discoveredDriverVersions.contains(selectedDriver) ? "Local Maven repository" : "Not downloaded";
+                    : discoveredDriverVersions.contains(selectedDriver) ? "Local Maven" : "Not downloaded";
             case LOCAL_JAR -> "Local JAR";
         };
         driverSummary.setText((selectedDriver.isBlank() ? source == DriverSource.LOCAL_JAR ? "Choose a JAR" : "Choose a version" : selectedDriver) + " · " + origin);

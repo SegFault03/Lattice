@@ -10,7 +10,7 @@ import java.util.Objects;
  */
 public record InstalledDriver(DatabaseType type, String version, Kind kind, Path jar) {
     public enum Kind {
-        BUNDLED("Bundled"), DOWNLOADED("Downloaded"), DISCOVERED("Local Maven repository");
+        BUNDLED("Bundled"), DOWNLOADED("Downloaded"), DISCOVERED("Local Maven");
         private final String displayName;
         Kind(String displayName) { this.displayName = displayName; }
         public String displayName() { return displayName; }

@@ -22,6 +22,9 @@ internal class DriverDownloadUiFixture(proxyAddress: String?) : Closeable {
     private val workers = Executors.newCachedThreadPool { runnable ->
         Thread(runnable, "lattice-ui-download-proxy").apply { isDaemon = true }
     }
+    // The IDE downloads from the same base the launcher passes as -Dlattice.maven.central (a mirror when set).
+    private val gatedHost = System.getProperty("lattice.maven.central")?.takeIf { it.isNotBlank() }
+        ?.let { runCatching { URI.create(it).host }.getOrNull() } ?: "repo.maven.apache.org"
     private val gate = Object()
     private var paused = false
     private var blocked = CountDownLatch(1)
@@ -77,7 +80,7 @@ internal class DriverDownloadUiFixture(proxyAddress: String?) : Closeable {
             client.getOutputStream().write("HTTP/1.1 200 Connection established\r\n\r\n".toByteArray(US_ASCII))
             workers.execute { forward(client, server, false) }
             // TLS stays end-to-end with Maven Central; no certificate or artifact is substituted.
-            forward(server, client, target.host == "repo.maven.apache.org")
+            forward(server, client, target.host == gatedHost)
         } catch (error: Exception) {
             if (!closed) System.err.println("Download fixture tunnel ended: ${error.javaClass.simpleName}")
         } finally {

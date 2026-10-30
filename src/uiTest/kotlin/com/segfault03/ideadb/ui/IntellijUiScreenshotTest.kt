@@ -503,9 +503,9 @@ class IntellijUiScreenshotTest {
                     byTitle("New connection")
                 }.waitFound()
                 mysqlDialog.x {
-                    byVisibleText("8.4.0 · Local Maven repository")
+                    byVisibleText("8.4.0 · Local Maven")
                 }.waitFound()
-                assertDriverSummary(mysqlDialog, "8.4.0 · Local Maven repository")
+                assertDriverSummary(mysqlDialog, "8.4.0 · Local Maven")
                 if (review) {
                     captureScreen(screenshotsDirectory.resolve("mysql-standard.png"))
                     mysqlDialog.x { byVisibleText("JDBC URL") }.waitFound().click()
@@ -524,28 +524,28 @@ class IntellijUiScreenshotTest {
                 val mysqlAvailableDriverLabels = mysqlAvailableDriverCombo.listValues()
                 println("Available MySQL driver entries: ${mysqlAvailableDriverLabels.joinToString()}")
                 check(mysqlAvailableDriverLabels.containsAll(listOf(
-                    "26.7.0 · Bundled", "9.0.0 · Local Maven repository", "8.4.0 · Local Maven repository", "8.0.33 · Local Maven repository",
+                    "26.7.0 · Bundled", "9.0.0 · Local Maven", "8.4.0 · Local Maven", "8.0.33 · Local Maven",
                 ))) { "Expected bundled and Maven-discovered MySQL releases: $mysqlAvailableDriverLabels" }
                 captureScreen(screenshotsDirectory.resolve("mysql-connection-dialog-available-driver-list.png"))
                 pressEscape()
                 assertDataSourcePicker(mysqlDialog)
                 mysqlDialog.x { byAccessibleName("HSQLDB") }.waitFound().click()
-                assertDriverSummary(mysqlDialog, "2.7.2 · Local Maven repository")
+                assertDriverSummary(mysqlDialog, "2.7.2 · Local Maven")
                 captureScreen(screenshotsDirectory.resolve("driver-type-switch-hsql-project-default.png"))
                 mysqlDialog.x { byAccessibleName("MySQL") }.waitFound().click()
-                assertDriverSummary(mysqlDialog, "8.4.0 · Local Maven repository")
+                assertDriverSummary(mysqlDialog, "8.4.0 · Local Maven")
                 mysqlAvailableDriverCombo.selectItem("26.7.0 · Bundled")
                 mysqlDialog.x { byAccessibleName("HSQLDB") }.waitFound().click()
-                assertDriverSummary(mysqlDialog, "2.7.2 · Local Maven repository")
+                assertDriverSummary(mysqlDialog, "2.7.2 · Local Maven")
                 mysqlDialog.x { byAccessibleName("MySQL") }.waitFound().click()
                 assertDriverSummary(mysqlDialog, "26.7.0 · Bundled")
                 captureScreen(screenshotsDirectory.resolve("driver-type-switch-mysql-manual-choice.png"))
-                mysqlAvailableDriverCombo.selectItem("8.4.0 · Local Maven repository")
+                mysqlAvailableDriverCombo.selectItem("8.4.0 · Local Maven")
                 if (review) {
                     mysqlAvailableDriverCombo.selectItem("26.7.0 · Bundled")
                     assertDriverSummary(mysqlDialog, "26.7.0 · Bundled")
                     captureScreen(screenshotsDirectory.resolve("mysql-driver-summary-bundled.png"))
-                    mysqlAvailableDriverCombo.selectItem("8.4.0 · Local Maven repository")
+                    mysqlAvailableDriverCombo.selectItem("8.4.0 · Local Maven")
                 }
 
                 if (!postgres && !h2 && !System.getProperty("ui.skip.remote.downloads", "false").toBoolean()) {
@@ -568,7 +568,7 @@ class IntellijUiScreenshotTest {
                     val mysqlDownloadVersions = mysqlDriverVersionCombo.listValues()
                     println("MySQL download-version entries: ${mysqlDownloadVersions.joinToString()}")
                     check(mysqlDownloadVersions.containsAll(listOf(
-                        "9.0.0 · Local Maven repository", "8.4.0 · Local Maven repository", "8.0.33 · Local Maven repository",
+                        "9.0.0 · Local Maven", "8.4.0 · Local Maven", "8.0.33 · Local Maven",
                     ))) { "Expected Maven-discovered MySQL releases in the download-version list: $mysqlDownloadVersions" }
                     captureScreen(screenshotsDirectory.resolve("mysql-connection-dialog-download-version-list.png"))
                     pressEscape()
@@ -653,9 +653,9 @@ class IntellijUiScreenshotTest {
                     byTitle("New connection")
                 }.waitFound()
                 connectionDialog.x {
-                    byVisibleText("2.7.2 · Local Maven repository")
+                    byVisibleText("2.7.2 · Local Maven")
                 }.waitFound()
-                assertDriverSummary(connectionDialog, "2.7.2 · Local Maven repository")
+                assertDriverSummary(connectionDialog, "2.7.2 · Local Maven")
                 Thread.sleep(750)
                 captureScreen(screenshotsDirectory.resolve("connection-dialog-default-driver.png"))
                 val modeCombo = connectionDialog.x(JComboBoxUiComponent::class.java) {
@@ -703,7 +703,7 @@ class IntellijUiScreenshotTest {
                 val availableDriverLabels = availableDriverCombo.listValues()
                 println("Available driver entries: ${availableDriverLabels.joinToString()}")
                 check(availableDriverLabels.containsAll(listOf(
-                    "2.7.4 · Bundled", "2.7.3-jdk8 · Downloaded", "2.7.2 · Local Maven repository", "2.6.1-jdk8 · Local Maven repository", "2.4.1 · Local Maven repository",
+                    "2.7.4 · Bundled", "2.7.3-jdk8 · Downloaded", "2.7.2 · Local Maven", "2.6.1-jdk8 · Local Maven", "2.4.1 · Local Maven",
                 ))) { "Expected bundled, downloaded, and Maven-discovered releases in the available-driver list: $availableDriverLabels" }
                 captureScreen(screenshotsDirectory.resolve("connection-dialog-available-driver-list.png"))
                 pressEscape()
@@ -736,7 +736,7 @@ class IntellijUiScreenshotTest {
                 val downloadVersions = driverVersionCombo.listValues()
                 println("Download-version entries: ${downloadVersions.joinToString()}")
                 check(downloadVersions.containsAll(listOf(
-                    "2.7.2 · Local Maven repository", "2.6.1-jdk8 · Local Maven repository", "2.4.1 · Local Maven repository",
+                    "2.7.2 · Local Maven", "2.6.1-jdk8 · Local Maven", "2.4.1 · Local Maven",
                 ))) {
                     "Expected Maven-discovered releases in the download-version list: $downloadVersions"
                 }
