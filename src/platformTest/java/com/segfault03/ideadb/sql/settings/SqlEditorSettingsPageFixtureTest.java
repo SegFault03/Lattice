@@ -162,4 +162,34 @@ public class SqlEditorSettingsPageFixtureTest extends BasePlatformTestCase {
         page.apply();
         assertTrue(SqlFileTypeClaim.isClaimed());
     }
+
+    /**
+     * The inspections page loads after it is shown and resets its own selection while it does, so one call to select the group
+     * is not enough. The page here ignores the first calls (not loaded yet) and drops the selection once after taking it.
+     */
+    public void testTheInspectionsPageIsAskedAgainUntilTheGroupHolds() {
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var selected = new java.util.concurrent.atomic.AtomicBoolean();
+        var asked = new java.util.ArrayList<String>();
+        var page = (com.intellij.profile.codeInspection.ui.ErrorsConfigurable) java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(),
+                new Class<?>[] {com.intellij.profile.codeInspection.ui.ErrorsConfigurable.class}, (proxy, method, args) -> {
+                    if (method.getName().equals("selectInspectionGroup")) {
+                        asked.add(((String[]) args[0])[0]);
+                        int call = calls.incrementAndGet();
+                        if (call == 1) throw new IllegalStateException("the panel does not exist yet");
+                        if (call >= 3) selected.set(true);
+                    }
+                    return null;
+                });
+        var settled = new java.util.concurrent.atomic.AtomicInteger();
+        InspectionsPage.selectGroup(page, () -> null, root -> {
+            // Once the group has been taken, the page drops it again once, as it does when it finishes loading.
+            if (calls.get() == 3 && settled.getAndIncrement() == 0) selected.set(false);
+            return selected.get();
+        });
+        com.intellij.testFramework.PlatformTestUtil.waitWithEventsDispatching("The group was never selected for good",
+                () -> calls.get() >= 4 && selected.get(), 20);
+        assertEquals("Lattice SQL", asked.get(0));
+        assertTrue("it asked again after the page dropped the selection", calls.get() >= 4);
+    }
 }

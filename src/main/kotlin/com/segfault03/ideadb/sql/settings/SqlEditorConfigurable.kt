@@ -1,17 +1,10 @@
 package com.segfault03.ideadb.sql.settings
 
-import com.intellij.ide.DataManager
-import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.options.BoundConfigurable
-import com.intellij.openapi.options.ex.ConfigurableWrapper
 import com.intellij.openapi.options.SearchableConfigurable
-import com.intellij.openapi.options.ShowSettingsUtil
-import com.intellij.openapi.options.ex.Settings
-import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.openapi.ui.InputValidatorEx
 import com.intellij.openapi.ui.Messages
-import com.intellij.profile.codeInspection.ui.ErrorsConfigurable
 import com.intellij.ui.AnActionButtonUpdater
 import com.intellij.ui.CollectionListModel
 import com.intellij.ui.ToolbarDecorator
@@ -103,7 +96,7 @@ class SqlEditorConfigurable : BoundConfigurable("Lattice SQL Editor"), Searchabl
                 }
                 indent {
                     row {
-                        link("Configure inspections…") { openInspections(it.source as? Component) }
+                        link("Configure inspections…") { InspectionsPage.open(it.source as? Component) }
                     }
                 }
             }.enabledIf(master.component.selected)
@@ -205,25 +198,8 @@ class SqlEditorConfigurable : BoundConfigurable("Lattice SQL Editor"), Searchabl
         return Messages.showInputDialog(parent, "Method name:", title, null, initial, validator)?.trim()
     }
 
-    private fun openInspections(source: Component?) {
-        val context = source?.let { DataManager.getInstance().getDataContext(it) }
-        val settings = context?.let { Settings.KEY.getData(it) }
-        val errors = settings?.find(INSPECTIONS_ID)
-        if (settings != null && errors != null) {
-            // Already in the settings dialog: switch its page instead of opening a second dialog.
-            settings.select(errors).doWhenDone {
-                ConfigurableWrapper.cast(ErrorsConfigurable::class.java, errors)?.selectInspectionGroup(arrayOf(INSPECTION_GROUP))
-            }
-            return
-        }
-        val project = context?.let { CommonDataKeys.PROJECT.getData(it) } ?: ProjectManager.getInstance().defaultProject
-        ShowSettingsUtil.getInstance().showSettingsDialog(project, ErrorsConfigurable::class.java) { it.selectInspectionGroup(arrayOf(INSPECTION_GROUP)) }
-    }
-
     companion object {
         private const val VISIBLE_METHODS = 6
-        private const val INSPECTIONS_ID = "Errors"
-        private const val INSPECTION_GROUP = "Lattice SQL"
         private val METHOD_NAME = Regex("[\\p{L}_$][\\p{L}\\p{N}_$.]*")
 
         /** The name that decides whether two entries are the same method, as [SqlKnownCalls] reads them. */
