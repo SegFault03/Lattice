@@ -46,6 +46,7 @@ public final class SqlEditorSupport {
                 announceStandDown(project);
             }
             pruneBindings(project);
+            com.segfault03.ideadb.sql.discovery.JdbcDiscovery.getInstance(project).refresh();
             // A deleted or retyped connection changes the dialect of the files bound to it.
             ApplicationManager.getApplication().getMessageBus().connect(project)
                     .subscribe(DatabaseSettingsListener.TOPIC, (DatabaseSettingsListener) () -> {

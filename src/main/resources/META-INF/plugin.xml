@@ -18,7 +18,7 @@
         <li><b>SQL Query Console:</b> Execute queries with Ctrl+Enter, result tables, affected row counts, elapsed time, query history, timeouts and cancellation.</li>
         <li><b>Visual Table Design:</b> Create and alter tables with column navigation and complete SQL previews. Batch column changes, rename tables and retain unfinished edits after partial DDL failures.</li>
         <li><b>Export:</b> Export data directly to CSV, JSON, and SQL INSERTs, and export/view CREATE TABLE DDL.</li>
-        <li><b>SQL Highlighting, Completion and Hover:</b> Dialect-aware highlighting, schema-aware completion (tables, columns, joins, keywords) and hover details (comments, types, keys) for .sql files and for SQL strings in Java and Kotlin code, following the connection you choose. Turn it off in Settings | Tools | Lattice SQL Editor.</li>
+        <li><b>SQL Highlighting, Completion and Hover:</b> Dialect-aware highlighting, schema-aware completion (tables, columns, joins, keywords) and hover details (comments, types, keys) for .sql files and for SQL strings in Java and Kotlin code, following the connection you choose, or the one your Spring or Jakarta EE configuration points at. Turn it off in Settings | Tools | Lattice SQL Editor.</li>
         <li><b>What's New:</b> Illustrated, offline feature guides in an editor tab, with a dismissible once-per-version update notice.</li>
     </ul>
     <p>Requires IntelliJ IDEA 2025.1 or later and the IDE's Java 21+ runtime. This is an alpha release; see the project documentation for database compatibility and limitations.</p>
@@ -87,6 +87,7 @@
         <colorSettingsPage implementation="com.segfault03.ideadb.sql.lang.LatticeSqlColorSettingsPage"/>
         <applicationService serviceImplementation="com.segfault03.ideadb.sql.settings.SqlEditorSettings"/>
         <projectService serviceImplementation="com.segfault03.ideadb.sql.binding.SqlBindingsState"/>
+        <projectService serviceImplementation="com.segfault03.ideadb.sql.discovery.JdbcDiscovery"/>
         <applicationService serviceImplementation="com.segfault03.ideadb.sql.schema.SqlSchemaService"/>
         <applicationConfigurable parentId="tools" id="com.segfault03.lattice.sql.editor"
                                  instance="com.segfault03.ideadb.sql.settings.SqlEditorConfigurable"
@@ -119,6 +120,12 @@
                 class="com.segfault03.ideadb.sql.binding.ChooseProjectSqlConnectionAction"
                 text="Lattice: SQL Connection for Project..."
                 description="Choose the default connection whose dialect applies to SQL in this project">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+        <action id="com.segfault03.lattice.sql.addConnectionFromProject"
+                class="com.segfault03.ideadb.sql.binding.AddConnectionFromProjectAction"
+                text="Lattice: Add Connection from Project Configuration..."
+                description="Add a connection for a database that application.yml, application.properties or persistence.xml points at">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
         <action id="com.segfault03.lattice.whatsNew"

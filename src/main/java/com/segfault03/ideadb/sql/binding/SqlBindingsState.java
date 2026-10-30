@@ -30,6 +30,8 @@ public final class SqlBindingsState implements PersistentStateComponent<SqlBindi
     public static class State {
         public String defaultConnectionId = "";
         public Map<String, Binding> files = new LinkedHashMap<>();
+        /** Databases found in project files that the user chose not to be offered again, by their description. */
+        public java.util.List<String> dismissedDiscoveries = new java.util.ArrayList<>();
     }
 
     private State state = new State();
@@ -71,6 +73,12 @@ public final class SqlBindingsState implements PersistentStateComponent<SqlBindi
             changed = true;
         }
         return changed;
+    }
+
+    public synchronized boolean isDiscoveryDismissed(@NotNull String key) { return state.dismissedDiscoveries != null && state.dismissedDiscoveries.contains(key); }
+    public synchronized void dismissDiscovery(@NotNull String key) {
+        if (state.dismissedDiscoveries == null) state.dismissedDiscoveries = new java.util.ArrayList<>();
+        if (!state.dismissedDiscoveries.contains(key)) state.dismissedDiscoveries.add(key);
     }
 
     public synchronized @NotNull String defaultConnectionId() { return state.defaultConnectionId == null ? "" : state.defaultConnectionId; }

@@ -81,8 +81,10 @@ A file's dialect comes from, in order:
 
 1. The connection or dialect chosen for that file.
 2. The project's default connection.
-3. The only saved connection, when there is exactly one.
-4. Generic SQL.
+3. The saved connection that the project's own configuration files point at (see below), when exactly one does.
+4. The only saved connection, when there is exactly one.
+5. The database type the project's configuration files agree on, with no connection (so keywords and quoting are right, but there is no schema).
+6. Generic SQL.
 
 When a `.sql` file has no choice, the project has no default and there are two or more connections, a banner offers **Choose connection**, **Use for project** and **Keep generic**. You can also use:
 
@@ -91,6 +93,26 @@ When a `.sql` file has no choice, the project has no default and there are two o
 - **Lattice: SQL Connection for Project...** in the Tools menu.
 
 Choices are stored in the project's workspace file, not in version control, because connection IDs are local to your machine. When a connection is deleted, files bound to it become unbound and a default that pointed to it is cleared; an explicit generic-SQL choice is kept.
+
+## Connections found in the project
+
+Lattice reads the database URLs in the project's configuration files, so a Spring or Jakarta EE project needs no setup:
+
+| Files | Keys read |
+|---|---|
+| `application*.properties`, `.yml`, `.yaml`, `bootstrap*` | any key ending in `url`, `jdbc-url` or `connection-url`: `spring.datasource.url`, `quarkus.datasource.jdbc.url`, `datasources.default.url` |
+| `persistence.xml` | `jakarta.persistence.jdbc.url`, `javax.persistence.jdbc.url`, `hibernate.connection.url` |
+| `hibernate.cfg.xml`, `hibernate.properties`, `context.xml` (Tomcat `Resource`), `jdbc*.properties`, `database*.properties`, `db*.properties` | URL properties and attributes |
+
+Only values that start with `jdbc:` for MySQL (and MariaDB), PostgreSQL, H2 or HSQLDB count. Spring placeholders resolve to their default (`${DB_HOST:localhost}`) or to another setting of the same file; the environment is not consulted, and a part that stays unknown matches any saved connection. Build output (`build`, `target`, `out`) is skipped. Each `---` document of a YAML file is read on its own, so profiles are all found.
+
+What this does:
+
+- **A saved connection that a URL points at applies by itself** (same type, server, port and database; `localhost` and `127.0.0.1` are the same). When the files point at two different saved connections, such as dev and test, none is guessed; the chooser lists them.
+- **A database that is not saved yet is offered.** A banner on the SQL file reads "application.yml connects to PostgreSQL localhost:5432/shop" with **Add connection...**, which opens the connection dialog with the type, server, port and database filled in. **Not now** turns that offer down for the project. **Tools | Lattice: Add Connection from Project Configuration...** and the file's connection chooser offer the same. Saving it also makes it the project default if there is none.
+- **Credentials are never read.** User names, passwords, tokens and other secrets in these files are skipped as the file is read, and URL parameters (`?user=...&password=...`, `;PASSWORD=...`, `user:pass@host`) are dropped when the URL is parsed. The new connection has an empty user and password for you to enter.
+
+The status bar entry says when a connection was chosen because of the project's files. Files are read in the background when the project opens and again when one of them changes.
 
 ## Settings
 
@@ -122,6 +144,7 @@ The Database plugin brings its own SQL support. Where it is enabled, Lattice's S
 ## Limits
 
 - Strings are found by what is written at the call site. Kotlin calls are matched by name only, because Kotlin PSI cannot resolve a call here; Java also honors `@Language` on a resolved method's parameters.
+- R2DBC URLs, other databases and URLs assembled in code are not read, and a URL whose parts are all unresolved placeholders matches by type only.
 - A `StringBuilder` chain (`sb.append("select ").append(x)`) is not followed.
 - An escape such as `\n` inside a Kotlin string appears in the SQL text as written, so a keyword right after it is not recognized by the highlighter or completion.
 - The heuristic is strict on purpose: `select 1`, bare `delete from t` and similar are found only through a call, annotation or comment.

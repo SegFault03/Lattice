@@ -58,7 +58,10 @@ final class SqlConnectionWidget implements StatusBarWidget, StatusBarWidget.Text
     @Override public float getAlignment() { return Component.CENTER_ALIGNMENT; }
 
     @Override public @Nullable String getTooltipText() {
-        return sqlFile() == null ? null : "The SQL dialect and Lattice connection used for this file. Click to choose.";
+        VirtualFile file = sqlFile();
+        if (file == null) return null;
+        String origin = SqlDialectResolver.isFromProjectFiles(project, file) ? " Chosen because the project's configuration files point at it." : "";
+        return "The SQL dialect and Lattice connection used for this file." + origin + " Click to choose.";
     }
 
     @Override public @Nullable Consumer<MouseEvent> getClickConsumer() {
