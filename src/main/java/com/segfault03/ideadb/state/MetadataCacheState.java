@@ -16,6 +16,8 @@ public final class MetadataCacheState implements PersistentStateComponent<Metada
     public static final class State { public Map<String, Source> sources = new LinkedHashMap<>(); }
     public static final class Source {
         public String identity = "";
+        /** The namespace unqualified names resolve to on this connection; empty until it has been read. */
+        public String defaultNamespace = "";
         public Map<String, Namespace> namespaces = new LinkedHashMap<>();
     }
     public static final class Namespace {
@@ -89,6 +91,27 @@ public final class MetadataCacheState implements PersistentStateComponent<Metada
 
     public synchronized long revision() { return revision; }
 
+    public synchronized void defaultNamespaceResolved(ConnectionConfig config, String namespace) {
+        if (namespace == null) return;
+        var source = source(config);
+        if (namespace.equals(source.defaultNamespace)) return;
+        revision++;
+        source.defaultNamespace = namespace;
+    }
+
+    /** Whether the cache holds metadata read for this exact connection (same engine, URL and user). */
+    public synchronized boolean matches(ConnectionConfig config) {
+        var source = state.sources.get(config.getId());
+        return source != null && source.identity.equals(identity(config));
+    }
+
+    /** The cached default namespace, or null when the connection has not been read or its identity changed. */
+    public synchronized String defaultNamespace(ConnectionConfig config) {
+        var source = state.sources.get(config.getId());
+        if (source == null || !source.identity.equals(identity(config)) || source.defaultNamespace == null || source.defaultNamespace.isEmpty()) return null;
+        return source.defaultNamespace;
+    }
+
     public synchronized void databasesRefreshed(ConnectionConfig config, List<String> names) {
         revision++;
         var source = source(config);
@@ -142,7 +165,7 @@ public final class MetadataCacheState implements PersistentStateComponent<Metada
     private static State copy(State original) {
         var copy = new State();
         original.sources.forEach((id, source) -> {
-            var sourceCopy = new Source(); sourceCopy.identity = source.identity;
+            var sourceCopy = new Source(); sourceCopy.identity = source.identity; sourceCopy.defaultNamespace = source.defaultNamespace;
             source.namespaces.forEach((name, namespace) -> {
                 var namespaceCopy = new Namespace(); namespaceCopy.tablesLoaded = namespace.tablesLoaded;
                 namespace.tables.forEach((tableName, table) -> {

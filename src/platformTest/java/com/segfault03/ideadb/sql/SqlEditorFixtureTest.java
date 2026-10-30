@@ -1,6 +1,5 @@
 package com.segfault03.ideadb.sql;
 
-import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.editor.ex.EditorEx;
 import com.intellij.openapi.editor.highlighter.HighlighterIterator;
 import com.intellij.openapi.fileEditor.FileEditor;
@@ -10,7 +9,6 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.testFramework.PlatformTestUtil;
-import com.intellij.testFramework.ServiceContainerUtil;
 import com.intellij.testFramework.fixtures.BasePlatformTestCase;
 import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.model.DatabaseType;
@@ -32,9 +30,6 @@ import com.intellij.util.ui.UIUtil;
 
 import javax.swing.JComponent;
 
-import java.util.HashMap;
-import java.util.Map;
-
 public class SqlEditorFixtureTest extends BasePlatformTestCase {
     private ConnectionConfig mysql;
     private ConnectionConfig postgres;
@@ -42,12 +37,7 @@ public class SqlEditorFixtureTest extends BasePlatformTestCase {
 
     @Override protected void setUp() throws Exception {
         super.setUp();
-        Map<String, DatabaseSettingsState.Secret> secrets = new HashMap<>();
-        connections = new DatabaseSettingsState(new DatabaseSettingsState.CredentialStore() {
-            @Override public DatabaseSettingsState.Secret get(String id) { return secrets.get(id); }
-            @Override public void set(String id, DatabaseSettingsState.Secret secret) { secrets.put(id, secret); }
-        }, () -> {});
-        ServiceContainerUtil.replaceService(ApplicationManager.getApplication(), DatabaseSettingsState.class, connections, getTestRootDisposable());
+        connections = FixtureConnections.install(getTestRootDisposable(), false);
         mysql = new ConnectionConfig(DatabaseType.MYSQL, "shop-mysql");
         postgres = new ConnectionConfig(DatabaseType.POSTGRESQL, "shop-postgres");
         SqlEditorSettings.getInstance().loadState(new SqlEditorSettings.State());

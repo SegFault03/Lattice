@@ -61,6 +61,7 @@
         <colorSettingsPage implementation="com.segfault03.ideadb.sql.lang.LatticeSqlColorSettingsPage"/>
         <applicationService serviceImplementation="com.segfault03.ideadb.sql.settings.SqlEditorSettings"/>
         <projectService serviceImplementation="com.segfault03.ideadb.sql.binding.SqlBindingsState"/>
+        <applicationService serviceImplementation="com.segfault03.ideadb.sql.schema.SqlSchemaService"/>
         <applicationConfigurable parentId="tools" id="com.segfault03.lattice.sql.editor"
                                  instance="com.segfault03.ideadb.sql.settings.SqlEditorConfigurable"
                                  displayName="Lattice SQL Editor"/>
