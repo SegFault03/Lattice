@@ -35,6 +35,7 @@ Live database suites need owned fixtures; see `docs/CONTRIBUTING.md`. Do not run
 - Do not create a pull request unless asked.
 - Never push to a remote without the user's request or explicit approval. Commit locally and ask first.
 - Branches: do not create or push a new branch on your own. Ask the user which branch to work on. If the user names no branch, use `main`. Do not push to any branch other than the one the user chose.
+- Permissions and approvals the user gives during a session take precedence over the pre-defined rules above, for the scope the user stated (for example, standing permission to push a named branch at checkpoints). Outside that scope, the rules still apply.
 - Documentation is current-state. Do not add dated validation narratives or progress logs to `docs/`.
 
 ## Key locations
