@@ -5,6 +5,7 @@ import com.segfault03.ideadb.provider.DatabaseProviders;
 import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.model.QueryResult;
 import com.segfault03.ideadb.model.RowDefaults;
+import com.segfault03.ideadb.model.TruncatedValue;
 
 import java.sql.*;
 import java.util.ArrayList;
@@ -307,8 +308,9 @@ public class DataService {
                         if (rows.size() >= options.maxRows()) { truncated=true; break; }
                         List<Object> row = new ArrayList<>();
                         for (int i=1;i<=colCount;i++) {
-                            Object value = detachValue(provider.readValue(rs,md,i)); row.add(value);
-                            bytes += value instanceof byte[] binary ? binary.length : value instanceof String text ? text.length()*2L : 32;
+                            Object value = detachDisplayValue(provider.readValue(rs,md,i)); row.add(value);
+                            bytes += value instanceof byte[] binary ? binary.length : value instanceof String text ? text.length()*2L
+                                    : value instanceof TruncatedValue cut ? (cut.preview() instanceof byte[] b ? b.length : ((String) cut.preview()).length()*2L) + 32 : 32;
                         }
                         if (bytes > 16L * 1024 * 1024) { truncated=true; break; }
                         rows.add(row);
@@ -365,13 +367,35 @@ public class DataService {
 
     private static long elapsed(long start) { return (System.nanoTime()-start)/1_000_000; }
 
-    /** LOBs must remain usable after the ResultSet and Statement have been closed. */
+    private static final long MAX_BLOB_BYTES = 2L * 1024 * 1024;
+    private static final int MAX_CLOB_CHARS = 1024 * 1024;
+
+    /** LOBs must remain usable after the ResultSet and Statement have been closed. Oversized values fail so callers such as export never truncate silently. */
     static Object detachValue(Object value) throws SQLException {
         if (value instanceof Blob blob) {
-            try { if (blob.length()>2L*1024*1024) throw new SQLException("Binary value exceeds the 2 MiB display limit"); return blob.getBytes(1, Math.toIntExact(blob.length())); } finally { blob.free(); }
+            try { if (blob.length()>MAX_BLOB_BYTES) throw new SQLException("Binary value exceeds the 2 MiB limit and cannot be exported without truncation"); return blob.getBytes(1, Math.toIntExact(blob.length())); } finally { blob.free(); }
         }
         if (value instanceof Clob clob) {
-            try { if (clob.length()>1024*1024) throw new SQLException("Text value exceeds the 1 Mi-character display limit"); return clob.getSubString(1, Math.toIntExact(clob.length())); } finally { clob.free(); }
+            try { if (clob.length()>MAX_CLOB_CHARS) throw new SQLException("Text value exceeds the 1 Mi-character limit and cannot be exported without truncation"); return clob.getSubString(1, Math.toIntExact(clob.length())); } finally { clob.free(); }
+        }
+        return value;
+    }
+
+    /** Display variant of {@link #detachValue}: oversized LOBs become a {@link TruncatedValue} instead of failing the page; smaller ones are returned in full. */
+    static Object detachDisplayValue(Object value) throws SQLException {
+        if (value instanceof Blob blob) {
+            try {
+                long length = blob.length();
+                byte[] bytes = blob.getBytes(1, (int) Math.min(length, MAX_BLOB_BYTES));
+                return length > MAX_BLOB_BYTES ? new TruncatedValue(bytes, length) : bytes;
+            } finally { blob.free(); }
+        }
+        if (value instanceof Clob clob) {
+            try {
+                long length = clob.length();
+                String text = clob.getSubString(1, (int) Math.min(length, MAX_CLOB_CHARS));
+                return length > MAX_CLOB_CHARS ? new TruncatedValue(text, length) : text;
+            } finally { clob.free(); }
         }
         return value;
     }

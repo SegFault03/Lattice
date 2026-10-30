@@ -939,6 +939,7 @@ final class CellDetailsPanel extends JPanel {
         if (value == RowDefaults.Value.USE_DEFAULT) return "Database default";
         if (value == null) return "SQL NULL";
         if (value instanceof String text && text.isEmpty()) return "Empty string · 0 characters";
+        if (value instanceof com.segfault03.ideadb.model.TruncatedValue cut) return "Preview only · " + cut.sizeLabel() + " · too large to edit here";
         if (value instanceof byte[] bytes) return bytes.length + (bytes.length == 1 ? " byte" : " bytes");
         String s = CellValuePresentation.raw(value);
         int characters = s.codePointCount(0, s.length());

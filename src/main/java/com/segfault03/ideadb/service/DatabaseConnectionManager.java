@@ -19,10 +19,13 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
     private final Map<String, ConnectionGroup> activeConnections = new ConcurrentHashMap<>();
 
     private static final class ConnectionGroup {
-        private final Map<String, Connection> connections = new java.util.HashMap<>();
+        // Concurrent so isConnected can read without waiting for a connect in progress.
+        private final Map<String, Connection> connections = new ConcurrentHashMap<>();
         private Identity identity;
         private boolean registered;
         private boolean removed;
+        // Bumped by every full close so a connect that finishes afterwards is discarded, not installed.
+        private int generation;
     }
 
     private record Identity(com.segfault03.ideadb.model.DatabaseType type, String url, String user, String password, boolean autoCommit, com.segfault03.ideadb.model.DriverSource driverSource, String driverVersion, String driverJarPath) {
@@ -63,6 +66,7 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
         if (!group.registered) group.identity = identity;
     }
     private void closeGroup(ConnectionGroup group) {
+        group.generation++;
         group.connections.values().forEach(DatabaseConnectionManager::closeQuietly);
         group.connections.clear();
     }
@@ -93,29 +97,40 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
     /** Exclusive short-lived connection for a transaction; caller closes it. */
     public Connection openConnection(ConnectionConfig config) throws Exception {
         ConnectionGroup group = activeConnections.computeIfAbsent(config.getId(), id -> new ConnectionGroup());
-        synchronized (group) {
-            validateConfiguration(group, config);
-            Connection connection = createRawConnection(config.copy());
-            try { connection.setAutoCommit(true); return connection; }
-            catch (Exception e) { connection.close(); throw e; }
-        }
+        synchronized (group) { validateConfiguration(group, config); }
+        // Connecting can block for the network timeout; never hold the group lock meanwhile.
+        Connection connection = createRawConnection(config.copy());
+        try {
+            synchronized (group) { validateConfiguration(group, config); }
+            connection.setAutoCommit(true);
+            return connection;
+        } catch (Exception e) { connection.close(); throw e; }
     }
 
     Connection getConnection(ConnectionConfig config, String sessionId) throws Exception {
         ConnectionGroup group = activeConnections.computeIfAbsent(config.getId(), id -> new ConnectionGroup());
+        int generation;
         synchronized (group) {
             validateConfiguration(group, config);
             Connection conn = group.connections.get(sessionId);
             if (conn != null && !conn.isClosed()) return conn;
-            conn = createRawConnection(config);
-            try {
-                conn.setAutoCommit("browser-metadata".equals(sessionId) || config.isAutoCommit());
-                group.connections.put(sessionId, conn);
-                return conn;
-            } catch (Exception e) {
-                conn.close();
-                throw e;
+            generation = group.generation;
+        }
+        // Connecting can block for the network timeout; never hold the group lock meanwhile.
+        Connection created = createRawConnection(config);
+        try {
+            created.setAutoCommit("browser-metadata".equals(sessionId) || config.isAutoCommit());
+            synchronized (group) {
+                validateConfiguration(group, config);
+                if (group.generation != generation) throw new SQLException("The connection was closed while it was being opened");
+                Connection existing = group.connections.get(sessionId);
+                if (existing != null && !existing.isClosed()) { closeQuietly(created); return existing; }
+                group.connections.put(sessionId, created);
+                return created;
             }
+        } catch (Exception e) {
+            closeQuietly(created);
+            throw e;
         }
     }
 
@@ -192,21 +207,17 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
     public boolean isConnected(String connectionId) {
         ConnectionGroup group = activeConnections.get(connectionId);
         if (group == null) return false;
-        synchronized (group) {
-            for (Connection conn : group.connections.values()) {
-                try { if (!conn.isClosed()) return true; } catch (SQLException ignored) { }
-            }
-            return false;
+        // Called on the EDT: must not wait for a connect in progress, which runs outside the group lock.
+        for (Connection conn : group.connections.values()) {
+            try { if (!conn.isClosed()) return true; } catch (SQLException ignored) { }
         }
+        return false;
     }
 
     public void closeConnection(String connectionId) {
         ConnectionGroup group = activeConnections.get(connectionId);
         if (group != null) {
-            synchronized (group) {
-                group.connections.values().forEach(DatabaseConnectionManager::closeQuietly);
-                group.connections.clear();
-            }
+            synchronized (group) { closeGroup(group); }
         }
     }
 

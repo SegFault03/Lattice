@@ -198,4 +198,9 @@ class DatabaseProviderTest {
         final DatabaseConnectionManager manager = new DatabaseConnectionManager();
         public void close() { manager.dispose(); }
     }
+
+    @Test void mysqlUrlBoundsTheTcpConnect() {
+        var config = new com.segfault03.ideadb.model.ConnectionConfig(DatabaseType.MYSQL, "m");
+        assertTrue(DatabaseProviders.get(DatabaseType.MYSQL).buildJdbcUrl(config).contains("connectTimeout=10000"));
+    }
 }

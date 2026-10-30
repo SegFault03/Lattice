@@ -111,7 +111,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         historyCombo.addActionListener(e -> {
             if (historyCombo.getSelectedIndex() > 0) {
                 QueryHistoryEntry query = (QueryHistoryEntry) historyCombo.getSelectedItem();
-                if (query != null && query.sql()!=null) setSqlText(query.sql());
+                if (query != null && query.sql()!=null) insertSqlText(query.sql());
             }
         });
         historyCombo.setToolTipText("Restore a recent query into the editor");
@@ -260,6 +260,16 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     public void setSqlText(String sql) {
         editorArea.setText(sql);
         editorArea.setCaretPosition(sql.length());
+    }
+
+    /** Insert SQL without discarding what the user typed; an empty or identical console is simply set. */
+    public void insertSqlText(String sql) {
+        String existing = editorArea.getText();
+        if (existing.isBlank() || existing.equals(sql)) { setSqlText(sql); return; }
+        String separator = existing.endsWith("\n\n") ? "" : existing.endsWith("\n") ? "\n" : "\n\n";
+        int start = existing.length() + separator.length();
+        editorArea.append(separator + sql);
+        editorArea.select(start, start + sql.length());
     }
 
     private void executeCurrentSql() {
@@ -451,6 +461,8 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
                     JBUI.Borders.customLine(JBColor.namedColor("Component.focusColor", new JBColor(0x3574F0, 0x548AF7))),
                     JBUI.Borders.empty(0, 7)) : JBUI.Borders.empty(0, 8));
             if (value == null) setText("NULL");
+            else if (value instanceof byte[] bytes) setText(CellValuePresentation.abbreviated(bytes));
+            else if (value instanceof com.segfault03.ideadb.model.TruncatedValue cut) setText(CellValuePresentation.abbreviated(cut));
             return this;
         }
     }

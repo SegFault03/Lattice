@@ -308,14 +308,21 @@ public final class DatabaseInputs {
                 if (value == com.segfault03.ideadb.model.RowDefaults.Value.USE_DEFAULT) {
                     if (rendered instanceof JLabel label) field.setText(label.getText());
                     initialText = field.getText();
+                } else if (value instanceof byte[] bytes) {
+                    // Binary values edit as 0x hex, which the cell converter parses back.
+                    field.setText(CellValuePresentation.raw(bytes));
+                    initialText = field.getText();
                 }
             } else input = null;
             return component;
         }
         @Override public Object getCellEditorValue() {
             Object value = delegate.getCellEditorValue();
-            return initialValue == com.segfault03.ideadb.model.RowDefaults.Value.USE_DEFAULT
-                    && java.util.Objects.equals(initialText, value) ? initialValue : value;
+            // An untouched NULL cell opens with empty text; committing must not turn it into ''.
+            if (initialValue == null && "".equals(value)) return null;
+            boolean sentinel = initialValue == com.segfault03.ideadb.model.RowDefaults.Value.USE_DEFAULT
+                    || initialValue instanceof byte[];
+            return sentinel && java.util.Objects.equals(initialText, value) ? initialValue : value;
         }
         @Override public boolean isCellEditable(EventObject event) { return delegate.isCellEditable(event); }
         @Override public boolean shouldSelectCell(EventObject event) { return delegate.shouldSelectCell(event); }

@@ -23,7 +23,7 @@ final class MySqlProvider implements DatabaseProvider {
         String db = config.getDatabaseName() == null ? "" : config.getDatabaseName().trim();
         String host = config.getHost() == null || config.getHost().isBlank() ? "localhost" : config.getHost().trim();
         int port = config.getPort() > 0 ? config.getPort() : defaultPort();
-        return "jdbc:mysql://" + host + ":" + port + "/" + db + "?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&useLegacyDatetimeCode=false&forceConnectionTimeZoneToSession=true&characterEncoding=utf8";
+        return "jdbc:mysql://" + host + ":" + port + "/" + db + "?connectTimeout=10000&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&useLegacyDatetimeCode=false&forceConnectionTimeZoneToSession=true&characterEncoding=utf8";
     }
     public DatabaseNamespace namespace(String selected) { return new DatabaseNamespace(selected, null); }
     public void selectNamespace(Connection conn, String selected) throws SQLException { if (!selected.equals(conn.getCatalog())) conn.setCatalog(selected); }

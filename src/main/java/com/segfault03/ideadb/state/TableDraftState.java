@@ -55,6 +55,11 @@ public final class TableDraftState implements PersistentStateComponent<TableDraf
             Cell cell = new Cell();
             if (value == null) return cell;
             if (value instanceof byte[] bytes) { cell.kind = "bytes"; cell.text = Base64.getEncoder().encodeToString(bytes); return cell; }
+            if (value instanceof com.segfault03.ideadb.model.TruncatedValue cut) {
+                // Kept as a TruncatedValue on restore so a draft can never turn the preview into an editable real value.
+                cell.kind = "truncated"; cell.text = cut.fullLength() + ":" + (cut.binary() ? "b:" + Base64.getEncoder().encodeToString((byte[]) cut.preview()) : "s:" + cut.preview());
+                return cell;
+            }
             cell.kind = value.getClass().getName(); cell.text = value instanceof Enum<?> enumeration ? enumeration.name() : value.toString();
             return cell;
         }
@@ -62,6 +67,10 @@ public final class TableDraftState implements PersistentStateComponent<TableDraf
             return switch (kind) {
                 case "null" -> null;
                 case "com.segfault03.ideadb.model.RowDefaults$Value" -> com.segfault03.ideadb.model.RowDefaults.Value.USE_DEFAULT;
+                case "truncated" -> {
+                    String[] parts = text.split(":", 3);
+                    yield new com.segfault03.ideadb.model.TruncatedValue(parts[1].equals("b") ? Base64.getDecoder().decode(parts[2]) : parts[2], Long.parseLong(parts[0]));
+                }
                 case "bytes" -> Base64.getDecoder().decode(text);
                 case "java.lang.Byte" -> Byte.valueOf(text);
                 case "java.lang.Short" -> Short.valueOf(text);

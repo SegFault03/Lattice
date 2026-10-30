@@ -65,7 +65,7 @@ public class DatabaseEditorManager implements com.intellij.openapi.Disposable {
             DatabaseVirtualFile vf = openFiles.get(key);
             if (vf instanceof SqlConsoleVirtualFile console && FileEditorManager.getInstance(project).isFileOpen(vf)) {
                 FileEditorManager.getInstance(project).openFile(vf, true);
-                if (initialSql != null && console.getPanel() != null) console.getPanel().setSqlText(initialSql);
+                if (initialSql != null && console.getPanel() != null) console.getPanel().insertSqlText(initialSql);
                 return;
             }
             // Open immediately. The production panel loads its database picker with visible feedback.

@@ -1,20 +1,34 @@
 package com.segfault03.ideadb.ui;
 
 import com.segfault03.ideadb.model.RowDefaults;
+import com.segfault03.ideadb.model.TruncatedValue;
 
 /** Text-only presentations for values in the cell details view. */
 final class CellValuePresentation {
+    private static final java.util.HexFormat HEX = java.util.HexFormat.of().withUpperCase();
+    private static final int GRID_BINARY_CHARS = 64;
     private CellValuePresentation() {}
 
     static String raw(Object value) {
         if (value == null) return "NULL";
         if (value == RowDefaults.Value.USE_DEFAULT) return "(Default)";
         if (value instanceof byte[] bytes) {
-            StringBuilder hex = new StringBuilder(2 + bytes.length * 2).append("0x");
-            for (byte b : bytes) hex.append(String.format("%02X", b & 0xff));
-            return hex.toString();
+            return "0x" + HEX.formatHex(bytes);
         }
+        if (value instanceof TruncatedValue cut) return raw(cut.preview());
         return String.valueOf(value);
+    }
+
+    /** Grid form of an oversized LOB: the abbreviated preview followed by the truncation notice. */
+    static String abbreviated(TruncatedValue cut) {
+        return (cut.preview() instanceof byte[] bytes ? abbreviated(bytes) : (String) cut.preview()) + cut.suffix();
+    }
+
+    /** Grid form of a binary value: hex truncated to {@link #GRID_BINARY_CHARS} characters plus an ellipsis. */
+    static String abbreviated(byte[] bytes) {
+        int keep = (GRID_BINARY_CHARS - 2) / 2;
+        if (bytes.length <= keep) return "0x" + HEX.formatHex(bytes);
+        return "0x" + HEX.formatHex(bytes, 0, keep) + "…";
     }
 
     /** Editing a SQL sentinel begins with empty text; Apply can then stage an actual empty string. */

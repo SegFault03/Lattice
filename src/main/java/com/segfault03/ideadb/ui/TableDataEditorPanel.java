@@ -24,6 +24,7 @@ import com.segfault03.ideadb.model.QueryResult;
 import com.segfault03.ideadb.model.TableMetadata;
 import com.segfault03.ideadb.model.RowIdentity;
 import com.segfault03.ideadb.model.RowDefaults;
+import com.segfault03.ideadb.model.TruncatedValue;
 import com.segfault03.ideadb.model.CellValueConverter;
 import com.segfault03.ideadb.service.DataService;
 import com.segfault03.ideadb.service.DatabaseConnectionManager;
@@ -532,6 +533,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         boolean editable = tableModel.isCellEditable(row, col)
                 && (newRow || !tableMetadata.getPrimaryKeyColumnNames().isEmpty());
         String hint = tableMetadata.isView() ? "Views are read-only"
+                : tableModel.getValueAt(row, col) instanceof TruncatedValue ? "Value is too large to edit here"
                 : column != null && column.isGenerated() ? "Generated columns are read-only"
                 : isBusy() ? "Wait for the current table operation to finish"
                 : !newRow && tableMetadata.getPrimaryKeyColumnNames().isEmpty()
@@ -636,7 +638,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 if (tableModel.hasPendingChanges()) {
                     DatabaseUi.status(statusLabel, "Auto-refresh paused · Commit or revert pending edits", DatabaseUi.Tone.WARNING);
                 } else {
-                    loadData(currentPage,pageSize,false);
+                    loadData(currentPage,pageSize,false,true);
                 }
             });
             autoRefreshTimer.setRepeats(true);
@@ -692,7 +694,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     private static final class MissingTableException extends java.sql.SQLException {
         MissingTableException() { super("The table no longer exists. Create it again or close this editor."); }
     }
-    private void loadData(int requestedPage, int requestedSize, boolean refreshMetadata) {
+    private void loadData(int requestedPage, int requestedSize, boolean refreshMetadata) { loadData(requestedPage,requestedSize,refreshMetadata,false); }
+    private void loadData(int requestedPage, int requestedSize, boolean refreshMetadata, boolean autoRefresh) {
         if (isBusy() || disposed || !finishCellEditing()) return;
         if (tableModel.hasPendingChanges()) {
             statusLabel.setText("Pending edits preserved. Commit or Revert before reloading.");
@@ -766,6 +769,13 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     }
                     DatabaseUi.status(statusLabel, "Could not load data · See error details", DatabaseUi.Tone.ERROR);
                     statusLabel.setToolTipText(ex.getMessage());
+                    if (autoRefresh) {
+                        // A failing timer would otherwise open a modal every tick; stop it and report in the status line.
+                        autoRefreshCombo.setSelectedIndex(0);
+                        DatabaseUi.status(statusLabel, "Auto-refresh stopped · Could not load data", DatabaseUi.Tone.ERROR);
+                        statusLabel.setToolTipText(ex.getMessage());
+                        return;
+                    }
                     Messages.showErrorDialog(project, "Error: " + ex.getMessage(), "Data Fetch Error");
                 });
             }
@@ -1240,6 +1250,10 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             for(int selected:dataTable.getSelectedRows()) rows.add(new ArrayList<>(tableModel.rows.get(dataTable.convertRowIndexToModel(selected))));
             if(rows.isEmpty()) { statusLabel.setText("Select rows to export."); return; }
         } else if(scope==ExportScope.PAGE) for(List<Object> row:tableModel.rows) rows.add(new ArrayList<>(row));
+        if(rows.stream().anyMatch(row -> row.stream().anyMatch(TruncatedValue.class::isInstance))) {
+            Messages.showErrorDialog(project,"Some displayed values are truncated and would be exported incomplete. Use the full-table export (All persisted rows), which fails instead of truncating oversized values.","Export Error");
+            return;
+        }
         String filter=appliedWhere;
         FileSaverDescriptor descriptor = new FileSaverDescriptor("Export " + (scope==ExportScope.ALL_PERSISTED ? "All Persisted Rows" : "Displayed Rows Including Pending Edits"), "Save as ." + format, format);
         VirtualFileWrapper targetWrapper = FileChooserFactory.getInstance().createSaveFileDialog(descriptor, project)
@@ -1501,7 +1515,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         @Override
         public boolean isCellEditable(int row, int col) {
             ColumnMetadata metadata = getColumnMeta(col);
-            return !isBusy() && !disposed && !tableMetadata.isView() && (metadata == null || !metadata.isGenerated());
+            return !isBusy() && !disposed && !tableMetadata.isView() && (metadata == null || !metadata.isGenerated())
+                    && !(getValueAt(row, col) instanceof TruncatedValue);
         }
 
         @Override public Object getValueAt(int row, int col) {
@@ -1702,6 +1717,10 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             }
             if (value == null) {
                 setText("NULL");
+            } else if (value instanceof byte[] bytes) {
+                setText(CellValuePresentation.abbreviated(bytes));
+            } else if (value instanceof TruncatedValue cut) {
+                setText(CellValuePresentation.abbreviated(cut));
             } else if (isAuto && value == RowDefaults.Value.USE_DEFAULT) {
                 setText("(Auto)");
             }

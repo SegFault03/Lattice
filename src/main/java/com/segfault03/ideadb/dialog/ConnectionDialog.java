@@ -953,7 +953,10 @@ public class ConnectionDialog extends DialogWrapper {
         if (customUrlRadio.isSelected() && customUrlField.getText().trim().isEmpty()) {
             return new ValidationInfo("Enter a JDBC URL", customUrlField);
         }
+        if (nameField.getText().trim().isEmpty()) return new ValidationInfo("Enter a connection name", nameField);
         ConnectionConfig candidate = createTempConfig();
+        String problem = ConnectionReadiness.problem(candidate, customUrlRadio.isSelected());
+        if (problem != null) return new ValidationInfo(problem, problemField(problem, candidate));
         try {
             if (candidate.getDriverSource() == DriverSource.DOWNLOAD) {
                 var downloaded = DriverCatalog.downloadedJar(candidate.getType(), candidate.getDriverVersion());
@@ -969,6 +972,17 @@ public class ConnectionDialog extends DialogWrapper {
             }
         } catch (Exception error) { return new ValidationInfo(error.getMessage(), driverSourceCombo); }
         return null;
+    }
+    private javax.swing.JComponent problemField(String problem, ConnectionConfig candidate) {
+        if (customUrlRadio.isSelected()) return problem.startsWith("Enter a JDBC URL") ? customUrlField : driverSourceCombo;
+        boolean server = DatabaseProviders.get(candidate.getType()).connectionForm() == DatabaseProvider.ConnectionForm.SERVER;
+        boolean hsqlServer = !server && candidate.getHsqlMode() == HsqlMode.SERVER;
+        if (problem.startsWith("Enter a host")) return server ? mysqlHostField : hsqlServerHostField;
+        if (problem.startsWith("Enter a port")) return server ? mysqlPortField : hsqlServerPortField;
+        if (problem.startsWith("Enter a user")) return server ? mysqlUserField : hsqlUserField;
+        if (problem.contains("database")) return server ? mysqlDatabaseField : hsqlServer ? hsqlServerDbField
+                : candidate.getHsqlMode() == HsqlMode.FILE ? hsqlFileField : hsqlMemNameField;
+        return driverSourceCombo;
     }
     @Override protected void dispose() {
         if (discoveryTask != null) discoveryTask.cancel(true);
