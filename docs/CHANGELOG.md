@@ -7,6 +7,7 @@ Patch notes are selected by the exact release version, including prerelease suff
 ### SQL editor
 
 - Highlight `.sql` files for the database dialect of the connection you choose (MySQL, PostgreSQL, HSQLDB, H2, or generic SQL), with its own colors, a connection banner, per-file and project defaults, and Settings | Tools | Lattice SQL Editor. This replaces the IDE's highlighting-only SQL file type for `.sql`; a notice offers to turn it off, and it starts off where the Ultimate Database plugin is enabled.
+- Complete keywords, functions, types, tables, views, aliases and columns in `.sql` files for the dialect of the file's connection, with foreign key join conditions after `ON`, columns of the statement's tables, quoting that follows the dialect's case folding, and an option in Settings | Tools | Lattice SQL Editor.
 - Use the only saved connection for SQL files without a choice, show the file's dialect and connection in the status bar, and forget bindings to deleted connections.
 - Read foreign key targets and table and column comments with the schema metadata, and keep them in the offline metadata cache.
 - Make the Maven plugin an optional dependency so Lattice loads in IDEs without it.

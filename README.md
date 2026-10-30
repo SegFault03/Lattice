@@ -212,7 +212,7 @@ Planned work includes:
 
 1. Broader database compatibility coverage and support for more relational databases.
 2. More SQL and schema actions, including generating POJOs, DTOs and JavaBeans from tables and query results.
-3. SQL inline suggestions and hover details informed by connected database schemas, and SQL support inside Java and Kotlin strings, subject to feasibility within the IntelliJ Platform. Dialect-aware highlighting for `.sql` files is described in [SQL editor support](docs/SQL_EDITOR.md).
+3. Hover details informed by connected database schemas, and SQL support inside Java and Kotlin strings, subject to feasibility within the IntelliJ Platform. Dialect-aware highlighting and completion for `.sql` files are described in [SQL editor support](docs/SQL_EDITOR.md).
 4. Relationship graphs and dependency trees to explore how tables connect through foreign keys.
 
 More improvements are planned as Lattice evolves. These features are not available yet, and priorities may change based on feedback and technical feasibility.

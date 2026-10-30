@@ -19,6 +19,7 @@ public final class SqlEditorSettings implements PersistentStateComponent<SqlEdit
         public Boolean enabled;
         public boolean handleSqlFiles = true;
         public boolean highlighting = true;
+        public boolean completion = true;
         /** The claim last applied to the platform's file type mapping; null before the first run. */
         public Boolean appliedClaim;
         public boolean takeoverNoticeShown;
@@ -45,10 +46,13 @@ public final class SqlEditorSettings implements PersistentStateComponent<SqlEdit
     public synchronized void setHandleSqlFiles(boolean value) { state.handleSqlFiles = value; }
     public synchronized boolean isHighlighting() { return state.highlighting; }
     public synchronized void setHighlighting(boolean value) { state.highlighting = value; }
+    public synchronized boolean isCompletion() { return state.completion; }
+    public synchronized void setCompletion(boolean value) { state.completion = value; }
 
     /** Whether Lattice should own the .sql file type right now. */
     public synchronized boolean isTakeoverEffective() { return isEnabled() && state.handleSqlFiles; }
     public synchronized boolean isHighlightingEffective() { return isEnabled() && state.highlighting; }
+    public synchronized boolean isCompletionEffective() { return isEnabled() && state.completion; }
 
     public synchronized @Nullable Boolean appliedClaim() { return state.appliedClaim; }
     public synchronized void appliedClaim(boolean claim) { state.appliedClaim = claim; }

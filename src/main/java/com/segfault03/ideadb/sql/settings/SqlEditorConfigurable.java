@@ -17,6 +17,7 @@ public final class SqlEditorConfigurable implements SearchableConfigurable {
     private final JBCheckBox enabled = new JBCheckBox("Enable Lattice SQL editor support");
     private final JBCheckBox handleFiles = new JBCheckBox("Handle .sql files (replaces the IDE's highlighting-only SQL file type)");
     private final JBCheckBox highlighting = new JBCheckBox("Syntax highlighting for the dialect of the bound connection");
+    private final JBCheckBox completion = new JBCheckBox("Code completion: keywords, functions, tables and columns of the bound connection");
     private JPanel panel;
 
     @Override public @NotNull String getId() { return "com.segfault03.lattice.sql.editor"; }
@@ -30,7 +31,7 @@ public final class SqlEditorConfigurable implements SearchableConfigurable {
             form.addComponent(note);
         }
         panel = form.addComponent(handleFiles, JBUI.scale(8)).addComponent(highlighting)
-                .addComponentFillVertically(new JPanel(), 0).getPanel();
+                .addComponent(completion).addComponentFillVertically(new JPanel(), 0).getPanel();
         enabled.addActionListener(event -> updateDependents());
         reset();
         return panel;
@@ -39,12 +40,13 @@ public final class SqlEditorConfigurable implements SearchableConfigurable {
     private void updateDependents() {
         handleFiles.setEnabled(enabled.isSelected());
         highlighting.setEnabled(enabled.isSelected());
+        completion.setEnabled(enabled.isSelected());
     }
 
     @Override public boolean isModified() {
         SqlEditorSettings settings = SqlEditorSettings.getInstance();
         return enabled.isSelected() != settings.isEnabled() || handleFiles.isSelected() != settings.isHandleSqlFiles()
-                || highlighting.isSelected() != settings.isHighlighting();
+                || highlighting.isSelected() != settings.isHighlighting() || completion.isSelected() != settings.isCompletion();
     }
 
     @Override public void apply() {
@@ -52,6 +54,7 @@ public final class SqlEditorConfigurable implements SearchableConfigurable {
         if (enabled.isSelected() != settings.isEnabled()) settings.setEnabled(enabled.isSelected());
         settings.setHandleSqlFiles(handleFiles.isSelected());
         settings.setHighlighting(highlighting.isSelected());
+        settings.setCompletion(completion.isSelected());
         SqlEditorSupport.settingsChanged();
     }
 
@@ -60,6 +63,7 @@ public final class SqlEditorConfigurable implements SearchableConfigurable {
         enabled.setSelected(settings.isEnabled());
         handleFiles.setSelected(settings.isHandleSqlFiles());
         highlighting.setSelected(settings.isHighlighting());
+        completion.setSelected(settings.isCompletion());
         updateDependents();
     }
 
