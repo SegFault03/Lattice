@@ -120,11 +120,11 @@ Fix:
 apt-get update && apt-get install -y --no-install-recommends x11-utils openbox
 ```
 
-## Flaky `DatabaseUiTest.cachedPopupAndSubmenuRefreshTheirPaletteOnEveryOpen`
+## Failing `DatabaseUiTest.cachedPopupAndSubmenuRefreshTheirPaletteOnEveryOpen`
 
-The test fails in a full `./gradlew test` run with `Not disposed javax.swing.Timer ... PopupTimer`. It passes alone (`--tests com.segfault03.ideadb.ui.DatabaseUiTest`). The leaked timer comes from another test in the same JVM.
+The test fails in cloud sessions with `Not disposed javax.swing.Timer ... PopupTimer`, in a full `./gradlew test` run and usually when run alone (`--tests com.segfault03.ideadb.ui.DatabaseUiTest`). It also fails on commits that predate the SQL editor work, and one earlier run passed alone, so treat it as nondeterministic. The leaked timer is a Swing popup timer left by this test class.
 
-Fix: do not skip the test. Rerun it alone to confirm it passes. Report the full-run failure to the user, and investigate the timer leak before merging test-order changes.
+Fix: do not skip the test. Report it by name, confirm whether it fails on the base commit before attributing it to a change, and fix the timer leak in `DatabaseUiTest` or the popup code it exercises.
 
 ## Shell and background-process pitfalls
 
