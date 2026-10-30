@@ -33,6 +33,7 @@ Live database suites need owned fixtures; see `docs/CONTRIBUTING.md`. Do not run
 - Downloadable drivers are only the known Maven Central coordinates in `DriverCatalog`; the base URL can be overridden with `-Dlattice.maven.central` for isolated runs only.
 - Pin GitHub Actions to commit SHAs with version comments, and keep permissions least-privilege.
 - Do not create a pull request unless asked.
+- Branches: do not create or push a new branch on your own. Ask the user which branch to work on. If the user names no branch, use `main`. Do not push to any branch other than the one the user chose.
 - Documentation is current-state. Do not add dated validation narratives or progress logs to `docs/`.
 
 ## Key locations
