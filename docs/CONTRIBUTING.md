@@ -13,7 +13,7 @@ On Linux/macOS you can also use `./gradlew test buildPlugin`; on Windows use `.\
 
 ## SQL editor fixture tests
 
-Editor features (language, completion, hover, injection) have IDE fixture tests, which run a headless IDE and are not part of `./gradlew test`. They run in three separate JVMs because the Java and Kotlin plugins cannot share one:
+Editor features (language, completion, hover, injection, validation) have IDE fixture tests, which run a headless IDE and are not part of `./gradlew test`. They run in three separate JVMs because the Java and Kotlin plugins cannot share one:
 
 ```text
 ./gradlew platformTest         # .sql files, completion, hover, bindings

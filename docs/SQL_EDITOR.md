@@ -178,6 +178,7 @@ The Database plugin brings its own SQL support. Where it is enabled, Lattice's S
 
 ## Limits
 
+- Not available yet: filling in parameters (`?`, `:name`, `$1`) to preview the final SQL, sending a statement from the editor to the Lattice console, and a read-only dry run.
 - Strings are found by what is written at the call site. Kotlin calls are matched by name only, because Kotlin PSI cannot resolve a call here; Java also honors `@Language` on a resolved method's parameters.
 - R2DBC URLs, other databases and URLs assembled in code are not read, and a URL whose parts are all unresolved placeholders matches by type only.
 - Validation is a tolerant scanner, not a full SQL parser: it finds the mistakes above, not every way a statement can be invalid for a particular server, and it can miss a mistake that sits behind something it cannot see through.
