@@ -81,7 +81,8 @@ public class SqlDiscoveryFixtureTest extends BasePlatformTestCase {
         assertEquals(described.toString(), List.of("H2 in-memory testdb (application-test.properties)", "MySQL db:3306/legacy (persistence.xml)",
                 "PostgreSQL localhost:5432/shop (application.yml)"), described);
         assertFalse(discovery.snapshot().toString().contains("hunter2"));
-        assertFalse(discovery.snapshot().toString().contains("shop_app"));
+        var users = discovery.snapshot().stream().map(DiscoveredConnection::user).filter(java.util.Objects::nonNull).toList();
+        assertEquals("only the user name that the file names is kept", List.of("shop_app"), users);
     }
 
     public void testASavedConnectionThatTheFilesPointAtAppliesWithoutBeingChosen() {
@@ -192,11 +193,48 @@ public class SqlDiscoveryFixtureTest extends BasePlatformTestCase {
         assertNotNull("the banner offers to add it", new SqlConnectionBanner().collectNotificationData(getProject(), file));
         assertTrue(actionAvailable());
 
-        var config = offers.get(0).url().toConnection(offers.get(0).suggestedName());
+        var config = offers.get(0).toConnection();
         assertEquals("shop (PostgreSQL)", config.getName());
-        assertEquals("", config.getUser());
+        assertEquals("the user name the file gives is prefilled", "shop_app", config.getUser());
         assertEquals("", config.getPassword());
         assertEquals("localhost", config.getHost());
+    }
+
+    private com.intellij.ui.EditorNotificationPanel discoveryBanner(VirtualFile file) {
+        var editor = com.intellij.openapi.fileEditor.FileEditorManager.getInstance(getProject()).getSelectedEditor(file);
+        return (com.intellij.ui.EditorNotificationPanel) new SqlConnectionBanner().collectNotificationData(getProject(), file).apply(editor);
+    }
+
+    private static List<String> links(com.intellij.ui.EditorNotificationPanel panel) {
+        return com.intellij.util.ui.UIUtil.findComponentsOfType(panel, com.intellij.ui.HyperlinkLabel.class).stream().map(com.intellij.ui.HyperlinkLabel::getText).toList();
+    }
+
+    public void testTheDiscoveryBannerIsShortAndKeepsTheFullDescriptionInTheTooltip() {
+        myFixture.addFileToProject("src/main/resources/application.yml", SPRING);
+        discovery.refreshNow();
+        VirtualFile file = myFixture.configureByText("report.sql", "select 1").getVirtualFile();
+
+        var panel = discoveryBanner(file);
+        assertEquals("application.yml: PostgreSQL shop on localhost", panel.getText());
+        assertEquals("PostgreSQL localhost:5432/shop (application.yml)", panel.getToolTipText());
+        assertEquals("no saved connection to choose from", List.of("Add connection\u2026", "Not now"), links(panel));
+
+        saved(DatabaseType.MYSQL, "other", "elsewhere", 3306, "other");
+        assertEquals(List.of("Add connection\u2026", "Choose\u2026", "Not now"), links(discoveryBanner(file)));
+    }
+
+    public void testTheDiscoveryBannerNamesThePortOnlyWhenItIsNotTheDefault() {
+        myFixture.addFileToProject("src/main/resources/application.properties", "spring.datasource.url=jdbc:postgresql://db.internal:6432/billing\n");
+        discovery.refreshNow();
+        VirtualFile file = myFixture.configureByText("report.sql", "select 1").getVirtualFile();
+        assertEquals("application.properties: PostgreSQL billing on db.internal:6432", discoveryBanner(file).getText());
+    }
+
+    public void testTheDiscoveryBannerForAnEmbeddedDatabaseNamesNoHost() {
+        myFixture.addFileToProject("src/main/resources/application.properties", "spring.datasource.url=jdbc:h2:mem:testdb\n");
+        discovery.refreshNow();
+        VirtualFile file = myFixture.configureByText("report.sql", "select 1").getVirtualFile();
+        assertEquals("application.properties: H2 in-memory testdb", discoveryBanner(file).getText());
     }
 
     public void testTurningTheOfferDownSilencesIt() {

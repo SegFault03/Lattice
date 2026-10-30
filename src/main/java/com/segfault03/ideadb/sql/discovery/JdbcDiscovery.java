@@ -36,7 +36,7 @@ import java.util.Set;
 
 /**
  * The databases this project's configuration files point at, read in the background and kept as a snapshot that editor
- * features can read at any time. Passwords and user names are never read (see {@link ProjectConfigScanner}).
+ * features can read at any time. Passwords are never read; the only credential kept is a user name (see {@link ProjectConfigScanner}).
  */
 @Service(Service.Level.PROJECT)
 public final class JdbcDiscovery implements Disposable {
@@ -155,7 +155,7 @@ public final class JdbcDiscovery implements Disposable {
                 try { text = new String(file.contentsToByteArray(), file.getCharset() != null ? file.getCharset() : StandardCharsets.UTF_8); }
                 catch (java.io.IOException unreadable) { continue; }
                 String path = relative(project, file);
-                for (ParsedJdbcUrl url : ProjectConfigScanner.urlsIn(name, text)) result.add(new DiscoveredConnection(url, name, path));
+                for (ProjectConfigScanner.Found hit : ProjectConfigScanner.findIn(name, text)) result.add(new DiscoveredConnection(hit.url(), name, path, hit.user()));
             }
         }
         result.sort(Comparator.comparing(DiscoveredConnection::path));

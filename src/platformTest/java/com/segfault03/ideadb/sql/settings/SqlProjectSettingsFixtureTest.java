@@ -100,6 +100,58 @@ public class SqlProjectSettingsFixtureTest extends BasePlatformTestCase {
         page.disposeUIResources();
     }
 
+    public void testThePageIsCalledProjectDefaultsAndKeepsItsId() {
+        var page = new SqlProjectConfigurable(getProject());
+        assertEquals("Project Defaults", page.getDisplayName());
+        assertEquals("com.segfault03.lattice.sql.editor.project", page.getId());
+    }
+
+    private static JCheckBox checkBoxStartingWith(java.awt.Container root, String text) {
+        return com.intellij.util.ui.UIUtil.findComponentsOfType((JComponent) root, JCheckBox.class).stream()
+                .filter(box -> box.getText().startsWith(text)).findFirst().orElse(null);
+    }
+
+    public void testTurnedDownOffersAreOfferedAgainOnlyWhenTheCheckboxIsApplied() {
+        var bindings = SqlBindingsState.getInstance(getProject());
+        var page = new SqlProjectConfigurable(getProject());
+        JComponent component = page.createComponent();
+        JCheckBox offer = checkBoxStartingWith(component, "Offer the");
+        assertNotNull(offer);
+        assertFalse("nothing was turned down, so nothing to offer again", offer.isVisible());
+        page.disposeUIResources();
+
+        bindings.dismissDiscovery("PostgreSQL localhost:5432/shop (application.yml)");
+        bindings.dismissDiscovery("MySQL db:3306/legacy (persistence.xml)");
+        component = page.createComponent();
+        offer = checkBoxStartingWith(component, "Offer the");
+        assertTrue(offer.isVisible());
+        assertEquals("Offer the 2 databases I turned down again", offer.getText());
+        assertFalse("it is an action, not a setting: off to begin with", offer.isSelected());
+        assertFalse(page.isModified());
+
+        offer.setSelected(true);
+        assertTrue("the pending action counts as a change", page.isModified());
+        assertTrue("nothing happens until Apply", bindings.isDiscoveryDismissed("MySQL db:3306/legacy (persistence.xml)"));
+        page.reset();
+        assertFalse("reset drops the pending action", offer.isSelected());
+        assertFalse(page.isModified());
+
+        offer.setSelected(true);
+        page.apply();
+        assertFalse(bindings.isDiscoveryDismissed("MySQL db:3306/legacy (persistence.xml)"));
+        assertEquals(0, bindings.dismissedDiscoveryCount());
+        assertFalse(page.isModified());
+        assertFalse("and there is nothing left to offer again", offer.isVisible());
+        page.disposeUIResources();
+    }
+
+    public void testOneTurnedDownOfferIsNamedInTheSingular() {
+        SqlBindingsState.getInstance(getProject()).dismissDiscovery("PostgreSQL localhost:5432/shop (application.yml)");
+        var page = new SqlProjectConfigurable(getProject());
+        assertEquals("Offer the 1 database I turned down again", checkBoxStartingWith(page.createComponent(), "Offer the").getText());
+        page.disposeUIResources();
+    }
+
     public void testRestoringTheBuiltInHandlingGivesSqlFilesBackAtOnce() {
         assertEquals(LatticeSqlFileType.INSTANCE, myFixture.configureByText("q.sql", "select 1").getFileType());
         var action = new RestoreBuiltInSqlAction();

@@ -217,7 +217,10 @@ public class SqlEditorFixtureTest extends BasePlatformTestCase {
         connections.addConnection(postgres);
         assertNotNull(banner.collectNotificationData(getProject(), file));
         FileEditor editor = myFixture.getEditor() == null ? null : com.intellij.openapi.fileEditor.FileEditorManager.getInstance(getProject()).getSelectedEditor(file);
-        assertNotNull(banner.collectNotificationData(getProject(), file).apply(editor));
+        var panel = (com.intellij.ui.EditorNotificationPanel) banner.collectNotificationData(getProject(), file).apply(editor);
+        assertNotNull(panel);
+        assertEquals("Generic SQL: no connection chosen", panel.getText());
+        assertEquals(java.util.List.of("Choose connection\u2026", "Use generic SQL"), actionLabels(panel));
 
         SqlBindingsState.getInstance(getProject()).bindFileToConnection(file, mysql.getId());
         assertNull("A bound file needs no banner", banner.collectNotificationData(getProject(), file));
@@ -229,6 +232,22 @@ public class SqlEditorFixtureTest extends BasePlatformTestCase {
         VirtualFile other = myFixture.configureByText("notes.txt", "select 1").getVirtualFile();
         SqlBindingsState.getInstance(getProject()).setDefaultConnectionId("");
         assertNull("Only SQL files get the banner", banner.collectNotificationData(getProject(), other));
+    }
+
+    private static java.util.List<String> actionLabels(com.intellij.ui.EditorNotificationPanel panel) {
+        return UIUtil.findComponentsOfType(panel, com.intellij.ui.HyperlinkLabel.class).stream().map(com.intellij.ui.HyperlinkLabel::getText).toList();
+    }
+
+    public void testUseGenericSqlBindsTheFileToTheGenericDialect() {
+        connections.addConnection(mysql);
+        connections.addConnection(postgres);
+        VirtualFile file = sqlFile("select 1");
+        FileEditor editor = com.intellij.openapi.fileEditor.FileEditorManager.getInstance(getProject()).getSelectedEditor(file);
+        var panel = (com.intellij.ui.EditorNotificationPanel) new SqlConnectionBanner().collectNotificationData(getProject(), file).apply(editor);
+        UIUtil.findComponentsOfType(panel, com.intellij.ui.HyperlinkLabel.class).stream()
+                .filter(link -> link.getText().equals("Use generic SQL")).findFirst().orElseThrow().doClick();
+        assertEquals(SqlDialects.ANSI.id(), SqlBindingsState.getInstance(getProject()).fileBinding(file).dialectId);
+        assertNull("Chosen, so the banner goes", new SqlConnectionBanner().collectNotificationData(getProject(), file));
     }
 
     // --- a sole connection, pruning and the status bar -------------------------------------------------------------
@@ -284,23 +303,27 @@ public class SqlEditorFixtureTest extends BasePlatformTestCase {
         connections.addConnection(postgres);
         var widget = new com.segfault03.ideadb.sql.binding.SqlConnectionWidgetFactory().createWidget(getProject());
         com.intellij.openapi.util.Disposer.register(getTestRootDisposable(), widget);
-        var presentation = (com.intellij.openapi.wm.StatusBarWidget.TextPresentation) widget.getPresentation();
+        var presentation = (com.intellij.openapi.wm.StatusBarWidget.MultipleTextValuesPresentation) widget.getPresentation();
 
         myFixture.configureByText("notes.txt", "select 1");
-        assertEquals("Other files show nothing", "", presentation.getText());
+        assertEquals("Other files show nothing", "", presentation.getSelectedValue());
         assertNull(presentation.getTooltipText());
+        assertNull("and offer nothing to choose", presentation.getPopupStep());
 
         VirtualFile file = sqlFile("select 1");
-        assertEquals("SQL: Generic SQL", presentation.getText());
+        assertEquals("SQL: Generic SQL", presentation.getSelectedValue());
         assertNotNull(presentation.getTooltipText());
-        assertNotNull(presentation.getClickConsumer());
+        var popup = presentation.getPopupStep();
+        assertNotNull("a click opens the chooser above the entry", popup);
+        assertSame(popup.getClass(), presentation.getPopup().getClass());
+        popup.dispose();
 
         SqlBindingsState.getInstance(getProject()).bindFileToConnection(file, mysql.getId());
-        assertEquals("SQL: MySQL \u00b7 shop-mysql", presentation.getText());
+        assertEquals("SQL: MySQL \u00b7 shop-mysql", presentation.getSelectedValue());
         SqlBindingsState.getInstance(getProject()).bindFileToConnection(file, postgres.getId());
-        assertEquals("SQL: PostgreSQL \u00b7 shop-postgres", presentation.getText());
+        assertEquals("SQL: PostgreSQL \u00b7 shop-postgres", presentation.getSelectedValue());
         SqlBindingsState.getInstance(getProject()).bindFileToDialect(file, SqlDialects.ANSI.id());
-        assertEquals("SQL: Generic SQL", presentation.getText());
+        assertEquals("SQL: Generic SQL", presentation.getSelectedValue());
     }
 
     // --- startup reconciliation and the settings page --------------------------------------------------------------

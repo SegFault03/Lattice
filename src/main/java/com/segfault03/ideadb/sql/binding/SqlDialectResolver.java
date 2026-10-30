@@ -45,6 +45,18 @@ public final class SqlDialectResolver {
         return projectLevel(project, bindings);
     }
 
+    /** The connection that applies to files with no choice of their own: the project default, or what its files or sole connection give; null when none does. */
+    public static @Nullable ConnectionConfig projectConnection(@NotNull Project project) {
+        return projectLevel(project, SqlBindingsState.getInstance(project));
+    }
+
+    /** What files with no choice of their own resolve to, for a person: a connection's name, a database type, or generic SQL. */
+    public static @NotNull String describeProjectDefault(@NotNull Project project) {
+        ConnectionConfig connection = projectConnection(project);
+        if (connection != null) return connection.getName();
+        return resolve(project, null).displayName();
+    }
+
     /** Whether the file's connection comes from what the project's configuration files say, rather than from a choice. */
     public static boolean isFromProjectFiles(@NotNull Project project, @Nullable VirtualFile file) {
         SqlBindingsState bindings = SqlBindingsState.getInstance(project);

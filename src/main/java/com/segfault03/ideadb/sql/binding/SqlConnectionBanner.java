@@ -1,11 +1,14 @@
 package com.segfault03.ideadb.sql.binding;
 
+import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.fileEditor.FileEditor;
+import com.intellij.openapi.fileEditor.TextEditor;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.ui.EditorNotificationPanel;
 import com.intellij.ui.EditorNotificationProvider;
 import com.intellij.ui.EditorNotifications;
+import com.segfault03.ideadb.sql.dialect.SqlDialects;
 import com.segfault03.ideadb.sql.discovery.DiscoveredConnection;
 import com.segfault03.ideadb.sql.discovery.ProjectConnectionOffer;
 import com.segfault03.ideadb.sql.lang.LatticeSqlFileType;
@@ -34,11 +37,10 @@ public final class SqlConnectionBanner implements EditorNotificationProvider {
         if (DatabaseSettingsState.getInstance().getConnections().size() < 2) return null;
         return editor -> {
             EditorNotificationPanel panel = new EditorNotificationPanel(editor, EditorNotificationPanel.Status.Info);
-            panel.setText("No Lattice connection selected. This SQL is treated as generic SQL.");
-            panel.createActionLabel("Choose connection", () -> SqlConnectionChooser.chooseForFile(project, file));
-            panel.createActionLabel("Use for project", () -> SqlConnectionChooser.chooseForProject(project));
-            panel.createActionLabel("Keep generic", () -> {
-                SqlBindingsState.getInstance(project).bindFileToDialect(file, com.segfault03.ideadb.sql.dialect.SqlDialects.ANSI.id());
+            panel.setText("Generic SQL: no connection chosen");
+            panel.createActionLabel("Choose connection\u2026", () -> SqlConnectionChooser.chooseForFile(project, file, editorOf(editor)));
+            panel.createActionLabel("Use generic SQL", () -> {
+                SqlBindingsState.getInstance(project).bindFileToDialect(file, SqlDialects.ANSI.id());
                 SqlEditorRefresh.refresh(project, file);
             });
             return panel;
@@ -48,10 +50,11 @@ public final class SqlConnectionBanner implements EditorNotificationProvider {
     private static Function<? super FileEditor, ? extends JComponent> foundInProject(Project project, VirtualFile file, DiscoveredConnection found) {
         return editor -> {
             EditorNotificationPanel panel = new EditorNotificationPanel(editor, EditorNotificationPanel.Status.Info);
-            panel.setText(found.fileName() + " connects to " + found.url().describe());
-            panel.createActionLabel("Add connection...", () -> ProjectConnectionOffer.add(project, found, file));
+            panel.setText(found.fileName() + ": " + found.summary());
+            panel.setToolTipText(found.describe());
+            panel.createActionLabel("Add connection\u2026", () -> ProjectConnectionOffer.add(project, found, file));
             if (!DatabaseSettingsState.getInstance().getConnections().isEmpty()) {
-                panel.createActionLabel("Choose another connection", () -> SqlConnectionChooser.chooseForFile(project, file));
+                panel.createActionLabel("Choose\u2026", () -> SqlConnectionChooser.chooseForFile(project, file, editorOf(editor)));
             }
             panel.createActionLabel("Not now", () -> {
                 SqlBindingsState.getInstance(project).dismissDiscovery(found.describe());
@@ -60,4 +63,6 @@ public final class SqlConnectionBanner implements EditorNotificationProvider {
             return panel;
         };
     }
+
+    private static @Nullable Editor editorOf(@Nullable FileEditor editor) { return editor instanceof TextEditor text ? text.getEditor() : null; }
 }

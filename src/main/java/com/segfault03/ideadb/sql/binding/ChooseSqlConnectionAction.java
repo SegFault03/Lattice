@@ -33,6 +33,6 @@ public final class ChooseSqlConnectionAction extends AnAction implements DumbAwa
 
     @Override public void actionPerformed(@NotNull AnActionEvent event) {
         VirtualFile file = event.getData(CommonDataKeys.VIRTUAL_FILE);
-        if (event.getProject() != null && file != null) SqlConnectionChooser.chooseForFile(event.getProject(), file);
+        if (event.getProject() != null && file != null) SqlConnectionChooser.chooseForFile(event.getProject(), file, event.getData(CommonDataKeys.EDITOR));
     }
 }

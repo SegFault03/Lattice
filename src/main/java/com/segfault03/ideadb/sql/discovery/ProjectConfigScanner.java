@@ -23,10 +23,12 @@ import java.util.regex.Pattern;
  * {@code .yml}, JPA {@code persistence.xml}, Hibernate {@code hibernate.cfg.xml} and {@code .properties}, Tomcat
  * {@code context.xml} and plain {@code jdbc}/{@code database}/{@code db} properties files.
  *
- * <p>Only values under a URL key that start with {@code jdbc:} are read. User names, passwords and every other
- * setting are skipped without being looked at, and what is returned is parsed down to the target database (see
- * {@link ParsedJdbcUrl}). Placeholders such as {@code ${DB_HOST:localhost}} resolve to their default, or to another
- * setting of the same file; the environment is never consulted.
+ * <p>Only values under a URL key that start with {@code jdbc:} are read, and what is returned is parsed down to the
+ * target database (see {@link ParsedJdbcUrl}). The one other thing kept is the user name that sits next to a URL
+ * ({@code spring.datasource.username}, {@code javax.persistence.jdbc.user}...) or in its {@code user=} parameter, so a
+ * new connection can start with it. Passwords and every other setting are skipped without being looked at.
+ * Placeholders such as {@code ${DB_HOST:localhost}} resolve to their default, or to another setting of the same file;
+ * the environment is never consulted.
  */
 public final class ProjectConfigScanner {
     private static final Pattern NAME = Pattern.compile(
@@ -40,22 +42,58 @@ public final class ProjectConfigScanner {
     /** Whether a file of this name can hold a datasource URL. */
     public static boolean isConfigFileName(@NotNull String name) { return NAME.matcher(name).matches(); }
 
+    /** A database a file points at, with the user name the file gives for it, if any. Never a password. */
+    public record Found(@NotNull ParsedJdbcUrl url, @Nullable String user) {}
+
     /** The databases the file's URLs point at, in file order, without duplicates. */
     public static @NotNull List<ParsedJdbcUrl> urlsIn(@NotNull String fileName, @NotNull CharSequence text) {
+        return findIn(fileName, text).stream().map(Found::url).toList();
+    }
+
+    /** The databases the file's URLs point at, each with its user name, in file order, without duplicate databases. */
+    public static @NotNull List<Found> findIn(@NotNull String fileName, @NotNull CharSequence text) {
         String lower = fileName.toLowerCase(Locale.ROOT);
         List<Map<String, String>> documents = lower.endsWith(".yml") || lower.endsWith(".yaml") ? yamlDocuments(text)
                 : List.of(lower.endsWith(".xml") ? xml(text) : properties(text));
-        List<ParsedJdbcUrl> found = new ArrayList<>();
+        List<Found> found = new ArrayList<>();
         for (Map<String, String> settings : documents) {
             for (Map.Entry<String, String> entry : settings.entrySet()) {
                 if (!isUrlKey(entry.getKey())) continue;
                 String value = resolve(entry.getValue(), settings, 0);
                 if (!value.toLowerCase(Locale.ROOT).startsWith("jdbc:")) continue;
                 ParsedJdbcUrl parsed = JdbcUrls.parse(value);
-                if (parsed != null && !found.contains(parsed)) found.add(parsed);
+                if (parsed == null) continue;
+                String user = userNextTo(entry.getKey(), settings);
+                if (user == null) user = JdbcUrls.userOf(value);
+                int at = indexOfUrl(found, parsed);
+                if (at < 0) found.add(new Found(parsed, user));
+                else if (found.get(at).user() == null && user != null) found.set(at, new Found(parsed, user));
             }
         }
         return found;
+    }
+
+    private static int indexOfUrl(List<Found> found, ParsedJdbcUrl url) {
+        for (int i = 0; i < found.size(); i++) if (found.get(i).url().equals(url)) return i;
+        return -1;
+    }
+
+    /** The user name set beside a URL key: the same prefix ({@code spring.datasource.}), or one level up for {@code quarkus.datasource.jdbc.url}. */
+    private static @Nullable String userNextTo(String urlKey, Map<String, String> settings) {
+        String prefix = urlKey.substring(0, urlKey.lastIndexOf('.') + 1);
+        List<String> prefixes = new ArrayList<>(List.of(prefix));
+        if (prefix.toLowerCase(Locale.ROOT).endsWith(".jdbc.")) prefixes.add(prefix.substring(0, prefix.length() - "jdbc.".length()));
+        for (String candidate : prefixes) {
+            for (Map.Entry<String, String> entry : settings.entrySet()) {
+                String key = entry.getKey();
+                if (key.length() <= candidate.length() || !key.regionMatches(true, 0, candidate, 0, candidate.length())) continue;
+                String rest = key.substring(candidate.length());
+                if (rest.indexOf('.') >= 0 || !isUserName(rest)) continue;
+                String user = resolve(entry.getValue(), settings, 0).strip();
+                if (!user.isEmpty() && user.indexOf(JdbcUrls.UNKNOWN) < 0) return user;
+            }
+        }
+        return null;
     }
 
     /** {@code spring.datasource.url}, {@code hibernate.connection.url}, {@code quarkus.datasource.jdbc.url}, {@code url} under a datasource... */
@@ -76,8 +114,17 @@ public final class ProjectConfigScanner {
         return last.equals("user") || last.equals("login") || last.equals("auth");
     }
 
+    /** Whether the last part of a key names a database user: {@code user}, {@code username}, {@code user-name}. */
+    private static boolean isUserName(String lastPart) {
+        String normalized = lastPart.toLowerCase(Locale.ROOT).replace("-", "").replace("_", "");
+        return normalized.equals("user") || normalized.equals("username");
+    }
+
+    /** The one kind of sensitive setting that is kept: a user name, which is not a secret and is only used to prefill a dialog. */
+    private static boolean isUserKey(String key) { return isUserName(key.substring(key.lastIndexOf('.') + 1)) && !key.toLowerCase(Locale.ROOT).contains("password"); }
+
     private static void store(Map<String, String> settings, String key, String value) {
-        if (!isSensitive(key)) settings.put(key, value);
+        if (!isSensitive(key) || isUserKey(key)) settings.put(key, value);
     }
 
     // ---- placeholders ----------------------------------------------------------------------------------------------
@@ -275,7 +322,11 @@ public final class ProjectConfigScanner {
             String value = element.hasAttribute("value") ? element.getAttribute("value") : directText(element);
             if (!value.isEmpty()) store(settings, name, value);
         }
-        if (element.hasAttribute("url")) store(settings, (name.isEmpty() ? element.getTagName() : name) + ".url", element.getAttribute("url"));
+        if (element.hasAttribute("url")) {
+            String owner = name.isEmpty() ? element.getTagName() : name;
+            store(settings, owner + ".url", element.getAttribute("url"));
+            if (element.hasAttribute("username")) store(settings, owner + ".username", element.getAttribute("username"));
+        }
         for (Node child = element.getFirstChild(); child != null; child = child.getNextSibling()) {
             if (child instanceof Element nested) collect(nested, settings);
         }

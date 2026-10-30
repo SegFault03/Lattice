@@ -182,6 +182,7 @@ public final class SqlBindingsState implements PersistentStateComponent<SqlBindi
         if (!state.dismissedDiscoveries.contains(key)) state.dismissedDiscoveries.add(key);
     }
 
+    public synchronized int dismissedDiscoveryCount() { return state.dismissedDiscoveries == null ? 0 : state.dismissedDiscoveries.size(); }
     public synchronized void clearDismissedDiscoveries() { if (state.dismissedDiscoveries != null) state.dismissedDiscoveries.clear(); }
     public synchronized boolean useProjectFiles() { return state.useProjectFiles; }
     public synchronized void useProjectFiles(boolean value) { state.useProjectFiles = value; }

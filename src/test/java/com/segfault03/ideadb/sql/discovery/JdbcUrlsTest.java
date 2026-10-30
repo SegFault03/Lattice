@@ -144,4 +144,16 @@ class JdbcUrlsTest {
         assertEquals("H2 file ./data/db", parse("jdbc:h2:file:./data/db").describe());
         assertEquals("MySQL localhost:3306/shop", parse("jdbc:mysql://localhost/shop").describe());
     }
+
+    @Test void onlyTheUserParameterIsReadFromTheQuery() {
+        assertEquals("bob", JdbcUrls.userOf("jdbc:postgresql://localhost/shop?user=bob&password=hunter2"));
+        assertEquals("bob", JdbcUrls.userOf("jdbc:postgresql://localhost/shop?password=hunter2&USER=bob"));
+        assertEquals("sa", JdbcUrls.userOf("jdbc:h2:mem:shop;USER=sa;PASSWORD=hunter2"));
+        assertEquals("a b", JdbcUrls.userOf("jdbc:mysql://h/d?user=a%20b"));
+        assertNull(JdbcUrls.userOf("jdbc:mysql://h/d?password=hunter2"));
+        assertNull(JdbcUrls.userOf("jdbc:mysql://h/d?username=bob"), "a longer name is another parameter");
+        assertNull(JdbcUrls.userOf("jdbc:mysql://admin:s3cr3t@h/d"), "the user of the authority part is not read");
+        assertNull(JdbcUrls.userOf("jdbc:mysql://h/d?user="));
+        assertNull(JdbcUrls.userOf(null));
+    }
 }

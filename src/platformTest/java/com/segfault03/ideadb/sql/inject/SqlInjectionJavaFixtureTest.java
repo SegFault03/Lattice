@@ -224,6 +224,36 @@ public class SqlInjectionJavaFixtureTest extends H2SqlFixtureTestCase {
         assertFalse("inside a string that is not SQL", myFixture.testAction(action).isEnabledAndVisible());
     }
 
+    public void testTheStatusBarEntryShowsForASourceFileOnlyWhileItHostsSql() {
+        var widget = new com.segfault03.ideadb.sql.binding.SqlConnectionWidgetFactory().createWidget(getProject());
+        com.intellij.openapi.util.Disposer.register(getTestRootDisposable(), widget);
+        var presentation = (com.intellij.openapi.wm.StatusBarWidget.MultipleTextValuesPresentation) widget.getPresentation();
+
+        myFixture.configureByText("Plain.java", inClass("String s = \"hello\";"));
+        myFixture.doHighlighting();
+        assertEquals("No SQL in the file, no entry", "", presentation.getSelectedValue());
+        assertNull(presentation.getPopupStep());
+
+        var host = myFixture.configureByText("A.java", inClass("void f(Connection c) throws Exception { c.prepareStatement(\"select * from books\"); }"));
+        myFixture.doHighlighting();
+        assertEquals("SQL: H2 \u00b7 fixture H2", presentation.getSelectedValue());
+        assertNotNull(presentation.getTooltipText());
+
+        // Choosing there binds the Java file, which is what injected SQL resolves through.
+        var popup = presentation.getPopupStep();
+        assertNotNull(popup);
+        try {
+            @SuppressWarnings("unchecked") var step = (com.intellij.openapi.ui.popup.ListPopupStepEx<Object>) popup.getListStep();
+            Object generic = step.getValues().stream().filter(row -> row.toString().equals("Generic SQL")).findFirst().orElseThrow();
+            step.onChosen(generic, true);
+            step.getFinalRunnable().run();
+        } finally {
+            popup.dispose();
+        }
+        assertEquals(SqlDialects.ANSI.id(), SqlBindingsState.getInstance(getProject()).fileBinding(host.getVirtualFile()).dialectId);
+        assertEquals("SQL: Generic SQL", presentation.getSelectedValue());
+    }
+
     public void testInjectionDoesNotNeedIndexesAndSurvivesIndexing() {
         com.intellij.testFramework.DumbModeTestUtils.runInDumbModeSynchronously(getProject(), () -> {
             assertTrue(com.intellij.openapi.project.DumbService.isDumb(getProject()));

@@ -11,7 +11,7 @@ import java.util.regex.Pattern;
 
 /**
  * Reads the JDBC URLs of the supported databases. Only the target is kept (see {@link ParsedJdbcUrl}): user names,
- * passwords, query strings and driver options never leave this class. The character {@link #UNKNOWN} stands where a
+ * passwords, query strings and driver options never leave this class (the one exception is the {@code user=} parameter, read by {@link #userOf}). The character {@link #UNKNOWN} stands where a
  * placeholder could not be resolved.
  */
 public final class JdbcUrls {
@@ -52,6 +52,22 @@ public final class JdbcUrls {
             case "postgresql", "postgres" -> DatabaseType.POSTGRESQL;
             default -> null;
         };
+    }
+
+    /**
+     * The value of a {@code user=} parameter ({@code ?user=bob&...} or {@code ;USER=sa}), the only parameter read. Nothing else
+     * in the query is looked at, so a password in the same URL is never touched. Null when there is none or it is unresolved.
+     */
+    public static @Nullable String userOf(@Nullable String url) {
+        if (url == null) return null;
+        String[] parts = url.split("[?&;]");
+        for (int i = 1; i < parts.length; i++) {
+            int equals = parts[i].indexOf('=');
+            if (equals <= 0 || !parts[i].substring(0, equals).strip().equalsIgnoreCase("user")) continue;
+            String user = decode(parts[i].substring(equals + 1)).strip();
+            return user.isEmpty() || user.indexOf(UNKNOWN) >= 0 ? null : user;
+        }
+        return null;
     }
 
     // ---- MySQL and PostgreSQL --------------------------------------------------------------------------------------

@@ -15,8 +15,8 @@ import java.util.List;
 
 /**
  * Turns a database found in a project file into a saved connection: the connection dialog opens with the type, server,
- * port and database filled in, and the user and password empty. The person reviews it and enters the credentials;
- * nothing is saved until they confirm.
+ * port and database filled in, and the user name too when the file names one. The password is always empty: the person
+ * reviews the connection and enters it; nothing is saved until they confirm.
  */
 public final class ProjectConnectionOffer {
     private ProjectConnectionOffer() {}
@@ -30,7 +30,7 @@ public final class ProjectConnectionOffer {
 
     /** Opens the dialog for one found database; on OK saves the connection and, if the project has no default, makes it the default. */
     public static void add(@NotNull Project project, @NotNull DiscoveredConnection discovered, @Nullable VirtualFile file) {
-        ConnectionConfig config = discovered.url().toConnection(discovered.suggestedName());
+        ConnectionConfig config = discovered.toConnection();
         ConnectionDialog dialog = new ConnectionDialog(project, config, true);
         if (!dialog.showAndGet()) return;
         ConnectionConfig saved = dialog.getResultConfig();

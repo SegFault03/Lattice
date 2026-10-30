@@ -98,7 +98,7 @@
                                  instance="com.segfault03.ideadb.sql.settings.SqlEditorConfigurable"
                                  displayName="Lattice SQL Editor"/>
         <projectConfigurable parentId="com.segfault03.lattice.sql.editor" id="com.segfault03.lattice.sql.editor.project"
-                             instance="com.segfault03.ideadb.sql.settings.SqlProjectConfigurable" displayName="Project"/>
+                             instance="com.segfault03.ideadb.sql.settings.SqlProjectConfigurable" displayName="Project Defaults"/>
         <localInspection language="LatticeSQL" shortName="LatticeSqlSyntax" displayName="Syntax error" groupName="Lattice SQL"
                          enabledByDefault="true" level="ERROR" implementationClass="com.segfault03.ideadb.sql.validate.LatticeSqlSyntaxInspection"/>
         <localInspection language="LatticeSQL" shortName="LatticeSqlUnknownTable" displayName="Unknown table" groupName="Lattice SQL"

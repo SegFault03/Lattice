@@ -86,11 +86,13 @@ A file's dialect comes from, in order:
 5. The database type the project's configuration files agree on, with no connection (so keywords and quoting are right, but there is no schema).
 6. Generic SQL.
 
-When a `.sql` file has no choice, the project has no default and there are two or more connections, a banner offers **Choose connection**, **Use for project** and **Keep generic**. You can also use:
+When a `.sql` file has no choice, the project has no default and there are two or more connections, a banner reads "Generic SQL: no connection chosen" and offers **Choose connection...** and **Use generic SQL**. You can also use:
 
-- The **SQL: ...** entry in the status bar, which shows the dialect and connection of the current `.sql` file and opens the same chooser when clicked.
+- The **SQL: ...** entry in the status bar, which shows the dialect and connection of the current file and opens the chooser above itself when clicked, like Encoding and Line Separator. It shows for `.sql` files and for Java and Kotlin files that currently have SQL in strings; choosing there binds the Java or Kotlin file.
 - **Lattice: SQL Connection for This File...** in the editor's right-click menu.
 - **Lattice: SQL Connection for Project...** in the Tools menu.
+
+The chooser lists the saved connections first, each with its database icon and type, and preselects the one in effect. After a separator come **Generic SQL**, **Follow project default (...)** (only for a file with a choice of its own; it clears that choice and names what it falls back to), **Add ...** for each database found in the project's files, and **Set project default...**, which opens the same list for the whole project.
 
 Choices are stored in the project's workspace file, not in version control, because connection IDs are local to your machine. A file's choice follows it when it or a folder above it is renamed or moved, and is forgotten when it is deleted. When a connection is deleted, files bound to it become unbound and a default that pointed to it is cleared; an explicit generic-SQL choice is kept.
 
@@ -131,14 +133,14 @@ Only values that start with `jdbc:` for MySQL (and MariaDB), PostgreSQL, H2 or H
 What this does:
 
 - **A saved connection that a URL points at applies by itself** (same type, server, port and database; `localhost` and `127.0.0.1` are the same). When the files point at two different saved connections, such as dev and test, none is guessed; the chooser lists them.
-- **A database that is not saved yet is offered.** A banner on the SQL file reads "application.yml connects to PostgreSQL localhost:5432/shop" with **Add connection...**, which opens the connection dialog with the type, server, port and database filled in. **Not now** turns that offer down for the project. **Tools | Lattice: Add Connection from Project Configuration...** and the file's connection chooser offer the same. Saving it also makes it the project default if there is none.
-- **Credentials are never read.** User names, passwords, tokens and other secrets in these files are skipped as the file is read, and URL parameters (`?user=...&password=...`, `;PASSWORD=...`, `user:pass@host`) are dropped when the URL is parsed. The new connection has an empty user and password for you to enter.
+- **A database that is not saved yet is offered.** A banner on the SQL file reads "application.properties: PostgreSQL billing on db.internal" (the port only when it is not the default; the full description is in the tooltip) with **Add connection...**, which opens the connection dialog with the type, server, port, database and user name filled in. **Choose...** (when connections are saved) opens the chooser, and **Not now** turns that offer down for the project. **Tools | Lattice: Add Connection from Project Configuration...** and the file's connection chooser offer the same. Saving it also makes it the project default if there is none.
+- **Passwords are never read.** Passwords, tokens and other secrets in these files are skipped as the file is read, and URL parameters other than `user` (`?password=...`, `;PASSWORD=...`, `user:pass@host`) are dropped when the URL is parsed. The one credential kept is the user name: the setting beside the URL (`spring.datasource.username` or `.user`, `jakarta.persistence.jdbc.user`, `javax.persistence.jdbc.user`, `hibernate.connection.username`, `quarkus.datasource.username`, a Tomcat `Resource`'s `username`) or, failing that, a `user=` parameter of the URL. It pre-fills the new connection's user; the password is empty for you to enter.
 
 The status bar entry says when a connection was chosen because of the project's files. Files are read in the background when the project opens and again when one of them changes.
 
 ## Settings
 
-**Settings | Tools | Lattice SQL Editor** (and its **Project** page)
+**Settings | Tools | Lattice SQL Editor** (and its **Project Defaults** page)
 
 | Setting | Default |
 |---|---|
@@ -148,11 +150,13 @@ The status bar entry says when a connection was chosen because of the project's 
 | Code completion | On |
 | Keyword case when inserted | As typed (or always upper or lower case) |
 | Hover documentation | On |
-| Validation | On, as five inspections whose severities you set under Editor | Inspections |
-| SQL inside Java and Kotlin strings | On, as three switches: marked strings, known calls and strict content check |
-| Known calls | JDBC, Spring `JdbcTemplate`, JPA, Hibernate, jOOQ and Exposed method names, one per line |
+| Validation | On, as five inspections whose severities you set under Editor | Inspections; **Configure inspections...** opens that page at Lattice SQL |
+| SQL in Java and Kotlin strings | On, as three switches: marked strings, known calls and strict content check |
+| Known calls | A list of JDBC, Spring `JdbcTemplate`, JPA, Hibernate, jOOQ and Exposed method names, edited with the add, edit and remove buttons; an empty list means the default one |
 
-The **Project** page sets what applies to the current project only: the default connection for its SQL (or Automatic, which uses the project's files and then the only connection), whether its configuration files are read to find the database, and a button that offers again the databases you turned down.
+Everything on the page except the first checkbox is disabled while Lattice SQL editor support is off.
+
+The **Project Defaults** page sets what applies to the current project only: the default connection for its SQL (or Automatic, which uses the project's files and then the only connection), whether its configuration files are read to find the database, and, while some offers are turned down, a checkbox "Offer the N databases I turned down again" that takes effect when you apply the page.
 
 Colors are under **Settings | Editor | Color Scheme | Lattice SQL**. **Tools | Lattice: Restore the IDE's Built-in SQL Handling** switches off `.sql` handling in one step, with an undo in the notice it shows.
 
