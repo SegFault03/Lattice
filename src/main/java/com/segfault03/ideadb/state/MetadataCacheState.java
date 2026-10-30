@@ -23,17 +23,17 @@ public final class MetadataCacheState implements PersistentStateComponent<Metada
         public Map<String, Table> tables = new LinkedHashMap<>();
     }
     public static final class Table {
-        public String catalog, schema, name, type;
+        public String catalog, schema, name, type, comment;
         public boolean columnsLoaded;
         public List<Column> columns = new ArrayList<>();
         TableMetadata metadata() {
-            var metadata = new TableMetadata(catalog, schema, name, type);
+            var metadata = new TableMetadata(catalog, schema, name, type, comment);
             metadata.setColumns(columns.stream().map(Column::metadata).toList());
             return metadata;
         }
     }
     public static final class Column {
-        public String name, typeName, defaultValue;
+        public String name, typeName, defaultValue, comment, refNamespace, refTable, refColumn;
         public int dataType, columnSize, decimalDigits;
         public boolean nullable, primaryKey, foreignKey, autoIncrement, generated;
         static Column capture(ColumnMetadata metadata) {
@@ -44,15 +44,22 @@ public final class MetadataCacheState implements PersistentStateComponent<Metada
             column.nullable = metadata.isNullable(); column.primaryKey = metadata.isPrimaryKey();
             column.foreignKey = metadata.isForeignKey(); column.autoIncrement = metadata.isAutoIncrement();
             column.generated = metadata.isGenerated();
+            column.comment = metadata.getComment();
+            var reference = metadata.getReference();
+            if (reference != null) { column.refNamespace = reference.namespace(); column.refTable = reference.table(); column.refColumn = reference.column(); }
             return column;
         }
         ColumnMetadata metadata() {
+            // Older caches have a foreign-key flag but no target until the next refresh reads one.
             return new ColumnMetadata(name, typeName, dataType, columnSize, decimalDigits, nullable,
-                    primaryKey, autoIncrement, defaultValue, generated).withForeignKey(foreignKey);
+                    primaryKey, autoIncrement, defaultValue, generated).withForeignKey(foreignKey).withComment(comment)
+                    .withReference(refTable == null ? null : new ColumnReference(refNamespace, refTable, refColumn));
         }
     }
 
     private State state = new State();
+    /** Bumped on every change, so consumers can tell when a derived view of the cache is stale without copying it. */
+    private long revision;
     private static final class Standalone { private static final MetadataCacheState INSTANCE = new MetadataCacheState(); }
     public static MetadataCacheState getInstance() {
         var application = ApplicationManager.getApplication();
@@ -80,7 +87,10 @@ public final class MetadataCacheState implements PersistentStateComponent<Metada
         return source;
     }
 
+    public synchronized long revision() { return revision; }
+
     public synchronized void databasesRefreshed(ConnectionConfig config, List<String> names) {
+        revision++;
         var source = source(config);
         source.namespaces.keySet().retainAll(names);
         for (String name : names) source.namespaces.computeIfAbsent(name, ignored -> new Namespace());
@@ -88,13 +98,14 @@ public final class MetadataCacheState implements PersistentStateComponent<Metada
 
     public synchronized void tablesRefreshed(ConnectionConfig config, String namespace, List<TableMetadata> metadata) {
         if (namespace == null) return;
+        revision++;
         var cached = source(config).namespaces.computeIfAbsent(namespace, ignored -> new Namespace());
         var tables = new LinkedHashMap<String, Table>();
         for (var table : metadata) {
             var entry = cached.tables.get(table.getName());
             if (entry == null || !Objects.equals(entry.type, table.getType())) entry = new Table();
             entry.catalog = table.getCatalog(); entry.schema = table.getSchema();
-            entry.name = table.getName(); entry.type = table.getType();
+            entry.name = table.getName(); entry.type = table.getType(); entry.comment = table.getComment();
             tables.put(entry.name, entry);
         }
         cached.tables = tables;
@@ -103,6 +114,7 @@ public final class MetadataCacheState implements PersistentStateComponent<Metada
 
     public synchronized void columnsRefreshed(ConnectionConfig config, String namespace, String table, List<ColumnMetadata> columns) {
         if (namespace == null) return;
+        revision++;
         var cached = source(config).namespaces.computeIfAbsent(namespace, ignored -> new Namespace());
         var entry = cached.tables.computeIfAbsent(table, ignored -> {
             var value = new Table(); value.name = table; value.type = "TABLE"; return value;
@@ -123,10 +135,10 @@ public final class MetadataCacheState implements PersistentStateComponent<Metada
         return new ExplorerMetadataSnapshot(List.copyOf(namespaces), List.of(), 3);
     }
 
-    public synchronized void remove(String connectionId) { state.sources.remove(connectionId); }
+    public synchronized void remove(String connectionId) { revision++; state.sources.remove(connectionId); }
 
     @Override public synchronized State getState() { return copy(state); }
-    @Override public synchronized void loadState(State loaded) { state = copy(loaded); }
+    @Override public synchronized void loadState(State loaded) { revision++; state = copy(loaded); }
     private static State copy(State original) {
         var copy = new State();
         original.sources.forEach((id, source) -> {
@@ -136,7 +148,7 @@ public final class MetadataCacheState implements PersistentStateComponent<Metada
                 namespace.tables.forEach((tableName, table) -> {
                     var tableCopy = new Table();
                     tableCopy.catalog = table.catalog; tableCopy.schema = table.schema;
-                    tableCopy.name = table.name; tableCopy.type = table.type;
+                    tableCopy.name = table.name; tableCopy.type = table.type; tableCopy.comment = table.comment;
                     tableCopy.columnsLoaded = table.columnsLoaded;
                     tableCopy.columns = table.columns.stream().map(column -> Column.capture(column.metadata())).toList();
                     namespaceCopy.tables.put(tableName, tableCopy);

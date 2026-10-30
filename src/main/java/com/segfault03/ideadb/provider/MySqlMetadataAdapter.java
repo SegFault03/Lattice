@@ -16,6 +16,10 @@ final class MySqlMetadataAdapter extends JdbcMetadataAdapter {
         }
         Collections.sort(names); return names;
     }
+    @Override public String defaultNamespace(Connection conn, ConnectionConfig config) throws Exception {
+        String catalog = conn.getCatalog();
+        return catalog != null && !catalog.isBlank() ? catalog : config.getDatabaseName();
+    }
     protected void enrichColumns(Connection conn, ConnectionConfig config, String database, String schema, String table, List<ColumnMetadata> columns) throws Exception {
         DatabaseMetaData meta = conn.getMetaData();
         if (meta.getDatabaseMajorVersion() > 5 || meta.getDatabaseMajorVersion() == 5 && meta.getDatabaseMinorVersion() >= 6)
