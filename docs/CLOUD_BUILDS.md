@@ -10,6 +10,83 @@ This guide covers building and testing Lattice in Claude cloud sessions (ephemer
 - `plugins.gradle.org` resolves normally.
 - JetBrains' own repositories (`packages.jetbrains.team`, `www.jetbrains.com/intellij-repository`) return 404 through the proxy for most paths. `cache-redirector.jetbrains.com/intellij-dependencies` serves some artifacts (for example JCEF).
 - A Central mirror that works: `https://maven-central.storage-download.googleapis.com/maven2`. It does not host IntelliJ `bundledModule` artifacts or every JetBrains tooling jar.
+- Each new session gets a fresh VM and a fresh clone. `~/.gradle`, the init script and anything installed mid-session do not carry over by default.
+- The exception is the environment cache. If the environment's setup script finishes in roughly five minutes, Anthropic snapshots the filesystem and new sessions start from that snapshot, skipping the script. The snapshot rebuilds when the script or allowed hosts change, and expires after about seven days. A script that runs longer than five minutes is not cached.
+
+## Setup script
+
+Configure this in the environment's settings: open the cloud environment menu in the session title bar, choose Edit, then the **Setup script** row. Setup scripts are visible to everyone who uses the environment, so do not put secrets in them.
+
+The script runs from the repository root. Confirm the working directory in the first session before relying on the paths below.
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+# 1. X11 tools for the real-IDE capture (not in the base image).
+apt-get update -qq
+apt-get install -y -qq --no-install-recommends x11-utils openbox
+
+# 2. Mirror init script, read by every Gradle build in the session.
+mkdir -p "$HOME/.gradle/init.d"
+cat > "$HOME/.gradle/init.d/mirror.gradle.kts" <<'EOF'
+val centralMirror = "https://maven-central.storage-download.googleapis.com/maven2"
+val jetbrainsDeps = "https://cache-redirector.jetbrains.com/intellij-dependencies"
+
+fun org.gradle.api.artifacts.dsl.RepositoryHandler.prependMirror() {
+    val deps = maven { name = "jetbrainsDepsMirror"; url = uri(jetbrainsDeps) }
+    remove(deps)
+    add(0, deps)
+    val mirror = maven { name = "centralMirror"; url = uri(centralMirror) }
+    remove(mirror)
+    add(0, mirror)
+}
+
+beforeSettings {
+    pluginManagement.repositories.prependMirror()
+    pluginManagement.repositories.gradlePluginPortal()
+}
+
+beforeProject {
+    buildscript.repositories.prependMirror()
+    repositories.prependMirror()
+}
+EOF
+
+# 3. UI fixture JDBC jars, fetched from the mirror (same paths as scripts/linux/review-intellij-ui.sh).
+M=https://maven-central.storage-download.googleapis.com/maven2
+R="$PWD/build/ui-test-maven/repository"
+for a in \
+    com/mysql/mysql-connector-j/9.0.0/mysql-connector-j-9.0.0.jar \
+    com/mysql/mysql-connector-j/8.4.0/mysql-connector-j-8.4.0.jar \
+    com/mysql/mysql-connector-j/8.0.33/mysql-connector-j-8.0.33.jar \
+    org/hsqldb/hsqldb/2.7.2/hsqldb-2.7.2.jar \
+    org/hsqldb/hsqldb/2.7.3/hsqldb-2.7.3-jdk8.jar \
+    org/hsqldb/hsqldb/2.6.1/hsqldb-2.6.1-jdk8.jar \
+    org/hsqldb/hsqldb/2.4.1/hsqldb-2.4.1.jar; do
+  mkdir -p "$R/$(dirname "$a")"
+  if [[ ! -s "$R/$a" ]]; then
+    curl -sS --fail --retry 2 -L "$M/$a" -o "$R/$a.part"
+    mv "$R/$a.part" "$R/$a"
+  fi
+done
+
+# 4. Warm the Gradle cache. Keep this last: it is the slowest step.
+for attempt in 1 2; do
+  ./gradlew --no-daemon compileJava compileKotlin compileUiTestKotlin && break
+  [[ $attempt -eq 2 ]] && exit 1
+  sleep 120
+done
+```
+
+Notes on the script:
+
+- The whole script must finish in roughly five minutes, or the environment is not cached. If the Gradle warm-up (step 4) alone takes longer, remove it and run it from a SessionStart hook in the background. That hook runs on every session and does not benefit from the cache.
+- The script can still hit Central 429s. Two attempts with a two-minute gap is the most that fits the time budget. If it fails, the session still starts, so check the build output before assuming the cache exists.
+- Changing the script or the allowed hosts rebuilds the cache. An existing session picks up a change only when its VM is rebuilt, so start a new session to see it.
+- The mirror hosts must be reachable. Add `maven-central.storage-download.googleapis.com` and `cache-redirector.jetbrains.com` under **Allowed domains**, with **Allow package managers** ticked. See [network access](https://code.claude.com/docs/en/cloud-environments#network-access).
+
+For this environment, the mirror script and fixtures are in step 2 and step 3 above. Once the environment is cached, a new session starts with them already on disk.
 
 ## Failure: `Could not GET ... Received status code 429`
 
