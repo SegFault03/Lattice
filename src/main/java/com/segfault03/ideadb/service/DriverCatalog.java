@@ -17,7 +17,10 @@ import java.util.regex.Pattern;
 
 /** Downloads only known Maven Central coordinates; local JARs are never downloaded implicitly. */
 public final class DriverCatalog {
-    private static final String CENTRAL = "https://repo.maven.apache.org/maven2/";
+    private static final String DEFAULT_CENTRAL = "https://repo.maven.apache.org/maven2/";
+    // Isolated test runs can point downloads at a Maven Central mirror; checksums are fetched from the same host, so this is
+    // not a way to choose where drivers come from in normal use.
+    private static final String CENTRAL = baseUrl(System.getProperty("lattice.maven.central"));
     private static final long MAX_JAR_BYTES = 32L * 1024 * 1024;
     private static final long ABANDONED_PART_MAX_AGE_MILLIS = 24L * 60 * 60 * 1000;
     private static com.segfault03.ideadb.provider.DriverDescriptor descriptor(DatabaseType type) {
@@ -40,6 +43,14 @@ public final class DriverCatalog {
     }
 
     private DriverCatalog() {}
+    /** The repository base URL ending in exactly one '/', or Maven Central when {@code configured} is null or blank. */
+    static String baseUrl(String configured) {
+        if (configured == null || configured.isBlank()) return DEFAULT_CENTRAL;
+        String trimmed = configured.strip();
+        int end = trimmed.length();
+        while (end > 0 && trimmed.charAt(end - 1) == '/') end--;
+        return trimmed.substring(0, end) + "/";
+    }
     public static List<String> suggestedVersions(DatabaseType type) { return descriptor(type).suggestedVersions(); }
     public static Path cacheDirectory() {
         String override = System.getProperty("lattice.jdbc.cache");

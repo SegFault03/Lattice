@@ -18,11 +18,12 @@
         <li><b>SQL Query Console:</b> Execute queries with Ctrl+Enter, result tables, affected row counts, elapsed time, query history, timeouts and cancellation.</li>
         <li><b>Visual Table Design:</b> Create and alter tables with column navigation and complete SQL previews. Batch column changes, rename tables and retain unfinished edits after partial DDL failures.</li>
         <li><b>Export:</b> Export data directly to CSV, JSON, and SQL INSERTs, and export/view CREATE TABLE DDL.</li>
+        <li><b>SQL Highlighting, Completion, Hover and Validation:</b> Dialect-aware highlighting, schema-aware completion (tables, columns, joins, keywords), hover details (comments, types, keys) and local validation (syntax errors, unknown tables and columns) for .sql files and for SQL strings in Java and Kotlin code, following the connection you choose, or the one your Spring or Jakarta EE configuration points at. Turn it off in Settings | Tools | Lattice SQL Editor.</li>
         <li><b>What's New:</b> Illustrated, offline feature guides in an editor tab, with a dismissible once-per-version update notice.</li>
     </ul>
     <p>Requires IntelliJ IDEA 2025.1 or later and the IDE's Java 21+ runtime. This is an alpha release; see the project documentation for database compatibility and limitations.</p>
     <h4>Coming soon:</h4>
-    <p>The roadmap includes generating POJOs, DTOs and JavaBeans; SQL syntax highlighting and schema-aware inline suggestions, subject to platform feasibility; and table relationship graphs and dependency trees. These features are not available yet.</p>
+    <p>The roadmap includes generating POJOs, DTOs and JavaBeans; query preview and running SQL from your code in the Lattice console; and table relationship graphs and dependency trees. These features are not available yet.</p>
     ]]></description>
 
     <change-notes><![CDATA[
@@ -37,18 +38,82 @@
 
     <idea-version since-build="251"/>
 
-    <!-- Maven settings identify the effective local repository used for driver discovery. -->
     <depends>com.intellij.modules.platform</depends>
-    <depends>org.jetbrains.idea.maven</depends>
+    <applicationListeners>
+        <listener class="com.segfault03.ideadb.sql.schema.SqlSchemaDaemonRestarter"
+                  topic="com.segfault03.ideadb.sql.schema.SqlSchemaListener"/>
+    </applicationListeners>
+
+    <!-- Maven settings identify the effective local repository used for driver discovery.
+         Access is reflective and falls back to ~/.m2 and POM parsing, so Maven is optional. -->
+    <depends optional="true" config-file="lattice-maven.xml">org.jetbrains.idea.maven</depends>
+    <!-- SQL in string literals needs each language's PSI, so that code lives in descriptors loaded only where the plugin exists. -->
+    <depends optional="true" config-file="lattice-java.xml">com.intellij.modules.java</depends>
+    <depends optional="true" config-file="lattice-kotlin.xml">org.jetbrains.kotlin</depends>
+
+    <!-- Read by the Kotlin plugin, and only when present: the Kotlin code here uses PSI, which both of its modes provide. -->
+    <extensionPoints>
+        <extensionPoint name="sqlHostAdapter" beanClass="com.intellij.lang.LanguageExtensionPoint" dynamic="true">
+            <with attribute="implementationClass" implements="com.segfault03.ideadb.sql.inject.SqlHostAdapter"/>
+        </extensionPoint>
+    </extensionPoints>
+
+    <extensions defaultExtensionNs="org.jetbrains.kotlin">
+        <supportsKotlinPluginMode supportsK1="true" supportsK2="true"/>
+    </extensions>
 
     <extensions defaultExtensionNs="com.intellij">
         <postStartupActivity implementation="com.segfault03.ideadb.release.ReleaseNotesStartupActivity"/>
         <notificationGroup id="Lattice updates" displayType="BALLOON"/>
+        <notificationGroup id="Lattice SQL editor" displayType="BALLOON"/>
         <toolWindow id="Lattice"
                     anchor="right"
                     secondary="false"
                     icon="/icons/lattice.svg"
                     factoryClass="com.segfault03.ideadb.ui.DatabaseToolWindowFactory"/>
+
+        <fileType name="Lattice SQL" implementationClass="com.segfault03.ideadb.sql.lang.LatticeSqlFileType"
+                  fieldName="INSTANCE" language="LatticeSQL" extensions="sql"/>
+        <lang.parserDefinition language="LatticeSQL" implementationClass="com.segfault03.ideadb.sql.lang.LatticeSqlParserDefinition"/>
+        <lang.syntaxHighlighterFactory language="LatticeSQL" implementationClass="com.segfault03.ideadb.sql.lang.LatticeSqlSyntaxHighlighterFactory"/>
+        <lang.commenter language="LatticeSQL" implementationClass="com.segfault03.ideadb.sql.lang.LatticeSqlCommenter"/>
+        <completion.contributor language="LatticeSQL" implementationClass="com.segfault03.ideadb.sql.completion.LatticeSqlCompletionContributor"/>
+        <intentionAction>
+            <className>com.segfault03.ideadb.sql.inject.SqlStringIntentions$NotSql</className>
+            <category>Lattice SQL</category>
+        </intentionAction>
+        <intentionAction>
+            <className>com.segfault03.ideadb.sql.inject.SqlStringIntentions$AsSql</className>
+            <category>Lattice SQL</category>
+        </intentionAction>
+        <typedHandler implementation="com.segfault03.ideadb.sql.completion.LatticeSqlTypedHandler"/>
+        <platform.backend.documentation.targetProvider implementation="com.segfault03.ideadb.sql.doc.LatticeSqlDocumentationTargetProvider"/>
+        <platform.backend.documentation.linkHandler implementation="com.segfault03.ideadb.sql.doc.LatticeSqlDocumentationLinkHandler"/>
+        <colorSettingsPage implementation="com.segfault03.ideadb.sql.lang.LatticeSqlColorSettingsPage"/>
+        <applicationService serviceImplementation="com.segfault03.ideadb.sql.settings.SqlEditorSettings"/>
+        <projectService serviceImplementation="com.segfault03.ideadb.sql.binding.SqlBindingsState"/>
+        <projectService serviceImplementation="com.segfault03.ideadb.sql.discovery.JdbcDiscovery"/>
+        <applicationService serviceImplementation="com.segfault03.ideadb.sql.schema.SqlSchemaService"/>
+        <applicationConfigurable parentId="tools" id="com.segfault03.lattice.sql.editor"
+                                 instance="com.segfault03.ideadb.sql.settings.SqlEditorConfigurable"
+                                 displayName="Lattice SQL Editor"/>
+        <projectConfigurable parentId="com.segfault03.lattice.sql.editor" id="com.segfault03.lattice.sql.editor.project"
+                             instance="com.segfault03.ideadb.sql.settings.SqlProjectConfigurable" displayName="Project Defaults"/>
+        <localInspection language="LatticeSQL" shortName="LatticeSqlSyntax" displayName="Syntax error" groupName="Lattice SQL"
+                         enabledByDefault="true" level="ERROR" implementationClass="com.segfault03.ideadb.sql.validate.LatticeSqlSyntaxInspection"/>
+        <localInspection language="LatticeSQL" shortName="LatticeSqlUnknownTable" displayName="Unknown table" groupName="Lattice SQL"
+                         enabledByDefault="true" level="WARNING" implementationClass="com.segfault03.ideadb.sql.validate.LatticeSqlUnknownTableInspection"/>
+        <localInspection language="LatticeSQL" shortName="LatticeSqlUnknownColumn" displayName="Unknown column" groupName="Lattice SQL"
+                         enabledByDefault="true" level="WARNING" implementationClass="com.segfault03.ideadb.sql.validate.LatticeSqlUnknownColumnInspection"/>
+        <localInspection language="LatticeSQL" shortName="LatticeSqlAmbiguousColumn" displayName="Ambiguous column" groupName="Lattice SQL"
+                         enabledByDefault="true" level="WARNING" implementationClass="com.segfault03.ideadb.sql.validate.LatticeSqlAmbiguousColumnInspection"/>
+        <localInspection language="LatticeSQL" shortName="LatticeSqlAlias" displayName="Table alias problem" groupName="Lattice SQL"
+                         enabledByDefault="true" level="WARNING" implementationClass="com.segfault03.ideadb.sql.validate.LatticeSqlAliasInspection"/>
+        <lang.inspectionSuppressor language="LatticeSQL" implementationClass="com.segfault03.ideadb.sql.validate.LatticeSqlInspectionSuppressor"/>
+        <editorNotificationProvider implementation="com.segfault03.ideadb.sql.binding.SqlConnectionBanner"/>
+        <statusBarWidgetFactory id="com.segfault03.lattice.sql.connection"
+                                implementation="com.segfault03.ideadb.sql.binding.SqlConnectionWidgetFactory"/>
+        <postStartupActivity implementation="com.segfault03.ideadb.sql.SqlEditorStartupActivity"/>
 
         <fileEditorProvider implementation="com.segfault03.ideadb.editor.DatabaseFileEditorProvider"/>
         <fileIconProvider implementation="com.segfault03.ideadb.editor.DatabaseTableIconProvider"/>
@@ -63,6 +128,30 @@
     </extensions>
 
     <actions>
+        <action id="com.segfault03.lattice.sql.chooseFileConnection"
+                class="com.segfault03.ideadb.sql.binding.ChooseSqlConnectionAction"
+                text="Lattice: SQL Connection for This File..."
+                description="Choose the connection whose dialect applies to this SQL file">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+        <action id="com.segfault03.lattice.sql.chooseProjectConnection"
+                class="com.segfault03.ideadb.sql.binding.ChooseProjectSqlConnectionAction"
+                text="Lattice: SQL Connection for Project..."
+                description="Choose the default connection whose dialect applies to SQL in this project">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+        <action id="com.segfault03.lattice.sql.restoreBuiltIn"
+                class="com.segfault03.ideadb.sql.binding.RestoreBuiltInSqlAction"
+                text="Lattice: Restore the IDE's Built-in SQL Handling"
+                description="Stop Lattice from handling .sql files and give them back to the IDE's own SQL file type">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+        <action id="com.segfault03.lattice.sql.addConnectionFromProject"
+                class="com.segfault03.ideadb.sql.binding.AddConnectionFromProjectAction"
+                text="Lattice: Add Connection from Project Configuration..."
+                description="Add a connection for a database that application.yml, application.properties or persistence.xml points at">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
         <action id="com.segfault03.lattice.whatsNew"
                 class="com.segfault03.ideadb.ui.OpenReleaseNotesAction"
                 text="What's New in Lattice"

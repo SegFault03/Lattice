@@ -12,6 +12,8 @@ public class ColumnMetadata {
     private final String defaultValue;
     private final boolean generated;
     private final boolean foreignKey;
+    private final String comment;
+    private final ColumnReference reference;
 
     public ColumnMetadata(String name, String typeName, int dataType, int columnSize, int decimalDigits,
                           boolean nullable, boolean primaryKey, boolean autoIncrement, String defaultValue) {
@@ -19,12 +21,14 @@ public class ColumnMetadata {
     }
     public ColumnMetadata(String name, String typeName, int dataType, int columnSize, int decimalDigits,
                           boolean nullable, boolean primaryKey, boolean autoIncrement, String defaultValue, boolean generated) {
-        this(name, typeName, dataType, columnSize, decimalDigits, nullable, primaryKey, autoIncrement, defaultValue, generated, false);
+        this(name, typeName, dataType, columnSize, decimalDigits, nullable, primaryKey, autoIncrement, defaultValue, generated, false, null, null);
     }
     private ColumnMetadata(String name, String typeName, int dataType, int columnSize, int decimalDigits,
                            boolean nullable, boolean primaryKey, boolean autoIncrement, String defaultValue,
-                           boolean generated, boolean foreignKey) {
-        this.foreignKey = foreignKey;
+                           boolean generated, boolean foreignKey, String comment, ColumnReference reference) {
+        this.foreignKey = foreignKey || reference != null;
+        this.comment = comment;
+        this.reference = reference;
         this.generated = generated;
         this.name = name;
         this.typeName = typeName;
@@ -40,7 +44,21 @@ public class ColumnMetadata {
     public boolean isForeignKey() { return foreignKey; }
     public ColumnMetadata withForeignKey(boolean foreignKey) {
         return new ColumnMetadata(name, typeName, dataType, columnSize, decimalDigits, nullable,
-                primaryKey, autoIncrement, defaultValue, generated, foreignKey);
+                primaryKey, autoIncrement, defaultValue, generated, foreignKey, comment, reference);
+    }
+
+    /** The column's comment as the database reports it; null when it has none. */
+    public String getComment() { return comment; }
+    public ColumnMetadata withComment(String comment) {
+        return new ColumnMetadata(name, typeName, dataType, columnSize, decimalDigits, nullable,
+                primaryKey, autoIncrement, defaultValue, generated, foreignKey, comment, reference);
+    }
+
+    /** Where this column's foreign key points; null when it has none or the target is not known. A reference implies a foreign key. */
+    public ColumnReference getReference() { return reference; }
+    public ColumnMetadata withReference(ColumnReference reference) {
+        return new ColumnMetadata(name, typeName, dataType, columnSize, decimalDigits, nullable,
+                primaryKey, autoIncrement, defaultValue, generated, foreignKey, comment, reference);
     }
 
     public boolean isGenerated() { return generated; }

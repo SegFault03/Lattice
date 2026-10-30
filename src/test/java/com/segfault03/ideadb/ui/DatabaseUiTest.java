@@ -10,10 +10,11 @@ class DatabaseUiTest {
         SwingUtilities.invokeAndWait(() -> {
             String[] keys = {"PopupMenu.background", "MenuItem.background", "MenuItem.foreground"};
             Object[] previous = java.util.Arrays.stream(keys).map(UIManager::get).toArray();
+            JPopupMenu menu = DatabaseUi.popupMenu();
+            JMenu nested = DatabaseUi.submenu("More");
             try {
-                JPopupMenu menu = DatabaseUi.popupMenu();
                 JMenuItem count = new JMenuItem("Count rows"); menu.add(count);
-                JMenu nested = DatabaseUi.submenu("More"); menu.add(nested);
+                menu.add(nested);
                 JMenuItem truncate = new JMenuItem("Truncate table"); nested.add(truncate);
                 int listeners = menu.getPopupMenuListeners().length;
                 for (Color background : new Color[]{Color.WHITE, new Color(0x25262A), Color.WHITE}) {
@@ -33,9 +34,19 @@ class DatabaseUiTest {
                     assertFalse(menu.isLightWeightPopupEnabled()); assertFalse(child.isLightWeightPopupEnabled());
                     assertEquals(listeners, menu.getPopupMenuListeners().length, "Opening must not accumulate listeners");
                 }
-            } finally { for (int index = 0; index < keys.length; index++) UIManager.put(keys[index], previous[index]); }
+            } finally {
+                // Opening a JBPopupMenu starts its PopupTimer and closing stops it; leave no running timer behind.
+                closePopup(nested.getPopupMenu());
+                closePopup(menu);
+                for (int index = 0; index < keys.length; index++) UIManager.put(keys[index], previous[index]);
+            }
         });
     }
+
+    private static void closePopup(JPopupMenu popup) {
+        for (var listener : popup.getPopupMenuListeners()) listener.popupMenuWillBecomeInvisible(new javax.swing.event.PopupMenuEvent(popup));
+    }
+
     @Test void emptyAndCommentOnlySqlCannotRunButExecutableCommentsAndStatementsCan() {
         for (String sql : new String[]{"", " \n\t", "; ;", "-- Write your query\n", "/* explanation */ ; # comment\r\n", "/* unfinished"})
             assertFalse(SqlQueryConsolePanel.hasExecutableSql(sql), sql);

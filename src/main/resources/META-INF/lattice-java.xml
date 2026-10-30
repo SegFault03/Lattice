@@ -1,0 +1,9 @@
+<!-- Loaded only when the Java plugin is present; it also puts Java's classes on this plugin's class path. -->
+<idea-plugin>
+    <extensions defaultExtensionNs="com.intellij">
+        <multiHostInjector implementation="com.segfault03.ideadb.sql.inject.java.JavaSqlInjector"/>
+    </extensions>
+    <extensions defaultExtensionNs="com.segfault03.lattice">
+        <sqlHostAdapter language="JAVA" implementationClass="com.segfault03.ideadb.sql.inject.java.JavaSqlHostAdapter"/>
+    </extensions>
+</idea-plugin>

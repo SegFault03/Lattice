@@ -25,6 +25,9 @@ ui_java_options="-Dsun.java2d.uiScale=1.0 -Dide.ui.scale=1.0 -Djb.consents.confi
 if [[ -n "${LATTICE_UI_MAVEN_REPOSITORY:-}" ]]; then
     ui_java_options+=" -Dlattice.maven.repository=$LATTICE_UI_MAVEN_REPOSITORY"
 fi
+if [[ -n "${LATTICE_UI_MAVEN_CENTRAL:-}" ]]; then
+    ui_java_options+=" -Dlattice.maven.central=$LATTICE_UI_MAVEN_CENTRAL"
+fi
 if [[ -n "$proxy_url" ]]; then
     ui_java_options+=" -Dhttps.proxyHost=$proxy_host -Dhttps.proxyPort=$proxy_port -Dhttp.proxyHost=$proxy_host -Dhttp.proxyPort=$proxy_port -Dhttp.nonProxyHosts=localhost|127.*"
 fi

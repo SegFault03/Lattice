@@ -24,6 +24,12 @@
       "requires": ["java21"], "tasks": ["regressionTest"]
     },
     {
+      "id": "backend-editor", "group": "backend-tests", "phase": "base", "kind": "gradle",
+      "platforms": ["linux"], "ci_hosts": ["linux"],
+      "unsupported": {"windows": "The SQL editor IDE fixtures run headless on Linux in CI; native Windows execution is not verified.", "macos": "The SQL editor IDE fixtures run headless on Linux in CI; native macOS execution is not verified."},
+      "requires": ["java21"], "tasks": ["platformTest", "javaPlatformTest", "kotlinPlatformTest"]
+    },
+    {
       "id": "backend-h2", "group": "backend-tests", "phase": "base", "kind": "gradle",
       "platforms": ["linux", "windows", "macos"], "ci_hosts": ["linux", "windows", "macos"],
       "requires": ["java21"], "tasks": ["h2IntegrationTest"]
