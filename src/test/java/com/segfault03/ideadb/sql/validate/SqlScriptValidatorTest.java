@@ -404,18 +404,144 @@ class SqlScriptValidatorTest {
             only("select from orders", profile, Kind.SYNTAX, "select");
             only("select id, from orders", profile, Kind.SYNTAX, ",");
             only("select id,, total from orders", profile, Kind.SYNTAX, ",");
-            only("select * from orders where", profile, Kind.SYNTAX, "where");
-            only("select * from orders where id = 1 and", profile, Kind.SYNTAX, "and");
-            only("select * from orders where id =", profile, Kind.SYNTAX, "=");
+            only("select * from orders where;", profile, Kind.SYNTAX, "where");
+            only("select * from orders where id = 1 and;", profile, Kind.SYNTAX, "and");
+            only("select * from orders where id =;", profile, Kind.SYNTAX, "=");
             only("select * from orders where id = 1 or or status = 'a'", profile, Kind.SYNTAX, "or");
-            only("select * from", profile, Kind.SYNTAX, "from");
-            only("select * from orders order by", profile, Kind.SYNTAX, "by");
+            only("select * from;", profile, Kind.SYNTAX, "from");
+            only("select * from orders order by;", profile, Kind.SYNTAX, "by");
             only("select * from orders where id = 1 group by customer_id where total > 1", profile, Kind.SYNTAX, "where");
             only("select * from orders order by id where id = 1", profile, Kind.SYNTAX, "where");
             only("select * from orders where id = 1 where total = 2", profile, Kind.SYNTAX, "where");
             only("select id total status from orders", profile, Kind.SYNTAX, "status");
-            only("insert into orders (id)", profile, Kind.SYNTAX, ")");
-            only("update orders where id = 1", profile, Kind.SYNTAX, "1");
+            only("insert into orders (id);", profile, Kind.SYNTAX, ")");
+            only("update orders where id = 1;", profile, Kind.SYNTAX, "1");
         }
+    }
+
+    // ---- the statement being typed -----------------------------------------------------------------------------------------
+
+    @Test void aTrailingStatementThatEndsWhereSomethingMustFollowIsStillBeingTyped() {
+        for (var profile : ALL) quiet(profile,
+                "select * from orders where",
+                "select * from orders where id = 1 and",
+                "select * from orders where id =",
+                "select * from orders where id = 1 or ",
+                "select * from",
+                "select * from orders join",
+                "select * from orders order by",
+                "select * from orders group by",
+                "select id,",
+                "select",
+                "select distinct",
+                "insert into orders (id)",
+                "update orders",
+                "select 1; select * from orders where");
+    }
+
+    @Test void aTerminatedOrEarlierStatementWithTheSameShapeIsStillReported() {
+        for (var profile : ALL) {
+            only("select * from orders where;", profile, Kind.SYNTAX, "where");
+            only("select * from orders where; select 1", profile, Kind.SYNTAX, "where");
+            only("select id, ;", profile, Kind.SYNTAX, ",");
+            only("select;", profile, Kind.SYNTAX, "select");
+            only("insert into orders (id);", profile, Kind.SYNTAX, ")");
+            only("update orders;", profile, Kind.SYNTAX, "orders");
+        }
+    }
+
+    @Test void aTrailingStatementIsStillCheckedWhereTheGapIsNotAtItsEnd() {
+        for (var profile : ALL) {
+            only("select from orders", profile, Kind.SYNTAX, "select");
+            only("select id, from orders", profile, Kind.SYNTAX, ",");
+            only("select * from orders where group by id", profile, Kind.SYNTAX, "where");
+            only("select * from orders where (id = 1", profile, Kind.SYNTAX, "(");
+            only("select * from orders where status = 'open", profile, Kind.SYNTAX, "'open");
+        }
+    }
+
+    @Test void aTrailingStatementStillGetsUnknownNameChecks() {
+        for (var profile : ALL) {
+            only("select * from orderz where", profile, Kind.UNKNOWN_TABLE, "orderz");
+            only("select totl from orders where id =", profile, Kind.UNKNOWN_COLUMN, "totl");
+        }
+    }
+
+    // ---- string prefixes ---------------------------------------------------------------------------------------------------
+
+    @Test void everyStringPrefixTheLexerAcceptsIsTerminated() {
+        for (var profile : ALL) quiet(profile,
+                "SELECT b'1010'",
+                "SELECT B'1010'",
+                "select x'ff', X'ff', n'abc', N'abc'",
+                "select b'1010';",
+                "select e'a', E'a'");
+        only("select b'1010", SqlDialects.POSTGRESQL, Kind.SYNTAX, "b'1010");
+    }
+
+    // ---- words that follow a table are clauses, not aliases ------------------------------------------------------------
+
+    @Test void aClauseWordAfterATableIsNotItsAlias() {
+        for (var profile : new SqlDialectProfile[] {SqlDialects.ANSI, SqlDialects.MYSQL, SqlDialects.POSTGRESQL}) quiet(profile,
+                "select orders.id from orders limit 10",
+                "select orders.id from orders offset 5",
+                "select orders.id from orders order by orders.id limit 10 offset 5",
+                "select orders.id from orders union select customers.id from customers",
+                "select orders.id from orders except select customers.id from customers",
+                "select orders.id from orders intersect select customers.id from customers",
+                "select orders.id from orders fetch first 5 rows only",
+                "select orders.id from orders for update",
+                "select orders.id from orders where orders.id = 1 limit 1",
+                "select o.id from orders o limit 10",
+                "select orders.id from public.orders limit 10",
+                "select orders.id from orders join items on items.order_id = orders.id limit 3");
+        quiet(SqlDialects.ANSI,
+                "select orders.id from orders qualify orders.id > 1",
+                "select orders.id from orders minus select customers.id from customers",
+                "select orders.id from orders lock in share mode");
+        for (var profile : ALL) only("select orders.id from orders as o limit 10", profile, Kind.ALIAS, "orders");
+    }
+
+    @Test void aQuotedWordAfterATableIsStillItsAlias() {
+        for (var profile : new SqlDialectProfile[] {SqlDialects.ANSI, SqlDialects.POSTGRESQL}) quiet(profile,
+                "select \"limit\".id from orders \"limit\"");
+    }
+
+    // ---- columns the engine adds ------------------------------------------------------------------------------------------
+
+    @Test void systemColumnsAreNotUnknownColumns() {
+        quiet(SqlDialects.POSTGRESQL,
+                "select ctid, xmin, xmax, cmin, cmax, tableoid, oid from orders",
+                "select o.ctid, o.xmin, o.tableoid from orders o",
+                "select orders.ctid from orders",
+                "select CTID from orders where ctid = '(0,1)'",
+                "select id from orders order by ctid",
+                "select * from orders o join items i on i.ctid = o.ctid",
+                "delete from orders where ctid in (select ctid from orders limit 1)");
+        quiet(SqlDialects.H2, "select _rowid_ from orders", "select o._ROWID_ from orders o", "select * from orders where _ROWID_ = 1");
+        quiet(SqlDialects.MYSQL, "select _rowid from orders", "select o._rowid from orders o", "select * from orders order by _rowid");
+        quiet(SqlDialects.ANSI, "select ctid, _rowid, _rowid_ from orders");
+    }
+
+    @Test void anEnginesSystemColumnsAreOnlyThatEnginesOwn() {
+        only("select _rowid from orders", SqlDialects.POSTGRESQL, Kind.UNKNOWN_COLUMN, "_rowid");
+        only("select ctid from orders", SqlDialects.MYSQL, Kind.UNKNOWN_COLUMN, "ctid");
+        only("select o.ctid from orders o", SqlDialects.H2, Kind.UNKNOWN_COLUMN, "ctid");
+    }
+
+    @Test void parenthesislessNiladicFunctionsAreNotColumns() {
+        for (var profile : ALL) quiet(profile,
+                "select sysdate from orders",
+                "select systimestamp from orders",
+                "select current_date, current_time, current_timestamp, localtime, localtimestamp from orders",
+                "select current_user, session_user, user from orders",
+                "select * from orders where created_at < sysdate and status <> user");
+    }
+
+    @Test
+    void sqlInAStringIsCompleteSoAMissingFinalPieceIsReported() {
+        String sql = "select * from orders where";
+        assertTrue(SqlScriptValidator.validate(sql, SqlDialects.H2, ValidationFixtures.shop(DatabaseType.H2)).isEmpty());
+        assertEquals(1, SqlScriptValidator.validate(sql, SqlDialects.H2, ValidationFixtures.shop(DatabaseType.H2), false).size());
     }
 }

@@ -17,6 +17,10 @@ import java.sql.Connection;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class SqlSchemaServiceFixtureTest extends BasePlatformTestCase {
     private DatabaseSettingsState connections;
@@ -39,8 +43,10 @@ public class SqlSchemaServiceFixtureTest extends BasePlatformTestCase {
 
     @Override protected void tearDown() throws Exception {
         try {
+            SqlSchemaLoader.columnReadHook = table -> {};
             DatabaseConnectionManager.getInstance().closeConnection(h2.getId());
             MetadataCacheState.getInstance().remove(h2.getId());
+            MetadataCacheState.getInstance().remove("other-" + h2.getId());
         } finally {
             super.tearDown();
         }
@@ -142,5 +148,91 @@ public class SqlSchemaServiceFixtureTest extends BasePlatformTestCase {
         connections.removeConnection(h2.getId());
         PlatformTestUtil.dispatchAllEventsInIdeEventQueue();
         assertFalse(service.isServing(h2.getId()));
+    }
+
+    private boolean columnsLoaded(String table) {
+        return service.schema(h2).table(null, table).columnsLoaded();
+    }
+
+    public void testATableWhoseColumnsCannotBeReadDoesNotMakeTheSchemaLoadAgainAndAgain() {
+        AtomicInteger attempts = new AtomicInteger();
+        SqlSchemaLoader.columnReadHook = table -> {
+            if (table.equals("BOOKS")) {
+                attempts.incrementAndGet();
+                throw new IllegalStateException("no access to BOOKS");
+            }
+        };
+        service.ensureLoaded(h2);
+        awaitAnnouncement();
+        assertTrue(columnsLoaded("AUTHORS"));
+        assertFalse("the unreadable table stays unknown to the checks", columnsLoaded("BOOKS"));
+        assertEquals(1, attempts.get());
+
+        service.ensureLoaded(h2);
+        PlatformTestUtil.dispatchAllEventsInIdeEventQueue();
+        assertFalse("A table that failed counts as attempted", service.isLoading(h2.getId()));
+        assertEquals(1, attempts.get());
+        assertTrue(events.isEmpty());
+    }
+
+    public void testASecondChangeDuringARefreshKeepsTheSchemaStale() throws Exception {
+        service.ensureLoaded(h2);
+        awaitAnnouncement();
+        DatabaseChangeListener.publish(DatabaseChange.connection(h2.getId()));
+        PlatformTestUtil.dispatchAllEventsInIdeEventQueue();
+        assertTrue(service.isStale(h2.getId()));
+
+        CountDownLatch reading = new CountDownLatch(1), release = new CountDownLatch(1);
+        AtomicBoolean first = new AtomicBoolean(true);
+        SqlSchemaLoader.columnReadHook = table -> {
+            if (!first.compareAndSet(true, false)) return;
+            reading.countDown();
+            try { release.await(30, TimeUnit.SECONDS); } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
+        };
+        service.ensureLoaded(h2);
+        assertTrue("the refresh never started reading", reading.await(30, TimeUnit.SECONDS));
+        DatabaseChangeListener.publish(DatabaseChange.connection(h2.getId()));
+        PlatformTestUtil.dispatchAllEventsInIdeEventQueue();
+        release.countDown();
+        awaitAnnouncement();
+        assertTrue("The refresh began before the second change, so it does not cover it", service.isStale(h2.getId()));
+
+        SqlSchemaLoader.columnReadHook = table -> {};
+        service.ensureLoaded(h2);
+        PlatformTestUtil.waitWithEventsDispatching("The second refresh never finished", () -> !service.isStale(h2.getId()) && !service.isLoading(h2.getId()), 30);
+    }
+
+    public void testABurstOfTableChangesIsOneReadAndAHugeBurstIsAConnectionWideChange() throws Exception {
+        service.ensureLoaded(h2);
+        awaitAnnouncement();
+        AtomicInteger reads = new AtomicInteger();
+        SqlSchemaLoader.columnReadHook = table -> reads.incrementAndGet();
+        sql("ALTER TABLE AUTHORS ADD COLUMN BIO VARCHAR(20)", "ALTER TABLE BOOKS ADD COLUMN SUBTITLE VARCHAR(20)");
+        for (int i = 0; i < 3; i++) {
+            DatabaseChangeListener.publish(DatabaseChange.table(h2.getId(), "PUBLIC", "AUTHORS"));
+            DatabaseChangeListener.publish(DatabaseChange.table(h2.getId(), "PUBLIC", "BOOKS"));
+        }
+        awaitAnnouncement();
+        assertTrue(hasColumn("AUTHORS", "BIO"));
+        assertTrue(hasColumn("BOOKS", "SUBTITLE"));
+        assertEquals("each changed table is read once for the whole burst", 2, reads.get());
+        assertFalse(service.isStale(h2.getId()));
+
+        for (int i = 0; i < 25; i++) DatabaseChangeListener.publish(DatabaseChange.table(h2.getId(), "PUBLIC", "T" + i));
+        PlatformTestUtil.waitWithEventsDispatching("A burst of table changes never became a connection-wide change", () -> service.isStale(h2.getId()), 30);
+    }
+
+    public void testAChangeToAnotherConnectionKeepsThisConnectionsSchemaView() {
+        service.ensureLoaded(h2);
+        awaitAnnouncement();
+        SqlSchema view = service.schema(h2);
+        ConnectionConfig other = new ConnectionConfig(DatabaseType.H2, "other H2");
+        other.setId("other-" + h2.getId());
+        other.setDatabaseName("other_" + UUID.randomUUID());
+        MetadataCacheState.getInstance().tablesRefreshed(other, "PUBLIC", List.of());
+        assertSame("Only changes to this connection rebuild its view", view, service.schema(h2));
+
+        MetadataCacheState.getInstance().columnsRefreshed(h2, "PUBLIC", "AUTHORS", List.of());
+        assertNotSame(view, service.schema(h2));
     }
 }

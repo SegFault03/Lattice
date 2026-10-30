@@ -32,6 +32,9 @@ public final class SqlValidation {
 
     public static @NotNull List<SqlDiagnostic> diagnostics(@NotNull PsiFile file) {
         if (!SqlEditorSettings.getInstance().isValidationEffective() || notJudgeable(file)) return List.of();
+        // Outside the cached computation, which must not have side effects: ask for the read the result is waiting on.
+        ConnectionConfig connection = SqlDialectResolver.connection(file.getProject(), file.getOriginalFile().getVirtualFile());
+        if (connection != null && SqlSchemaService.getInstance().isStale(connection.getId())) SqlSchemaService.getInstance().ensureLoaded(connection);
         return CachedValuesManager.getManager(file.getProject()).getCachedValue(file, KEY, () -> compute(file), false);
     }
 
@@ -40,15 +43,18 @@ public final class SqlValidation {
         SqlDialectProfile profile = SqlDialectResolver.resolve(file.getProject(), virtual);
         ConnectionConfig connection = SqlDialectResolver.connection(file.getProject(), virtual);
         SqlSchemaService service = SqlSchemaService.getInstance();
-        SqlSchema schema = null;
         String connectionId = connection == null ? "" : connection.getId();
-        if (connection != null) {
-            if (service.isStale(connectionId)) service.ensureLoaded(connection); // refresh in the background; the result re-validates
-            else schema = service.schema(connection);
-        }
-        List<SqlDiagnostic> found = SqlScriptValidator.validate(file.getViewProvider().getContents(), profile, schema);
-        ModificationTracker schemaChanges = () -> MetadataCacheState.getInstance().revision() * 2 + (service.isStale(connectionId) ? 1 : 0);
+        // While the cache may be out of date only the shape of the statements is checked.
+        SqlSchema schema = connection == null || service.isStale(connectionId) ? null : service.schema(connection);
+        List<SqlDiagnostic> found = SqlScriptValidator.validate(file.getViewProvider().getContents(), profile, schema,
+                !InjectedLanguageManager.getInstance(file.getProject()).isInjectedFragment(file));
+        ModificationTracker schemaChanges = () -> schemaStamp(service, connectionId);
         return CachedValueProvider.Result.create(found, file, schemaChanges);
+    }
+
+    /** Changes with this connection's cached metadata and with whether that metadata may be out of date. */
+    private static long schemaStamp(SqlSchemaService service, String connectionId) {
+        return MetadataCacheState.getInstance().revision(connectionId) * 2 + (service.isStale(connectionId) ? 1 : 0);
     }
 
     /** SQL assembled from text only known at run time, or with escapes still in it, is not the SQL that will run. */

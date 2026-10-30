@@ -1,10 +1,13 @@
 package com.segfault03.ideadb.sql.validate;
 
+import com.segfault03.ideadb.model.DatabaseType;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -35,12 +38,27 @@ final class SqlSafeWords {
             + "RELEASE REPEAT RESIGNAL RESTRICT RESULT RETURN RETURNING RETURNS REVOKE RIGHT RLIKE ROLE ROLLBACK ROLLUP ROUTINE ROW ROWS ROW_NUMBER SAVEPOINT SCHEMA SCOPE "
             + "SCROLL SEARCH SECOND SECONDS SECTION SELECT SENSITIVE SEPARATOR SESSION SESSION_USER SET SETS SHARE SIGNAL SIGNED SIMILAR SIZE SMALLINT SOME SPACE SPECIFIC "
             + "SPECIFICTYPE SQL SQLEXCEPTION SQLSTATE SQLWARNING SQRT START STATE STATEMENT STATIC STDDEV_POP STDDEV_SAMP STRAIGHT_JOIN STRUCTURE SUBMULTISET SUBSTRING "
-            + "SUBSTRING_REGEX SUCCEEDS SUM SYMMETRIC SYSTEM SYSTEM_TIME SYSTEM_USER TABLE TABLESAMPLE TEMPORARY TERMINATE TEXT THAN THEN TIES TIME TIMESTAMP TIMEZONE "
+            + "SUBSTRING_REGEX SUCCEEDS SUM SYMMETRIC SYSDATE SYSTEM SYSTEM_TIME SYSTEM_USER SYSTIMESTAMP TABLE TABLESAMPLE TEMPORARY TERMINATE TEXT THAN THEN TIES TIME TIMESTAMP TIMEZONE "
             + "TIMEZONE_HOUR TIMEZONE_MINUTE TINYINT TO TOP TRAILING TRANSACTION TRANSLATE TRANSLATE_REGEX TRANSLATION TREAT TRIGGER TRIM TRIM_ARRAY TRUE TRUNCATE UESCAPE "
             + "UNBOUNDED UNDER UNDO UNION UNIQUE UNKNOWN UNNEST UNSIGNED UNTIL UPDATE UPPER USAGE USER USING VALUE VALUES VALUE_OF VARBINARY VARCHAR VARIADIC VARYING "
             + "VAR_POP VAR_SAMP VERBOSE VERSIONING VIEW WEEK WHEN WHENEVER WHERE WHILE WIDTH_BUCKET WINDOW WITH WITHIN WITHOUT WORK WRITE XML XOR YEAR YEARS ZONE").split("\\s+")));
 
+    /** Columns an engine adds to every table: JDBC metadata does not list them, but queries may name them. */
+    private static final Map<DatabaseType, Set<String>> PSEUDO_COLUMNS = Map.of(
+            DatabaseType.POSTGRESQL, Set.of("CTID", "XMIN", "XMAX", "CMIN", "CMAX", "TABLEOID", "OID"),
+            DatabaseType.H2, Set.of("_ROWID_"),
+            DatabaseType.MYSQL, Set.of("_ROWID"),
+            DatabaseType.HSQLDB, Set.of());
+
     private SqlSafeWords() {}
 
     static boolean contains(@NotNull String word) { return WORDS.contains(word.toUpperCase(Locale.ROOT)); }
+
+    /** Whether the engine adds a column of this name to its tables; a generic dialect (no engine) accepts every engine's. */
+    static boolean pseudoColumn(@Nullable DatabaseType engine, @NotNull String name) {
+        String upper = name.toUpperCase(Locale.ROOT);
+        if (engine != null) return PSEUDO_COLUMNS.get(engine).contains(upper);
+        for (Set<String> columns : PSEUDO_COLUMNS.values()) if (columns.contains(upper)) return true;
+        return false;
+    }
 }

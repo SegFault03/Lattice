@@ -39,6 +39,11 @@
     <idea-version since-build="251"/>
 
     <depends>com.intellij.modules.platform</depends>
+    <applicationListeners>
+        <listener class="com.segfault03.ideadb.sql.schema.SqlSchemaDaemonRestarter"
+                  topic="com.segfault03.ideadb.sql.schema.SqlSchemaListener"/>
+    </applicationListeners>
+
     <!-- Maven settings identify the effective local repository used for driver discovery.
          Access is reflective and falls back to ~/.m2 and POM parsing, so Maven is optional. -->
     <depends optional="true" config-file="lattice-maven.xml">org.jetbrains.idea.maven</depends>

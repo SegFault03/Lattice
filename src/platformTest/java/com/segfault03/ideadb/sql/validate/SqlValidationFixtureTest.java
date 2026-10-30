@@ -6,10 +6,13 @@ import com.intellij.testFramework.PlatformTestUtil;
 import com.segfault03.ideadb.service.DatabaseChange;
 import com.segfault03.ideadb.service.DatabaseChangeListener;
 import com.segfault03.ideadb.sql.H2SqlFixtureTestCase;
+import com.segfault03.ideadb.sql.schema.SqlSchemaTestHooks;
 import com.segfault03.ideadb.sql.schema.SqlSchemaService;
 import com.segfault03.ideadb.sql.settings.SqlEditorSettings;
 
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /** The inspections over a real H2 schema: what they report, how it can be fixed, and when they stay quiet. */
 public class SqlValidationFixtureTest extends H2SqlFixtureTestCase {
@@ -69,7 +72,7 @@ public class SqlValidationFixtureTest extends H2SqlFixtureTestCase {
     public void testWithoutACachedSchemaOnlyTheShapeOfStatementsIsChecked() {
         // nothing has been read yet, and reading is not started by opening a file
         assertEquals(List.of(), messages(problems("select * from authorz")));
-        assertEquals(1, problems("select * from books where").size());
+        assertEquals(1, problems("select * from books where;").size());
     }
 
     public void testAChangeToTheConnectionSuspendsSchemaChecksUntilTheSchemaIsReadAgain() {
@@ -78,12 +81,22 @@ public class SqlValidationFixtureTest extends H2SqlFixtureTestCase {
         var file = myFixture.getFile();
         var service = SqlSchemaService.getInstance();
 
-        // Asked before any highlighting pass can run, and so before the read that validation itself requests.
-        DatabaseChangeListener.publish(DatabaseChange.connection(h2.getId()));
-        PlatformTestUtil.dispatchAllEventsInIdeEventQueue();
-        assertTrue("a console statement may have changed the schema", service.isStale(h2.getId()));
-        assertEquals("nothing is claimed from a cache that may be out of date", List.of(),
-                SqlValidation.diagnostics(file).stream().filter(d -> d.kind() == SqlDiagnostic.Kind.UNKNOWN_TABLE).toList());
+        // The refresh that validation asks for is held back, so the stale state can be observed before it ends.
+        CountDownLatch release = new CountDownLatch(1);
+        SqlSchemaTestHooks.onColumnRead(table -> {
+            try { release.await(30, TimeUnit.SECONDS); } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
+        });
+        try {
+            DatabaseChangeListener.publish(DatabaseChange.connection(h2.getId()));
+            PlatformTestUtil.dispatchAllEventsInIdeEventQueue();
+            assertTrue("a console statement may have changed the schema", service.isStale(h2.getId()));
+            assertEquals("nothing is claimed from a cache that may be out of date", List.of(),
+                    SqlValidation.diagnostics(file).stream().filter(d -> d.kind() == SqlDiagnostic.Kind.UNKNOWN_TABLE).toList());
+            assertTrue("validating a stale schema asks for it to be read again", service.isLoading(h2.getId()));
+        } finally {
+            release.countDown();
+            SqlSchemaTestHooks.reset();
+        }
 
         PlatformTestUtil.waitWithEventsDispatching("The stale schema was never read again", () -> !service.isStale(h2.getId()) && !service.isLoading(h2.getId()), 30);
         assertEquals("the checks come back with the fresh schema", 1, SqlValidation.diagnostics(file).stream().filter(d -> d.kind() == SqlDiagnostic.Kind.UNKNOWN_TABLE).count());
@@ -99,6 +112,6 @@ public class SqlValidationFixtureTest extends H2SqlFixtureTestCase {
         loadSchema();
         myFixture.disableInspections(new LatticeSqlUnknownTableInspection());
         assertEquals(List.of(), messages(problems("select * from authorz")));
-        assertEquals(1, problems("select * from authors where").size());
+        assertEquals(1, problems("select * from authors where;").size());
     }
 }

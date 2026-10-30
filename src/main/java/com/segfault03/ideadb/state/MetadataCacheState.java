@@ -62,6 +62,8 @@ public final class MetadataCacheState implements PersistentStateComponent<Metada
     private State state = new State();
     /** Bumped on every change, so consumers can tell when a derived view of the cache is stale without copying it. */
     private long revision;
+    /** The same, per connection, so a change to one connection does not invalidate what was derived from another. */
+    private final Map<String, Long> revisions = new HashMap<>();
     private static final class Standalone { private static final MetadataCacheState INSTANCE = new MetadataCacheState(); }
     public static MetadataCacheState getInstance() {
         var application = ApplicationManager.getApplication();
@@ -91,11 +93,19 @@ public final class MetadataCacheState implements PersistentStateComponent<Metada
 
     public synchronized long revision() { return revision; }
 
+    /** Bumped by every change to this connection's cached metadata, and by nothing else. */
+    public synchronized long revision(String connectionId) { return revisions.getOrDefault(connectionId, 0L); }
+
+    private void changed(String connectionId) {
+        revision++;
+        revisions.merge(connectionId, 1L, Long::sum);
+    }
+
     public synchronized void defaultNamespaceResolved(ConnectionConfig config, String namespace) {
         if (namespace == null) return;
         var source = source(config);
         if (namespace.equals(source.defaultNamespace)) return;
-        revision++;
+        changed(config.getId());
         source.defaultNamespace = namespace;
     }
 
@@ -113,7 +123,7 @@ public final class MetadataCacheState implements PersistentStateComponent<Metada
     }
 
     public synchronized void databasesRefreshed(ConnectionConfig config, List<String> names) {
-        revision++;
+        changed(config.getId());
         var source = source(config);
         source.namespaces.keySet().retainAll(names);
         for (String name : names) source.namespaces.computeIfAbsent(name, ignored -> new Namespace());
@@ -121,7 +131,7 @@ public final class MetadataCacheState implements PersistentStateComponent<Metada
 
     public synchronized void tablesRefreshed(ConnectionConfig config, String namespace, List<TableMetadata> metadata) {
         if (namespace == null) return;
-        revision++;
+        changed(config.getId());
         var cached = source(config).namespaces.computeIfAbsent(namespace, ignored -> new Namespace());
         var tables = new LinkedHashMap<String, Table>();
         for (var table : metadata) {
@@ -137,13 +147,27 @@ public final class MetadataCacheState implements PersistentStateComponent<Metada
 
     public synchronized void columnsRefreshed(ConnectionConfig config, String namespace, String table, List<ColumnMetadata> columns) {
         if (namespace == null) return;
-        revision++;
+        changed(config.getId());
         var cached = source(config).namespaces.computeIfAbsent(namespace, ignored -> new Namespace());
         var entry = cached.tables.computeIfAbsent(table, ignored -> {
             var value = new Table(); value.name = table; value.type = "TABLE"; return value;
         });
         entry.columns = columns.stream().map(Column::capture).toList();
         entry.columnsLoaded = true;
+    }
+
+    /** Marks these tables' columns as not read, so nothing trusts columns that could no longer be refreshed. */
+    public synchronized void columnsInvalidated(ConnectionConfig config, String namespace, Collection<String> tables) {
+        var cached = namespace == null ? null : source(config).namespaces.get(namespace);
+        if (cached == null) return;
+        boolean any = false;
+        for (String name : tables) {
+            var entry = cached.tables.get(name);
+            if (entry == null || !entry.columnsLoaded) continue;
+            entry.columnsLoaded = false;
+            any = true;
+        }
+        if (any) changed(config.getId());
     }
 
     public synchronized ExplorerMetadataSnapshot snapshot(ConnectionConfig config) {
@@ -158,10 +182,15 @@ public final class MetadataCacheState implements PersistentStateComponent<Metada
         return new ExplorerMetadataSnapshot(List.copyOf(namespaces), List.of(), 3);
     }
 
-    public synchronized void remove(String connectionId) { revision++; state.sources.remove(connectionId); }
+    public synchronized void remove(String connectionId) { changed(connectionId); state.sources.remove(connectionId); }
 
     @Override public synchronized State getState() { return copy(state); }
-    @Override public synchronized void loadState(State loaded) { revision++; state = copy(loaded); }
+    @Override public synchronized void loadState(State loaded) {
+        revision++;
+        for (String id : state.sources.keySet()) revisions.merge(id, 1L, Long::sum);
+        for (String id : loaded.sources.keySet()) revisions.merge(id, 1L, Long::sum);
+        state = copy(loaded);
+    }
     private static State copy(State original) {
         var copy = new State();
         original.sources.forEach((id, source) -> {

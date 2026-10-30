@@ -28,6 +28,8 @@ public final class SqlStatementAnalyzer {
     private static final Set<String> CLAUSE_WORDS = Set.of("SELECT", "WHERE", "GROUP", "ORDER", "HAVING", "SET", "ON", "USING", "JOIN",
             "INNER", "LEFT", "RIGHT", "FULL", "CROSS", "NATURAL", "LIMIT", "OFFSET", "UNION", "INTERSECT", "EXCEPT", "VALUES",
             "RETURNING", "FROM", "INTO", "WINDOW", "FETCH", "FOR", "WITH", "AS", "BY", "OUTER", "AND", "OR", "NOT");
+    /** Words that follow a table reference as the next clause; a dialect's keyword list may lack them, but they are never an alias without AS. */
+    private static final Set<String> TRAILING_CLAUSE_WORDS = Set.of("QUALIFY", "MINUS", "LOCK");
     private static final Set<String> CLAUSES = Set.of("SELECT", "FROM", "JOIN", "ON", "WHERE", "HAVING", "BY", "SET", "VALUES", "INTO",
             "UPDATE", "LIMIT", "OFFSET", "FETCH", "UNION", "INTERSECT", "EXCEPT", "WITH", "RETURNING", "TABLE", "TRUNCATE", "USING", "REFERENCES");
     /** FROM inside these function calls is part of their syntax, not a table clause. */
@@ -291,7 +293,8 @@ public final class SqlStatementAnalyzer {
                 int at = k + 1;
                 if (isKeyword(at, "AS")) at++;
                 String alias = null;
-                if (nameToken(at, true) && blockOf[at] == block) { alias = unquote(at); at++; }
+                boolean explicit = isKeyword(at - 1, "AS");
+                if (nameToken(at, true) && blockOf[at] == block && (explicit || !startsClause(at))) { alias = unquote(at); at++; }
                 end[0] = at;
                 return new TableRef(null, null, alias, block, introducer, introducerIndex, start, at, true);
             }
@@ -311,11 +314,18 @@ public final class SqlStatementAnalyzer {
                 if (nameToken(k + 1, true)) { alias = unquote(k + 1); k += 2; }
             } else if (k < n && blockOf[k] == block) {
                 var type = stmt.get(k).type();
-                if (type == LatticeSqlTokens.IDENTIFIER || type == LatticeSqlTokens.QUOTED_IDENTIFIER) { alias = unquote(k); k++; }
+                if ((type == LatticeSqlTokens.IDENTIFIER && !startsClause(k)) || type == LatticeSqlTokens.QUOTED_IDENTIFIER) { alias = unquote(k); k++; }
             }
             end[0] = k;
             return new TableRef(parts.size() >= 2 ? parts.get(parts.size() - 2) : null, parts.get(parts.size() - 1), alias, block,
                     introducer, introducerIndex, start, k, false);
+        }
+
+        /** An unquoted word that begins the next clause is not an alias, whether or not the dialect lists it as a keyword. */
+        boolean startsClause(int i) {
+            if (stmt.get(i).type() != LatticeSqlTokens.IDENTIFIER) return false;
+            String word = upper(i);
+            return CLAUSE_WORDS.contains(word) || TRAILING_CLAUSE_WORDS.contains(word);
         }
 
         String unquote(int i) {

@@ -10,11 +10,13 @@ import com.segfault03.ideadb.sql.completion.SqlTokenizer;
 import com.segfault03.ideadb.sql.dialect.SqlDialectProfile;
 import com.segfault03.ideadb.sql.lang.LatticeSqlTokens;
 import com.segfault03.ideadb.sql.schema.SqlSchema;
+import com.segfault03.ideadb.sql.schema.SqlTableIndex;
 import com.segfault03.ideadb.sql.validate.SqlDiagnostic.Kind;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
+import java.util.function.IntPredicate;
 
 /**
  * Checks a SQL script locally: the statements' shape, and, against the cached schema, their tables and columns. No
@@ -42,9 +44,32 @@ public final class SqlScriptValidator {
     /** Functions whose first argument names a field or unit, not a column. */
     private static final Set<String> FIELD_FUNCTIONS = Set.of("EXTRACT", "DATE_PART", "DATE_TRUNC", "DATEADD", "DATEDIFF", "TIMESTAMPADD", "TIMESTAMPDIFF", "TRIM", "OVERLAY");
 
+    private static final Set<String> POSITION_FUNCTIONS = Set.of("SUBSTRING", "POSITION");
+    private static final Set<String> LIST_BREAKERS = Set.of("SELECT", "WHERE", "BY", "SET", "ON", "FROM");
+    private static final Set<String> CONDITION_WORDS = Set.of("WHERE", "HAVING", "AND", "OR");
+    private static final Set<String> TABLE_NAME_STOPPERS = Set.of("WHERE", "GROUP", "ORDER", "HAVING", "LIMIT", "ON");
+    private static final Set<String> INSERT_SOURCES = Set.of("VALUES", "SELECT", "SET", "DEFAULT", "WITH", "TABLE", "VALUE");
+    private static final Set<String> LITERAL_WORDS = Set.of("NULL", "TRUE", "FALSE");
+    private static final Set<String> TABLE_NAME_MODIFIERS = Set.of("IF", "NOT", "EXISTS", "ONLY");
+    private static final Set<String> TRANSACTION_WORDS = Set.of("TRANSACTION", "WORK", "ISOLATION", "READ", "DEFERRED", "IMMEDIATE", "EXCLUSIVE", "ATOMIC");
+    private static final Set<String> ROUTINE_WORDS = Set.of("FUNCTION", "PROCEDURE", "TRIGGER", "EVENT", "PACKAGE");
+    /** Statements are checked for cancellation once per this many tokens. */
+    private static final int CANCEL_CHECK_INTERVAL = 1024;
+    /** The letters the lexer accepts before a quote: escape, national, bit and hex strings. */
+    private static final String STRING_PREFIXES = "eEnNbBxX";
+
     private SqlScriptValidator() {}
 
     public static @NotNull List<SqlDiagnostic> validate(@NotNull CharSequence text, @NotNull SqlDialectProfile profile, @Nullable SqlSchema schema) {
+        return validate(text, profile, schema, true);
+    }
+
+    /**
+     * @param lastMayBeTyped whether a last statement with no ';' after it may be one the user is still typing, so a missing
+     *                       final piece is not reported. True for script files; false for SQL in a string, which is complete.
+     */
+    public static @NotNull List<SqlDiagnostic> validate(@NotNull CharSequence text, @NotNull SqlDialectProfile profile, @Nullable SqlSchema schema,
+                                                        boolean lastMayBeTyped) {
         if (text.length() > MAX_LENGTH) return List.of();
         List<SqlToken> all = SqlTokenizer.tokenize(text, profile);
         List<SqlDiagnostic> out = new ArrayList<>();
@@ -61,12 +86,14 @@ public final class SqlScriptValidator {
 
         List<List<SqlToken>> statements = split(code, text);
         Script script = new Script(text, profile, schema, statements);
-        for (List<SqlToken> statement : statements) {
+        for (int i = 0; i < statements.size(); i++) {
+            List<SqlToken> statement = statements.get(i);
             ProgressManager.checkCanceled();
             if (statement.isEmpty()) continue;
             if (script.opaque(statement)) break;
             if (script.templated(statement)) continue;
-            new Check(script, statement, out).run();
+            // the last statement has no ';' after it: it may be what the user is typing
+            new Check(script, statement, out, lastMayBeTyped && i == statements.size() - 1).run();
         }
         out.sort(Comparator.comparingInt(SqlDiagnostic::start));
         return out;
@@ -96,6 +123,8 @@ public final class SqlScriptValidator {
         final Set<String> altered = new HashSet<>();
         /** A USE, SET SCHEMA or SET search_path changes what an unqualified table means. */
         boolean changesDefaultSchema;
+        /** "Did you mean" answers by the thing searched (a namespace or a table) and the lowercase name, null when nothing was close. */
+        final Map<Object, Map<String, String>> suggestions = new IdentityHashMap<>();
 
         Script(CharSequence text, SqlDialectProfile profile, @Nullable SqlSchema schema, List<List<SqlToken>> statements) {
             this.text = text; this.profile = profile; this.schema = schema;
@@ -116,7 +145,7 @@ public final class SqlScriptValidator {
                 String word = up(s.get(i));
                 if ((word.equals("TABLE") || word.equals("VIEW")) && i + 1 < s.size() && (first.equals("CREATE") || first.equals("ALTER"))) {
                     int at = i + 1;
-                    while (at < s.size() && Set.of("IF", "NOT", "EXISTS", "ONLY").contains(up(s.get(at)))) at++;
+                    while (at < s.size() && TABLE_NAME_MODIFIERS.contains(up(s.get(at)))) at++;
                     String name = lastNamePart(s, at);
                     if (name != null) (first.equals("CREATE") ? created : altered).add(name.toLowerCase(Locale.ROOT));
                 }
@@ -158,12 +187,12 @@ public final class SqlScriptValidator {
         boolean opaque(List<SqlToken> s) {
             String first = up(s.get(0));
             if (first.equals("DELIMITER") || first.equals("DECLARE") || first.equals("DO")) return true;
-            if (first.equals("BEGIN")) return s.size() > 1 && !Set.of("TRANSACTION", "WORK", "ISOLATION", "READ", "DEFERRED", "IMMEDIATE", "EXCLUSIVE", "ATOMIC").contains(up(s.get(1))) || s.size() > 1 && up(s.get(1)).equals("ATOMIC");
+            if (first.equals("BEGIN")) return s.size() > 1 && !TRANSACTION_WORDS.contains(up(s.get(1))) || s.size() > 1 && up(s.get(1)).equals("ATOMIC");
             if (!first.equals("CREATE")) return false;
             boolean routine = false;
             for (SqlToken token : s) {
                 String word = up(token);
-                if (Set.of("FUNCTION", "PROCEDURE", "TRIGGER", "EVENT", "PACKAGE").contains(word)) routine = true;
+                if (ROUTINE_WORDS.contains(word)) routine = true;
                 if (routine && (word.equals("BEGIN") || word.equals("DECLARE"))) return true;
             }
             return false;
@@ -186,6 +215,18 @@ public final class SqlScriptValidator {
         final SqlDialectProfile profile;
         final int n;
         final String kind;
+        /** The last statement of the script and not ended by ';': the user may still be typing it. */
+        final boolean typing;
+        /** Each token's uppercase text, filled in when first asked for. */
+        final String[] upper;
+        int ticks;
+        /** The ")" that closes each "(" (the last token when it never closes), -1 elsewhere. */
+        int[] closeOf;
+        /** For each token, the nearest earlier token of its group that ends the search for a join, select list or WITH. */
+        int[] joinMarker, selectListMarker, cteMarker;
+        /** The tables visible from each group and segment of the statement. */
+        final Map<Long, Scope> scopes = new HashMap<>();
+        List<List<Ref>> refsByBlock;
         SqlStatementAnalyzer.Structure structure;
         int[] segment;
         boolean[] skip;
@@ -195,15 +236,24 @@ public final class SqlScriptValidator {
         Set<String> knownQualifiers = new HashSet<>();
         boolean natural;
 
-        Check(Script script, List<SqlToken> statement, List<SqlDiagnostic> out) {
+        Check(Script script, List<SqlToken> statement, List<SqlDiagnostic> out, boolean typing) {
             this.script = script; this.text = script.text; this.s = statement; this.out = out; this.profile = script.profile;
+            this.typing = typing;
             this.n = statement.size();
+            this.upper = new String[n];
             this.kind = firstWord();
         }
 
         // -- token helpers ------------------------------------------------------------------------------------------
 
-        String up(int i) { return script.up(s.get(i)); }
+        String up(int i) {
+            String word = upper[i];
+            if (word == null) upper[i] = word = script.up(s.get(i));
+            return word;
+        }
+        /** Called once per token of a loop: long statements stay cancellable. */
+        void tick() { if (++ticks % CANCEL_CHECK_INTERVAL == 0) ProgressManager.checkCanceled(); }
+        boolean keywordIn(int i, Set<String> words) { return in(i) && s.get(i).type() == LatticeSqlTokens.KEYWORD && words.contains(up(i)); }
         boolean in(int i) { return i >= 0 && i < n; }
         boolean punct(int i, char c) { return in(i) && s.get(i).type() == LatticeSqlTokens.PUNCTUATION && text.charAt(s.get(i).start()) == c; }
         boolean keyword(int i, String word) { return in(i) && s.get(i).type() == LatticeSqlTokens.KEYWORD && up(i).equals(word); }
@@ -213,7 +263,7 @@ public final class SqlScriptValidator {
             return t == LatticeSqlTokens.IDENTIFIER || t == LatticeSqlTokens.KEYWORD || t == LatticeSqlTokens.FUNCTION || t == LatticeSqlTokens.TYPE || t == LatticeSqlTokens.QUOTED_IDENTIFIER;
         }
         boolean ident(int i) { return in(i) && (s.get(i).type() == LatticeSqlTokens.IDENTIFIER || s.get(i).type() == LatticeSqlTokens.QUOTED_IDENTIFIER); }
-        boolean operator(int i, String op) { return in(i) && s.get(i).type() == LatticeSqlTokens.OPERATOR && s.get(i).text(text).equals(op); }
+        boolean operator(int i, String op) { return in(i) && s.get(i).type() == LatticeSqlTokens.OPERATOR && up(i).equals(op); }
         String name(int i) { return script.unquote(s.get(i)); }
         String firstWord() {
             if (n == 0) return "";
@@ -241,6 +291,7 @@ public final class SqlScriptValidator {
 
         void lexical() {
             for (int i = 0; i < n; i++) {
+                tick();
                 var type = s.get(i).type();
                 String raw = s.get(i).text(text);
                 if (type == LatticeSqlTokens.STRING && !terminatedString(raw)) report(Kind.SYNTAX, i, i, "Unterminated string literal");
@@ -256,7 +307,7 @@ public final class SqlScriptValidator {
                 String tag = raw.substring(0, tagEnd + 1);
                 return raw.length() >= 2 * tag.length() && raw.endsWith(tag);
             }
-            int open = (raw.charAt(0) == 'E' || raw.charAt(0) == 'e' || raw.charAt(0) == 'N' || raw.charAt(0) == 'n' || raw.charAt(0) == 'B' || raw.charAt(0) == 'X' || raw.charAt(0) == 'x') ? 1 : 0;
+            int open = STRING_PREFIXES.indexOf(raw.charAt(0)) >= 0 ? 1 : 0;
             if (open >= raw.length()) return true;
             char quote = raw.charAt(open);
             return raw.length() - open >= 2 && raw.charAt(raw.length() - 1) == quote;
@@ -280,6 +331,7 @@ public final class SqlScriptValidator {
         void parentheses() {
             Deque<Integer> opened = new ArrayDeque<>();
             for (int i = 0; i < n; i++) {
+                tick();
                 if (punct(i, '(')) opened.push(i);
                 else if (punct(i, ')')) {
                     if (opened.isEmpty()) report(Kind.SYNTAX, i, i, "Unmatched ')'");
@@ -304,11 +356,12 @@ public final class SqlScriptValidator {
 
         void computeSegments() {
             segment = new int[n];
-            Map<Integer, Integer> counters = new HashMap<>();
+            int[] counters = new int[structure.open().size()];
             for (int i = 0; i < n; i++) {
+                tick();
                 int block = structure.blockOf()[i];
-                if (s.get(i).type() == LatticeSqlTokens.KEYWORD && SET_OPERATORS.contains(up(i))) counters.merge(block, 1, Integer::sum);
-                segment[i] = counters.getOrDefault(block, 0);
+                if (s.get(i).type() == LatticeSqlTokens.KEYWORD && SET_OPERATORS.contains(up(i))) counters[block]++;
+                segment[i] = counters[block];
             }
         }
 
@@ -327,16 +380,17 @@ public final class SqlScriptValidator {
 
         /** Clause order and repeats within one query: WHERE after GROUP BY, two FROMs, an empty select list. */
         void selectBlocks() {
-            Map<String, Integer> lastRank = new HashMap<>();
+            Map<Long, Integer> lastRank = new HashMap<>();
             for (int i = 0; i < n; i++) {
+                tick();
                 if (s.get(i).type() != LatticeSqlTokens.KEYWORD) continue;
                 String word = up(i);
                 int rank = SELECT_ORDER.indexOf(word);
                 if (rank < 0) continue;
                 if ((word.equals("GROUP") || word.equals("ORDER")) && !keyword(i + 1, "BY")) continue;
                 if (word.equals("FROM") && (keyword(i - 1, "DISTINCT") || insideFieldFunction(structure.blockOf()[i]))) continue;
-                String key = structure.blockOf()[i] + ":" + segment[i];
-                if (word.equals("SELECT")) { lastRank.put(key, 0); if (selectListEmpty(i)) report(Kind.SYNTAX, i, i, "Select list expected after SELECT"); continue; }
+                long key = (long) structure.blockOf()[i] << 32 | segment[i];
+                if (word.equals("SELECT")) { lastRank.put(key, 0); if (selectListEmpty(i) && !(typing && !in(afterSelect(i)))) report(Kind.SYNTAX, i, i, "Select list expected after SELECT"); continue; }
                 if (!lastRank.containsKey(key)) continue; // not a SELECT: DELETE FROM, UPDATE ... WHERE
                 int previous = lastRank.get(key);
                 if (rank < previous) report(Kind.SYNTAX, i, i, word + " cannot come after " + SELECT_ORDER.get(previous));
@@ -346,52 +400,61 @@ public final class SqlScriptValidator {
         }
 
         boolean selectListEmpty(int select) {
+            int at = afterSelect(select);
+            return !in(at) || clauseStart(at) || punct(at, ')');
+        }
+
+        /** The first token of the select list, after DISTINCT or ALL. */
+        int afterSelect(int select) {
             int at = select + 1;
             while (keyword(at, "DISTINCT") || keyword(at, "ALL")) at++;
-            return !in(at) || clauseStart(at) || punct(at, ')');
+            return at;
         }
 
         /** FROM inside EXTRACT(), TRIM(), SUBSTRING()... is part of the function's syntax. */
         boolean insideFieldFunction(int block) {
             if (block == 0) return false;
             int open = structure.open().get(block);
-            return open > 0 && isWord(open - 1) && (FIELD_FUNCTIONS.contains(up(open - 1)) || Set.of("SUBSTRING", "POSITION").contains(up(open - 1)));
+            return open > 0 && isWord(open - 1) && (FIELD_FUNCTIONS.contains(up(open - 1)) || POSITION_FUNCTIONS.contains(up(open - 1)));
         }
 
         /** ",," and a comma before a clause or a closing bracket. */
         void separators() {
             for (int i = 0; i < n; i++) {
+                tick();
                 if (!punct(i, ',')) continue;
                 if (punct(i + 1, ',')) report(Kind.SYNTAX, i + 1, i + 1, "Unexpected ','");
+                else if (!in(i + 1) && typing) continue;
                 else if (!in(i + 1) || punct(i + 1, ')') || clauseStart(i + 1)) report(Kind.SYNTAX, i, i, "Expression expected after ','");
                 else if (i == 0 || punct(i - 1, '(') || clauseStartOrKeyword(i - 1)) report(Kind.SYNTAX, i, i, "Unexpected ','");
             }
         }
 
         boolean clauseStartOrKeyword(int i) {
-            return s.get(i).type() == LatticeSqlTokens.KEYWORD && Set.of("SELECT", "WHERE", "BY", "SET", "ON", "FROM").contains(up(i));
+            return s.get(i).type() == LatticeSqlTokens.KEYWORD && LIST_BREAKERS.contains(up(i));
         }
 
         /** A condition, comparison or list that stops where something has to follow. */
         void incompleteExpressions() {
             for (int i = 0; i < n; i++) {
+                tick();
                 String word = s.get(i).type() == LatticeSqlTokens.KEYWORD ? up(i) : "";
-                boolean comparison = s.get(i).type() == LatticeSqlTokens.OPERATOR && COMPARISONS.contains(s.get(i).text(text));
+                boolean comparison = s.get(i).type() == LatticeSqlTokens.OPERATOR && COMPARISONS.contains(up(i));
                 boolean listClause = word.equals("BY") && (keyword(i - 1, "ORDER") || keyword(i - 1, "GROUP"));
-                boolean needsOperand = comparison || listClause || Set.of("WHERE", "HAVING", "AND", "OR").contains(word) || word.equals("ON") && inJoin(i);
+                boolean needsOperand = comparison || listClause || CONDITION_WORDS.contains(word) || word.equals("ON") && inJoin(i);
                 if (!needsOperand) continue;
                 boolean doubledLogic = (word.equals("AND") || word.equals("OR")) && (keyword(i + 1, "AND") || keyword(i + 1, "OR"));
+                if (!in(i + 1) && typing) continue; // the operand is the next thing to be typed
                 if (endsExpression(i + 1) || doubledLogic) report(Kind.SYNTAX, i, i, "Expression expected after " + (word.isEmpty() ? s.get(i).text(text) : word));
             }
             // FROM, JOIN and a statement's target need a table
-            for (int at = 0; at < n; at++) {
-                final int i = at;
+            for (int i = 0; i < n; i++) {
+                tick();
                 if (s.get(i).type() != LatticeSqlTokens.KEYWORD) continue;
                 String word = up(i);
                 boolean introduces = word.equals("JOIN") || word.equals("FROM") && !keyword(i - 1, "DISTINCT") && !insideFieldFunction(structure.blockOf()[i])
                         || word.equals("UPDATE") && i == 0 || word.equals("INTO") && kind.equals("INSERT");
-                if (introduces && (!in(i + 1) || punct(i + 1, ')') || punct(i + 1, ',')
-                        || Set.of("WHERE", "GROUP", "ORDER", "HAVING", "LIMIT", "ON").stream().anyMatch(clause -> keyword(i + 1, clause)))) {
+                if (introduces && !(typing && !in(i + 1)) && (!in(i + 1) || punct(i + 1, ')') || punct(i + 1, ',') || keywordIn(i + 1, TABLE_NAME_STOPPERS))) {
                     report(Kind.SYNTAX, i, i, "Table name expected after " + word);
                 }
             }
@@ -400,32 +463,48 @@ public final class SqlScriptValidator {
         }
 
         void insertWithoutSource() {
-            if (!kind.equals("INSERT") || n < 3) return;
+            if (!kind.equals("INSERT") || n < 3 || typing) return;
             for (int i = 0; i < n; i++) {
-                if (s.get(i).type() == LatticeSqlTokens.KEYWORD && Set.of("VALUES", "SELECT", "SET", "DEFAULT", "WITH", "TABLE", "VALUE").contains(up(i))) return;
+                tick();
+                if (keywordIn(i, INSERT_SOURCES)) return;
                 if (punct(i, '(') && keyword(i + 1, "SELECT")) return;
             }
             report(Kind.SYNTAX, n - 1, n - 1, "VALUES or SELECT expected");
         }
 
         void updateWithoutSet() {
-            if (!kind.equals("UPDATE") || n < 2) return;
+            if (!kind.equals("UPDATE") || n < 2 || typing) return;
             for (int i = 0; i < n; i++) if (keyword(i, "SET")) return;
             report(Kind.SYNTAX, n - 1, n - 1, "SET expected");
         }
 
-        boolean inJoin(int on) {
-            for (int i = on - 1; i >= 0; i--) {
-                if (structure.blockOf()[i] != structure.blockOf()[on]) continue;
-                if (keyword(i, "JOIN")) return true;
-                if (clauseStart(i)) return false;
+        /**
+         * For each token, the nearest earlier token of the same group that satisfies {@code marker}, or -1: one pass over
+         * the statement answers every backward search that stops at such a token.
+         */
+        int[] nearestBefore(IntPredicate marker) {
+            int[] blockOf = structure.blockOf();
+            int[] last = new int[structure.open().size()];
+            Arrays.fill(last, -1);
+            int[] found = new int[n];
+            for (int i = 0; i < n; i++) {
+                tick();
+                found[i] = last[blockOf[i]];
+                if (marker.test(i)) last[blockOf[i]] = i;
             }
-            return false;
+            return found;
+        }
+
+        boolean inJoin(int on) {
+            if (joinMarker == null) joinMarker = nearestBefore(i -> keyword(i, "JOIN") || clauseStart(i));
+            int k = joinMarker[on];
+            return k >= 0 && keyword(k, "JOIN");
         }
 
         /** "select a b c from t": a name, an alias, then another name. */
         void missingComma() {
             for (int i = 2; i < n; i++) {
+                tick();
                 if (!(ident(i) && ident(i - 1) && ident(i - 2))) continue;
                 if (punct(i + 1, '.') || punct(i + 1, '(') || punct(i - 1, '.') || punct(i - 2, '.') || punct(i - 3, '.')) continue;
                 if (!inSelectList(i) || SqlSafeWords.contains(name(i)) || SqlSafeWords.contains(name(i - 1)) || SqlSafeWords.contains(name(i - 2))) continue;
@@ -434,13 +513,11 @@ public final class SqlScriptValidator {
         }
 
         boolean inSelectList(int i) {
-            int block = structure.blockOf()[i];
-            for (int k = i - 1; k >= 0; k--) {
-                if (structure.blockOf()[k] != block) continue;
-                if (keyword(k, "SELECT")) return true;
-                if (clauseStart(k) || keyword(k, "ON") || keyword(k, "SET") || keyword(k, "BY")) return false;
+            if (selectListMarker == null) {
+                selectListMarker = nearestBefore(k -> keyword(k, "SELECT") || clauseStart(k) || keyword(k, "ON") || keyword(k, "SET") || keyword(k, "BY"));
             }
-            return false;
+            int k = selectListMarker[i];
+            return k >= 0 && keyword(k, "SELECT");
         }
 
         // -- tables, columns and aliases ----------------------------------------------------------------------------------
@@ -466,6 +543,7 @@ public final class SqlScriptValidator {
         void collectNames() {
             skip = new boolean[n];
             for (int i = 0; i < n; i++) {
+                tick();
                 // alias definitions
                 if (ident(i) && (keyword(i - 1, "AS") || operandEnd(i - 1))) aliasNames.add(name(i).toLowerCase(Locale.ROOT));
                 if (keyword(i, "NATURAL")) natural = true;
@@ -500,6 +578,7 @@ public final class SqlScriptValidator {
             }
             // regions that name things the schema cannot judge
             for (int i = 0; i < n; i++) {
+                tick();
                 boolean conflict = word(i, "ON") && (word(i + 1, "CONFLICT") || word(i + 1, "DUPLICATE"));
                 if (conflict || word(i, "RETURNING") || word(i, "WINDOW")) { for (int k = i; k < n; k++) skip[k] = true; break; }
             }
@@ -518,30 +597,34 @@ public final class SqlScriptValidator {
         }
 
         boolean cteContext(int i) {
-            for (int k = i - 1; k >= 0; k--) {
-                if (structure.blockOf()[k] != structure.blockOf()[i]) continue;
-                if (keyword(k, "WITH") || word(k, "RECURSIVE")) return true;
-                if (keyword(k, "SELECT") || keyword(k, "INSERT") || keyword(k, "UPDATE") || keyword(k, "DELETE")) return false;
+            if (cteMarker == null) {
+                cteMarker = nearestBefore(k -> keyword(k, "WITH") || word(k, "RECURSIVE")
+                        || keyword(k, "SELECT") || keyword(k, "INSERT") || keyword(k, "UPDATE") || keyword(k, "DELETE"));
             }
-            return false;
+            int k = cteMarker[i];
+            return k >= 0 && (keyword(k, "WITH") || word(k, "RECURSIVE"));
         }
 
         void skipRange(int from, int to) { for (int k = from; k <= to && k < n; k++) skip[k] = true; }
 
         int closing(int open) {
-            int depth = 0;
-            for (int k = open; k < n; k++) {
-                if (punct(k, '(')) depth++;
-                else if (punct(k, ')') && --depth == 0) return k;
+            if (closeOf == null) {
+                closeOf = new int[n];
+                Arrays.fill(closeOf, n - 1);
+                Deque<Integer> opened = new ArrayDeque<>();
+                for (int k = 0; k < n; k++) {
+                    if (punct(k, '(')) opened.push(k);
+                    else if (punct(k, ')') && !opened.isEmpty()) closeOf[opened.pop()] = k;
+                }
             }
-            return n - 1;
+            return closeOf[open];
         }
 
         boolean operandEnd(int i) {
             if (!in(i)) return false;
             var t = s.get(i).type();
             if (t == LatticeSqlTokens.IDENTIFIER || t == LatticeSqlTokens.QUOTED_IDENTIFIER || t == LatticeSqlTokens.NUMBER || t == LatticeSqlTokens.STRING || t == LatticeSqlTokens.PARAMETER) return true;
-            return punct(i, ')') || t == LatticeSqlTokens.KEYWORD && Set.of("NULL", "TRUE", "FALSE").contains(up(i));
+            return punct(i, ')') || t == LatticeSqlTokens.KEYWORD && LITERAL_WORDS.contains(up(i));
         }
 
         // -- table references -------------------------------------------------------------------------------------------------
@@ -577,10 +660,11 @@ public final class SqlScriptValidator {
             ExplorerMetadataSnapshot.Namespace namespace = schema.namespace(ref.namespace());
             if (namespace == null || !namespace.tablesLoaded()) return null;
             if (ref.namespace() == null && script.changesDefaultSchema) return null;
-            var table = schema.table(ref.namespace(), ref.name());
+            SqlTableIndex index = schema.index(namespace);
+            var table = index.find(ref.name());
             if (table != null) return table;
-            if (ambiguousCase(namespace, ref.name())) return null;
-            String suggestion = nearest(ref.name(), namespace.tables().stream().map(t -> t.metadata().getName()).toList());
+            if (index.ambiguousCase(ref.name())) return null;
+            String suggestion = suggestion(namespace, ref.name(), () -> index.nearest(ref.name(), editLimit(ref.name())));
             String where = ref.namespace() == null ? "" : " in " + ref.namespace();
             int startToken = nameToken(ref);
             if (startToken >= 0) {
@@ -588,10 +672,6 @@ public final class SqlScriptValidator {
                         suggestion == null ? null : requote(suggestion, startToken));
             }
             return null;
-        }
-
-        boolean ambiguousCase(ExplorerMetadataSnapshot.Namespace namespace, String name) {
-            return namespace.tables().stream().filter(t -> t.metadata().getName().equalsIgnoreCase(name)).count() > 1;
         }
 
         /** The token of the table's own name (the last part of a dotted name). */
@@ -631,25 +711,42 @@ public final class SqlScriptValidator {
         // -- column uses ---------------------------------------------------------------------------------------------------
 
         /** Tables visible at a token, innermost query first. Tables a statement inserts into are not part of what its SELECT sees. */
-        List<List<Ref>> scopes(int token, List<Ref> refs) {
-            List<List<Ref>> levels = new ArrayList<>();
-            int seg = segment[token];
-            for (int block = structure.blockOf()[token]; block >= 0; block = structure.parent().get(block)) {
-                List<Ref> level = new ArrayList<>();
-                for (Ref r : refs) {
-                    if (r.ref().block() != block || r.ref().introducer().equals("INTO")) continue;
-                    if (block == structure.blockOf()[token] && segment[r.ref().startIndex()] != seg) continue;
-                    level.add(r);
-                }
-                if (!level.isEmpty()) levels.add(level);
-                if (block == 0) break;
+        Scope scope(int token, List<Ref> refs) {
+            if (refsByBlock == null) {
+                refsByBlock = new ArrayList<>();
+                for (int b = 0; b < structure.open().size(); b++) refsByBlock.add(new ArrayList<>());
+                for (Ref r : refs) refsByBlock.get(r.ref().block()).add(r);
             }
-            return levels;
+            int own = structure.blockOf()[token];
+            int seg = segment[token];
+            return scopes.computeIfAbsent((long) own << 32 | seg, key -> {
+                List<List<Ref>> levels = new ArrayList<>();
+                for (int block = own; block >= 0; block = structure.parent().get(block)) {
+                    List<Ref> level = new ArrayList<>();
+                    for (Ref r : refsByBlock.get(block)) {
+                        if (r.ref().introducer().equals("INTO")) continue;
+                        if (block == own && segment[r.ref().startIndex()] != seg) continue;
+                        level.add(r);
+                    }
+                    if (!level.isEmpty()) levels.add(level);
+                    if (block == 0) break;
+                }
+                return Scope.of(levels);
+            });
+        }
+
+        /** The levels of tables a name can come from, innermost first, and whether every one of their columns is known. */
+        record Scope(List<List<Ref>> levels, boolean columnsKnown) {
+            static Scope of(List<List<Ref>> levels) {
+                for (List<Ref> level : levels) for (Ref r : level) if (!r.columnsKnown()) return new Scope(levels, false);
+                return new Scope(levels, true);
+            }
         }
 
         void columnUses(List<Ref> refs) {
             Set<Integer> setTargets = setTargets();
             for (int i = 0; i < n; i++) {
+                tick();
                 if (skip[i] || !ident(i) && !(isQualifierStart(i))) continue;
                 if (punct(i - 1, '.') || operator(i - 1, "::") || keyword(i - 1, "AS")) continue;
                 if (operandEnd(i - 1)) continue; // an alias
@@ -684,6 +781,7 @@ public final class SqlScriptValidator {
             if (!kind.equals("UPDATE")) return targets;
             boolean inSet = false;
             for (int i = 0; i < n; i++) {
+                tick();
                 if (structure.blockOf()[i] != 0) continue;
                 if (keyword(i, "SET")) inSet = true;
                 else if (keyword(i, "WHERE") || keyword(i, "FROM")) inSet = false;
@@ -695,7 +793,7 @@ public final class SqlScriptValidator {
         void qualified(int fromToken, int lastToken, String qualifier, @Nullable String column, List<Ref> refs, List<Integer> chain) {
             String lowerQualifier = qualifier.toLowerCase(Locale.ROOT);
             if (TRAILING_QUALIFIERS.contains(qualifier.toUpperCase(Locale.ROOT))) return;
-            List<List<Ref>> levels = scopes(fromToken, refs);
+            List<List<Ref>> levels = scope(fromToken, refs).levels();
             Ref found = null;
             for (List<Ref> level : levels) {
                 for (Ref r : level) if (r.ref().exposedName() != null && r.ref().exposedName().equalsIgnoreCase(qualifier)) found = found == null ? r : found;
@@ -723,7 +821,9 @@ public final class SqlScriptValidator {
             boolean exists = found.table().columns().stream().anyMatch(c -> c.getName().equalsIgnoreCase(column));
             if (!exists) {
                 int token = lastToken;
-                String suggestion = nearest(column, found.table().columns().stream().map(ColumnMetadata::getName).toList());
+                if (SqlSafeWords.pseudoColumn(profile.databaseType(), column)) return;
+                var columns = found.table().columns();
+                String suggestion = suggestion(found.table(), column, () -> nearest(column, columns.stream().map(ColumnMetadata::getName).toList()));
                 report(Kind.UNKNOWN_COLUMN, token, token, "Unknown column '" + column + "' in " + found.table().metadata().getName() + (suggestion == null ? "" : ". Did you mean '" + suggestion + "'?"),
                         suggestion == null ? null : requote(suggestion, token));
             }
@@ -739,9 +839,9 @@ public final class SqlScriptValidator {
             String lower = column.toLowerCase(Locale.ROOT);
             boolean quoted = s.get(token).type() == LatticeSqlTokens.QUOTED_IDENTIFIER;
             if (aliasNames.contains(lower) && !quoted || usingColumns.contains(lower) && !quoted) return;
-            List<List<Ref>> levels = setTarget ? targetLevel(refs) : scopes(token, refs);
-            if (levels.isEmpty()) return;
-            for (List<Ref> level : levels) for (Ref r : level) if (!r.columnsKnown()) return; // something in scope hides its columns
+            Scope scope = setTarget ? Scope.of(targetLevel(refs)) : scope(token, refs);
+            List<List<Ref>> levels = scope.levels();
+            if (levels.isEmpty() || !scope.columnsKnown()) return; // nothing to judge against, or something in scope hides its columns
             for (List<Ref> level : levels) {
                 List<Ref> matches = new ArrayList<>();
                 for (Ref r : level) if (r.table().columns().stream().anyMatch(c -> c.getName().equalsIgnoreCase(column))) matches.add(r);
@@ -751,10 +851,13 @@ public final class SqlScriptValidator {
                 }
                 return;
             }
+            if (SqlSafeWords.pseudoColumn(profile.databaseType(), column)) return;
             if (!quoted && (SqlSafeWords.contains(column) || profile.keywords().contains(column.toUpperCase(Locale.ROOT)))) return;
             List<String> candidates = new ArrayList<>();
             for (List<Ref> level : levels) for (Ref r : level) for (ColumnMetadata c : r.table().columns()) candidates.add(c.getName());
-            String suggestion = nearest(column, candidates);
+            // with a single table in scope the answer is the one a qualified name gets
+            Object single = levels.size() == 1 && levels.get(0).size() == 1 ? levels.get(0).get(0).table() : null;
+            String suggestion = single == null ? nearest(column, candidates) : suggestion(single, column, () -> nearest(column, candidates));
             report(Kind.UNKNOWN_COLUMN, token, token, "Unknown column '" + column + "'" + (suggestion == null ? "" : ". Did you mean '" + suggestion + "'?"),
                     suggestion == null ? null : requote(suggestion, token));
         }
@@ -779,10 +882,11 @@ public final class SqlScriptValidator {
                 if (!ref.introducer().equals("INTO") || !r.columnsKnown() || !punct(ref.endIndex(), '(') || keyword(ref.endIndex() + 1, "SELECT")) continue;
                 int close = closing(ref.endIndex());
                 for (int k = ref.endIndex() + 1; k < close; k++) {
+                    tick();
                     if (!ident(k) || !(punct(k - 1, '(') || punct(k - 1, ','))) continue;
                     String column = name(k);
                     if (r.table().columns().stream().noneMatch(c -> c.getName().equalsIgnoreCase(column))) {
-                        String suggestion = nearest(column, r.table().columns().stream().map(ColumnMetadata::getName).toList());
+                        String suggestion = suggestion(r.table(), column, () -> nearest(column, r.table().columns().stream().map(ColumnMetadata::getName).toList()));
                         report(Kind.UNKNOWN_COLUMN, k, k, "Unknown column '" + column + "' in " + r.table().metadata().getName() + (suggestion == null ? "" : ". Did you mean '" + suggestion + "'?"),
                                 suggestion == null ? null : requote(suggestion, k));
                     }
@@ -790,14 +894,28 @@ public final class SqlScriptValidator {
             }
         }
 
+        /** How many edits away a name can be and still be offered as what was meant. */
+        static int editLimit(String wanted) { return wanted.length() <= 4 ? 1 : 2; }
+
+        /** The "did you mean" answer for a name among the things of {@code scope}, worked out once per script. */
+        @Nullable String suggestion(Object scope, String wanted, java.util.function.Supplier<String> search) {
+            Map<String, String> known = script.suggestions.computeIfAbsent(scope, key -> new HashMap<>());
+            String key = wanted.toLowerCase(Locale.ROOT);
+            if (known.containsKey(key)) return known.get(key);
+            String found = search.get();
+            known.put(key, found);
+            return found;
+        }
+
         /** The closest name within a typo's distance, or null. */
         @Nullable String nearest(String wanted, Collection<String> candidates) {
             String best = null;
             int bestDistance = Integer.MAX_VALUE;
-            int limit = wanted.length() <= 4 ? 1 : 2;
+            int limit = editLimit(wanted);
+            String lowerWanted = wanted.toLowerCase(Locale.ROOT);
             for (String candidate : candidates) {
-                if (candidate.equalsIgnoreCase(wanted)) continue;
-                int distance = SqlEditDistance.distance(wanted.toLowerCase(Locale.ROOT), candidate.toLowerCase(Locale.ROOT), limit);
+                if (Math.abs(candidate.length() - lowerWanted.length()) > limit || candidate.equalsIgnoreCase(wanted)) continue;
+                int distance = SqlEditDistance.distance(lowerWanted, candidate.toLowerCase(Locale.ROOT), limit);
                 if (distance <= limit && distance < bestDistance) { best = candidate; bestDistance = distance; }
             }
             return best;

@@ -8,6 +8,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.function.Function;
 
 /**
@@ -23,6 +24,8 @@ public final class SqlSchema {
     private final List<ExplorerMetadataSnapshot.Namespace> namespaces;
     private final String defaultNamespace;
     private final long revision;
+    /** One name index per namespace, built on first use; the schema is shared between threads. */
+    private final AtomicReferenceArray<SqlTableIndex> indexes;
 
     private SqlSchema(String connectionId, DatabaseType type, List<ExplorerMetadataSnapshot.Namespace> namespaces,
                       String defaultNamespace, long revision) {
@@ -31,6 +34,7 @@ public final class SqlSchema {
         this.namespaces = namespaces;
         this.defaultNamespace = defaultNamespace;
         this.revision = revision;
+        this.indexes = new AtomicReferenceArray<>(namespaces.size());
     }
 
     public static @NotNull SqlSchema of(@NotNull ConnectionConfig config, @NotNull ExplorerMetadataSnapshot snapshot,
@@ -59,7 +63,22 @@ public final class SqlSchema {
 
     /** A table in the named namespace, or in the default one for a null namespace. */
     public @Nullable ExplorerMetadataSnapshot.Table table(@Nullable String namespace, @NotNull String name) {
-        return resolve(tables(namespace), table -> table.metadata().getName(), name);
+        var found = namespace(namespace);
+        return found == null ? null : index(found).find(name);
+    }
+
+    /** The tables of a namespace of this schema by name. Safe to call from several threads. */
+    public @NotNull SqlTableIndex index(@NotNull ExplorerMetadataSnapshot.Namespace namespace) {
+        for (int i = 0; i < namespaces.size(); i++) {
+            if (namespaces.get(i) != namespace) continue;
+            SqlTableIndex built = indexes.get(i);
+            if (built == null) {
+                built = new SqlTableIndex(namespace.tables());
+                if (!indexes.compareAndSet(i, null, built)) built = indexes.get(i);
+            }
+            return built;
+        }
+        return new SqlTableIndex(namespace.tables());
     }
 
     /** Whether the namespace's table list is known and every table's columns have been read. */

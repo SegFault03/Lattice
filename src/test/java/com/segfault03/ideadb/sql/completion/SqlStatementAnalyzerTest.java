@@ -152,6 +152,29 @@ class SqlStatementAnalyzerTest {
         assertEquals(Position.AFTER_TABLE, at("select * from orders ord^").position());
     }
 
+    @Test void aClauseWordAfterATableIsNotItsAlias() {
+        for (var profile : new SqlDialectProfile[] {SqlDialects.ANSI, SqlDialects.MYSQL, SqlDialects.POSTGRESQL}) {
+            for (String clause : List.of("limit 10", "offset 5", "union select 1", "except select 1", "intersect select 1", "minus select 1",
+                    "fetch first 1 rows only", "for update", "lock in share mode", "qualify x > 1", "window w as (order by x)", "returning id")) {
+                SqlContext context = at("select users.name from users " + clause + " ^", profile);
+                assertEquals(List.of("users"), names(context), profile.displayName() + ": " + clause);
+                assertNull(context.tables().get(0).alias(), profile.displayName() + ": " + clause);
+            }
+        }
+    }
+
+    @Test void aClauseWordIsAnAliasOnlyWhenQuotedOrAfterAs() {
+        assertEquals(List.of("users limit"), names(at("select ^ from users as limit")));
+        assertEquals(List.of("users limit"), names(at("select ^ from users \"limit\"")));
+        assertEquals(List.of("users u"), names(at("select ^ from users u limit 1")));
+    }
+
+    @Test void aDerivedTableIsNotAliasedByAClauseWord() {
+        SqlContext context = at("select ^ from (select 1 as a) limit 10", SqlDialects.ANSI);
+        assertEquals(1, context.tables().size());
+        assertNull(context.tables().get(0).alias());
+    }
+
     // ---- qualifier, prefix and quoting -------------------------------------------------------------------------------
 
     @Test void aQualifierIsTheDottedNamesBeforeTheCaret() {
