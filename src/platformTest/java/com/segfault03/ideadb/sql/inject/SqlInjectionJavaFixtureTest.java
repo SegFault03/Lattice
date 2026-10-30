@@ -254,6 +254,38 @@ public class SqlInjectionJavaFixtureTest extends H2SqlFixtureTestCase {
         assertEquals("SQL: Generic SQL", presentation.getSelectedValue());
     }
 
+    /** The sequence in the IDE: the file is selected and the bar reads an empty entry; injections appear only after the daemon ran. */
+    public void testTheStatusBarIsRefreshedWhenTheDaemonFinishesOverASourceFile() {
+        var updates = new java.util.ArrayList<String>();
+        var statusBar = (com.intellij.openapi.wm.StatusBar) java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(),
+                new Class<?>[] {com.intellij.openapi.wm.StatusBar.class}, (proxy, method, args) -> {
+                    if (method.getName().equals("updateWidget") && args != null && args.length == 1 && args[0] instanceof String id) updates.add(id);
+                    return method.getReturnType() == boolean.class ? Boolean.FALSE : null;
+                });
+        var factory = new com.segfault03.ideadb.sql.binding.SqlConnectionWidgetFactory();
+        var widget = factory.createWidget(getProject());
+        com.intellij.openapi.util.Disposer.register(getTestRootDisposable(), widget);
+        widget.install(statusBar);
+        var presentation = (com.intellij.openapi.wm.StatusBarWidget.MultipleTextValuesPresentation) widget.getPresentation();
+
+        myFixture.configureByText("A.java", inClass("void f(Connection c) throws Exception { c.prepareStatement(\"select * from books\"); }"));
+        assertEquals("Just selected, nothing is injected yet, and the bar reads this", "", presentation.getSelectedValue());
+        updates.clear();
+
+        myFixture.doHighlighting();
+        getProject().getMessageBus().syncPublisher(com.intellij.codeInsight.daemon.DaemonCodeAnalyzer.DAEMON_EVENT_TOPIC).daemonFinished();
+        com.intellij.testFramework.PlatformTestUtil.dispatchAllEventsInIdeEventQueue();
+
+        assertFalse("the daemon finishing asks the bar to read the entry again", updates.isEmpty());
+        assertEquals(factory.getId(), updates.get(0));
+        assertEquals("SQL: H2 \u00b7 fixture H2", presentation.getSelectedValue());
+
+        updates.clear();
+        getProject().getMessageBus().syncPublisher(com.intellij.codeInsight.daemon.DaemonCodeAnalyzer.DAEMON_EVENT_TOPIC).daemonFinished();
+        com.intellij.testFramework.PlatformTestUtil.dispatchAllEventsInIdeEventQueue();
+        assertTrue("and does not repeat it while nothing changed", updates.isEmpty());
+    }
+
     public void testInjectionDoesNotNeedIndexesAndSurvivesIndexing() {
         com.intellij.testFramework.DumbModeTestUtils.runInDumbModeSynchronously(getProject(), () -> {
             assertTrue(com.intellij.openapi.project.DumbService.isDumb(getProject()));

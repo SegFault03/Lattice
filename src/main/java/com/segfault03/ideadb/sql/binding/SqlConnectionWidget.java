@@ -46,7 +46,7 @@ final class SqlConnectionWidget implements StatusBarWidget, StatusBarWidget.Mult
         connection.subscribe(DaemonCodeAnalyzer.DAEMON_EVENT_TOPIC, new DaemonCodeAnalyzer.DaemonListener() {
             @Override public void daemonFinished() {
                 ApplicationManager.getApplication().invokeLater(() -> {
-                    if (!project.isDisposed() && !getSelectedValue().equals(shown)) statusBar.updateWidget(ID());
+                    if (!project.isDisposed() && !text().equals(shown)) statusBar.updateWidget(ID());
                 }, project.getDisposed());
             }
         });
@@ -63,13 +63,17 @@ final class SqlConnectionWidget implements StatusBarWidget, StatusBarWidget.Mult
         return file.getFileType() == LatticeSqlFileType.INSTANCE || SqlInjectionHosts.hostsSql(project, file) ? file : null;
     }
 
-    @Override public @NotNull String getSelectedValue() {
+    /** The entry's text for the selected file, without recording it as shown. */
+    private @NotNull String text() {
         VirtualFile file = sqlFile();
-        if (file == null) return shown = "";
+        if (file == null) return "";
         SqlDialectProfile dialect = SqlDialectResolver.resolve(project, file);
         ConnectionConfig connection = SqlDialectResolver.connection(project, file);
-        return shown = "SQL: " + dialect.displayName() + (connection == null ? "" : " · " + connection.getName());
+        return "SQL: " + dialect.displayName() + (connection == null ? "" : " \u00b7 " + connection.getName());
     }
+
+    /** What the status bar reads; remembered so that the daemon finishing only refreshes the bar when the text differs from it. */
+    @Override public @NotNull String getSelectedValue() { return shown = text(); }
 
     @Override public @Nullable String getTooltipText() {
         VirtualFile file = sqlFile();
