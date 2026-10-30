@@ -151,4 +151,38 @@ public class SqlInjectionKotlinFixtureTest extends H2SqlFixtureTestCase {
         assertTrue(doc.getText().contains("    // language=SQL\n    val q = "));
         assertTrue(isSqlNow(top));
     }
+
+    // ---- validation inside strings -----------------------------------------------------------------------------------
+
+    private List<String> problemsIn(String source) {
+        myFixture.enableInspections(com.segfault03.ideadb.sql.validate.LatticeSqlSyntaxInspection.class,
+                com.segfault03.ideadb.sql.validate.LatticeSqlUnknownTableInspection.class, com.segfault03.ideadb.sql.validate.LatticeSqlUnknownColumnInspection.class);
+        myFixture.configureByText("A.kt", source);
+        return myFixture.doHighlighting().stream().filter(info -> info.getSeverity().compareTo(com.intellij.lang.annotation.HighlightSeverity.WEAK_WARNING) >= 0)
+                .map(info -> info.getDescription()).filter(d -> d != null && (d.startsWith("Unknown") || d.contains("expected") || d.startsWith("Unmatched") || d.startsWith("Unclosed"))).toList();
+    }
+
+    public void testASqlStringIsValidatedLikeAFile() {
+        loadSchema();
+        assertEquals(List.of(), problemsIn("val q = \"select a.name from authors a join books b on b.author_id = a.id where b.title = ?\""));
+        var found = problemsIn("val q = \"select * from authorz where id = ?\"");
+        assertEquals(found.toString(), 1, found.size());
+        assertTrue(found.get(0), found.get(0).contains("authorz"));
+        assertEquals(1, problemsIn("val q = \"select titel from books where id = ?\"").size());
+        assertEquals(1, problemsIn("val q = \"select * from books where\"").size());
+        assertEquals(List.of(), problemsIn("val q = \"\"\"\n    select b.title\n      from books b\n     where b.id = ?\n    \"\"\".trimIndent()"));
+        assertEquals(1, problemsIn("val q = \"\"\"\n    select b.title\n      from bookz b\n    \"\"\".trimIndent()").size());
+    }
+
+    public void testAStringWithTemplateEntriesIsNotJudged() {
+        loadSchema();
+        assertEquals(List.of(), problemsIn("fun f(cols: String) = \"select $cols from authorz where x = 1\""));
+        assertEquals(List.of(), problemsIn("fun f(t: String) = \"select * from ${t.trim()} where\""));
+        assertEquals(List.of(), problemsIn("fun f(t: String) = \"select * from \" + t + \" where\""));
+    }
+
+    public void testAStringWithAnEscapeIsNotJudged() {
+        loadSchema();
+        assertEquals(List.of(), problemsIn("val q = \"select *\\nfrom authorz\""));
+    }
 }
