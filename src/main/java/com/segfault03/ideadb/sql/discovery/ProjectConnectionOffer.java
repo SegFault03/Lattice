@@ -24,7 +24,7 @@ public final class ProjectConnectionOffer {
     /** The databases found in project files that no saved connection points at and the user has not turned away. */
     public static @NotNull List<DiscoveredConnection> open(@NotNull Project project) {
         var bindings = SqlBindingsState.getInstance(project);
-        return JdbcDiscovery.getInstance(project).unmatched(DatabaseSettingsState.getInstance().getConnections()).stream()
+        return JdbcDiscovery.getInstance(project).unmatched().stream()
                 .filter(discovered -> !bindings.isDiscoveryDismissed(discovered.describe())).toList();
     }
 

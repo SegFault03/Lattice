@@ -7,11 +7,14 @@ import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.components.Service;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ProjectFileIndex;
+import com.intellij.openapi.roots.ProjectRootManager;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.openapi.vfs.newvfs.BulkFileListener;
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent;
+import com.intellij.openapi.vfs.newvfs.events.VFileMoveEvent;
+import com.intellij.openapi.vfs.newvfs.events.VFilePropertyChangeEvent;
 import com.intellij.psi.search.FilenameIndex;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.ui.EditorNotifications;
@@ -19,11 +22,13 @@ import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.model.DatabaseType;
 import com.segfault03.ideadb.sql.binding.SqlBindingsState;
 import com.segfault03.ideadb.sql.binding.SqlEditorRefresh;
+import com.segfault03.ideadb.state.DatabaseSettingsState;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -41,13 +46,18 @@ public final class JdbcDiscovery implements Disposable {
     private final Project project;
     private volatile List<DiscoveredConnection> found = List.of();
     private volatile boolean scanned;
+    /** What the saved connections make of one snapshot; dropped when the snapshot or the saved connections change. */
+    private volatile Matches matches;
+
+    private record Matches(List<DiscoveredConnection> snapshot, DatabaseSettingsState settings, long modification,
+                           @Nullable String matchedId, List<DiscoveredConnection> unmatched, @Nullable DatabaseType impliedType) {}
 
     public JdbcDiscovery(@NotNull Project project) {
         this.project = project;
         project.getMessageBus().connect(this).subscribe(VirtualFileManager.VFS_CHANGES, new BulkFileListener() {
             @Override public void after(@NotNull List<? extends VFileEvent> events) {
                 for (VFileEvent event : events) {
-                    if (ProjectConfigScanner.isConfigFileName(nameOf(event))) { refresh(); return; }
+                    if (ProjectConfigScanner.isConfigFileName(nameOf(event)) && inProject(event)) { refresh(); return; }
                 }
             }
         });
@@ -88,27 +98,43 @@ public final class JdbcDiscovery implements Disposable {
     // ---- what the saved connections make of it -----------------------------------------------------------------------
 
     /** The one saved connection the project's files point at, or null when none does or several different ones do. */
-    public @Nullable ConnectionConfig matchedConnection(@NotNull List<ConnectionConfig> saved) {
-        Set<ConnectionConfig> hits = new LinkedHashSet<>();
-        for (DiscoveredConnection discovered : snapshot()) {
-            for (ConnectionConfig connection : saved) if (discovered.url().matches(connection)) hits.add(connection);
-        }
-        return hits.size() == 1 ? hits.iterator().next() : null;
+    public @Nullable ConnectionConfig matchedConnection() {
+        String id = current().matchedId();
+        return id == null ? null : DatabaseSettingsState.getInstance().getConnection(id);
     }
 
     /** The discovered databases that no saved connection points at: the ones worth offering to add. */
-    public @NotNull List<DiscoveredConnection> unmatched(@NotNull List<ConnectionConfig> saved) {
-        return snapshot().stream().filter(discovered -> saved.stream().noneMatch(connection -> discovered.url().matches(connection))).toList();
-    }
+    public @NotNull List<DiscoveredConnection> unmatched() { return current().unmatched(); }
 
     /** The database type every discovered URL agrees on: the dialect to use when no connection is chosen. */
-    public @Nullable DatabaseType impliedType() {
+    public @Nullable DatabaseType impliedType() { return current().impliedType(); }
+
+    /** These are asked on every completion, hover and keystroke handler, so they are worked out once per snapshot and settings change. */
+    private Matches current() {
+        List<DiscoveredConnection> snapshot = snapshot();
+        DatabaseSettingsState settings = DatabaseSettingsState.getInstance();
+        long modification = settings.modificationCount(); // before reading the connections: a later change only causes a recompute
+        Matches known = matches;
+        if (known != null && known.snapshot() == snapshot && known.settings() == settings && known.modification() == modification) return known;
+        List<ConnectionConfig> saved = settings.getConnections();
+        Set<String> hits = new LinkedHashSet<>();
+        List<DiscoveredConnection> open = new ArrayList<>();
         DatabaseType type = null;
-        for (DiscoveredConnection discovered : snapshot()) {
-            if (type != null && type != discovered.url().type()) return null;
+        boolean agree = true;
+        for (DiscoveredConnection discovered : snapshot) {
+            boolean matched = false;
+            for (ConnectionConfig connection : saved) {
+                if (!discovered.url().matches(connection)) continue;
+                hits.add(connection.getId());
+                matched = true;
+            }
+            if (!matched) open.add(discovered);
+            if (type != null && type != discovered.url().type()) agree = false;
             type = discovered.url().type();
         }
-        return type;
+        Matches computed = new Matches(snapshot, settings, modification, hits.size() == 1 ? hits.iterator().next() : null, List.copyOf(open), agree ? type : null);
+        matches = computed;
+        return computed;
     }
 
     // ---- scanning ---------------------------------------------------------------------------------------------------
@@ -116,8 +142,12 @@ public final class JdbcDiscovery implements Disposable {
     private static List<DiscoveredConnection> scan(Project project) {
         GlobalSearchScope scope = GlobalSearchScope.projectScope(project);
         List<DiscoveredConnection> result = new ArrayList<>();
-        for (String name : FilenameIndex.getAllFilenames(project)) {
-            if (!ProjectConfigScanner.isConfigFileName(name)) continue;
+        Set<String> names = new LinkedHashSet<>();
+        FilenameIndex.processAllFileNames(name -> {
+            if (ProjectConfigScanner.isConfigFileName(name)) names.add(name);
+            return true;
+        }, scope, null);
+        for (String name : names) {
             for (VirtualFile file : FilenameIndex.getVirtualFilesByName(name, scope)) {
                 com.intellij.openapi.progress.ProgressManager.checkCanceled();
                 if (!file.isValid() || file.isDirectory() || file.getLength() > MAX_FILE_BYTES || inGeneratedDirectory(project, file)) continue;
@@ -143,6 +173,18 @@ public final class JdbcDiscovery implements Disposable {
         VirtualFile root = ProjectFileIndex.getInstance(project).getContentRootForFile(file);
         String relative = root == null ? null : VfsUtilCore.getRelativePath(file, root);
         return relative != null ? relative : file.getName();
+    }
+
+    /** Whether the event touches a path under one of this project's content roots; a deleted file has no VirtualFile, so paths are compared. */
+    private boolean inProject(VFileEvent event) {
+        List<String> paths = new ArrayList<>(List.of(event.getPath()));
+        if (event instanceof VFileMoveEvent move) paths.add(move.getOldPath());
+        else if (event instanceof VFilePropertyChangeEvent change && change.isRename()) paths.add(change.getOldPath());
+        String[] roots = ReadAction.compute(() -> Arrays.stream(ProjectRootManager.getInstance(project).getContentRoots()).map(VirtualFile::getPath).toArray(String[]::new));
+        for (String path : paths) {
+            for (String root : roots) if (path.equals(root) || path.startsWith(root.endsWith("/") ? root : root + "/")) return true;
+        }
+        return false;
     }
 
     private static String nameOf(VFileEvent event) {

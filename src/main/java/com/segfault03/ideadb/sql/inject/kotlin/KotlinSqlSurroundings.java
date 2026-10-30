@@ -3,6 +3,7 @@ package com.segfault03.ideadb.sql.inject.kotlin;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.util.PsiTreeUtil;
+import com.segfault03.ideadb.sql.inject.SqlInjectionRules;
 import com.segfault03.ideadb.sql.inject.SqlInjectionRules.Surroundings;
 import com.segfault03.ideadb.sql.inject.SqlMarkers;
 import com.segfault03.ideadb.sql.inject.SqlStatementComments;
@@ -22,7 +23,15 @@ final class KotlinSqlSurroundings {
 
     private KotlinSqlSurroundings() {}
 
-    static @NotNull Surroundings of(@NotNull KtExpression top) {
+    static @NotNull Surroundings of(@NotNull KtExpression top) { return cheap(top, true); }
+
+    /** Whether the string is SQL, reading the annotations only when the explicit tier can use them. */
+    static boolean shouldInject(@NotNull KtExpression top, @NotNull String text, @NotNull SqlInjectionRules.Tiers tiers) {
+        return SqlInjectionRules.shouldInject(cheap(top, tiers.explicit()), text, tiers);
+    }
+
+    /** Nothing here resolves: the marker comment is read first, the annotations only when asked for. */
+    private static @NotNull Surroundings cheap(@NotNull KtExpression top, boolean annotations) {
         SqlMarkers.Mark mark = SqlStatementComments.markAbove(statementOf(top));
         boolean annotated = false;
         String callee = null;
@@ -37,13 +46,13 @@ final class KotlinSqlSurroundings {
                 nativeQuery = isNativeQuery(entry, argument);
             }
         } else if (parent instanceof KtProperty property && property.getInitializer() == top) {
-            annotated = isSqlAnnotated(property);
+            annotated = annotations && isSqlAnnotated(property);
         } else if (parent instanceof KtParameter parameter && parameter.getDefaultValue() == top) {
-            annotated = isSqlAnnotated(parameter);
+            annotated = annotations && isSqlAnnotated(parameter);
         } else if (parent instanceof KtNamedFunction function && function.getBodyExpression() == top) {
-            annotated = isSqlAnnotated(function);
+            annotated = annotations && isSqlAnnotated(function);
         } else if (parent instanceof KtReturnExpression) {
-            KtNamedFunction function = PsiTreeUtil.getParentOfType(parent, KtNamedFunction.class, true, KtClass.class);
+            KtNamedFunction function = annotations ? PsiTreeUtil.getParentOfType(parent, KtNamedFunction.class, true, KtClass.class) : null;
             annotated = function != null && isSqlAnnotated(function);
         }
         return new Surroundings(mark, annotated, callee, nativeQuery);

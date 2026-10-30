@@ -111,6 +111,42 @@ public class SqlDiscoveryFixtureTest extends BasePlatformTestCase {
         assertEquals("the file's own choice wins", SqlDialects.H2, SqlDialectResolver.resolve(getProject(), file));
     }
 
+    public void testTheMatchFollowsEditsToTheSavedConnections() {
+        ConnectionConfig postgres = saved(DatabaseType.POSTGRESQL, "shop-pg", "localhost", 5432, "shop");
+        saved(DatabaseType.MYSQL, "other-mysql", "localhost", 3306, "other");
+        myFixture.addFileToProject("src/main/resources/application.yml", SPRING);
+        discovery.refreshNow();
+        VirtualFile file = sqlFile();
+
+        assertEquals(postgres.getId(), discovery.matchedConnection().getId());
+        assertEquals("asking again gives the same answer", postgres.getId(), discovery.matchedConnection().getId());
+        assertTrue(discovery.unmatched().isEmpty());
+
+        postgres.setPort(6543);
+        connections.updateConnection(postgres);
+        assertNull("the edited connection no longer matches", discovery.matchedConnection());
+        assertEquals(1, discovery.unmatched().size());
+        assertNull(SqlDialectResolver.connection(getProject(), file));
+        assertEquals("the files still say PostgreSQL", SqlDialects.POSTGRESQL, SqlDialectResolver.resolve(getProject(), file));
+
+        postgres.setPort(5432);
+        connections.updateConnection(postgres);
+        assertEquals(postgres.getId(), discovery.matchedConnection().getId());
+        connections.removeConnection(postgres.getId());
+        assertNull(discovery.matchedConnection());
+        assertEquals(1, discovery.unmatched().size());
+    }
+
+    public void testTheTypeTheFilesAgreeOnIsKeptUntilTheyChange() {
+        myFixture.addFileToProject("src/main/resources/application.properties", "spring.datasource.url=jdbc:mysql://db:3306/shop\n");
+        discovery.refreshNow();
+        assertEquals(DatabaseType.MYSQL, discovery.impliedType());
+        assertEquals(DatabaseType.MYSQL, discovery.impliedType());
+        myFixture.addFileToProject("src/main/resources/application-test.properties", "spring.datasource.url=jdbc:h2:mem:testdb\n");
+        discovery.refreshNow();
+        assertNull(discovery.impliedType());
+    }
+
     public void testFilesThatPointAtTwoDifferentSavedConnectionsAreNotGuessedBetween() {
         saved(DatabaseType.POSTGRESQL, "dev", "localhost", 5432, "shop");
         saved(DatabaseType.POSTGRESQL, "test", "localhost", 5433, "shop_test");

@@ -45,7 +45,10 @@ public final class SqlSchemaService implements Disposable {
     /** More tables than this changing within one debounce window is handled as a connection-wide change. */
     private static final int TABLE_BURST_LIMIT = 20;
 
-    private final ConcurrentMap<String, SqlSchema> views = new ConcurrentHashMap<>();
+    /** A view and the saved-connection modification count it was built under. */
+    private record View(SqlSchema schema, long settings) {}
+
+    private final ConcurrentMap<String, View> views = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Future<?>> loading = new ConcurrentHashMap<>();
     private final Set<String> served = ConcurrentHashMap.newKeySet();
     private final Set<String> stale = ConcurrentHashMap.newKeySet();
@@ -74,19 +77,27 @@ public final class SqlSchemaService implements Disposable {
 
     public static SqlSchemaService getInstance() { return ApplicationManager.getApplication().getService(SqlSchemaService.class); }
 
-    /** The schema as last cached, or null when nothing has been read for this connection. Reuses the view until the cache changes. */
+    /**
+     * The schema as last cached, or null when nothing has been read for this connection. Reuses the view while the
+     * connection's cache and the saved connection settings are unchanged; only then is the identity hash re-checked.
+     */
     public @Nullable SqlSchema schema(@NotNull ConnectionConfig config) {
         MetadataCacheState cache = MetadataCacheState.getInstance();
         long revision = cache.revision(config.getId()); // read first: a change after this only causes a harmless rebuild next time
-        SqlSchema known = views.get(config.getId());
-        if (known != null && known.revision() == revision && cache.matches(config)) return known;
+        long settings = DatabaseSettingsState.getInstance().modificationCount();
+        View known = views.get(config.getId());
+        if (known != null && known.schema().revision() == revision && known.settings() == settings) return known.schema();
+        if (known != null && known.schema().revision() == revision && cache.matches(config)) {
+            views.put(config.getId(), new View(known.schema(), settings)); // settings changed elsewhere; this connection did not
+            return known.schema();
+        }
         ExplorerMetadataSnapshot snapshot = cache.snapshot(config);
         if (snapshot == null) {
             views.remove(config.getId());
             return null;
         }
         SqlSchema built = SqlSchema.of(config, snapshot, cache.defaultNamespace(config), revision);
-        views.put(config.getId(), built);
+        views.put(config.getId(), new View(built, settings));
         return built;
     }
 

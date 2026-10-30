@@ -3,6 +3,8 @@ package com.segfault03.ideadb.sql.inject;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.function.BooleanSupplier;
+
 /**
  * Whether a string becomes SQL, from what surrounds it and what it says. The tiers are independent switches:
  * an explicit statement by the user (annotation or comment), a call known to take SQL, and the content itself.
@@ -30,5 +32,15 @@ public final class SqlInjectionRules {
             }
         }
         return tiers.content() && SqlStringHeuristic.looksLikeSql(text);
+    }
+
+    /**
+     * The same decision, for surroundings read without resolving anything. {@code resolvedAnnotation} (finding an annotation by
+     * resolving a call or a reference) is asked only when the explicit tier is on and nothing cheaper has decided.
+     */
+    public static boolean shouldInject(@NotNull Surroundings cheap, @NotNull BooleanSupplier resolvedAnnotation, @NotNull String text, @NotNull Tiers tiers) {
+        if (shouldInject(cheap, text, tiers)) return true;
+        if (!tiers.explicit() || text.isBlank() || cheap.mark() == SqlMarkers.Mark.NOT_SQL) return false;
+        return resolvedAnnotation.getAsBoolean();
     }
 }

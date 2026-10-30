@@ -235,4 +235,19 @@ public class SqlSchemaServiceFixtureTest extends BasePlatformTestCase {
         MetadataCacheState.getInstance().columnsRefreshed(h2, "PUBLIC", "AUTHORS", List.of());
         assertNotSame(view, service.schema(h2));
     }
+
+    public void testEditingTheSavedConnectionDropsTheCachedView() {
+        service.ensureLoaded(h2);
+        awaitAnnouncement();
+        SqlSchema view = service.schema(h2);
+        assertNotNull(view);
+        assertSame("nothing changed, so the view is reused", view, service.schema(h2));
+
+        DatabaseSettingsState.getInstance().updateConnection(h2);
+        assertSame("a save that leaves the connection as it was keeps its view", view, service.schema(h2));
+
+        h2.setDatabaseName("renamed_" + UUID.randomUUID());
+        DatabaseSettingsState.getInstance().updateConnection(h2);
+        assertNull("the cache was read for another database", service.schema(h2));
+    }
 }

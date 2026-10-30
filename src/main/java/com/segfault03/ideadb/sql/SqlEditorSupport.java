@@ -18,6 +18,9 @@ import com.segfault03.ideadb.sql.settings.SqlFileTypeClaim;
 import com.segfault03.ideadb.state.DatabaseSettingsListener;
 import com.segfault03.ideadb.state.DatabaseSettingsState;
 
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+
 /** Keeps the IDE's file type mapping, the notices and open editors in step with the SQL editor settings. */
 public final class SqlEditorSupport {
     private static final String NOTIFICATION_GROUP = "Lattice SQL editor";
@@ -50,14 +53,24 @@ public final class SqlEditorSupport {
                 if (!project.isDisposed()) SqlBindingsState.getInstance(project).pruneMissingFiles();
             });
             com.segfault03.ideadb.sql.discovery.JdbcDiscovery.getInstance(project).refresh();
-            // A deleted or retyped connection changes the dialect of the files bound to it.
+            // A deleted or retyped connection changes the dialect of the files bound to it; a changed password or option does not.
+            AtomicReference<List<List<String>>> known = new AtomicReference<>(fingerprint());
             ApplicationManager.getApplication().getMessageBus().connect(SqlEditorProjectScope.of(project))
                     .subscribe(DatabaseSettingsListener.TOPIC, (DatabaseSettingsListener) () -> {
                         pruneBindings(project);
+                        List<List<String>> now = fingerprint();
+                        if (now.equals(known.getAndSet(now))) return;
                         SqlBindingsState.getInstance(project).connectionsChanged();
                         SqlEditorRefresh.refreshAll(project);
                     });
         });
+    }
+
+    /** What dialect resolution and discovery matching read from the saved connections; kept in memory only, as it includes the custom URL. */
+    private static List<List<String>> fingerprint() {
+        return DatabaseSettingsState.getInstance().getConnections().stream().map(config -> List.of(config.getId(), config.getName(), config.getType().name(),
+                String.valueOf(config.getHsqlMode()), String.valueOf(config.getHost()), String.valueOf(config.getPort()),
+                String.valueOf(config.getDatabaseName()), String.valueOf(config.getUser()), String.valueOf(config.getCustomUrl()))).toList();
     }
 
     private static void pruneBindings(Project project) {

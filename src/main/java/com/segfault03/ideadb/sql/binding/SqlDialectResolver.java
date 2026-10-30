@@ -59,12 +59,14 @@ public final class SqlDialectResolver {
         if (chosen != null) return chosen;
         ConnectionConfig discovered = matchedByProjectFiles(project);
         if (discovered != null) return discovered;
-        var all = DatabaseSettingsState.getInstance().getConnections();
-        return all.size() == 1 ? all.get(0) : null;
+        var settings = DatabaseSettingsState.getInstance();
+        if (settings.connectionCount() != 1) return null;
+        var only = settings.getConnections();
+        return only.size() == 1 ? only.get(0) : null;
     }
 
     private static @Nullable ConnectionConfig matchedByProjectFiles(Project project) {
-        return com.segfault03.ideadb.sql.discovery.JdbcDiscovery.getInstance(project).matchedConnection(DatabaseSettingsState.getInstance().getConnections());
+        return com.segfault03.ideadb.sql.discovery.JdbcDiscovery.getInstance(project).matchedConnection();
     }
 
     private static @Nullable ConnectionConfig connection(@Nullable String id) {

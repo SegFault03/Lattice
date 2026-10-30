@@ -67,7 +67,7 @@ public final class SqlEditorSettings implements PersistentStateComponent<SqlEdit
         modifications.incrementAndGet();
     }
 
-    /** Changes whenever the master switch or validation is switched, or the settings are loaded. */
+    /** Changes whenever the master switch, validation or an injection option is switched, or the settings are loaded. */
     @Override public long getModificationCount() { return modifications.get(); }
 
     public synchronized boolean isEnabled() { return effectiveEnabled(state.enabled, UltimateDatabasePlugin.isActive()); }
@@ -96,15 +96,30 @@ public final class SqlEditorSettings implements PersistentStateComponent<SqlEdit
     public synchronized boolean isHighlightingEffective() { return isEnabled() && state.highlighting; }
     public synchronized boolean isCompletionEffective() { return isEnabled() && state.completion; }
     public synchronized boolean isInjection() { return state.injection; }
-    public synchronized void setInjection(boolean value) { state.injection = value; }
+    public synchronized void setInjection(boolean value) {
+        state.injection = value;
+        modifications.incrementAndGet();
+    }
     public synchronized boolean isInjectExplicit() { return state.injectExplicit; }
-    public synchronized void setInjectExplicit(boolean value) { state.injectExplicit = value; }
+    public synchronized void setInjectExplicit(boolean value) {
+        state.injectExplicit = value;
+        modifications.incrementAndGet();
+    }
     public synchronized boolean isInjectKnownCalls() { return state.injectKnownCalls; }
-    public synchronized void setInjectKnownCalls(boolean value) { state.injectKnownCalls = value; }
+    public synchronized void setInjectKnownCalls(boolean value) {
+        state.injectKnownCalls = value;
+        modifications.incrementAndGet();
+    }
     public synchronized boolean isInjectContent() { return state.injectContent; }
-    public synchronized void setInjectContent(boolean value) { state.injectContent = value; }
+    public synchronized void setInjectContent(boolean value) {
+        state.injectContent = value;
+        modifications.incrementAndGet();
+    }
     public synchronized @NotNull String knownCalls() { return state.knownCalls == null ? SqlKnownCalls.DEFAULT : state.knownCalls; }
-    public synchronized void knownCalls(@NotNull String value) { state.knownCalls = value; }
+    public synchronized void knownCalls(@NotNull String value) {
+        state.knownCalls = value;
+        modifications.incrementAndGet();
+    }
 
     public synchronized boolean isInjectionEffective() { return isEnabled() && state.injection; }
 
