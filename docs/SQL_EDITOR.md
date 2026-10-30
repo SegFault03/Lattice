@@ -1,6 +1,6 @@
 # SQL editor support
 
-Lattice edits SQL in your own project, not only in its console. Today that means dialect-aware syntax highlighting and code completion for `.sql` files. Hover details and SQL inside Java and Kotlin strings are not available yet.
+Lattice edits SQL in your own project, not only in its console. Today that means dialect-aware syntax highlighting, code completion and hover details for `.sql` files. SQL inside Java and Kotlin strings is not available yet.
 
 ## What you get
 
@@ -41,6 +41,19 @@ Details:
 - Names come from the metadata cache. The first completion for a connection reads its default schema in the background (columns for up to 300 tables) and the popup says so; the next popup includes the result. Completion never connects on its own to a connection nobody used, and a DDL change run in the console refreshes only the affected table.
 - Without a connection that applies, keywords, functions and types are still offered.
 
+## Hover details
+
+Hover over a name in a `.sql` file (or press `Ctrl+Q`, `F1` on macOS) to see what the file's connection knows about it. The card names the connection and dialect it came from.
+
+| Over | Card |
+|---|---|
+| A table or view | Comment, every column with type and `PK`/`FK`/`not null`, primary key, foreign keys (each a link to its target column), the columns that reference it, and **Open in Lattice** to open its data editor |
+| A column, bare or after `alias.`, `table.` or `schema.table.` | Type, comment, nullability, default, primary or foreign key (the target is a link), auto increment or generated |
+| An alias | The table it stands for, as a link |
+| A schema | Its tables, as links |
+
+Links in a card open the card of the target. Names resolve the way completion resolves them: through aliases, schema-qualified names, `UPDATE ... SET` and `INSERT` column lists, ignoring case, and with quoted names unquoted. Keywords, unknown names and derived-table aliases show nothing, as does a file with no connection or a connection whose schema has not been read yet; hovering starts that read, so the card appears on the next hover. The cards read the metadata cache and never contact the database.
+
 ## Choosing a connection
 
 A file's dialect comes from, in order:
@@ -68,6 +81,7 @@ Choices are stored in the project's workspace file, not in version control, beca
 | Handle `.sql` files | On |
 | Syntax highlighting | On |
 | Code completion | On |
+| Hover documentation | On |
 
 Colors are under **Settings | Editor | Color Scheme | Lattice SQL**.
 
@@ -85,6 +99,7 @@ The Database plugin brings its own SQL support. Where it is enabled, Lattice's S
 ## Limits
 
 - Completion does not offer the columns of a derived table or common table expression, and suggests a composite foreign key as one equality per column.
+- Hover does not describe columns of derived tables or common table expressions, and an unqualified column that exists in several tables of the statement shows the first one.
 - Only the default schema is read ahead of time; another schema's tables appear after it is read (for example by opening it in the explorer).
 - Highlighting is lexical. It does not check that tables, columns or syntax are valid.
 - Word lists are curated, not exhaustive, and do not vary by server version.

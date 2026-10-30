@@ -4,66 +4,20 @@ import com.intellij.codeInsight.editorActions.TypedHandlerDelegate;
 import com.intellij.codeInsight.lookup.LookupElement;
 import com.intellij.codeInsight.lookup.LookupManager;
 import com.intellij.testFramework.PlatformTestUtil;
-import com.intellij.testFramework.fixtures.BasePlatformTestCase;
-import com.segfault03.ideadb.model.ConnectionConfig;
-import com.segfault03.ideadb.model.DatabaseType;
-import com.segfault03.ideadb.service.DatabaseConnectionManager;
-import com.segfault03.ideadb.sql.FixtureConnections;
-import com.segfault03.ideadb.sql.binding.SqlBindingsState;
+import com.segfault03.ideadb.sql.H2SqlFixtureTestCase;
 import com.segfault03.ideadb.sql.schema.SqlSchemaService;
 import com.segfault03.ideadb.sql.settings.SqlEditorSettings;
-import com.segfault03.ideadb.sql.settings.SqlFileTypeClaim;
-import com.segfault03.ideadb.state.DatabaseSettingsState;
-import com.segfault03.ideadb.state.MetadataCacheState;
 
-import java.sql.Connection;
 import java.util.Arrays;
 import java.util.List;
-import java.util.UUID;
 
 /** Completion in a real editor over an H2 schema read through the schema service. */
-public class SqlCompletionFixtureTest extends BasePlatformTestCase {
-    private DatabaseSettingsState connections;
-    private ConnectionConfig h2;
-
-    @Override protected void setUp() throws Exception {
-        super.setUp();
-        connections = FixtureConnections.install(getTestRootDisposable(), true);
-        SqlEditorSettings.getInstance().loadState(new SqlEditorSettings.State());
-        SqlBindingsState.getInstance(getProject()).loadState(new SqlBindingsState.State());
-        SqlFileTypeClaim.apply(true);
-        h2 = new ConnectionConfig(DatabaseType.H2, "completion H2");
-        h2.setDatabaseName("completion_" + UUID.randomUUID());
-        connections.addConnection(h2);
-        Connection connection = DatabaseConnectionManager.getInstance().getConnection(h2);
-        synchronized (connection) {
-            try (var statement = connection.createStatement()) {
-                statement.execute("CREATE TABLE AUTHORS (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR(40))");
-                statement.execute("CREATE TABLE BOOKS (ID INTEGER NOT NULL PRIMARY KEY, TITLE VARCHAR(60), AUTHOR_ID INTEGER NOT NULL, "
-                        + "FOREIGN KEY (AUTHOR_ID) REFERENCES AUTHORS (ID))");
-            }
-        }
-    }
-
-    @Override protected void tearDown() throws Exception {
-        try {
-            DatabaseConnectionManager.getInstance().closeConnection(h2.getId());
-            MetadataCacheState.getInstance().remove(h2.getId());
-            SqlEditorSettings.getInstance().loadState(new SqlEditorSettings.State());
-            SqlBindingsState.getInstance(getProject()).loadState(new SqlBindingsState.State());
-        } finally {
-            super.tearDown();
-        }
-    }
-
-    /** Completion starts the read itself; tests that need the schema ready ask for it up front. */
-    private void loadSchema() {
-        SqlSchemaService service = SqlSchemaService.getInstance();
-        service.ensureLoaded(h2);
-        PlatformTestUtil.waitWithEventsDispatching("The schema never loaded", () -> {
-            var schema = service.schema(h2);
-            return schema != null && schema.isComplete(null);
-        }, 30);
+public class SqlCompletionFixtureTest extends H2SqlFixtureTestCase {
+    @Override protected String[] schemaStatements() {
+        return new String[] {
+                "CREATE TABLE AUTHORS (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR(40))",
+                "CREATE TABLE BOOKS (ID INTEGER NOT NULL PRIMARY KEY, TITLE VARCHAR(60), AUTHOR_ID INTEGER NOT NULL, "
+                        + "FOREIGN KEY (AUTHOR_ID) REFERENCES AUTHORS (ID))"};
     }
 
     private List<String> lookups(String text) {

@@ -18,6 +18,7 @@ public final class SqlEditorConfigurable implements SearchableConfigurable {
     private final JBCheckBox handleFiles = new JBCheckBox("Handle .sql files (replaces the IDE's highlighting-only SQL file type)");
     private final JBCheckBox highlighting = new JBCheckBox("Syntax highlighting for the dialect of the bound connection");
     private final JBCheckBox completion = new JBCheckBox("Code completion: keywords, functions, tables and columns of the bound connection");
+    private final JBCheckBox hover = new JBCheckBox("Hover documentation: tables, columns, keys and comments of the bound connection");
     private JPanel panel;
 
     @Override public @NotNull String getId() { return "com.segfault03.lattice.sql.editor"; }
@@ -31,7 +32,7 @@ public final class SqlEditorConfigurable implements SearchableConfigurable {
             form.addComponent(note);
         }
         panel = form.addComponent(handleFiles, JBUI.scale(8)).addComponent(highlighting)
-                .addComponent(completion).addComponentFillVertically(new JPanel(), 0).getPanel();
+                .addComponent(completion).addComponent(hover).addComponentFillVertically(new JPanel(), 0).getPanel();
         enabled.addActionListener(event -> updateDependents());
         reset();
         return panel;
@@ -41,12 +42,14 @@ public final class SqlEditorConfigurable implements SearchableConfigurable {
         handleFiles.setEnabled(enabled.isSelected());
         highlighting.setEnabled(enabled.isSelected());
         completion.setEnabled(enabled.isSelected());
+        hover.setEnabled(enabled.isSelected());
     }
 
     @Override public boolean isModified() {
         SqlEditorSettings settings = SqlEditorSettings.getInstance();
         return enabled.isSelected() != settings.isEnabled() || handleFiles.isSelected() != settings.isHandleSqlFiles()
-                || highlighting.isSelected() != settings.isHighlighting() || completion.isSelected() != settings.isCompletion();
+                || highlighting.isSelected() != settings.isHighlighting() || completion.isSelected() != settings.isCompletion()
+                || hover.isSelected() != settings.isHover();
     }
 
     @Override public void apply() {
@@ -55,6 +58,7 @@ public final class SqlEditorConfigurable implements SearchableConfigurable {
         settings.setHandleSqlFiles(handleFiles.isSelected());
         settings.setHighlighting(highlighting.isSelected());
         settings.setCompletion(completion.isSelected());
+        settings.setHover(hover.isSelected());
         SqlEditorSupport.settingsChanged();
     }
 
@@ -64,6 +68,7 @@ public final class SqlEditorConfigurable implements SearchableConfigurable {
         handleFiles.setSelected(settings.isHandleSqlFiles());
         highlighting.setSelected(settings.isHighlighting());
         completion.setSelected(settings.isCompletion());
+        hover.setSelected(settings.isHover());
         updateDependents();
     }
 
