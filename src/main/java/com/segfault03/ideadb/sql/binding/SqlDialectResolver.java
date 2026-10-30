@@ -5,6 +5,7 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.sql.dialect.SqlDialectProfile;
 import com.segfault03.ideadb.sql.dialect.SqlDialects;
+import com.segfault03.ideadb.sql.discovery.JdbcDiscovery;
 import com.segfault03.ideadb.state.DatabaseSettingsState;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -29,7 +30,7 @@ public final class SqlDialectResolver {
         }
         ConnectionConfig fallback = projectLevel(project, bindings);
         if (fallback != null) return SqlDialects.of(fallback.getType());
-        var implied = com.segfault03.ideadb.sql.discovery.JdbcDiscovery.getInstance(project).impliedType();
+        var implied = JdbcDiscovery.getInstance(project).impliedType();
         return implied == null ? SqlDialects.ANSI : SqlDialects.of(implied);
     }
 
@@ -78,7 +79,7 @@ public final class SqlDialectResolver {
     }
 
     private static @Nullable ConnectionConfig matchedByProjectFiles(Project project) {
-        return com.segfault03.ideadb.sql.discovery.JdbcDiscovery.getInstance(project).matchedConnection();
+        return JdbcDiscovery.getInstance(project).matchedConnection();
     }
 
     private static @Nullable ConnectionConfig connection(@Nullable String id) {

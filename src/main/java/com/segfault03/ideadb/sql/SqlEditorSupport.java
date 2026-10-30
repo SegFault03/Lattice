@@ -2,24 +2,31 @@ package com.segfault03.ideadb.sql;
 
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationAction;
+import com.intellij.notification.NotificationGroup;
 import com.intellij.notification.NotificationGroupManager;
 import com.intellij.notification.NotificationType;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.options.ShowSettingsUtil;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
+import com.intellij.util.FileContentUtil;
 import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.sql.binding.SqlBindingsState;
 import com.segfault03.ideadb.sql.binding.SqlEditorRefresh;
 import com.segfault03.ideadb.sql.coexist.UltimateDatabasePlugin;
+import com.segfault03.ideadb.sql.discovery.JdbcDiscovery;
+import com.segfault03.ideadb.sql.lang.LatticeSqlFileType;
 import com.segfault03.ideadb.sql.settings.SqlEditorConfigurable;
 import com.segfault03.ideadb.sql.settings.SqlEditorSettings;
 import com.segfault03.ideadb.sql.settings.SqlFileTypeClaim;
 import com.segfault03.ideadb.state.DatabaseSettingsListener;
 import com.segfault03.ideadb.state.DatabaseSettingsState;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 /** Keeps the IDE's file type mapping, the notices and open editors in step with the SQL editor settings. */
 public final class SqlEditorSupport {
@@ -52,7 +59,7 @@ public final class SqlEditorSupport {
             ApplicationManager.getApplication().executeOnPooledThread(() -> {
                 if (!project.isDisposed()) SqlBindingsState.getInstance(project).pruneMissingFiles();
             });
-            com.segfault03.ideadb.sql.discovery.JdbcDiscovery.getInstance(project).refresh();
+            JdbcDiscovery.getInstance(project).refresh();
             // A deleted or retyped connection changes the dialect of the files bound to it; a changed password or option does not.
             AtomicReference<List<List<String>>> known = new AtomicReference<>(fingerprint());
             ApplicationManager.getApplication().getMessageBus().connect(SqlEditorProjectScope.of(project))
@@ -74,7 +81,7 @@ public final class SqlEditorSupport {
     }
 
     private static void pruneBindings(Project project) {
-        var existing = DatabaseSettingsState.getInstance().getConnections().stream().map(ConnectionConfig::getId).collect(java.util.stream.Collectors.toSet());
+        var existing = DatabaseSettingsState.getInstance().getConnections().stream().map(ConnectionConfig::getId).collect(Collectors.toSet());
         SqlBindingsState.getInstance(project).pruneConnections(existing);
     }
 
@@ -90,11 +97,11 @@ public final class SqlEditorSupport {
     /** Re-reads which strings are SQL in the open source files after the injection settings changed. */
     public static void injectionSettingsChanged() {
         for (Project project : ProjectManager.getInstance().getOpenProjects()) {
-            com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater(() -> {
+            ApplicationManager.getApplication().invokeLater(() -> {
                 if (project.isDisposed()) return;
-                var files = java.util.Arrays.stream(com.intellij.openapi.fileEditor.FileEditorManager.getInstance(project).getOpenFiles())
-                        .filter(file -> file.getFileType() != com.segfault03.ideadb.sql.lang.LatticeSqlFileType.INSTANCE).toList();
-                com.intellij.util.FileContentUtil.reparseFiles(project, files, true);
+                var files = Arrays.stream(FileEditorManager.getInstance(project).getOpenFiles())
+                        .filter(file -> file.getFileType() != LatticeSqlFileType.INSTANCE).toList();
+                FileContentUtil.reparseFiles(project, files, true);
             });
         }
     }
@@ -121,7 +128,7 @@ public final class SqlEditorSupport {
         notification.notify(project);
     }
 
-    private static com.intellij.notification.NotificationGroup group() {
+    private static NotificationGroup group() {
         return NotificationGroupManager.getInstance().getNotificationGroup(NOTIFICATION_GROUP);
     }
 

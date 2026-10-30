@@ -1,6 +1,7 @@
 package com.segfault03.ideadb.sql.lang;
 
 import com.intellij.openapi.editor.DefaultLanguageHighlighterColors;
+import com.intellij.openapi.editor.colors.TextAttributesKey;
 import com.intellij.psi.tree.IElementType;
 import com.segfault03.ideadb.sql.dialect.SqlDialects;
 import org.junit.jupiter.api.Test;
@@ -32,7 +33,7 @@ class LatticeSqlColorSettingsPageTest {
         assertNotEquals(type, function);
         assertEquals(DefaultLanguageHighlighterColors.KEYWORD, type, "a type reads like a keyword until the user colors it");
         assertNotEquals(DefaultLanguageHighlighterColors.KEYWORD, function);
-        for (var inherited : new com.intellij.openapi.editor.colors.TextAttributesKey[] {type, function}) {
+        for (var inherited : new TextAttributesKey[] {type, function}) {
             assertNotEquals(DefaultLanguageHighlighterColors.IDENTIFIER, inherited);
             assertNotEquals(DefaultLanguageHighlighterColors.CLASS_NAME, inherited, "class names have no color of their own in the stock schemes");
             assertNotEquals(DefaultLanguageHighlighterColors.FUNCTION_CALL, inherited, "nor do function calls");

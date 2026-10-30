@@ -5,6 +5,7 @@ import com.intellij.openapi.util.ModificationTracker;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiLanguageInjectionHost;
+import com.intellij.psi.util.CachedValue;
 import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.openapi.util.Key;
@@ -27,7 +28,7 @@ import java.util.List;
  * statements is checked.
  */
 public final class SqlValidation {
-    private static final Key<com.intellij.psi.util.CachedValue<List<SqlDiagnostic>>> KEY = Key.create("lattice.sql.validation");
+    private static final Key<CachedValue<List<SqlDiagnostic>>> KEY = Key.create("lattice.sql.validation");
 
     private SqlValidation() {}
 

@@ -5,14 +5,16 @@ import com.segfault03.ideadb.model.HsqlMode;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
  * Reads the JDBC URLs of the supported databases. Only the target is kept (see {@link ParsedJdbcUrl}): user names,
- * passwords, query strings and driver options never leave this class (the one exception is the {@code user=} parameter, read by {@link #userOf}). The character {@link #UNKNOWN} stands where a
- * placeholder could not be resolved.
+ * passwords, query strings and driver options never leave this class (the one exception is the {@code user=} parameter, read
+ * by {@link #userOf}). The character {@link #UNKNOWN} stands where a placeholder could not be resolved.
  */
 public final class JdbcUrls {
     /** Marks a part of a URL that a placeholder left unknown. */
@@ -144,6 +146,6 @@ public final class JdbcUrls {
     }
 
     private static String decode(String part) {
-        try { return java.net.URLDecoder.decode(part, java.nio.charset.StandardCharsets.UTF_8); } catch (IllegalArgumentException invalid) { return part; }
+        try { return URLDecoder.decode(part, StandardCharsets.UTF_8); } catch (IllegalArgumentException invalid) { return part; }
     }
 }

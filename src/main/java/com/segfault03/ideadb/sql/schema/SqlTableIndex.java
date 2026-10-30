@@ -109,7 +109,9 @@ public final class SqlTableIndex {
                 for (int j = 1; j < row.length; j++) {
                     int cost = c == target.charAt(j - 1) ? 0 : 1;
                     row[j] = Math.min(Math.min(row[j - 1] + 1, previous[j] + 1), previous[j - 1] + cost);
-                    if (beforePrevious != null && j > 1 && c == target.charAt(j - 2) && last == target.charAt(j - 1)) row[j] = Math.min(row[j], beforePrevious[j - 2] + 1);
+                    if (beforePrevious != null && j > 1 && c == target.charAt(j - 2) && last == target.charAt(j - 1)) {
+                        row[j] = Math.min(row[j], beforePrevious[j - 2] + 1);
+                    }
                     minimum = Math.min(minimum, row[j]);
                 }
                 if (minimum <= limit) walk(at, end, depth + 1, previous, row, c);

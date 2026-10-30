@@ -1,5 +1,6 @@
 package com.segfault03.ideadb.sql.completion;
 
+import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.psi.TokenType;
 import com.intellij.psi.tree.IElementType;
 import com.segfault03.ideadb.sql.dialect.SqlDialectProfile;
@@ -22,7 +23,7 @@ public final class SqlTokenizer {
         List<SqlToken> tokens = new ArrayList<>();
         int count = 0;
         for (IElementType type = lexer.getTokenType(); type != null; lexer.advance(), type = lexer.getTokenType()) {
-            if ((++count & 0x3FF) == 0) com.intellij.openapi.progress.ProgressManager.checkCanceled();
+            if ((++count & 0x3FF) == 0) ProgressManager.checkCanceled();
             if (type != TokenType.WHITE_SPACE) tokens.add(new SqlToken(type, lexer.getTokenStart(), lexer.getTokenEnd()));
         }
         return tokens;

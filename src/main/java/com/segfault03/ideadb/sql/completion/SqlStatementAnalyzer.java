@@ -53,7 +53,7 @@ public final class SqlStatementAnalyzer {
         // The word being typed, if the caret is in or at the end of one.
         SqlToken word = null;
         for (SqlToken token : all) {
-            if (token.start() < caret && caret <= token.end() && isWord(token)) {
+            if (token.start() < caret && caret <= token.end() && SqlTokens.isWord(token)) {
                 boolean closedQuote = token.type() == LatticeSqlTokens.QUOTED_IDENTIFIER && caret == token.end() && closedQuoted(text, token);
                 if (!closedQuote) { word = token; break; }
             }
@@ -76,7 +76,7 @@ public final class SqlStatementAnalyzer {
         int first = 0, last = all.size();
         for (int i = 0; i < all.size(); i++) {
             SqlToken token = all.get(i);
-            if (isPunct(token, text, ';')) {
+            if (SqlTokens.isPunct(token, text, ';')) {
                 if (token.end() <= wordStart) first = i + 1;
                 else if (token.start() >= caret) { last = i; break; }
             }
@@ -141,16 +141,6 @@ public final class SqlStatementAnalyzer {
         return new SqlContext(Position.NONE, "", caret, (char) 0, List.of(), List.of(), null, null, List.of(), false, false, Set.of());
     }
 
-    private static boolean isWord(SqlToken token) {
-        var type = token.type();
-        return type == LatticeSqlTokens.IDENTIFIER || type == LatticeSqlTokens.KEYWORD || type == LatticeSqlTokens.FUNCTION
-                || type == LatticeSqlTokens.TYPE || type == LatticeSqlTokens.QUOTED_IDENTIFIER;
-    }
-
-    private static boolean isPunct(SqlToken token, CharSequence text, char c) {
-        return token.type() == LatticeSqlTokens.PUNCTUATION && text.charAt(token.start()) == c;
-    }
-
     /** Every keyword in the file, in order, to decide how the user capitalizes. */
     private static List<SqlToken> allTokensForCase(List<SqlToken> all, CharSequence text) {
         List<SqlToken> keywords = new ArrayList<>();
@@ -163,6 +153,7 @@ public final class SqlStatementAnalyzer {
     private static final class Scan {
         final CharSequence text;
         final List<SqlToken> stmt;
+        final SqlTokens tokens;
         final int caretIdx;
         final SqlDialectProfile profile;
         final String prefix;
@@ -181,13 +172,14 @@ public final class SqlStatementAnalyzer {
             this.text = text; this.stmt = stmt; this.caretIdx = caretIdx; this.profile = profile; this.prefix = prefix;
             this.prefixStart = prefixStart; this.openQuote = openQuote; this.fileKeywords = fileKeywords;
             this.n = stmt.size();
+            this.tokens = new SqlTokens(stmt, text);
             this.blockOf = new int[n];
         }
 
-        String upper(int i) { return stmt.get(i).text(text).toUpperCase(Locale.ROOT); }
-        boolean is(int i, char c) { return i >= 0 && i < n && isPunct(stmt.get(i), text, c); }
-        boolean isKeyword(int i, String word) { return i >= 0 && i < n && stmt.get(i).type() == LatticeSqlTokens.KEYWORD && upper(i).equals(word); }
-        boolean isNameLike(int i) { return i >= 0 && i < n && isWord(stmt.get(i)); }
+        String upper(int i) { return tokens.up(i); }
+        boolean is(int i, char c) { return tokens.punct(i, c); }
+        boolean isKeyword(int i, String word) { return tokens.keyword(i, word); }
+        boolean isNameLike(int i) { return tokens.isNameLike(i); }
 
         SqlContext run() {
             computeBlocks();
@@ -278,7 +270,7 @@ public final class SqlStatementAnalyzer {
             if (i >= n) return false;
             var type = stmt.get(i).type();
             if (type == LatticeSqlTokens.IDENTIFIER || type == LatticeSqlTokens.QUOTED_IDENTIFIER) return true;
-            return allowWords && isWord(stmt.get(i)) && !CLAUSE_WORDS.contains(upper(i));
+            return allowWords && SqlTokens.isWord(stmt.get(i)) && !CLAUSE_WORDS.contains(upper(i));
         }
 
         @Nullable TableRef parseReference(int start, int block, String introducer, int introducerIndex, int[] end) {
@@ -302,7 +294,7 @@ public final class SqlStatementAnalyzer {
             List<String> parts = new ArrayList<>();
             int k = start;
             if (isKeyword(k, "ONLY") && nameToken(k + 1, false)) k++; // FROM ONLY t: the table without its children
-            while (k < n && blockOf[k] == block && (parts.isEmpty() ? nameToken(k, true) : isWord(stmt.get(k)))) {
+            while (k < n && blockOf[k] == block && (parts.isEmpty() ? nameToken(k, true) : SqlTokens.isWord(stmt.get(k)))) {
                 parts.add(unquote(k));
                 k++;
                 if (is(k, '.') && blockOf[k] == block) { k++; continue; }

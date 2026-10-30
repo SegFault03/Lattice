@@ -1,16 +1,41 @@
 package com.segfault03.ideadb.sql.inject;
 
+import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer;
+import com.intellij.codeInsight.intention.IntentionAction;
+import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.lang.documentation.ide.IdeDocumentationTargetProvider;
 import com.intellij.lang.injection.InjectedLanguageManager;
+import com.intellij.openapi.editor.Document;
+import com.intellij.openapi.project.DumbService;
+import com.intellij.openapi.ui.popup.ListPopupStepEx;
+import com.intellij.openapi.util.Disposer;
+import com.intellij.openapi.wm.StatusBar;
+import com.intellij.openapi.wm.StatusBarWidget;
+import com.intellij.psi.PsiComment;
+import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiFile;
+import com.intellij.psi.PsiLanguageInjectionHost;
+import com.intellij.psi.util.PsiTreeUtil;
+import com.intellij.testFramework.DumbModeTestUtils;
+import com.intellij.testFramework.PlatformTestUtil;
 import com.segfault03.ideadb.sql.H2SqlFixtureTestCase;
+import com.segfault03.ideadb.sql.binding.ChooseSqlConnectionAction;
+import com.segfault03.ideadb.sql.binding.SqlConnectionWidgetFactory;
 import com.segfault03.ideadb.sql.binding.SqlDialectResolver;
+import com.segfault03.ideadb.sql.binding.SqlEditorRefresh;
 import com.segfault03.ideadb.sql.dialect.SqlDialects;
 import com.segfault03.ideadb.sql.doc.SqlDocumentationTarget;
 import com.segfault03.ideadb.sql.lang.LatticeSqlLanguage;
 import com.segfault03.ideadb.sql.settings.SqlEditorSettings;
 import com.segfault03.ideadb.sql.binding.SqlBindingsState;
+import com.segfault03.ideadb.sql.validate.LatticeSqlSyntaxInspection;
+import com.segfault03.ideadb.sql.validate.LatticeSqlUnknownColumnInspection;
+import com.segfault03.ideadb.sql.validate.LatticeSqlUnknownTableInspection;
+import com.segfault03.ideadb.sql.validate.SqlDiagnostic;
+import com.segfault03.ideadb.sql.validate.SqlValidation;
 
+import java.lang.reflect.Proxy;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -160,21 +185,21 @@ public class SqlInjectionJavaFixtureTest extends H2SqlFixtureTestCase {
     // ---- intentions ------------------------------------------------------------------------------------------------
 
     /** What the intention changed is in the source file, whose editor the fixture hides while the caret is inside SQL. */
-    private com.intellij.openapi.editor.Document hostDocument() {
+    private Document hostDocument() {
         var top = InjectedLanguageManager.getInstance(getProject()).getTopLevelFile(myFixture.getFile());
-        return com.intellij.psi.PsiDocumentManager.getInstance(getProject()).getDocument(top);
+        return PsiDocumentManager.getInstance(getProject()).getDocument(top);
     }
 
-    private boolean isSqlNow(com.intellij.psi.PsiFile top) {
-        com.intellij.psi.PsiDocumentManager.getInstance(getProject()).commitAllDocuments();
+    private boolean isSqlNow(PsiFile top) {
+        PsiDocumentManager.getInstance(getProject()).commitAllDocuments();
         // comments are injection hosts too; the string is the one that is not a comment
-        var host = com.intellij.psi.util.PsiTreeUtil.findChildrenOfType(top, com.intellij.psi.PsiLanguageInjectionHost.class).stream()
-                .filter(candidate -> !(candidate instanceof com.intellij.psi.PsiComment)).findFirst().orElseThrow();
+        var host = PsiTreeUtil.findChildrenOfType(top, PsiLanguageInjectionHost.class).stream()
+                .filter(candidate -> !(candidate instanceof PsiComment)).findFirst().orElseThrow();
         var files = InjectedLanguageManager.getInstance(getProject()).getInjectedPsiFiles(host);
         return files != null && files.stream().anyMatch(pair -> pair.first.getLanguage().isKindOf(LatticeSqlLanguage.INSTANCE));
     }
 
-    private com.intellij.codeInsight.intention.IntentionAction intention(String name) {
+    private IntentionAction intention(String name) {
         return myFixture.getAvailableIntentions().stream().filter(action -> action.getText().equals(name)).findFirst().orElse(null);
     }
 
@@ -217,7 +242,7 @@ public class SqlInjectionJavaFixtureTest extends H2SqlFixtureTestCase {
     }
 
     public void testTheFileConnectionActionIsOfferedInsideSqlStringsOnly() {
-        var action = new com.segfault03.ideadb.sql.binding.ChooseSqlConnectionAction();
+        var action = new ChooseSqlConnectionAction();
         myFixture.configureByText("A.java", inClass("String q = \"select * from <caret>books where id = ?\";"));
         assertTrue("inside a SQL string", myFixture.testAction(action).isEnabledAndVisible());
         myFixture.configureByText("B.java", inClass("String p = \"Select an item <caret>from the list\";"));
@@ -225,9 +250,9 @@ public class SqlInjectionJavaFixtureTest extends H2SqlFixtureTestCase {
     }
 
     public void testTheStatusBarEntryShowsForASourceFileOnlyWhileItHostsSql() {
-        var widget = new com.segfault03.ideadb.sql.binding.SqlConnectionWidgetFactory().createWidget(getProject());
-        com.intellij.openapi.util.Disposer.register(getTestRootDisposable(), widget);
-        var presentation = (com.intellij.openapi.wm.StatusBarWidget.MultipleTextValuesPresentation) widget.getPresentation();
+        var widget = new SqlConnectionWidgetFactory().createWidget(getProject());
+        Disposer.register(getTestRootDisposable(), widget);
+        var presentation = (StatusBarWidget.MultipleTextValuesPresentation) widget.getPresentation();
 
         myFixture.configureByText("Plain.java", inClass("String s = \"hello\";"));
         myFixture.doHighlighting();
@@ -243,7 +268,7 @@ public class SqlInjectionJavaFixtureTest extends H2SqlFixtureTestCase {
         var popup = presentation.getPopupStep();
         assertNotNull(popup);
         try {
-            @SuppressWarnings("unchecked") var step = (com.intellij.openapi.ui.popup.ListPopupStepEx<Object>) popup.getListStep();
+            @SuppressWarnings("unchecked") var step = (ListPopupStepEx<Object>) popup.getListStep();
             Object generic = step.getValues().stream().filter(row -> row.toString().equals("Generic SQL")).findFirst().orElseThrow();
             step.onChosen(generic, true);
             step.getFinalRunnable().run();
@@ -256,39 +281,39 @@ public class SqlInjectionJavaFixtureTest extends H2SqlFixtureTestCase {
 
     /** The sequence in the IDE: the file is selected and the bar reads an empty entry; injections appear only after the daemon ran. */
     public void testTheStatusBarIsRefreshedWhenTheDaemonFinishesOverASourceFile() {
-        var updates = new java.util.ArrayList<String>();
-        var statusBar = (com.intellij.openapi.wm.StatusBar) java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(),
-                new Class<?>[] {com.intellij.openapi.wm.StatusBar.class}, (proxy, method, args) -> {
+        var updates = new ArrayList<String>();
+        var statusBar = (StatusBar) Proxy.newProxyInstance(getClass().getClassLoader(),
+                new Class<?>[] {StatusBar.class}, (proxy, method, args) -> {
                     if (method.getName().equals("updateWidget") && args != null && args.length == 1 && args[0] instanceof String id) updates.add(id);
                     return method.getReturnType() == boolean.class ? Boolean.FALSE : null;
                 });
-        var factory = new com.segfault03.ideadb.sql.binding.SqlConnectionWidgetFactory();
+        var factory = new SqlConnectionWidgetFactory();
         var widget = factory.createWidget(getProject());
-        com.intellij.openapi.util.Disposer.register(getTestRootDisposable(), widget);
+        Disposer.register(getTestRootDisposable(), widget);
         widget.install(statusBar);
-        var presentation = (com.intellij.openapi.wm.StatusBarWidget.MultipleTextValuesPresentation) widget.getPresentation();
+        var presentation = (StatusBarWidget.MultipleTextValuesPresentation) widget.getPresentation();
 
         myFixture.configureByText("A.java", inClass("void f(Connection c) throws Exception { c.prepareStatement(\"select * from books\"); }"));
         assertEquals("Just selected, nothing is injected yet, and the bar reads this", "", presentation.getSelectedValue());
         updates.clear();
 
         myFixture.doHighlighting();
-        getProject().getMessageBus().syncPublisher(com.intellij.codeInsight.daemon.DaemonCodeAnalyzer.DAEMON_EVENT_TOPIC).daemonFinished();
-        com.intellij.testFramework.PlatformTestUtil.dispatchAllEventsInIdeEventQueue();
+        getProject().getMessageBus().syncPublisher(DaemonCodeAnalyzer.DAEMON_EVENT_TOPIC).daemonFinished();
+        PlatformTestUtil.dispatchAllEventsInIdeEventQueue();
 
         assertFalse("the daemon finishing asks the bar to read the entry again", updates.isEmpty());
         assertEquals(factory.getId(), updates.get(0));
         assertEquals("SQL: H2 \u00b7 fixture H2", presentation.getSelectedValue());
 
         updates.clear();
-        getProject().getMessageBus().syncPublisher(com.intellij.codeInsight.daemon.DaemonCodeAnalyzer.DAEMON_EVENT_TOPIC).daemonFinished();
-        com.intellij.testFramework.PlatformTestUtil.dispatchAllEventsInIdeEventQueue();
+        getProject().getMessageBus().syncPublisher(DaemonCodeAnalyzer.DAEMON_EVENT_TOPIC).daemonFinished();
+        PlatformTestUtil.dispatchAllEventsInIdeEventQueue();
         assertTrue("and does not repeat it while nothing changed", updates.isEmpty());
     }
 
     public void testInjectionDoesNotNeedIndexesAndSurvivesIndexing() {
-        com.intellij.testFramework.DumbModeTestUtils.runInDumbModeSynchronously(getProject(), () -> {
-            assertTrue(com.intellij.openapi.project.DumbService.isDumb(getProject()));
+        DumbModeTestUtils.runInDumbModeSynchronously(getProject(), () -> {
+            assertTrue(DumbService.isDumb(getProject()));
             // A call by name and a content match need no resolve; an assignment to a variable would, and must not throw.
             assertEquals("select ? from dual", injectedAtCaret(inClass("void f(Jdbc j) { j.queryForList(\"select ? from <caret>dual\"); }")));
             assertEquals("select * from orders where id = ?", injectedAtCaret(inClass("String q;\nvoid f() { q = \"select * from ord<caret>ers where id = ?\"; }")));
@@ -299,10 +324,10 @@ public class SqlInjectionJavaFixtureTest extends H2SqlFixtureTestCase {
     // ---- validation inside strings -----------------------------------------------------------------------------------
 
     private List<String> problemsIn(String source) {
-        myFixture.enableInspections(com.segfault03.ideadb.sql.validate.LatticeSqlSyntaxInspection.class,
-                com.segfault03.ideadb.sql.validate.LatticeSqlUnknownTableInspection.class, com.segfault03.ideadb.sql.validate.LatticeSqlUnknownColumnInspection.class);
+        myFixture.enableInspections(LatticeSqlSyntaxInspection.class,
+                LatticeSqlUnknownTableInspection.class, LatticeSqlUnknownColumnInspection.class);
         myFixture.configureByText("A.java", source);
-        return myFixture.doHighlighting().stream().filter(info -> info.getSeverity().compareTo(com.intellij.lang.annotation.HighlightSeverity.WEAK_WARNING) >= 0)
+        return myFixture.doHighlighting().stream().filter(info -> info.getSeverity().compareTo(HighlightSeverity.WEAK_WARNING) >= 0)
                 .map(info -> info.getDescription()).filter(d -> d != null && (d.startsWith("Unknown") || d.contains("expected") || d.startsWith("Unmatched") || d.startsWith("Unclosed"))).toList();
     }
 
@@ -331,7 +356,7 @@ public class SqlInjectionJavaFixtureTest extends H2SqlFixtureTestCase {
 
     public void testThePreviewOfTheQuickFixShowsTheReplacementInAString() {
         loadSchema();
-        myFixture.enableInspections(com.segfault03.ideadb.sql.validate.LatticeSqlUnknownColumnInspection.class);
+        myFixture.enableInspections(LatticeSqlUnknownColumnInspection.class);
         myFixture.configureByText("A.java", inClass("String q = \"select titel<caret> from books where id = ?\";"));
         myFixture.doHighlighting();
         var fix = myFixture.findSingleIntention("Replace with 'TITLE'");
@@ -343,14 +368,14 @@ public class SqlInjectionJavaFixtureTest extends H2SqlFixtureTestCase {
 
     // ---- bindings and open source files ------------------------------------------------------------------------------
 
-    private List<com.segfault03.ideadb.sql.validate.SqlDiagnostic> diagnosticsInInjected() {
+    private List<SqlDiagnostic> diagnosticsInInjected() {
         var top = myFixture.getFile();
         top = InjectedLanguageManager.getInstance(getProject()).getTopLevelFile(top);
-        com.intellij.psi.PsiDocumentManager.getInstance(getProject()).commitAllDocuments();
-        var host = com.intellij.psi.util.PsiTreeUtil.findChildrenOfType(top, com.intellij.psi.PsiLanguageInjectionHost.class).stream()
-                .filter(candidate -> !(candidate instanceof com.intellij.psi.PsiComment)).findFirst().orElseThrow();
+        PsiDocumentManager.getInstance(getProject()).commitAllDocuments();
+        var host = PsiTreeUtil.findChildrenOfType(top, PsiLanguageInjectionHost.class).stream()
+                .filter(candidate -> !(candidate instanceof PsiComment)).findFirst().orElseThrow();
         var injected = InjectedLanguageManager.getInstance(getProject()).getInjectedPsiFiles(host).get(0).first;
-        return com.segfault03.ideadb.sql.validate.SqlValidation.diagnostics((com.intellij.psi.PsiFile) injected);
+        return SqlValidation.diagnostics((PsiFile) injected);
     }
 
     public void testChangingTheFilesBindingChangesTheValidationOfItsSqlWithoutEditingIt() {
@@ -358,27 +383,27 @@ public class SqlInjectionJavaFixtureTest extends H2SqlFixtureTestCase {
         myFixture.configureByText("A.java", inClass("String q = \"select * from authorz where id = ?\";"));
         var hostFile = InjectedLanguageManager.getInstance(getProject()).getTopLevelFile(myFixture.getFile()).getVirtualFile();
         assertEquals("the sole connection judges the table", 1, diagnosticsInInjected().stream()
-                .filter(d -> d.kind() == com.segfault03.ideadb.sql.validate.SqlDiagnostic.Kind.UNKNOWN_TABLE).count());
+                .filter(d -> d.kind() == SqlDiagnostic.Kind.UNKNOWN_TABLE).count());
 
         SqlBindingsState.getInstance(getProject()).bindFileToDialect(hostFile, SqlDialects.POSTGRESQL.id());
         assertEquals("a dialect without a connection has no schema to judge by", 0, diagnosticsInInjected().stream()
-                .filter(d -> d.kind() == com.segfault03.ideadb.sql.validate.SqlDiagnostic.Kind.UNKNOWN_TABLE).count());
+                .filter(d -> d.kind() == SqlDiagnostic.Kind.UNKNOWN_TABLE).count());
 
         SqlBindingsState.getInstance(getProject()).bindFileToConnection(hostFile, h2.getId());
         assertEquals(1, diagnosticsInInjected().stream()
-                .filter(d -> d.kind() == com.segfault03.ideadb.sql.validate.SqlDiagnostic.Kind.UNKNOWN_TABLE).count());
+                .filter(d -> d.kind() == SqlDiagnostic.Kind.UNKNOWN_TABLE).count());
     }
 
     public void testRefreshingAllRestartsTheHighlightingOfOpenSourceFiles() {
         loadSchema();
-        myFixture.enableInspections(com.segfault03.ideadb.sql.validate.LatticeSqlUnknownTableInspection.class);
+        myFixture.enableInspections(LatticeSqlUnknownTableInspection.class);
         myFixture.configureByText("A.java", inClass("String q = \"select * from authorz where id = ?\";"));
         var hostFile = InjectedLanguageManager.getInstance(getProject()).getTopLevelFile(myFixture.getFile()).getVirtualFile();
         assertEquals(1, myFixture.doHighlighting().stream().filter(info -> info.getDescription() != null && info.getDescription().startsWith("Unknown table")).count());
 
         SqlBindingsState.getInstance(getProject()).bindFileToDialect(hostFile, SqlDialects.POSTGRESQL.id());
-        com.segfault03.ideadb.sql.binding.SqlEditorRefresh.refreshAll(getProject());
-        com.intellij.testFramework.PlatformTestUtil.dispatchAllEventsInIdeEventQueue();
+        SqlEditorRefresh.refreshAll(getProject());
+        PlatformTestUtil.dispatchAllEventsInIdeEventQueue();
         assertEquals(0, myFixture.doHighlighting().stream().filter(info -> info.getDescription() != null && info.getDescription().startsWith("Unknown table")).count());
     }
 }

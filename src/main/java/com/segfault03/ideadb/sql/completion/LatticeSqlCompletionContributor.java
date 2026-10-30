@@ -9,7 +9,9 @@ import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.patterns.PlatformPatterns;
 import com.intellij.util.ProcessingContext;
 import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.sql.binding.SqlDialectResolver;
@@ -32,7 +34,7 @@ import javax.swing.Icon;
  */
 public final class LatticeSqlCompletionContributor extends CompletionContributor implements DumbAware {
     public LatticeSqlCompletionContributor() {
-        extend(CompletionType.BASIC, com.intellij.patterns.PlatformPatterns.psiElement().withLanguage(LatticeSqlLanguage.INSTANCE),
+        extend(CompletionType.BASIC, PlatformPatterns.psiElement().withLanguage(LatticeSqlLanguage.INSTANCE),
                 new CompletionProvider<>() {
                     @Override protected void addCompletions(@NotNull CompletionParameters parameters, @NotNull ProcessingContext context,
                                                             @NotNull CompletionResultSet result) {
@@ -133,7 +135,7 @@ public final class LatticeSqlCompletionContributor extends CompletionContributor
         Document document = context.getDocument();
         int start = context.getStartOffset();
         int tail = context.getTailOffset();
-        if (document.getText(new com.intellij.openapi.util.TextRange(start, tail)).equals(exact)) return;
+        if (document.getText(new TextRange(start, tail)).equals(exact)) return;
         document.replaceString(start, tail, exact);
         context.setTailOffset(start + exact.length());
         context.getEditor().getCaretModel().moveToOffset(start + exact.length());

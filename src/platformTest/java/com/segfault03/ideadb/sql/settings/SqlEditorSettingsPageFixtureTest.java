@@ -8,6 +8,7 @@ import com.intellij.util.ui.UIUtil;
 import com.segfault03.ideadb.sql.FixtureConnections;
 import com.segfault03.ideadb.sql.inject.SqlKnownCalls;
 
+import java.util.function.BooleanSupplier;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import java.util.List;
@@ -67,7 +68,7 @@ public class SqlEditorSettingsPageFixtureTest extends BasePlatformTestCase {
 
     public void testEveryCheckboxIsAppliedAndResetAndNotifiesTheModifiedState() {
         SqlEditorSettings settings = SqlEditorSettings.getInstance();
-        record Toggle(String text, java.util.function.BooleanSupplier saved) {}
+        record Toggle(String text, BooleanSupplier saved) {}
         List<Toggle> toggles = List.of(
                 new Toggle("Handle .sql files", settings::isHandleSqlFiles),
                 new Toggle("Syntax highlighting", settings::isHighlighting),

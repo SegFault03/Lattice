@@ -24,6 +24,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Future;
@@ -182,7 +183,7 @@ public final class SqlSchemaService implements Disposable {
             work.run();
             served.add(connectionId);
             backoff.succeeded(connectionId);
-        } catch (java.util.concurrent.CancellationException cancelled) {
+        } catch (CancellationException cancelled) {
             // The service or the connection went away; nothing to report.
         } catch (Exception failure) {
             if (failure instanceof ControlFlowException) throw (RuntimeException) failure;

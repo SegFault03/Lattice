@@ -5,6 +5,7 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ModalityState;
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.components.Service;
+import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ProjectFileIndex;
 import com.intellij.openapi.roots.ProjectRootManager;
@@ -18,6 +19,7 @@ import com.intellij.openapi.vfs.newvfs.events.VFilePropertyChangeEvent;
 import com.intellij.psi.search.FilenameIndex;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.ui.EditorNotifications;
+import com.intellij.util.concurrency.AppExecutorUtil;
 import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.model.DatabaseType;
 import com.segfault03.ideadb.sql.binding.SqlBindingsState;
@@ -26,6 +28,7 @@ import com.segfault03.ideadb.state.DatabaseSettingsState;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -78,7 +81,7 @@ public final class JdbcDiscovery implements Disposable {
     public void refresh() {
         if (project.isDisposed() || !enabled()) return;
         ReadAction.nonBlocking(() -> scan(project)).inSmartMode(project).expireWith(this).coalesceBy(this)
-                .finishOnUiThread(ModalityState.nonModal(), this::publish).submit(com.intellij.util.concurrency.AppExecutorUtil.getAppExecutorService());
+                .finishOnUiThread(ModalityState.nonModal(), this::publish).submit(AppExecutorUtil.getAppExecutorService());
     }
 
     /** Scans now, on the calling thread, for a caller that needs the result before it continues. Needs indexes: call in smart mode. */
@@ -149,11 +152,11 @@ public final class JdbcDiscovery implements Disposable {
         }, scope, null);
         for (String name : names) {
             for (VirtualFile file : FilenameIndex.getVirtualFilesByName(name, scope)) {
-                com.intellij.openapi.progress.ProgressManager.checkCanceled();
+                ProgressManager.checkCanceled();
                 if (!file.isValid() || file.isDirectory() || file.getLength() > MAX_FILE_BYTES || inGeneratedDirectory(project, file)) continue;
                 String text;
                 try { text = new String(file.contentsToByteArray(), file.getCharset() != null ? file.getCharset() : StandardCharsets.UTF_8); }
-                catch (java.io.IOException unreadable) { continue; }
+                catch (IOException unreadable) { continue; }
                 String path = relative(project, file);
                 for (ProjectConfigScanner.Found hit : ProjectConfigScanner.findIn(name, text)) result.add(new DiscoveredConnection(hit.url(), name, path, hit.user()));
             }
@@ -180,7 +183,8 @@ public final class JdbcDiscovery implements Disposable {
         List<String> paths = new ArrayList<>(List.of(event.getPath()));
         if (event instanceof VFileMoveEvent move) paths.add(move.getOldPath());
         else if (event instanceof VFilePropertyChangeEvent change && change.isRename()) paths.add(change.getOldPath());
-        String[] roots = ReadAction.compute(() -> Arrays.stream(ProjectRootManager.getInstance(project).getContentRoots()).map(VirtualFile::getPath).toArray(String[]::new));
+        String[] roots = ReadAction.compute(() ->
+                Arrays.stream(ProjectRootManager.getInstance(project).getContentRoots()).map(VirtualFile::getPath).toArray(String[]::new));
         for (String path : paths) {
             for (String root : roots) if (path.equals(root) || path.startsWith(root.endsWith("/") ? root : root + "/")) return true;
         }

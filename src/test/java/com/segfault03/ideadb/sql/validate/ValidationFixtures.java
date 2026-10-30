@@ -4,6 +4,8 @@ import com.segfault03.ideadb.model.*;
 import com.segfault03.ideadb.service.ExplorerMetadataSnapshot;
 import com.segfault03.ideadb.sql.schema.SqlSchema;
 
+import java.sql.Types;
+import java.util.Arrays;
 import java.util.List;
 
 /** A small shop schema for validation tests: customers, orders, items and a view. */
@@ -11,12 +13,12 @@ final class ValidationFixtures {
     private ValidationFixtures() {}
 
     private static ColumnMetadata column(String name) {
-        return new ColumnMetadata(name, "INTEGER", java.sql.Types.INTEGER, 10, 0, true, false, false, null);
+        return new ColumnMetadata(name, "INTEGER", Types.INTEGER, 10, 0, true, false, false, null);
     }
 
     private static ExplorerMetadataSnapshot.Table table(String name, String type, boolean columnsLoaded, String... columns) {
         var metadata = new TableMetadata(null, "public", name, type);
-        var list = java.util.Arrays.stream(columns).map(ValidationFixtures::column).toList();
+        var list = Arrays.stream(columns).map(ValidationFixtures::column).toList();
         metadata.setColumns(list);
         return new ExplorerMetadataSnapshot.Table(metadata, columnsLoaded ? list : List.of(), columnsLoaded);
     }

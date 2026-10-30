@@ -23,7 +23,8 @@ public final class RestoreBuiltInSqlAction extends AnAction implements DumbAware
         SqlEditorSettings.getInstance().setHandleSqlFiles(false);
         SqlEditorSupport.settingsChanged();
         var notification = NotificationGroupManager.getInstance().getNotificationGroup("Lattice SQL editor")
-                .createNotification("The IDE's own SQL file type is back", "Lattice no longer handles .sql files. SQL in Java and Kotlin strings is not affected.", NotificationType.INFORMATION);
+                .createNotification("The IDE's own SQL file type is back",
+                        "Lattice no longer handles .sql files. SQL in Java and Kotlin strings is not affected.", NotificationType.INFORMATION);
         notification.addAction(NotificationAction.createSimpleExpiring("Let Lattice handle .sql files again", () -> {
             SqlEditorSettings.getInstance().setHandleSqlFiles(true);
             SqlEditorSupport.settingsChanged();

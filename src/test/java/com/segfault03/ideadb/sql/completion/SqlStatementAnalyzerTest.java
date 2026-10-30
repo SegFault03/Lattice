@@ -6,6 +6,7 @@ import com.segfault03.ideadb.sql.dialect.SqlDialects;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -86,7 +87,7 @@ class SqlStatementAnalyzerTest {
         SqlContext columns = at("insert into orders (id, ^)");
         assertEquals(Position.INSERT_COLUMNS, columns.position());
         assertEquals("orders", columns.target().name());
-        assertEquals(java.util.Set.of("ID"), columns.usedNames());
+        assertEquals(Set.of("ID"), columns.usedNames());
         assertEquals(Position.INSERT_COLUMNS, at("insert into orders (^").position());
         assertEquals(Position.VALUES, at("insert into orders (id) values (^").position());
         assertEquals(Position.VALUES, at("insert into orders (id) values (1), (^").position());

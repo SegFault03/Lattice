@@ -1,12 +1,22 @@
 package com.segfault03.ideadb.sql.inject;
 
+import com.intellij.codeInsight.intention.IntentionAction;
+import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.lang.documentation.ide.IdeDocumentationTargetProvider;
 import com.intellij.lang.injection.InjectedLanguageManager;
+import com.intellij.openapi.editor.Document;
+import com.intellij.psi.PsiComment;
+import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiFile;
+import com.intellij.psi.PsiLanguageInjectionHost;
+import com.intellij.psi.util.PsiTreeUtil;
 import com.segfault03.ideadb.sql.H2SqlFixtureTestCase;
 import com.segfault03.ideadb.sql.doc.SqlDocumentationTarget;
 import com.segfault03.ideadb.sql.lang.LatticeSqlLanguage;
 import com.segfault03.ideadb.sql.settings.SqlEditorSettings;
+import com.segfault03.ideadb.sql.validate.LatticeSqlSyntaxInspection;
+import com.segfault03.ideadb.sql.validate.LatticeSqlUnknownColumnInspection;
+import com.segfault03.ideadb.sql.validate.LatticeSqlUnknownTableInspection;
 
 import java.util.Arrays;
 import java.util.List;
@@ -112,21 +122,21 @@ public class SqlInjectionKotlinFixtureTest extends H2SqlFixtureTestCase {
     }
 
     /** What the intention changed is in the source file, whose editor the fixture hides while the caret is inside SQL. */
-    private com.intellij.openapi.editor.Document hostDocument() {
+    private Document hostDocument() {
         var top = InjectedLanguageManager.getInstance(getProject()).getTopLevelFile(myFixture.getFile());
-        return com.intellij.psi.PsiDocumentManager.getInstance(getProject()).getDocument(top);
+        return PsiDocumentManager.getInstance(getProject()).getDocument(top);
     }
 
-    private boolean isSqlNow(com.intellij.psi.PsiFile top) {
-        com.intellij.psi.PsiDocumentManager.getInstance(getProject()).commitAllDocuments();
+    private boolean isSqlNow(PsiFile top) {
+        PsiDocumentManager.getInstance(getProject()).commitAllDocuments();
         // comments are injection hosts too; the string is the one that is not a comment
-        var host = com.intellij.psi.util.PsiTreeUtil.findChildrenOfType(top, com.intellij.psi.PsiLanguageInjectionHost.class).stream()
-                .filter(candidate -> !(candidate instanceof com.intellij.psi.PsiComment)).findFirst().orElseThrow();
+        var host = PsiTreeUtil.findChildrenOfType(top, PsiLanguageInjectionHost.class).stream()
+                .filter(candidate -> !(candidate instanceof PsiComment)).findFirst().orElseThrow();
         var files = InjectedLanguageManager.getInstance(getProject()).getInjectedPsiFiles(host);
         return files != null && files.stream().anyMatch(pair -> pair.first.getLanguage().isKindOf(LatticeSqlLanguage.INSTANCE));
     }
 
-    private com.intellij.codeInsight.intention.IntentionAction intention(String name) {
+    private IntentionAction intention(String name) {
         return myFixture.getAvailableIntentions().stream().filter(action -> action.getText().equals(name)).findFirst().orElse(null);
     }
 
@@ -155,10 +165,10 @@ public class SqlInjectionKotlinFixtureTest extends H2SqlFixtureTestCase {
     // ---- validation inside strings -----------------------------------------------------------------------------------
 
     private List<String> problemsIn(String source) {
-        myFixture.enableInspections(com.segfault03.ideadb.sql.validate.LatticeSqlSyntaxInspection.class,
-                com.segfault03.ideadb.sql.validate.LatticeSqlUnknownTableInspection.class, com.segfault03.ideadb.sql.validate.LatticeSqlUnknownColumnInspection.class);
+        myFixture.enableInspections(LatticeSqlSyntaxInspection.class,
+                LatticeSqlUnknownTableInspection.class, LatticeSqlUnknownColumnInspection.class);
         myFixture.configureByText("A.kt", source);
-        return myFixture.doHighlighting().stream().filter(info -> info.getSeverity().compareTo(com.intellij.lang.annotation.HighlightSeverity.WEAK_WARNING) >= 0)
+        return myFixture.doHighlighting().stream().filter(info -> info.getSeverity().compareTo(HighlightSeverity.WEAK_WARNING) >= 0)
                 .map(info -> info.getDescription()).filter(d -> d != null && (d.startsWith("Unknown") || d.contains("expected") || d.startsWith("Unmatched") || d.startsWith("Unclosed"))).toList();
     }
 

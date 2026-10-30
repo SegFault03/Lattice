@@ -1,5 +1,6 @@
 package com.segfault03.ideadb.sql.doc;
 
+import com.intellij.openapi.project.DumbAware;
 import com.intellij.platform.backend.documentation.DocumentationLinkHandler;
 import com.intellij.platform.backend.documentation.DocumentationTarget;
 import com.intellij.platform.backend.documentation.LinkResolveResult;
@@ -11,7 +12,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /** Follows the links in Lattice SQL cards: to another card, or to the table in a Lattice editor. */
-public final class LatticeSqlDocumentationLinkHandler implements DocumentationLinkHandler, com.intellij.openapi.project.DumbAware {
+public final class LatticeSqlDocumentationLinkHandler implements DocumentationLinkHandler, DumbAware {
     @Override
     public @Nullable LinkResolveResult resolveLink(@NotNull DocumentationTarget target, @NotNull String url) {
         if (!(target instanceof SqlDocumentationTarget source)) return null;

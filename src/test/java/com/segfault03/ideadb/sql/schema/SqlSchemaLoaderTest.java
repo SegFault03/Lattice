@@ -9,6 +9,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.util.List;
 import java.util.UUID;
@@ -125,10 +126,10 @@ class SqlSchemaLoaderTest {
     @Test void theMySqlAdapterUsesTheCatalogAsItsDefaultNamespace() throws Exception {
         // The engine-specific rule lives on the adapter, so it needs no server to check the contract it implements.
         var adapter = DatabaseProviders.get(DatabaseType.MYSQL).metadata();
-        var connection = (Connection) java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{Connection.class},
+        var connection = (Connection) Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{Connection.class},
                 (proxy, method, args) -> method.getName().equals("getCatalog") ? "shop" : null);
         assertEquals("shop", adapter.defaultNamespace(connection, new ConnectionConfig(DatabaseType.MYSQL, "mysql")));
-        var blank = (Connection) java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{Connection.class},
+        var blank = (Connection) Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{Connection.class},
                 (proxy, method, args) -> null);
         var fallback = new ConnectionConfig(DatabaseType.MYSQL, "mysql");
         fallback.setDatabaseName("configured");

@@ -9,6 +9,7 @@ import com.segfault03.ideadb.sql.doc.SqlTarget;
 import com.segfault03.ideadb.sql.schema.SqlSchema;
 import org.junit.jupiter.api.Test;
 
+import java.sql.Types;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -95,7 +96,7 @@ class SqlLargeInputTest {
             var metadata = new TableMetadata(null, "PUBLIC", "table_" + t, "TABLE");
             List<ColumnMetadata> cols = new ArrayList<>();
             for (int c = 0; c < columns; c++) {
-                var column = new ColumnMetadata("col_" + c, "VARCHAR(40)", java.sql.Types.VARCHAR, 40, 0, true, c == 0, false, null);
+                var column = new ColumnMetadata("col_" + c, "VARCHAR(40)", Types.VARCHAR, 40, 0, true, c == 0, false, null);
                 if (c == 1 && t > 0) column = column.withReference(new ColumnReference("PUBLIC", "table_" + (t - 1), "col_0"));
                 cols.add(column);
             }

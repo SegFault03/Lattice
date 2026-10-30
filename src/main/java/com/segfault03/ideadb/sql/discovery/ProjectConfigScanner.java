@@ -107,7 +107,8 @@ public final class ProjectConfigScanner {
     /** Credentials and other secrets: dropped as each file is read, so no later step can see or keep them. */
     static boolean isSensitive(String key) {
         String lower = key.toLowerCase(Locale.ROOT);
-        for (String word : new String[] {"password", "passwd", "pwd", "secret", "token", "credential", "apikey", "api-key", "api_key", "privatekey", "username", "user-name", "user_name"}) {
+        for (String word : new String[] {"password", "passwd", "pwd", "secret", "token", "credential", "apikey", "api-key", "api_key", "privatekey",
+                "username", "user-name", "user_name"}) {
             if (lower.contains(word)) return true;
         }
         String last = lower.substring(lower.lastIndexOf('.') + 1);
@@ -183,7 +184,10 @@ public final class ProjectConfigScanner {
         store(settings, unescape(key.strip()), unescape(value.stripTrailing()));
     }
 
-    /** Escapes as {@link java.util.Properties} reads them: {@code \:}, {@code \=}, {@code \\}, {@code \ }, {@code \t}, {@code \n}, {@code \r}, {@code \f}, four-digit unicode escapes; any other escaped character is itself. */
+    /**
+     * Escapes as {@link java.util.Properties} reads them: {@code \:}, {@code \=}, {@code \\}, {@code \ }, {@code \t}, {@code \n}, {@code \r},
+     * {@code \f}, four-digit unicode escapes; any other escaped character is itself.
+     */
     static String unescape(String raw) {
         if (raw.indexOf('\\') < 0) return raw;
         StringBuilder out = new StringBuilder(raw.length());

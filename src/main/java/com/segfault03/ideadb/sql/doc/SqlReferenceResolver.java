@@ -7,7 +7,10 @@ import com.segfault03.ideadb.sql.completion.SqlContext;
 import com.segfault03.ideadb.sql.completion.SqlContext.Position;
 import com.segfault03.ideadb.sql.completion.SqlContext.TableRef;
 import com.segfault03.ideadb.sql.completion.SqlStatementAnalyzer;
+import com.segfault03.ideadb.sql.completion.SqlTextWindow;
+import com.segfault03.ideadb.sql.completion.SqlTokens;
 import com.segfault03.ideadb.sql.dialect.SqlDialectProfile;
+import com.segfault03.ideadb.sql.lang.LatticeSqlLexer;
 import com.segfault03.ideadb.sql.lang.LatticeSqlTokens;
 import com.segfault03.ideadb.sql.schema.SqlSchema;
 import org.jetbrains.annotations.NotNull;
@@ -24,7 +27,7 @@ public final class SqlReferenceResolver {
     private SqlReferenceResolver() {}
 
     public static @Nullable SqlTarget resolve(@NotNull CharSequence text, int offset, @NotNull SqlDialectProfile profile, @NotNull SqlSchema schema) {
-        var window = com.segfault03.ideadb.sql.completion.SqlTextWindow.around(text, offset);
+        var window = SqlTextWindow.around(text, offset);
         if (window.length() < text.length()) return resolve(text.subSequence(window.start(), window.end()), offset - window.start(), profile, schema);
         Word word = wordAt(text, offset, profile);
         if (word == null) return null;
@@ -111,15 +114,13 @@ public final class SqlReferenceResolver {
     private record Word(String name, int start, int end, boolean followedByDot) {}
 
     private static @Nullable Word wordAt(CharSequence text, int offset, SqlDialectProfile profile) {
-        var lexer = new com.segfault03.ideadb.sql.lang.LatticeSqlLexer(profile);
+        var lexer = new LatticeSqlLexer(profile);
         lexer.start(text, 0, text.length(), 0);
         for (IElementType type = lexer.getTokenType(); type != null; lexer.advance(), type = lexer.getTokenType()) {
             int start = lexer.getTokenStart(), end = lexer.getTokenEnd();
             if (offset < start) return null;
             if (offset >= end) continue;
-            boolean word = type == LatticeSqlTokens.IDENTIFIER || type == LatticeSqlTokens.QUOTED_IDENTIFIER
-                    || type == LatticeSqlTokens.KEYWORD || type == LatticeSqlTokens.FUNCTION || type == LatticeSqlTokens.TYPE;
-            if (!word) return null;
+            if (!SqlTokens.isWord(type)) return null;
             String raw = text.subSequence(start, end).toString();
             String name = type == LatticeSqlTokens.QUOTED_IDENTIFIER ? unquote(raw) : raw;
             int next = end;

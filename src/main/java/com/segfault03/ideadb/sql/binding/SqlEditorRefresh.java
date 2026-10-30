@@ -14,6 +14,7 @@ import com.intellij.util.FileContentUtil;
 import com.segfault03.ideadb.sql.lang.LatticeSqlFileType;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /** Re-applies the dialect and highlighting settings to files that are already open, including SQL injected in code. */
@@ -37,7 +38,7 @@ public final class SqlEditorRefresh {
 
     /** Every open SQL file, and every open source file that hosts SQL, whose dialect and checks come from the same settings. */
     public static void refreshAll(@NotNull Project project) {
-        List<VirtualFile> hosts = new java.util.ArrayList<>();
+        List<VirtualFile> hosts = new ArrayList<>();
         for (VirtualFile file : FileEditorManager.getInstance(project).getOpenFiles()) {
             if (file.getFileType() == LatticeSqlFileType.INSTANCE) refresh(project, file);
             else if (!file.getFileType().isBinary()) hosts.add(file);

@@ -8,15 +8,11 @@ import com.segfault03.ideadb.sql.inject.SqlInjectionRules.Surroundings;
 import com.segfault03.ideadb.sql.inject.SqlMarkers;
 import com.segfault03.ideadb.sql.inject.SqlStatementComments;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
-import java.util.Set;
+import java.util.Arrays;
 
 /** What surrounds a Java string expression: marker comments, {@code @Language}, the call it is passed to, native query annotations. */
 final class JavaSqlSurroundings {
-    private static final String LANGUAGE = "Language";
-    private static final Set<String> NATIVE_QUERY_ATTRIBUTES = Set.of("value", "countQuery", "query");
-
     private JavaSqlSurroundings() {}
 
     /** Everything, including what needs resolving. */
@@ -55,7 +51,7 @@ final class JavaSqlSurroundings {
     private static boolean resolvedAnnotation(@NotNull PsiExpression top) {
         PsiElement parent = top.getParent();
         if (parent instanceof PsiExpressionList list && list.getParent() instanceof PsiMethodCallExpression call) {
-            return parameterIsSql(call, java.util.Arrays.asList(list.getExpressions()).indexOf(top));
+            return parameterIsSql(call, Arrays.asList(list.getExpressions()).indexOf(top));
         }
         return parent instanceof PsiAssignmentExpression assignment && assignment.getRExpression() == top
                 && assignment.getLExpression() instanceof PsiReferenceExpression target && !DumbService.isDumb(target.getProject())
@@ -89,21 +85,16 @@ final class JavaSqlSurroundings {
 
     private static boolean isLanguageSql(PsiAnnotation annotation) {
         PsiJavaCodeReferenceElement name = annotation.getNameReferenceElement();
-        if (name == null || !LANGUAGE.equals(name.getReferenceName())) return false;
+        if (name == null || !SqlMarkers.LANGUAGE_ANNOTATION.equals(name.getReferenceName())) return false;
         PsiAnnotationMemberValue value = annotation.findAttributeValue("value");
         return value instanceof PsiLiteralExpression literal && literal.getValue() instanceof String text && SqlMarkers.isSqlLanguage(text);
     }
 
     /** {@code @Query(value = "...", nativeQuery = true)}, {@code @NativeQuery("...")} and {@code @NamedNativeQuery(query = "...")}. */
     private static boolean isNativeQueryAttribute(PsiNameValuePair pair) {
-        String attribute = pair.getName() == null ? "value" : pair.getName();
-        if (!NATIVE_QUERY_ATTRIBUTES.contains(attribute)) return false;
         PsiAnnotation annotation = PsiTreeUtil.getParentOfType(pair, PsiAnnotation.class);
         if (annotation == null || annotation.getNameReferenceElement() == null) return false;
-        return switch (String.valueOf(annotation.getNameReferenceElement().getReferenceName())) {
-            case "NativeQuery", "NamedNativeQuery" -> true;
-            case "Query" -> annotation.findAttributeValue("nativeQuery") instanceof PsiLiteralExpression flag && Boolean.TRUE.equals(flag.getValue());
-            default -> false;
-        };
+        return SqlInjectionRules.isNativeQueryAttribute(annotation.getNameReferenceElement().getReferenceName(), pair.getName() == null ? "value" : pair.getName(),
+                () -> annotation.findAttributeValue("nativeQuery") instanceof PsiLiteralExpression flag && Boolean.TRUE.equals(flag.getValue()));
     }
 }

@@ -2,13 +2,16 @@ package com.segfault03.ideadb.sql.completion;
 
 import com.intellij.codeInsight.editorActions.TypedHandlerDelegate;
 import com.intellij.codeInsight.lookup.LookupElement;
+import com.intellij.codeInsight.lookup.LookupElementPresentation;
 import com.intellij.codeInsight.lookup.LookupManager;
 import com.intellij.testFramework.PlatformTestUtil;
 import com.segfault03.ideadb.sql.H2SqlFixtureTestCase;
 import com.segfault03.ideadb.sql.schema.SqlSchemaService;
 import com.segfault03.ideadb.sql.settings.SqlEditorSettings;
+import com.segfault03.ideadb.ui.Icons;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 
 /** Completion in a real editor over an H2 schema read through the schema service. */
@@ -67,9 +70,9 @@ public class SqlCompletionFixtureTest extends H2SqlFixtureTestCase {
         loadSchema();
         myFixture.configureByText("query.sql", "select b.<caret> from books b");
         var items = myFixture.completeBasic();
-        var presentations = new java.util.HashMap<String, com.intellij.codeInsight.lookup.LookupElementPresentation>();
+        var presentations = new HashMap<String, LookupElementPresentation>();
         for (LookupElement item : items) {
-            var presentation = new com.intellij.codeInsight.lookup.LookupElementPresentation();
+            var presentation = new LookupElementPresentation();
             item.renderElement(presentation);
             presentations.put(item.getLookupString(), presentation);
         }
@@ -80,7 +83,7 @@ public class SqlCompletionFixtureTest extends H2SqlFixtureTestCase {
         assertNotNull(presentations.get("TITLE").getIcon());
         assertNotSame(presentations.get("ID").getIcon(), presentations.get("TITLE").getIcon());
         assertNotSame(presentations.get("AUTHOR_ID").getIcon(), presentations.get("TITLE").getIcon());
-        assertNotSame(com.segfault03.ideadb.ui.Icons.TABLE, com.segfault03.ideadb.ui.Icons.VIEW);
+        assertNotSame(Icons.TABLE, Icons.VIEW);
     }
 
     public void testTheLowercaseTextTheUserTypedStillMatchesUppercaseNames() {

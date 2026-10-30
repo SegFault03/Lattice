@@ -2,24 +2,18 @@ package com.segfault03.ideadb.sql.inject.kotlin;
 
 import com.intellij.lang.injection.MultiHostInjector;
 import com.intellij.lang.injection.MultiHostRegistrar;
-import com.intellij.openapi.project.DumbService;
+import com.intellij.openapi.project.DumbAware;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiLanguageInjectionHost;
-import com.intellij.psi.util.CachedValueProvider;
-import com.intellij.psi.util.CachedValuesManager;
-import com.intellij.psi.util.PsiModificationTracker;
-import com.segfault03.ideadb.sql.inject.SqlHostInjection;
-import com.segfault03.ideadb.sql.inject.SqlInjectionAssembler;
 import com.segfault03.ideadb.sql.inject.SqlInjectionAssembler.Part;
+import com.segfault03.ideadb.sql.inject.SqlInjectionDecision;
 import com.segfault03.ideadb.sql.settings.SqlEditorSettings;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.lexer.KtTokens;
 import org.jetbrains.kotlin.psi.*;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -27,7 +21,7 @@ import java.util.Set;
  * Plain, raw and template strings work: text between template entries, and between the operands of a {@code +},
  * is unknown and gets a placeholder. {@code trimIndent()} and {@code trimMargin()} on a raw string are looked through.
  */
-public final class KotlinSqlInjector implements MultiHostInjector, com.intellij.openapi.project.DumbAware {
+public final class KotlinSqlInjector implements MultiHostInjector, DumbAware {
     private static final Set<String> STRING_PASSTHROUGH = Set.of("trimIndent", "trimMargin", "trim", "trimStart", "trimEnd", "intern");
 
     @Override
@@ -37,18 +31,8 @@ public final class KotlinSqlInjector implements MultiHostInjector, com.intellij.
         if (!settings.isInjectionEffective()) return;
 
         KtExpression top = topOfConcatenation(literal);
-        // The platform asks once per literal; the whole expression is decided once until the code or the settings change.
-        Optional<SqlInjectionAssembler<PsiLanguageInjectionHost>> injection = CachedValuesManager.getCachedValue(top, () -> CachedValueProvider.Result.create(
-                decide(top), PsiModificationTracker.MODIFICATION_COUNT, SqlEditorSettings.getInstance(), DumbService.getInstance(top.getProject()).getModificationTracker()));
-        injection.ifPresent(assembled -> SqlHostInjection.register(registrar, assembled));
-    }
-
-    private static Optional<SqlInjectionAssembler<PsiLanguageInjectionHost>> decide(KtExpression top) {
-        List<Part<PsiLanguageInjectionHost>> parts = new ArrayList<>();
-        flatten(top, parts);
-        if (parts.stream().noneMatch(part -> !part.isDynamic())) return Optional.empty();
-        var assembled = new SqlInjectionAssembler<>(parts);
-        return KotlinSqlSurroundings.shouldInject(top, assembled.text(), SqlEditorSettings.getInstance().injectionTiers()) ? Optional.of(assembled) : Optional.empty();
+        SqlInjectionDecision.inject(registrar, top, parts -> flatten(top, parts),
+                (text, tiers) -> KotlinSqlSurroundings.shouldInject(top, text, tiers));
     }
 
     @Override

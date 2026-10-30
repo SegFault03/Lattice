@@ -6,6 +6,7 @@ import java.util.*;
 
 final class MySqlMetadataAdapter extends JdbcMetadataAdapter {
     protected DatabaseNamespace namespace(String selected) { return new DatabaseNamespace(selected, null); }
+    @Override protected boolean namespaceIsCatalog() { return true; }
     public List<String> getDatabases(Connection conn, ConnectionConfig config) throws Exception {
         List<String> names = new ArrayList<>();
         try (Statement statement = conn.createStatement(); ResultSet rows = statement.executeQuery("SHOW DATABASES;")) {

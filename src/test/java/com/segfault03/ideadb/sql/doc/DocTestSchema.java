@@ -4,6 +4,7 @@ import com.segfault03.ideadb.model.*;
 import com.segfault03.ideadb.service.ExplorerMetadataSnapshot;
 import com.segfault03.ideadb.sql.schema.SqlSchema;
 
+import java.sql.Types;
 import java.util.List;
 
 /** A small commented schema with one foreign key, one view and a second schema, for resolver and card tests. */
@@ -11,7 +12,7 @@ final class DocTestSchema {
     private DocTestSchema() {}
 
     static ColumnMetadata column(String name, String type, boolean nullable, boolean key, boolean auto, String comment, ColumnReference reference) {
-        var column = new ColumnMetadata(name, type, java.sql.Types.INTEGER, 10, 0, nullable, key, auto, null);
+        var column = new ColumnMetadata(name, type, Types.INTEGER, 10, 0, nullable, key, auto, null);
         if (comment != null) column = column.withComment(comment);
         return reference == null ? column : column.withReference(reference);
     }

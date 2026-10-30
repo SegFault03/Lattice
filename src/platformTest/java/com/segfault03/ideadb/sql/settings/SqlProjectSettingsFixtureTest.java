@@ -1,7 +1,10 @@
 package com.segfault03.ideadb.sql.settings;
 
+import com.intellij.openapi.actionSystem.impl.SimpleDataContext;
 import com.intellij.openapi.fileTypes.FileTypeManager;
+import com.intellij.testFramework.TestActionEvent;
 import com.intellij.testFramework.fixtures.BasePlatformTestCase;
+import com.intellij.util.ui.UIUtil;
 import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.model.DatabaseType;
 import com.segfault03.ideadb.sql.FixtureConnections;
@@ -12,6 +15,9 @@ import com.segfault03.ideadb.sql.discovery.JdbcDiscovery;
 import com.segfault03.ideadb.sql.dialect.SqlDialects;
 import com.segfault03.ideadb.sql.lang.LatticeSqlFileType;
 import com.segfault03.ideadb.state.DatabaseSettingsState;
+
+import java.awt.Component;
+import java.awt.Container;
 
 import javax.swing.*;
 
@@ -38,18 +44,18 @@ public class SqlProjectSettingsFixtureTest extends BasePlatformTestCase {
     }
 
     @SuppressWarnings("unchecked")
-    private static JComboBox<Object> firstCombo(java.awt.Container root) {
-        for (java.awt.Component child : root.getComponents()) {
+    private static JComboBox<Object> firstCombo(Container root) {
+        for (Component child : root.getComponents()) {
             if (child instanceof JComboBox<?> combo) return (JComboBox<Object>) combo;
-            if (child instanceof java.awt.Container container) { var found = firstCombo(container); if (found != null) return found; }
+            if (child instanceof Container container) { var found = firstCombo(container); if (found != null) return found; }
         }
         return null;
     }
 
-    private static JCheckBox firstCheckBox(java.awt.Container root) {
-        for (java.awt.Component child : root.getComponents()) {
+    private static JCheckBox firstCheckBox(Container root) {
+        for (Component child : root.getComponents()) {
             if (child instanceof JCheckBox box) return box;
-            if (child instanceof java.awt.Container container) { var found = firstCheckBox(container); if (found != null) return found; }
+            if (child instanceof Container container) { var found = firstCheckBox(container); if (found != null) return found; }
         }
         return null;
     }
@@ -106,8 +112,8 @@ public class SqlProjectSettingsFixtureTest extends BasePlatformTestCase {
         assertEquals("com.segfault03.lattice.sql.editor.project", page.getId());
     }
 
-    private static JCheckBox checkBoxStartingWith(java.awt.Container root, String text) {
-        return com.intellij.util.ui.UIUtil.findComponentsOfType((JComponent) root, JCheckBox.class).stream()
+    private static JCheckBox checkBoxStartingWith(Container root, String text) {
+        return UIUtil.findComponentsOfType((JComponent) root, JCheckBox.class).stream()
                 .filter(box -> box.getText().startsWith(text)).findFirst().orElse(null);
     }
 
@@ -155,14 +161,14 @@ public class SqlProjectSettingsFixtureTest extends BasePlatformTestCase {
     public void testRestoringTheBuiltInHandlingGivesSqlFilesBackAtOnce() {
         assertEquals(LatticeSqlFileType.INSTANCE, myFixture.configureByText("q.sql", "select 1").getFileType());
         var action = new RestoreBuiltInSqlAction();
-        var event = com.intellij.testFramework.TestActionEvent.createTestEvent(action, com.intellij.openapi.actionSystem.impl.SimpleDataContext.getProjectContext(getProject()));
+        var event = TestActionEvent.createTestEvent(action, SimpleDataContext.getProjectContext(getProject()));
         action.update(event);
         assertTrue(event.getPresentation().isEnabledAndVisible());
         action.actionPerformed(event);
 
         assertFalse(SqlEditorSettings.getInstance().isHandleSqlFiles());
         assertNotSame("the IDE's own type again", LatticeSqlFileType.INSTANCE, FileTypeManager.getInstance().getFileTypeByFileName("other.sql"));
-        var after = com.intellij.testFramework.TestActionEvent.createTestEvent(action, com.intellij.openapi.actionSystem.impl.SimpleDataContext.getProjectContext(getProject()));
+        var after = TestActionEvent.createTestEvent(action, SimpleDataContext.getProjectContext(getProject()));
         action.update(after);
         assertFalse("nothing to restore any more", after.getPresentation().isEnabledAndVisible());
     }

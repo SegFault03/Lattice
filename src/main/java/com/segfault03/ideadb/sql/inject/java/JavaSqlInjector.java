@@ -2,21 +2,15 @@ package com.segfault03.ideadb.sql.inject.java;
 
 import com.intellij.lang.injection.MultiHostInjector;
 import com.intellij.lang.injection.MultiHostRegistrar;
-import com.intellij.openapi.project.DumbService;
+import com.intellij.openapi.project.DumbAware;
 import com.intellij.psi.*;
 import com.intellij.psi.tree.IElementType;
-import com.intellij.psi.util.CachedValueProvider;
-import com.intellij.psi.util.CachedValuesManager;
-import com.intellij.psi.util.PsiModificationTracker;
-import com.segfault03.ideadb.sql.inject.SqlHostInjection;
-import com.segfault03.ideadb.sql.inject.SqlInjectionAssembler;
 import com.segfault03.ideadb.sql.inject.SqlInjectionAssembler.Part;
+import com.segfault03.ideadb.sql.inject.SqlInjectionDecision;
 import com.segfault03.ideadb.sql.settings.SqlEditorSettings;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Makes the string literals of a Java expression SQL when the user's settings and the surroundings say they are.
@@ -24,7 +18,7 @@ import java.util.Optional;
  * with a placeholder where {@code a} is. The platform asks about each literal on its own, so every literal registers
  * the same places and finds the injection of the whole expression.
  */
-public final class JavaSqlInjector implements MultiHostInjector, com.intellij.openapi.project.DumbAware {
+public final class JavaSqlInjector implements MultiHostInjector, DumbAware {
     @Override
     public void getLanguagesToInject(@NotNull MultiHostRegistrar registrar, @NotNull PsiElement context) {
         if (!(context instanceof PsiLiteralExpression literal) || !(literal.getValue() instanceof String)) return;
@@ -32,17 +26,8 @@ public final class JavaSqlInjector implements MultiHostInjector, com.intellij.op
         if (!settings.isInjectionEffective() || !isHost(literal)) return;
 
         PsiExpression top = topOfConcatenation(literal);
-        // The platform asks once per literal; the whole expression is decided once until the code or the settings change.
-        Optional<SqlInjectionAssembler<PsiLanguageInjectionHost>> injection = CachedValuesManager.getCachedValue(top, () -> CachedValueProvider.Result.create(
-                decide(top), PsiModificationTracker.MODIFICATION_COUNT, SqlEditorSettings.getInstance(), DumbService.getInstance(top.getProject()).getModificationTracker()));
-        injection.ifPresent(assembled -> SqlHostInjection.register(registrar, assembled));
-    }
-
-    private static Optional<SqlInjectionAssembler<PsiLanguageInjectionHost>> decide(PsiExpression top) {
-        List<Part<PsiLanguageInjectionHost>> parts = new ArrayList<>();
-        flatten(top, parts);
-        var assembled = new SqlInjectionAssembler<>(parts);
-        return JavaSqlSurroundings.shouldInject(top, assembled.text(), SqlEditorSettings.getInstance().injectionTiers()) ? Optional.of(assembled) : Optional.empty();
+        SqlInjectionDecision.inject(registrar, top, parts -> flatten(top, parts),
+                (text, tiers) -> JavaSqlSurroundings.shouldInject(top, text, tiers));
     }
 
     @Override

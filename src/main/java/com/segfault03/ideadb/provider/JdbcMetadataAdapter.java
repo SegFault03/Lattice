@@ -13,6 +13,8 @@ import java.util.*;
 
 abstract class JdbcMetadataAdapter implements MetadataAdapter {
     protected abstract DatabaseNamespace namespace(String selected);
+    /** Whether the selected namespace is the JDBC catalog (MySQL); otherwise it is the schema. */
+    protected boolean namespaceIsCatalog() { return false; }
     protected abstract void enrichColumns(Connection conn, ConnectionConfig config, String database, String schema, String table, List<ColumnMetadata> columns) throws Exception;
     public String currentSchema(Connection conn) throws java.sql.SQLException { return conn.getSchema(); }
     public List<TableMetadata> getTables(Connection conn, ConnectionConfig config, String database) throws Exception {
@@ -61,7 +63,7 @@ abstract class JdbcMetadataAdapter implements MetadataAdapter {
         enrichColumns(conn, config, database, schema, lookupTable, columns);
         // The enrichers rebuild columns from the basics, so comments and relationships are applied last.
         Map<String, ColumnReference> foreignKeys = new HashMap<>();
-        boolean namespaceIsCatalog = namespace("probe").catalog() != null;
+        boolean namespaceIsCatalog = namespaceIsCatalog();
         try (ResultSet rs = meta.getImportedKeys(catalog, schema, lookupTable)) {
             if (rs != null) while (rs.next()) {
                 String target = namespaceIsCatalog ? rs.getString("PKTABLE_CAT") : rs.getString("PKTABLE_SCHEM");

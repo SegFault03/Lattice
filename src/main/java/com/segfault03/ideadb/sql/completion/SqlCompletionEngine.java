@@ -195,7 +195,9 @@ public final class SqlCompletionEngine {
             String namespace = qualifier.size() == 2 ? qualifier.get(0) : null;
             String table = qualifier.get(qualifier.size() - 1);
             if (namespace != null || schema.table(null, table) != null) {
-                for (ColumnMetadata column : columnsOfNamed(namespace, table, schema)) out.add(column(column, insertion(column.getName(), context, profile), null, COLUMN));
+                for (ColumnMetadata column : columnsOfNamed(namespace, table, schema)) {
+                    out.add(column(column, insertion(column.getName(), context, profile), null, COLUMN));
+                }
                 return;
             }
         }
@@ -242,7 +244,8 @@ public final class SqlCompletionEngine {
         return reference.namespace() == null || wanted == null || reference.namespace().equalsIgnoreCase(wanted);
     }
 
-    private static void add(List<SqlSuggestion> out, SqlContext context, SqlDialectProfile profile, TableRef left, String leftColumn, TableRef right, String rightColumn) {
+    private static void add(List<SqlSuggestion> out, SqlContext context, SqlDialectProfile profile, TableRef left, String leftColumn,
+                            TableRef right, String rightColumn) {
         String text = reference(left.exposedName(), context, profile) + "." + insertion(leftColumn, context, profile)
                 + " = " + reference(right.exposedName(), context, profile) + "." + insertion(rightColumn, context, profile);
         out.add(new SqlSuggestion(Kind.JOIN, text, text, "foreign key", null, JOIN));

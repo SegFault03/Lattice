@@ -10,6 +10,7 @@ import com.segfault03.ideadb.sql.schema.SqlSchema;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.sql.Types;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.IntFunction;
@@ -33,7 +34,7 @@ class SqlScriptValidatorPerformanceTest {
         List<ExplorerMetadataSnapshot.Table> tables = new ArrayList<>();
         for (int t = 1; t <= TABLES; t++) {
             List<ColumnMetadata> columns = new ArrayList<>();
-            for (int c = 0; c < COLUMNS; c++) columns.add(new ColumnMetadata("col_" + c, "INTEGER", java.sql.Types.INTEGER, 10, 0, true, false, false, null));
+            for (int c = 0; c < COLUMNS; c++) columns.add(new ColumnMetadata("col_" + c, "INTEGER", Types.INTEGER, 10, 0, true, false, false, null));
             var metadata = new TableMetadata(null, "public", "table_" + t, "TABLE");
             metadata.setColumns(columns);
             tables.add(new ExplorerMetadataSnapshot.Table(metadata, columns, true));

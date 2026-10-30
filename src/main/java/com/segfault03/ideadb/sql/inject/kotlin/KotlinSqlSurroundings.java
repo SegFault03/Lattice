@@ -12,15 +12,12 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.psi.*;
 
 import java.util.List;
-import java.util.Set;
 
 /**
  * What surrounds a Kotlin string expression. Kotlin PSI cannot resolve a call without the analysis API, so a call is
  * recognized by the name written at the call site and an annotation by its short name.
  */
 final class KotlinSqlSurroundings {
-    private static final Set<String> NATIVE_QUERY_ATTRIBUTES = Set.of("value", "countQuery", "query");
-
     private KotlinSqlSurroundings() {}
 
     static @NotNull Surroundings of(@NotNull KtExpression top) { return cheap(top, true); }
@@ -69,7 +66,7 @@ final class KotlinSqlSurroundings {
 
     private static boolean isSqlAnnotated(KtAnnotated owner) {
         for (KtAnnotationEntry entry : owner.getAnnotationEntries()) {
-            if (entry.getShortName() == null || !"Language".equals(entry.getShortName().asString())) continue;
+            if (entry.getShortName() == null || !SqlMarkers.LANGUAGE_ANNOTATION.equals(entry.getShortName().asString())) continue;
             List<? extends ValueArgument> arguments = entry.getValueArguments();
             if (arguments.isEmpty() || arguments.get(0).getArgumentExpression() == null) continue;
             if (arguments.get(0).getArgumentExpression() instanceof KtStringTemplateExpression value
@@ -81,13 +78,9 @@ final class KotlinSqlSurroundings {
     /** {@code @Query(value = "...", nativeQuery = true)}, {@code @NativeQuery("...")} and {@code @NamedNativeQuery(query = "...")}. */
     private static boolean isNativeQuery(KtAnnotationEntry entry, KtValueArgument argument) {
         String attribute = argument.isNamed() && argument.getArgumentName() != null ? argument.getArgumentName().getAsName().asString() : "value";
-        if (!NATIVE_QUERY_ATTRIBUTES.contains(attribute) || entry.getShortName() == null) return false;
-        return switch (entry.getShortName().asString()) {
-            case "NativeQuery", "NamedNativeQuery" -> true;
-            case "Query" -> entry.getValueArguments().stream().anyMatch(other -> other instanceof KtValueArgument named && named.isNamed()
-                    && named.getArgumentName() != null && "nativeQuery".equals(named.getArgumentName().getAsName().asString())
-                    && named.getArgumentExpression() != null && "true".equals(named.getArgumentExpression().getText()));
-            default -> false;
-        };
+        return SqlInjectionRules.isNativeQueryAttribute(entry.getShortName() == null ? null : entry.getShortName().asString(), attribute,
+                () -> entry.getValueArguments().stream().anyMatch(other -> other instanceof KtValueArgument named && named.isNamed()
+                        && named.getArgumentName() != null && "nativeQuery".equals(named.getArgumentName().getAsName().asString())
+                        && named.getArgumentExpression() != null && "true".equals(named.getArgumentExpression().getText())));
     }
 }

@@ -1,5 +1,6 @@
 package com.segfault03.ideadb.sql.binding;
 
+import com.intellij.injected.editor.VirtualFileWindow;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.components.PersistentStateComponent;
 import com.intellij.openapi.components.State;
@@ -24,6 +25,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -47,7 +49,7 @@ public final class SqlBindingsState implements PersistentStateComponent<SqlBindi
         public String defaultConnectionId = "";
         public Map<String, Binding> files = new LinkedHashMap<>();
         /** Databases found in project files that the user chose not to be offered again, by their description. */
-        public java.util.List<String> dismissedDiscoveries = new java.util.ArrayList<>();
+        public List<String> dismissedDiscoveries = new ArrayList<>();
         /** Whether the project's configuration files are read to find its database. */
         public boolean useProjectFiles = true;
     }
@@ -158,14 +160,14 @@ public final class SqlBindingsState implements PersistentStateComponent<SqlBindi
 
     /** SQL injected into a source file is bound through that file. */
     public static @NotNull VirtualFile hostOf(@NotNull VirtualFile file) {
-        return file instanceof com.intellij.injected.editor.VirtualFileWindow window ? window.getDelegate() : file;
+        return file instanceof VirtualFileWindow window ? window.getDelegate() : file;
     }
 
     /**
      * Forgets bindings to connections that were deleted: a file bound to one goes back to being unbound, and a
      * project default pointing at one is cleared. Explicit dialect choices are kept. Returns whether anything changed.
      */
-    public synchronized boolean pruneConnections(@NotNull java.util.Set<String> existing) {
+    public synchronized boolean pruneConnections(@NotNull Set<String> existing) {
         boolean changed = state.files.values().removeIf(binding -> !binding.connectionId.isEmpty() && !existing.contains(binding.connectionId));
         String chosen = defaultConnectionId();
         if (!chosen.isEmpty() && !existing.contains(chosen)) {
@@ -178,7 +180,7 @@ public final class SqlBindingsState implements PersistentStateComponent<SqlBindi
 
     public synchronized boolean isDiscoveryDismissed(@NotNull String key) { return state.dismissedDiscoveries != null && state.dismissedDiscoveries.contains(key); }
     public synchronized void dismissDiscovery(@NotNull String key) {
-        if (state.dismissedDiscoveries == null) state.dismissedDiscoveries = new java.util.ArrayList<>();
+        if (state.dismissedDiscoveries == null) state.dismissedDiscoveries = new ArrayList<>();
         if (!state.dismissedDiscoveries.contains(key)) state.dismissedDiscoveries.add(key);
     }
 

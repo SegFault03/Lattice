@@ -1,6 +1,7 @@
 package com.segfault03.ideadb.sql.completion;
 
 import com.segfault03.ideadb.model.*;
+import com.segfault03.ideadb.provider.DatabaseProviders;
 import com.segfault03.ideadb.service.ExplorerMetadataSnapshot;
 import com.segfault03.ideadb.sql.completion.SqlSuggestion.Kind;
 import com.segfault03.ideadb.sql.dialect.SqlDialectProfile;
@@ -8,6 +9,9 @@ import com.segfault03.ideadb.sql.dialect.SqlDialects;
 import com.segfault03.ideadb.sql.schema.SqlSchema;
 import org.junit.jupiter.api.Test;
 
+import java.sql.Types;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -16,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class SqlCompletionEngineTest {
     private static ColumnMetadata column(String name, boolean autoIncrement, ColumnReference reference) {
-        var column = new ColumnMetadata(name, "INTEGER", java.sql.Types.INTEGER, 10, 0, true, name.equals("id"), autoIncrement, null);
+        var column = new ColumnMetadata(name, "INTEGER", Types.INTEGER, 10, 0, true, name.equals("id"), autoIncrement, null);
         return reference == null ? column : column.withReference(reference);
     }
 
@@ -135,7 +139,7 @@ class SqlCompletionEngineTest {
         var value = suggest("update orders set total = ^");
         assertTrue(labels(value, Kind.KEYWORD).containsAll(List.of("NULL", "DEFAULT")));
         assertTrue(labels(value, Kind.FUNCTION).contains("COUNT"));
-        assertEquals(List.of("ID", "TOTAL", "CUSTOMER_ID"), labels(value, Kind.COLUMN).stream().map(String::toUpperCase).sorted(java.util.Comparator.comparingInt(n -> List.of("ID", "TOTAL", "CUSTOMER_ID").indexOf(n))).toList(),
+        assertEquals(List.of("ID", "TOTAL", "CUSTOMER_ID"), labels(value, Kind.COLUMN).stream().map(String::toUpperCase).sorted(Comparator.comparingInt(n -> List.of("ID", "TOTAL", "CUSTOMER_ID").indexOf(n))).toList(),
                 "the right-hand side may refer to columns");
     }
 
@@ -221,7 +225,7 @@ class SqlCompletionEngineTest {
 
     @Test void columnsCarryTheirKeyRoleAsAFlagBeforeTheTypeAndAsAnIconKind() {
         var columns = suggest("select o.^ from orders o").stream().filter(s -> s.kind() == Kind.COLUMN).toList();
-        var byName = new java.util.HashMap<String, SqlSuggestion>();
+        var byName = new HashMap<String, SqlSuggestion>();
         for (var column : columns) byName.put(column.label(), column);
         assertEquals(SqlSuggestion.Key.PRIMARY, byName.get("id").key());
         assertEquals("PK INTEGER", byName.get("id").typeText());
@@ -314,7 +318,7 @@ class SqlCompletionEngineTest {
     @Test void quotingAgreesWithTheConsoleDialectForEveryDatabase() {
         for (DatabaseType type : DatabaseType.values()) {
             var profile = SqlDialects.of(type);
-            var dialect = com.segfault03.ideadb.provider.DatabaseProviders.get(type).dialect();
+            var dialect = DatabaseProviders.get(type).dialect();
             for (String name : List.of("Order Items", "select", "weird`name", "plain")) {
                 if (!SqlIdentifiers.needsQuotes(name, profile)) continue;
                 assertEquals(dialect.quoteIdentifier(name), SqlIdentifiers.quote(name, profile), type + " " + name);

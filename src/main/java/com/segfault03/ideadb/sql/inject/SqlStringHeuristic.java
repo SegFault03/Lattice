@@ -14,13 +14,17 @@ import java.util.regex.Pattern;
 public final class SqlStringHeuristic {
     private static final String ID = "(?:[\\w$]+|\"[^\"]+\"|`[^`]+`|\\[[^\\]]+\\]|\\?)";
     private static final String NAME = ID + "(?:\\s*\\.\\s*" + ID + ")*";
-    private static final Pattern VERB = Pattern.compile("^(select|insert\\s+into|update|delete\\s+from|with|create|alter\\s+table|drop|truncate|merge\\s+into|explain)\\b");
+    private static final Pattern VERB = Pattern.compile(
+            "^(select|insert\\s+into|update|delete\\s+from|with|create|alter\\s+table|drop|truncate|merge\\s+into|explain)\\b");
 
     private static final Pattern INSERT = Pattern.compile("^insert\\s+into\\s+" + NAME + "\\s*(\\(|values\\b|select\\b|default\\s+values\\b|\\?)");
     private static final Pattern UPDATE = Pattern.compile("^update\\s+" + NAME + "(?:\\s+(?:as\\s+)?" + ID + ")?\\s+set\\s+" + NAME + "\\s*=");
-    private static final Pattern DELETE = Pattern.compile("^delete\\s+from\\s+" + NAME + "(?:\\s+(?:as\\s+)?" + ID + ")?(?:\\s+(?:where|using)\\b.*|\\s*;?)$", Pattern.DOTALL);
-    private static final Pattern WITH = Pattern.compile("^with\\s+(?:recursive\\s+)?" + ID + "\\s*(?:\\([^)]*\\))?\\s+as\\s*(?:not\\s+materialized\\s*|materialized\\s*)?\\(.*\\bselect\\b.*", Pattern.DOTALL);
-    private static final Pattern DDL = Pattern.compile("^(?:create\\s+(?:or\\s+replace\\s+)?(?:(?:global\\s+|local\\s+)?(?:temporary\\s+|temp\\s+)|unique\\s+)?(?:table\\s+(?:if\\s+not\\s+exists\\s+)?" + NAME + "\\s*(?:\\(|as\\s+select\\b)"
+    private static final Pattern DELETE = Pattern.compile(
+            "^delete\\s+from\\s+" + NAME + "(?:\\s+(?:as\\s+)?" + ID + ")?(?:\\s+(?:where|using)\\b.*|\\s*;?)$", Pattern.DOTALL);
+    private static final Pattern WITH = Pattern.compile(
+            "^with\\s+(?:recursive\\s+)?" + ID + "\\s*(?:\\([^)]*\\))?\\s+as\\s*(?:not\\s+materialized\\s*|materialized\\s*)?\\(.*\\bselect\\b.*", Pattern.DOTALL);
+    private static final Pattern DDL = Pattern.compile("^(?:create\\s+(?:or\\s+replace\\s+)?(?:(?:global\\s+|local\\s+)?(?:temporary\\s+|temp\\s+)|unique\\s+)?"
+            + "(?:table\\s+(?:if\\s+not\\s+exists\\s+)?" + NAME + "\\s*(?:\\(|as\\s+select\\b)"
             + "|view\\s+(?:if\\s+not\\s+exists\\s+)?" + NAME + "\\s+as\\s+select\\b"
             + "|(?:index\\s+(?:if\\s+not\\s+exists\\s+)?" + ID + "\\s+on\\s+" + NAME + "\\s*\\()"
             + "|sequence\\s+" + NAME + "\\b)"
@@ -29,7 +33,9 @@ public final class SqlStringHeuristic {
             + "|truncate\\s+(?:table\\s+)?" + NAME + "\\s*;?)", Pattern.DOTALL);
     private static final Pattern EXPLAIN = Pattern.compile("^explain\\s+(?:analyze\\s+)?select\\b.*", Pattern.DOTALL);
 
-    private static final Pattern STRONG = Pattern.compile("\\bwhere\\b|\\bjoin\\b|\\bgroup\\s+by\\b|\\border\\s+by\\b|\\bhaving\\b|\\bunion\\b|\\blimit\\s+[\\d?]|\\bfetch\\s+first\\b|:[a-z_]\\w*|\\$\\d+|@[a-z_]\\w*|\\?");
+    private static final Pattern STRONG = Pattern.compile(
+            "\\bwhere\\b|\\bjoin\\b|\\bgroup\\s+by\\b|\\border\\s+by\\b|\\bhaving\\b|\\bunion\\b|\\blimit\\s+[\\d?]|\\bfetch\\s+first\\b"
+                    + "|:[a-z_]\\w*|\\$\\d+|@[a-z_]\\w*|\\?");
 
     private SqlStringHeuristic() {}
 
@@ -71,7 +77,8 @@ public final class SqlStringHeuristic {
             if (c == '\'' || c == '"' || c == '`') { i = skipQuoted(lower, i); if (i < 0) return false; continue; }
             if (c == '(') depth++;
             else if (c == ')') depth--;
-            else if (depth == 0 && lower.startsWith("from", i) && (i == 0 || !isWord(lower.charAt(i - 1))) && i + 4 < lower.length() && !isWord(lower.charAt(i + 4))) { from = i; break; }
+            else if (depth == 0 && lower.startsWith("from", i) && (i == 0 || !isWord(lower.charAt(i - 1)))
+                    && i + 4 < lower.length() && !isWord(lower.charAt(i + 4))) { from = i; break; }
         }
         if (from < 0 || depth != 0) return false;
         String list = lower.substring(listStart, from).strip();

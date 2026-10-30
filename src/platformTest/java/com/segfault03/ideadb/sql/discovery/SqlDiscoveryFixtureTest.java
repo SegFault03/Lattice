@@ -1,8 +1,14 @@
 package com.segfault03.ideadb.sql.discovery;
 
+import com.intellij.openapi.actionSystem.impl.SimpleDataContext;
+import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.testFramework.PlatformTestUtil;
+import com.intellij.testFramework.TestActionEvent;
 import com.intellij.testFramework.fixtures.BasePlatformTestCase;
+import com.intellij.ui.EditorNotificationPanel;
+import com.intellij.ui.HyperlinkLabel;
+import com.intellij.util.ui.UIUtil;
 import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.model.DatabaseType;
 import com.segfault03.ideadb.sql.FixtureConnections;
@@ -16,6 +22,7 @@ import com.segfault03.ideadb.sql.settings.SqlFileTypeClaim;
 import com.segfault03.ideadb.state.DatabaseSettingsState;
 
 import java.util.List;
+import java.util.Objects;
 
 /** A sample Spring project: what its configuration files say decides the dialect and the connection of its SQL files. */
 public class SqlDiscoveryFixtureTest extends BasePlatformTestCase {
@@ -52,8 +59,8 @@ public class SqlDiscoveryFixtureTest extends BasePlatformTestCase {
     /** Whether the Tools menu action is shown, without running it: running it opens a modal dialog. */
     private boolean actionAvailable() {
         var action = new AddConnectionFromProjectAction();
-        var event = com.intellij.testFramework.TestActionEvent.createTestEvent(action,
-                com.intellij.openapi.actionSystem.impl.SimpleDataContext.getProjectContext(getProject()));
+        var event = TestActionEvent.createTestEvent(action,
+                SimpleDataContext.getProjectContext(getProject()));
         action.update(event);
         return event.getPresentation().isEnabledAndVisible();
     }
@@ -81,7 +88,7 @@ public class SqlDiscoveryFixtureTest extends BasePlatformTestCase {
         assertEquals(described.toString(), List.of("H2 in-memory testdb (application-test.properties)", "MySQL db:3306/legacy (persistence.xml)",
                 "PostgreSQL localhost:5432/shop (application.yml)"), described);
         assertFalse(discovery.snapshot().toString().contains("hunter2"));
-        var users = discovery.snapshot().stream().map(DiscoveredConnection::user).filter(java.util.Objects::nonNull).toList();
+        var users = discovery.snapshot().stream().map(DiscoveredConnection::user).filter(Objects::nonNull).toList();
         assertEquals("only the user name that the file names is kept", List.of("shop_app"), users);
     }
 
@@ -200,13 +207,13 @@ public class SqlDiscoveryFixtureTest extends BasePlatformTestCase {
         assertEquals("localhost", config.getHost());
     }
 
-    private com.intellij.ui.EditorNotificationPanel discoveryBanner(VirtualFile file) {
-        var editor = com.intellij.openapi.fileEditor.FileEditorManager.getInstance(getProject()).getSelectedEditor(file);
-        return (com.intellij.ui.EditorNotificationPanel) new SqlConnectionBanner().collectNotificationData(getProject(), file).apply(editor);
+    private EditorNotificationPanel discoveryBanner(VirtualFile file) {
+        var editor = FileEditorManager.getInstance(getProject()).getSelectedEditor(file);
+        return (EditorNotificationPanel) new SqlConnectionBanner().collectNotificationData(getProject(), file).apply(editor);
     }
 
-    private static List<String> links(com.intellij.ui.EditorNotificationPanel panel) {
-        return com.intellij.util.ui.UIUtil.findComponentsOfType(panel, com.intellij.ui.HyperlinkLabel.class).stream().map(com.intellij.ui.HyperlinkLabel::getText).toList();
+    private static List<String> links(EditorNotificationPanel panel) {
+        return UIUtil.findComponentsOfType(panel, HyperlinkLabel.class).stream().map(HyperlinkLabel::getText).toList();
     }
 
     public void testTheDiscoveryBannerIsShortAndKeepsTheFullDescriptionInTheTooltip() {

@@ -21,6 +21,9 @@ public final class SqlMarkers {
     /** The comment text written by the "treat as SQL" intention. */
     public static final String SQL_COMMENT = "language=SQL";
 
+    /** The short name of the annotation ({@code @Language("SQL")}) that states the language of a string. */
+    public static final String LANGUAGE_ANNOTATION = "Language";
+
     private SqlMarkers() {}
 
     public static @NotNull Mark ofComment(@NotNull String comment) {

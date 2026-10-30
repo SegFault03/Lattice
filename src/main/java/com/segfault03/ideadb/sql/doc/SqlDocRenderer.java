@@ -173,7 +173,10 @@ public final class SqlDocRenderer {
         } else {
             List<String> lines = new ArrayList<>();
             for (var table : namespace.tables()) {
-                if (lines.size() == MAX_LISTED) { lines.add(DocumentationMarkup.GRAYED_START + "... " + (namespace.tables().size() - MAX_LISTED) + " more" + DocumentationMarkup.GRAYED_END); break; }
+                if (lines.size() == MAX_LISTED) {
+                    lines.add(DocumentationMarkup.GRAYED_START + "... " + (namespace.tables().size() - MAX_LISTED) + " more" + DocumentationMarkup.GRAYED_END);
+                    break;
+                }
                 lines.add(link(SqlDocLinks.show(connection, new SqlTarget.Table(namespace.name(), table.metadata().getName())), table.metadata().getName()));
             }
             section(html, "Tables", lines.isEmpty() ? "none" : String.join("<br>", lines));

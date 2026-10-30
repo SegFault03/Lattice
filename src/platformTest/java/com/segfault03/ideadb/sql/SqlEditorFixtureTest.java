@@ -1,19 +1,26 @@
 package com.segfault03.ideadb.sql;
 
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.editor.ex.EditorEx;
 import com.intellij.openapi.editor.highlighter.HighlighterIterator;
 import com.intellij.openapi.fileEditor.FileEditor;
+import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.fileTypes.FileTypeManager;
 import com.intellij.openapi.fileTypes.SyntaxHighlighterFactory;
+import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.wm.StatusBarWidget;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.testFramework.PlatformTestUtil;
 import com.intellij.testFramework.fixtures.BasePlatformTestCase;
+import com.intellij.ui.EditorNotificationPanel;
+import com.intellij.ui.HyperlinkLabel;
 import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.model.DatabaseType;
 import com.segfault03.ideadb.sql.binding.SqlBindingsState;
 import com.segfault03.ideadb.sql.binding.SqlConnectionBanner;
+import com.segfault03.ideadb.sql.binding.SqlConnectionWidgetFactory;
 import com.segfault03.ideadb.sql.binding.SqlDialectResolver;
 import com.segfault03.ideadb.sql.binding.SqlEditorRefresh;
 import com.segfault03.ideadb.sql.dialect.SqlDialects;
@@ -24,10 +31,12 @@ import com.segfault03.ideadb.sql.lang.LatticeSqlTokens;
 import com.segfault03.ideadb.sql.settings.SqlEditorSettings;
 import com.segfault03.ideadb.sql.settings.SqlFileTypeClaim;
 import com.segfault03.ideadb.sql.settings.SqlEditorConfigurable;
+import com.segfault03.ideadb.state.DatabaseSettingsListener;
 import com.segfault03.ideadb.state.DatabaseSettingsState;
 import com.intellij.ui.components.JBCheckBox;
 import com.intellij.util.ui.UIUtil;
 
+import java.util.List;
 import javax.swing.JComponent;
 
 public class SqlEditorFixtureTest extends BasePlatformTestCase {
@@ -216,11 +225,11 @@ public class SqlEditorFixtureTest extends BasePlatformTestCase {
 
         connections.addConnection(postgres);
         assertNotNull(banner.collectNotificationData(getProject(), file));
-        FileEditor editor = myFixture.getEditor() == null ? null : com.intellij.openapi.fileEditor.FileEditorManager.getInstance(getProject()).getSelectedEditor(file);
-        var panel = (com.intellij.ui.EditorNotificationPanel) banner.collectNotificationData(getProject(), file).apply(editor);
+        FileEditor editor = myFixture.getEditor() == null ? null : FileEditorManager.getInstance(getProject()).getSelectedEditor(file);
+        var panel = (EditorNotificationPanel) banner.collectNotificationData(getProject(), file).apply(editor);
         assertNotNull(panel);
         assertEquals("Generic SQL: no connection chosen", panel.getText());
-        assertEquals(java.util.List.of("Choose connection\u2026", "Use generic SQL"), actionLabels(panel));
+        assertEquals(List.of("Choose connection\u2026", "Use generic SQL"), actionLabels(panel));
 
         SqlBindingsState.getInstance(getProject()).bindFileToConnection(file, mysql.getId());
         assertNull("A bound file needs no banner", banner.collectNotificationData(getProject(), file));
@@ -234,17 +243,17 @@ public class SqlEditorFixtureTest extends BasePlatformTestCase {
         assertNull("Only SQL files get the banner", banner.collectNotificationData(getProject(), other));
     }
 
-    private static java.util.List<String> actionLabels(com.intellij.ui.EditorNotificationPanel panel) {
-        return UIUtil.findComponentsOfType(panel, com.intellij.ui.HyperlinkLabel.class).stream().map(com.intellij.ui.HyperlinkLabel::getText).toList();
+    private static List<String> actionLabels(EditorNotificationPanel panel) {
+        return UIUtil.findComponentsOfType(panel, HyperlinkLabel.class).stream().map(HyperlinkLabel::getText).toList();
     }
 
     public void testUseGenericSqlBindsTheFileToTheGenericDialect() {
         connections.addConnection(mysql);
         connections.addConnection(postgres);
         VirtualFile file = sqlFile("select 1");
-        FileEditor editor = com.intellij.openapi.fileEditor.FileEditorManager.getInstance(getProject()).getSelectedEditor(file);
-        var panel = (com.intellij.ui.EditorNotificationPanel) new SqlConnectionBanner().collectNotificationData(getProject(), file).apply(editor);
-        UIUtil.findComponentsOfType(panel, com.intellij.ui.HyperlinkLabel.class).stream()
+        FileEditor editor = FileEditorManager.getInstance(getProject()).getSelectedEditor(file);
+        var panel = (EditorNotificationPanel) new SqlConnectionBanner().collectNotificationData(getProject(), file).apply(editor);
+        UIUtil.findComponentsOfType(panel, HyperlinkLabel.class).stream()
                 .filter(link -> link.getText().equals("Use generic SQL")).findFirst().orElseThrow().doClick();
         assertEquals(SqlDialects.ANSI.id(), SqlBindingsState.getInstance(getProject()).fileBinding(file).dialectId);
         assertNull("Chosen, so the banner goes", new SqlConnectionBanner().collectNotificationData(getProject(), file));
@@ -288,8 +297,8 @@ public class SqlEditorFixtureTest extends BasePlatformTestCase {
 
         connections.removeConnection(postgres.getId());
         // The real state announces this itself; the fixture's does not, so announce it as the IDE would.
-        com.intellij.openapi.application.ApplicationManager.getApplication().getMessageBus()
-                .syncPublisher(com.segfault03.ideadb.state.DatabaseSettingsListener.TOPIC).connectionsChanged();
+        ApplicationManager.getApplication().getMessageBus()
+                .syncPublisher(DatabaseSettingsListener.TOPIC).connectionsChanged();
         PlatformTestUtil.dispatchAllEventsInIdeEventQueue();
 
         assertNotNull(bindings.fileBinding(toMysql));
@@ -301,9 +310,9 @@ public class SqlEditorFixtureTest extends BasePlatformTestCase {
     public void testTheStatusBarWidgetNamesTheFilesDialectAndConnection() {
         connections.addConnection(mysql);
         connections.addConnection(postgres);
-        var widget = new com.segfault03.ideadb.sql.binding.SqlConnectionWidgetFactory().createWidget(getProject());
-        com.intellij.openapi.util.Disposer.register(getTestRootDisposable(), widget);
-        var presentation = (com.intellij.openapi.wm.StatusBarWidget.MultipleTextValuesPresentation) widget.getPresentation();
+        var widget = new SqlConnectionWidgetFactory().createWidget(getProject());
+        Disposer.register(getTestRootDisposable(), widget);
+        var presentation = (StatusBarWidget.MultipleTextValuesPresentation) widget.getPresentation();
 
         myFixture.configureByText("notes.txt", "select 1");
         assertEquals("Other files show nothing", "", presentation.getSelectedValue());

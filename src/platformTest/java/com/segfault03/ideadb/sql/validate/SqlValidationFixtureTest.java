@@ -2,6 +2,7 @@ package com.segfault03.ideadb.sql.validate;
 
 import com.intellij.codeInsight.daemon.impl.HighlightInfo;
 import com.intellij.lang.annotation.HighlightSeverity;
+import com.intellij.openapi.util.TextRange;
 import com.intellij.testFramework.PlatformTestUtil;
 import com.segfault03.ideadb.service.DatabaseChange;
 import com.segfault03.ideadb.service.DatabaseChangeListener;
@@ -44,7 +45,7 @@ public class SqlValidationFixtureTest extends H2SqlFixtureTestCase {
         assertEquals(1, infos.size());
         assertEquals(HighlightSeverity.WARNING, infos.get(0).getSeverity());
         assertTrue(infos.get(0).getDescription(), infos.get(0).getDescription().contains("Unknown table 'authorz'"));
-        assertEquals("authorz", myFixture.getEditor().getDocument().getText(new com.intellij.openapi.util.TextRange(infos.get(0).getStartOffset(), infos.get(0).getEndOffset())));
+        assertEquals("authorz", myFixture.getEditor().getDocument().getText(new TextRange(infos.get(0).getStartOffset(), infos.get(0).getEndOffset())));
 
         var syntax = problems("selct * from books");
         assertEquals(1, syntax.size());

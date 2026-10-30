@@ -4,6 +4,7 @@ import com.segfault03.ideadb.model.DatabaseType;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -138,11 +139,11 @@ class ProjectConfigScannerTest {
         String text = "spring.datasource.url=jdbc:mysql://h/d\nspring.datasource.username=bob\nspring.datasource.password=hunter2\napi.token=abc\nsecret.key=zzz\nuser=x\n";
         var settings = ProjectConfigScanner.properties(text);
         // A user name is the one kept setting; it is not a secret and only prefills a dialog.
-        assertEquals(java.util.Set.of("spring.datasource.url", "spring.datasource.username", "user"), settings.keySet());
+        assertEquals(Set.of("spring.datasource.url", "spring.datasource.username", "user"), settings.keySet());
         var yaml = ProjectConfigScanner.yaml("spring:\n  datasource:\n    url: jdbc:mysql://h/d\n    password: hunter2\n    username: bob\n");
-        assertEquals(java.util.Set.of("spring.datasource.url", "spring.datasource.username"), yaml.keySet());
+        assertEquals(Set.of("spring.datasource.url", "spring.datasource.username"), yaml.keySet());
         var xml = ProjectConfigScanner.xml("<p><property name=\"jakarta.persistence.jdbc.password\" value=\"hunter2\"/><property name=\"jakarta.persistence.jdbc.url\" value=\"jdbc:mysql://h/d\"/></p>");
-        assertEquals(java.util.Set.of("jakarta.persistence.jdbc.url"), xml.keySet());
+        assertEquals(Set.of("jakarta.persistence.jdbc.url"), xml.keySet());
         assertFalse(settings.toString().contains("hunter2") || yaml.toString().contains("hunter2") || xml.toString().contains("hunter2"));
     }
 

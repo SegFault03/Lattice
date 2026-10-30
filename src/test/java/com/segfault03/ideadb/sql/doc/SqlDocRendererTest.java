@@ -2,12 +2,13 @@ package com.segfault03.ideadb.sql.doc;
 
 import com.intellij.lang.documentation.DocumentationMarkup;
 import com.segfault03.ideadb.model.DatabaseType;
+import com.segfault03.ideadb.sql.schema.SqlSchema;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class SqlDocRendererTest {
-    private final com.segfault03.ideadb.sql.schema.SqlSchema schema = DocTestSchema.schema(DatabaseType.MYSQL);
+    private final SqlSchema schema = DocTestSchema.schema(DatabaseType.MYSQL);
     private final String id = schema.connectionId();
 
     private String render(SqlTarget target) { return SqlDocRenderer.render(target, schema); }

@@ -4,6 +4,8 @@ import com.segfault03.ideadb.model.*;
 import com.segfault03.ideadb.service.ExplorerMetadataSnapshot;
 import org.junit.jupiter.api.Test;
 
+import java.sql.Types;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -12,12 +14,12 @@ class SqlSchemaTest {
     private final ConnectionConfig config = new ConnectionConfig(DatabaseType.H2, "schema test");
 
     private static ColumnMetadata column(String name) {
-        return new ColumnMetadata(name, "INTEGER", java.sql.Types.INTEGER, 10, 0, true, false, false, null);
+        return new ColumnMetadata(name, "INTEGER", Types.INTEGER, 10, 0, true, false, false, null);
     }
 
     private static ExplorerMetadataSnapshot.Table table(String name, boolean columnsLoaded, String... columns) {
         var metadata = new TableMetadata(null, "PUBLIC", name, "TABLE");
-        var list = java.util.Arrays.stream(columns).map(SqlSchemaTest::column).toList();
+        var list = Arrays.stream(columns).map(SqlSchemaTest::column).toList();
         metadata.setColumns(list);
         return new ExplorerMetadataSnapshot.Table(metadata, list, columnsLoaded);
     }

@@ -23,7 +23,7 @@ import java.util.Set;
 public record ParsedJdbcUrl(@NotNull DatabaseType type, @Nullable HsqlMode mode, @Nullable String host, int port, @Nullable String database) {
     /** The default port is the same as no port: the two spellings are one URL. */
     public ParsedJdbcUrl {
-        if (port == type.getDefaultPort() || (mode == com.segfault03.ideadb.model.HsqlMode.MEM || mode == com.segfault03.ideadb.model.HsqlMode.FILE)) port = 0;
+        if (port == type.getDefaultPort() || (mode == HsqlMode.MEM || mode == HsqlMode.FILE)) port = 0;
     }
 
     private static final Set<String> THIS_MACHINE = Set.of("localhost", "127.0.0.1", "::1", "0.0.0.0", "[::1]");

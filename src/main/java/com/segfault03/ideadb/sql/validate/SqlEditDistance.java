@@ -21,7 +21,9 @@ final class SqlEditDistance {
             for (int j = 1; j <= b.length(); j++) {
                 int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
                 current[j] = Math.min(Math.min(current[j - 1] + 1, previous[j] + 1), previous[j - 1] + cost);
-                if (i > 1 && j > 1 && a.charAt(i - 1) == b.charAt(j - 2) && a.charAt(i - 2) == b.charAt(j - 1)) current[j] = Math.min(current[j], beforePrevious[j - 2] + 1);
+                if (i > 1 && j > 1 && a.charAt(i - 1) == b.charAt(j - 2) && a.charAt(i - 2) == b.charAt(j - 1)) {
+                    current[j] = Math.min(current[j], beforePrevious[j - 2] + 1);
+                }
                 rowMinimum = Math.min(rowMinimum, current[j]);
             }
             if (rowMinimum > limit) return limit + 1;

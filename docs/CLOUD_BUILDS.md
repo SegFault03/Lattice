@@ -98,7 +98,7 @@ Fix: fetch the fixture jars into `build/ui-test-maven/repository` with the same 
 
 The plugin's `DriverCatalog` downloads from `https://repo.maven.apache.org/maven2/`, which is rate-limited.
 
-Fix: set `LATTICE_UI_MAVEN_CENTRAL=https://maven-central.storage-download.googleapis.com/maven2/` (trailing slash required) when running `capture-intellij-ui.sh`. The launcher passes it to the IDE as `-Dlattice.maven.central`. The product default is unchanged.
+Fix: set `LATTICE_UI_MAVEN_CENTRAL=https://maven-central.storage-download.googleapis.com/maven2/` when running `capture-intellij-ui.sh`. The launcher passes it to the IDE as `-Dlattice.maven.central`. The product default is unchanged.
 
 ## Failure: `Find JComboBoxUiComponent ... 'Available driver'`
 
