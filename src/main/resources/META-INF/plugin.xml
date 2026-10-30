@@ -18,11 +18,12 @@
         <li><b>SQL Query Console:</b> Execute queries with Ctrl+Enter, result tables, affected row counts, elapsed time, query history, timeouts and cancellation.</li>
         <li><b>Visual Table Design:</b> Create and alter tables with column navigation and complete SQL previews. Batch column changes, rename tables and retain unfinished edits after partial DDL failures.</li>
         <li><b>Export:</b> Export data directly to CSV, JSON, and SQL INSERTs, and export/view CREATE TABLE DDL.</li>
+        <li><b>SQL Highlighting:</b> Dialect-aware highlighting for .sql files, following the connection you choose. Turn it off in Settings | Tools | Lattice SQL Editor.</li>
         <li><b>What's New:</b> Illustrated, offline feature guides in an editor tab, with a dismissible once-per-version update notice.</li>
     </ul>
     <p>Requires IntelliJ IDEA 2025.1 or later and the IDE's Java 21+ runtime. This is an alpha release; see the project documentation for database compatibility and limitations.</p>
     <h4>Coming soon:</h4>
-    <p>The roadmap includes generating POJOs, DTOs and JavaBeans; SQL syntax highlighting and schema-aware inline suggestions, subject to platform feasibility; and table relationship graphs and dependency trees. These features are not available yet.</p>
+    <p>The roadmap includes generating POJOs, DTOs and JavaBeans; schema-aware SQL suggestions and hover details, including inside Java and Kotlin strings, subject to platform feasibility; and table relationship graphs and dependency trees. These features are not available yet.</p>
     ]]></description>
 
     <change-notes><![CDATA[
@@ -45,11 +46,26 @@
     <extensions defaultExtensionNs="com.intellij">
         <postStartupActivity implementation="com.segfault03.ideadb.release.ReleaseNotesStartupActivity"/>
         <notificationGroup id="Lattice updates" displayType="BALLOON"/>
+        <notificationGroup id="Lattice SQL editor" displayType="BALLOON"/>
         <toolWindow id="Lattice"
                     anchor="right"
                     secondary="false"
                     icon="/icons/lattice.svg"
                     factoryClass="com.segfault03.ideadb.ui.DatabaseToolWindowFactory"/>
+
+        <fileType name="Lattice SQL" implementationClass="com.segfault03.ideadb.sql.lang.LatticeSqlFileType"
+                  fieldName="INSTANCE" language="LatticeSQL" extensions="sql"/>
+        <lang.parserDefinition language="LatticeSQL" implementationClass="com.segfault03.ideadb.sql.lang.LatticeSqlParserDefinition"/>
+        <lang.syntaxHighlighterFactory language="LatticeSQL" implementationClass="com.segfault03.ideadb.sql.lang.LatticeSqlSyntaxHighlighterFactory"/>
+        <lang.commenter language="LatticeSQL" implementationClass="com.segfault03.ideadb.sql.lang.LatticeSqlCommenter"/>
+        <colorSettingsPage implementation="com.segfault03.ideadb.sql.lang.LatticeSqlColorSettingsPage"/>
+        <applicationService serviceImplementation="com.segfault03.ideadb.sql.settings.SqlEditorSettings"/>
+        <projectService serviceImplementation="com.segfault03.ideadb.sql.binding.SqlBindingsState"/>
+        <applicationConfigurable parentId="tools" id="com.segfault03.lattice.sql.editor"
+                                 instance="com.segfault03.ideadb.sql.settings.SqlEditorConfigurable"
+                                 displayName="Lattice SQL Editor"/>
+        <editorNotificationProvider implementation="com.segfault03.ideadb.sql.binding.SqlConnectionBanner"/>
+        <postStartupActivity implementation="com.segfault03.ideadb.sql.SqlEditorStartupActivity"/>
 
         <fileEditorProvider implementation="com.segfault03.ideadb.editor.DatabaseFileEditorProvider"/>
         <fileIconProvider implementation="com.segfault03.ideadb.editor.DatabaseTableIconProvider"/>
@@ -64,6 +80,18 @@
     </extensions>
 
     <actions>
+        <action id="com.segfault03.lattice.sql.chooseFileConnection"
+                class="com.segfault03.ideadb.sql.binding.ChooseSqlConnectionAction"
+                text="Lattice: SQL Connection for This File..."
+                description="Choose the connection whose dialect applies to this SQL file">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+        <action id="com.segfault03.lattice.sql.chooseProjectConnection"
+                class="com.segfault03.ideadb.sql.binding.ChooseProjectSqlConnectionAction"
+                text="Lattice: SQL Connection for Project..."
+                description="Choose the default connection whose dialect applies to SQL in this project">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
         <action id="com.segfault03.lattice.whatsNew"
                 class="com.segfault03.ideadb.ui.OpenReleaseNotesAction"
                 text="What's New in Lattice"

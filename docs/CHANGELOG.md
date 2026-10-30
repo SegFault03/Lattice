@@ -4,6 +4,11 @@ Patch notes are selected by the exact release version, including prerelease suff
 
 ## [Unreleased]
 
+### SQL editor
+
+- Highlight `.sql` files for the database dialect of the connection you choose (MySQL, PostgreSQL, HSQLDB, H2, or generic SQL), with its own colors, a connection banner, per-file and project defaults, and Settings | Tools | Lattice SQL Editor. This replaces the IDE's highlighting-only SQL file type for `.sql`; a notice offers to turn it off, and it starts off where the Ultimate Database plugin is enabled.
+- Make the Maven plugin an optional dependency so Lattice loads in IDEs without it.
+
 ## [0.1.0-alpha]
 
 ### Data sources and explorer
