@@ -36,6 +36,12 @@ public final class SqlStatementAnalyzer {
     private SqlStatementAnalyzer() {}
 
     public static @NotNull SqlContext analyze(@NotNull CharSequence text, int caret, @NotNull SqlDialectProfile profile) {
+        var window = SqlTextWindow.around(text, caret);
+        if (window.length() < text.length()) {
+            // A large file: look at the statement around the caret only, then put the offsets back.
+            SqlContext inside = analyze(text.subSequence(window.start(), window.end()), caret - window.start(), profile);
+            return inside.withPrefixStart(inside.prefixStart() + window.start());
+        }
         List<SqlToken> all = SqlTokenizer.tokenize(text, profile);
         for (SqlToken token : all) {
             if (token.start() >= caret) break;

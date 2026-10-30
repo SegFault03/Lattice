@@ -116,7 +116,7 @@ The status bar entry says when a connection was chosen because of the project's 
 
 ## Settings
 
-**Settings | Tools | Lattice SQL Editor**
+**Settings | Tools | Lattice SQL Editor** (and its **Project** page)
 
 | Setting | Default |
 |---|---|
@@ -124,11 +124,20 @@ The status bar entry says when a connection was chosen because of the project's 
 | Handle `.sql` files | On |
 | Syntax highlighting | On |
 | Code completion | On |
+| Keyword case when inserted | As typed (or always upper or lower case) |
 | Hover documentation | On |
 | SQL inside Java and Kotlin strings | On, as three switches: marked strings, known calls and strict content check |
 | Known calls | JDBC, Spring `JdbcTemplate`, JPA, Hibernate, jOOQ and Exposed method names, one per line |
 
-Colors are under **Settings | Editor | Color Scheme | Lattice SQL**.
+The **Project** page sets what applies to the current project only: the default connection for its SQL (or Automatic, which uses the project's files and then the only connection), whether its configuration files are read to find the database, and a button that offers again the databases you turned down.
+
+Colors are under **Settings | Editor | Color Scheme | Lattice SQL**. **Tools | Lattice: Restore the IDE's Built-in SQL Handling** switches off `.sql` handling in one step, with an undo in the notice it shows.
+
+## Large files and projects
+
+- In a file larger than 100 KB, completion and hover analyze the statement around the caret (up to the surrounding `;` at a line end, within about 50 KB each way), so a database dump stays as responsive as a small script. Highlighting is incremental and not affected.
+- Completion and hover read the schema cache and never wait for the database. For a schema of 5,000 tables with 40 columns each, building the suggestions takes a few milliseconds; only the default schema is read ahead, with columns for up to 300 tables.
+- Work is cancelled when you keep typing. While the IDE is indexing, highlighting, completion, hover and SQL in strings keep working; only what needs the indexes is skipped: `@Language` on a resolved method's parameters and the search for configuration files, which run after indexing.
 
 ## Turning it off
 
@@ -136,6 +145,10 @@ Lattice replaces the IDE's highlighting-only SQL file type for the `.sql` extens
 
 - Clear **Handle .sql files** in the settings above. The IDE's own SQL file type is restored immediately, without a restart.
 - Reassign `*.sql` yourself under **Settings | Editor | File Types**. Lattice does not override a mapping you changed by hand unless you change its setting.
+
+## IDE support
+
+Lattice's SQL editor needs IntelliJ IDEA 2025.1 or later (build 251+). SQL in Java and Kotlin strings needs the bundled Java and Kotlin plugins, which Lattice loads only when present; the Kotlin part reads Kotlin PSI only and works in both the K1 and K2 modes. Hover uses the platform's documentation target API, which JetBrains marks experimental: Plugin Verifier reports those uses and a future IDE release may require a small adaptation. See [compatibility](compatibility.md).
 
 ## IntelliJ IDEA Ultimate
 

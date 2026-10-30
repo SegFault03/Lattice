@@ -20,7 +20,9 @@ final class SqlTokenizer {
         LatticeSqlLexer lexer = new LatticeSqlLexer(profile);
         lexer.start(text, 0, text.length(), 0);
         List<SqlToken> tokens = new ArrayList<>();
+        int count = 0;
         for (IElementType type = lexer.getTokenType(); type != null; lexer.advance(), type = lexer.getTokenType()) {
+            if ((++count & 0x3FF) == 0) com.intellij.openapi.progress.ProgressManager.checkCanceled();
             if (type != TokenType.WHITE_SPACE) tokens.add(new SqlToken(type, lexer.getTokenStart(), lexer.getTokenEnd()));
         }
         return tokens;

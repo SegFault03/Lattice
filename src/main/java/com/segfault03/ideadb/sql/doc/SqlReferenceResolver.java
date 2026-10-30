@@ -24,6 +24,8 @@ public final class SqlReferenceResolver {
     private SqlReferenceResolver() {}
 
     public static @Nullable SqlTarget resolve(@NotNull CharSequence text, int offset, @NotNull SqlDialectProfile profile, @NotNull SqlSchema schema) {
+        var window = com.segfault03.ideadb.sql.completion.SqlTextWindow.around(text, offset);
+        if (window.length() < text.length()) return resolve(text.subSequence(window.start(), window.end()), offset - window.start(), profile, schema);
         Word word = wordAt(text, offset, profile);
         if (word == null) return null;
         SqlContext context = SqlStatementAnalyzer.analyze(text, word.start, profile);

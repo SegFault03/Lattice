@@ -18,7 +18,7 @@ import java.util.List;
  * What the pointer is over in a Lattice SQL file, from the file's connection. Nothing is shown when there is no
  * connection, no cached schema yet (a read starts) or the name does not resolve.
  */
-public final class LatticeSqlDocumentationTargetProvider implements DocumentationTargetProvider {
+public final class LatticeSqlDocumentationTargetProvider implements DocumentationTargetProvider, com.intellij.openapi.project.DumbAware {
     @Override
     public @NotNull List<? extends DocumentationTarget> documentationTargets(@NotNull PsiFile file, int offset) {
         if (!file.getLanguage().isKindOf(LatticeSqlLanguage.INSTANCE) || !SqlEditorSettings.getInstance().isHoverEffective()) return List.of();

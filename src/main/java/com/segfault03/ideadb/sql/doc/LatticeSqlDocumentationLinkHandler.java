@@ -11,7 +11,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /** Follows the links in Lattice SQL cards: to another card, or to the table in a Lattice editor. */
-public final class LatticeSqlDocumentationLinkHandler implements DocumentationLinkHandler {
+public final class LatticeSqlDocumentationLinkHandler implements DocumentationLinkHandler, com.intellij.openapi.project.DumbAware {
     @Override
     public @Nullable LinkResolveResult resolveLink(@NotNull DocumentationTarget target, @NotNull String url) {
         if (!(target instanceof SqlDocumentationTarget source)) return null;

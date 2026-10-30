@@ -110,4 +110,15 @@ public class SqlCompletionFixtureTest extends H2SqlFixtureTestCase {
                 handler.checkAutoPopup(' ', getProject(), myFixture.getEditor(), myFixture.getFile()));
         assertNull(LookupManager.getActiveLookup(myFixture.getEditor()));
     }
+
+    public void testTheKeywordCaseSettingOverridesTheTypedCase() {
+        loadSchema();
+        var settings = SqlEditorSettings.getInstance();
+        settings.keywordCase(SqlEditorSettings.KeywordCase.UPPER);
+        assertTrue(lookups("select * from books <caret>").containsAll(List.of("WHERE", "ORDER BY")));
+        settings.keywordCase(SqlEditorSettings.KeywordCase.LOWER);
+        assertTrue(lookups("SELECT * FROM books <caret>").containsAll(List.of("where", "order by")));
+        settings.keywordCase(SqlEditorSettings.KeywordCase.AS_TYPED);
+        assertTrue(lookups("SELECT * FROM books <caret>").contains("WHERE"));
+    }
 }

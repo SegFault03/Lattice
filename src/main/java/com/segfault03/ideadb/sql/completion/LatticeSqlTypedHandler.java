@@ -14,7 +14,7 @@ import org.jetbrains.annotations.NotNull;
  * Opens the popup without a shortcut where a name is certain to follow: after a dot, and after a space that ends a
  * clause word expecting a table or column (FROM, JOIN, WHERE, SET, ORDER BY...). Letters already open it by default.
  */
-public final class LatticeSqlTypedHandler extends TypedHandlerDelegate {
+public final class LatticeSqlTypedHandler extends TypedHandlerDelegate implements com.intellij.openapi.project.DumbAware {
     @Override
     public @NotNull Result checkAutoPopup(char charTyped, @NotNull Project project, @NotNull Editor editor, @NotNull PsiFile file) {
         if (!file.getLanguage().isKindOf(LatticeSqlLanguage.INSTANCE) || !SqlEditorSettings.getInstance().isCompletionEffective()) return Result.CONTINUE;

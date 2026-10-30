@@ -2,6 +2,7 @@ package com.segfault03.ideadb.sql.completion;
 
 import com.segfault03.ideadb.model.ColumnMetadata;
 import com.segfault03.ideadb.model.ColumnReference;
+import com.intellij.openapi.progress.ProgressManager;
 import com.segfault03.ideadb.sql.completion.SqlContext.Position;
 import com.segfault03.ideadb.sql.completion.SqlContext.TableRef;
 import com.segfault03.ideadb.sql.completion.SqlSuggestion.Kind;
@@ -94,6 +95,7 @@ public final class SqlCompletionEngine {
         var resolved = schema.namespace(namespace);
         if (resolved != null) {
             for (var table : resolved.tables()) {
+                ProgressManager.checkCanceled();
                 String name = table.metadata().getName();
                 boolean view = table.metadata().isView();
                 out.add(new SqlSuggestion(view ? Kind.VIEW : Kind.TABLE, name, insertion(name, context, profile),
@@ -113,6 +115,7 @@ public final class SqlCompletionEngine {
         List<TableRef> refs = visibleTables(context);
         Map<String, Integer> occurrences = new LinkedHashMap<>();
         for (TableRef ref : refs) {
+            ProgressManager.checkCanceled();
             for (ColumnMetadata column : columnsOf(ref, schema)) occurrences.merge(column.getName().toUpperCase(Locale.ROOT), 1, Integer::sum);
         }
         boolean several = refs.size() > 1;

@@ -20,7 +20,7 @@ import java.util.List;
  * with a placeholder where {@code a} is. The platform asks about each literal on its own, so every literal registers
  * the same places and finds the injection of the whole expression.
  */
-public final class JavaSqlInjector implements MultiHostInjector {
+public final class JavaSqlInjector implements MultiHostInjector, com.intellij.openapi.project.DumbAware {
     @Override
     public void getLanguagesToInject(@NotNull MultiHostRegistrar registrar, @NotNull PsiElement context) {
         if (!(context instanceof PsiLiteralExpression literal) || !(literal.getValue() instanceof String)) return;

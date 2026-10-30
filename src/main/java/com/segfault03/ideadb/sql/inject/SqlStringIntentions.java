@@ -64,7 +64,7 @@ public final class SqlStringIntentions {
     }
 
     /** The string is SQL to Lattice now; this says it is not. */
-    public static final class NotSql implements IntentionAction {
+    public static final class NotSql implements IntentionAction, com.intellij.openapi.project.DumbAware {
         @Override public @Nls @NotNull String getText() { return "Do not treat this string as SQL"; }
         @Override public @NotNull String getFamilyName() { return "Lattice SQL"; }
         @Override public boolean startInWriteAction() { return true; }
@@ -84,7 +84,7 @@ public final class SqlStringIntentions {
     }
 
     /** The string is not SQL to Lattice now; this says it is. */
-    public static final class AsSql implements IntentionAction {
+    public static final class AsSql implements IntentionAction, com.intellij.openapi.project.DumbAware {
         @Override public @Nls @NotNull String getText() { return "Treat this string as SQL"; }
         @Override public @NotNull String getFamilyName() { return "Lattice SQL"; }
         @Override public boolean startInWriteAction() { return true; }

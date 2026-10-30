@@ -50,6 +50,8 @@ public final class LatticeSqlCompletionContributor extends CompletionContributor
         int offset = parameters.getOffset();
         SqlContext context = SqlStatementAnalyzer.analyze(text, offset, profile);
         if (context.position() == SqlContext.Position.NONE) return;
+        var keywordCase = SqlEditorSettings.getInstance().keywordCase();
+        if (keywordCase != SqlEditorSettings.KeywordCase.AS_TYPED) context = context.withLowercaseKeywords(keywordCase == SqlEditorSettings.KeywordCase.LOWER);
 
         ConnectionConfig connection = SqlDialectResolver.connection(project, virtual);
         SqlSchema schema = null;

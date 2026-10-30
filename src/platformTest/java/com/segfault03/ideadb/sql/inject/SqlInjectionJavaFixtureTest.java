@@ -223,4 +223,14 @@ public class SqlInjectionJavaFixtureTest extends H2SqlFixtureTestCase {
         myFixture.configureByText("B.java", inClass("String p = \"Select an item <caret>from the list\";"));
         assertFalse("inside a string that is not SQL", myFixture.testAction(action).isEnabledAndVisible());
     }
+
+    public void testInjectionDoesNotNeedIndexesAndSurvivesIndexing() {
+        com.intellij.testFramework.DumbModeTestUtils.runInDumbModeSynchronously(getProject(), () -> {
+            assertTrue(com.intellij.openapi.project.DumbService.isDumb(getProject()));
+            // A call by name and a content match need no resolve; an assignment to a variable would, and must not throw.
+            assertEquals("select ? from dual", injectedAtCaret(inClass("void f(Jdbc j) { j.queryForList(\"select ? from <caret>dual\"); }")));
+            assertEquals("select * from orders where id = ?", injectedAtCaret(inClass("String q;\nvoid f() { q = \"select * from ord<caret>ers where id = ?\"; }")));
+            assertNull(injectedAtCaret(inClass("String s = \"x y <caret>z\";")));
+        });
+    }
 }

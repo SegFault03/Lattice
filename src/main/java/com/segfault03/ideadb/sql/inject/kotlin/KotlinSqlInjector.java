@@ -23,7 +23,7 @@ import java.util.Set;
  * Plain, raw and template strings work: text between template entries, and between the operands of a {@code +},
  * is unknown and gets a placeholder. {@code trimIndent()} and {@code trimMargin()} on a raw string are looked through.
  */
-public final class KotlinSqlInjector implements MultiHostInjector {
+public final class KotlinSqlInjector implements MultiHostInjector, com.intellij.openapi.project.DumbAware {
     private static final Set<String> STRING_PASSTHROUGH = Set.of("trimIndent", "trimMargin", "trim", "trimStart", "trimEnd", "intern");
 
     @Override

@@ -12,6 +12,16 @@ public record SqlContext(@NotNull Position position, @NotNull String prefix, int
                          @Nullable TableRef joinTarget, @NotNull List<TableRef> joinPrior, boolean afterOperand,
                          boolean lowercaseKeywords, @NotNull Set<String> usedNames) {
 
+    /** The same context with the prefix located elsewhere, for an analysis made on part of a larger text. */
+    public @NotNull SqlContext withPrefixStart(int start) {
+        return new SqlContext(position, prefix, start, openQuote, qualifier, tables, target, joinTarget, joinPrior, afterOperand, lowercaseKeywords, usedNames);
+    }
+
+    /** The same context with keywords forced to one case, for a setting that overrides following the typed text. */
+    public @NotNull SqlContext withLowercaseKeywords(boolean lowercase) {
+        return new SqlContext(position, prefix, prefixStart, openQuote, qualifier, tables, target, joinTarget, joinPrior, afterOperand, lowercase, usedNames);
+    }
+
     /** Where in a statement the caret is, which decides what is worth suggesting. */
     public enum Position {
         /** Inside a comment or string: suggest nothing. */

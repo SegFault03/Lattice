@@ -1,5 +1,6 @@
 package com.segfault03.ideadb.sql.inject.java;
 
+import com.intellij.openapi.project.DumbService;
 import com.intellij.psi.*;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.segfault03.ideadb.sql.inject.SqlInjectionRules.Surroundings;
@@ -33,7 +34,8 @@ final class JavaSqlSurroundings {
         } else if (parent instanceof PsiVariable variable) {
             annotated = isSqlAnnotated(variable);
         } else if (parent instanceof PsiAssignmentExpression assignment && assignment.getRExpression() == top
-                && assignment.getLExpression() instanceof PsiReferenceExpression target && target.resolve() instanceof PsiVariable variable) {
+                && assignment.getLExpression() instanceof PsiReferenceExpression target && !DumbService.isDumb(target.getProject())
+                && target.resolve() instanceof PsiVariable variable) {
             annotated = isSqlAnnotated(variable);
         } else if (parent instanceof PsiReturnStatement) {
             PsiMethod method = PsiTreeUtil.getParentOfType(parent, PsiMethod.class, true, PsiLambdaExpression.class, PsiClass.class);
@@ -48,7 +50,8 @@ final class JavaSqlSurroundings {
     }
 
     private static boolean parameterIsSql(PsiMethodCallExpression call, int index) {
-        if (index < 0) return false;
+        // Resolving a call needs the indexes, which are not there while the project is indexing: go by the written name only.
+        if (index < 0 || DumbService.isDumb(call.getProject())) return false;
         PsiMethod method = call.resolveMethod();
         if (method == null) return false;
         PsiParameter[] parameters = method.getParameterList().getParameters();

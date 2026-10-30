@@ -92,6 +92,8 @@
         <applicationConfigurable parentId="tools" id="com.segfault03.lattice.sql.editor"
                                  instance="com.segfault03.ideadb.sql.settings.SqlEditorConfigurable"
                                  displayName="Lattice SQL Editor"/>
+        <projectConfigurable parentId="com.segfault03.lattice.sql.editor" id="com.segfault03.lattice.sql.editor.project"
+                             instance="com.segfault03.ideadb.sql.settings.SqlProjectConfigurable" displayName="Project"/>
         <editorNotificationProvider implementation="com.segfault03.ideadb.sql.binding.SqlConnectionBanner"/>
         <statusBarWidgetFactory id="com.segfault03.lattice.sql.connection"
                                 implementation="com.segfault03.ideadb.sql.binding.SqlConnectionWidgetFactory"/>
@@ -120,6 +122,12 @@
                 class="com.segfault03.ideadb.sql.binding.ChooseProjectSqlConnectionAction"
                 text="Lattice: SQL Connection for Project..."
                 description="Choose the default connection whose dialect applies to SQL in this project">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+        <action id="com.segfault03.lattice.sql.restoreBuiltIn"
+                class="com.segfault03.ideadb.sql.binding.RestoreBuiltInSqlAction"
+                text="Lattice: Restore the IDE's Built-in SQL Handling"
+                description="Stop Lattice from handling .sql files and give them back to the IDE's own SQL file type">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
         <action id="com.segfault03.lattice.sql.addConnectionFromProject"

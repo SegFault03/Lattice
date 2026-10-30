@@ -17,6 +17,7 @@ import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.ui.EditorNotifications;
 import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.model.DatabaseType;
+import com.segfault03.ideadb.sql.binding.SqlBindingsState;
 import com.segfault03.ideadb.sql.binding.SqlEditorRefresh;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -55,14 +56,17 @@ public final class JdbcDiscovery implements Disposable {
     public static @NotNull JdbcDiscovery getInstance(@NotNull Project project) { return project.getService(JdbcDiscovery.class); }
 
     /** What was found by the last scan; empty until the first one finishes. */
-    public @NotNull List<DiscoveredConnection> snapshot() { return found; }
+    public @NotNull List<DiscoveredConnection> snapshot() { return enabled() ? found : List.of(); }
+
+    /** Whether this project reads its configuration files (a per-project setting). */
+    public boolean enabled() { return SqlBindingsState.getInstance(project).useProjectFiles(); }
 
     /** Whether a scan has finished since the project opened. */
     public boolean hasScanned() { return scanned; }
 
     /** Looks for configuration files again, off the UI thread. Concurrent requests share one scan. */
     public void refresh() {
-        if (project.isDisposed()) return;
+        if (project.isDisposed() || !enabled()) return;
         ReadAction.nonBlocking(() -> scan(project)).inSmartMode(project).expireWith(this).coalesceBy(this)
                 .finishOnUiThread(ModalityState.nonModal(), this::publish).submit(com.intellij.util.concurrency.AppExecutorUtil.getAppExecutorService());
     }
@@ -86,7 +90,7 @@ public final class JdbcDiscovery implements Disposable {
     /** The one saved connection the project's files point at, or null when none does or several different ones do. */
     public @Nullable ConnectionConfig matchedConnection(@NotNull List<ConnectionConfig> saved) {
         Set<ConnectionConfig> hits = new LinkedHashSet<>();
-        for (DiscoveredConnection discovered : found) {
+        for (DiscoveredConnection discovered : snapshot()) {
             for (ConnectionConfig connection : saved) if (discovered.url().matches(connection)) hits.add(connection);
         }
         return hits.size() == 1 ? hits.iterator().next() : null;
@@ -94,13 +98,13 @@ public final class JdbcDiscovery implements Disposable {
 
     /** The discovered databases that no saved connection points at: the ones worth offering to add. */
     public @NotNull List<DiscoveredConnection> unmatched(@NotNull List<ConnectionConfig> saved) {
-        return found.stream().filter(discovered -> saved.stream().noneMatch(connection -> discovered.url().matches(connection))).toList();
+        return snapshot().stream().filter(discovered -> saved.stream().noneMatch(connection -> discovered.url().matches(connection))).toList();
     }
 
     /** The database type every discovered URL agrees on: the dialect to use when no connection is chosen. */
     public @Nullable DatabaseType impliedType() {
         DatabaseType type = null;
-        for (DiscoveredConnection discovered : found) {
+        for (DiscoveredConnection discovered : snapshot()) {
             if (type != null && type != discovered.url().type()) return null;
             type = discovered.url().type();
         }
@@ -115,6 +119,7 @@ public final class JdbcDiscovery implements Disposable {
         for (String name : FilenameIndex.getAllFilenames(project)) {
             if (!ProjectConfigScanner.isConfigFileName(name)) continue;
             for (VirtualFile file : FilenameIndex.getVirtualFilesByName(name, scope)) {
+                com.intellij.openapi.progress.ProgressManager.checkCanceled();
                 if (!file.isValid() || file.isDirectory() || file.getLength() > MAX_FILE_BYTES || inGeneratedDirectory(project, file)) continue;
                 String text;
                 try { text = new String(file.contentsToByteArray(), file.getCharset() != null ? file.getCharset() : StandardCharsets.UTF_8); }

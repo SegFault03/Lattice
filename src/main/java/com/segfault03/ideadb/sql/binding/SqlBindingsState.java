@@ -32,6 +32,8 @@ public final class SqlBindingsState implements PersistentStateComponent<SqlBindi
         public Map<String, Binding> files = new LinkedHashMap<>();
         /** Databases found in project files that the user chose not to be offered again, by their description. */
         public java.util.List<String> dismissedDiscoveries = new java.util.ArrayList<>();
+        /** Whether the project's configuration files are read to find its database. */
+        public boolean useProjectFiles = true;
     }
 
     private State state = new State();
@@ -80,6 +82,10 @@ public final class SqlBindingsState implements PersistentStateComponent<SqlBindi
         if (state.dismissedDiscoveries == null) state.dismissedDiscoveries = new java.util.ArrayList<>();
         if (!state.dismissedDiscoveries.contains(key)) state.dismissedDiscoveries.add(key);
     }
+
+    public synchronized void clearDismissedDiscoveries() { if (state.dismissedDiscoveries != null) state.dismissedDiscoveries.clear(); }
+    public synchronized boolean useProjectFiles() { return state.useProjectFiles; }
+    public synchronized void useProjectFiles(boolean value) { state.useProjectFiles = value; }
 
     public synchronized @NotNull String defaultConnectionId() { return state.defaultConnectionId == null ? "" : state.defaultConnectionId; }
     public synchronized void setDefaultConnectionId(@NotNull String id) { state.defaultConnectionId = id; }
