@@ -17,7 +17,8 @@ import java.util.regex.Pattern;
 
 /** Downloads only known Maven Central coordinates; local JARs are never downloaded implicitly. */
 public final class DriverCatalog {
-    private static final String CENTRAL = "https://repo.maven.apache.org/maven2/";
+    // Isolated UI runs can point downloads at a Maven Central mirror; the default is unchanged.
+    private static final String CENTRAL = System.getProperty("lattice.maven.central", "https://repo.maven.apache.org/maven2/");
     private static final long MAX_JAR_BYTES = 32L * 1024 * 1024;
     private static final long ABANDONED_PART_MAX_AGE_MILLIS = 24L * 60 * 60 * 1000;
     private static com.segfault03.ideadb.provider.DriverDescriptor descriptor(DatabaseType type) {
