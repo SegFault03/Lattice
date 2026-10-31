@@ -1,16 +1,24 @@
 package com.segfault03.ideadb.sql.run;
 
-import com.intellij.openapi.ui.ComboBox;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.editor.colors.EditorColorsManager;
+import com.intellij.openapi.editor.colors.EditorFontType;
+import com.segfault03.ideadb.model.DatabaseType;
+import com.segfault03.ideadb.ui.DatabaseInputs;
 import com.intellij.ui.DocumentAdapter;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.components.JBLabel;
+import com.intellij.ui.components.JBScrollPane;
+import com.intellij.ui.components.JBTextArea;
 import com.intellij.ui.components.JBTextField;
 import com.intellij.util.ui.JBUI;
 import org.jetbrains.annotations.NotNull;
 
+import javax.swing.JComboBox;
 import javax.swing.JPanel;
 import javax.swing.event.DocumentEvent;
+import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.util.ArrayList;
@@ -18,7 +26,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** One row per SQL parameter: its key, a type, a value and a NULL switch. */
+/** One row per SQL parameter: its key, a type, a value and a NULL switch, above a live preview of the SQL with the values written in. */
 public final class SqlParameterPanel extends JPanel {
     private static final SqlParameterValue.Type[] TYPES = {
             SqlParameterValue.Type.TEXT, SqlParameterValue.Type.NUMBER, SqlParameterValue.Type.BOOLEAN,
@@ -26,10 +34,14 @@ public final class SqlParameterPanel extends JPanel {
 
     private final Map<String, Row> rows = new LinkedHashMap<>();
     private final List<Runnable> listeners = new ArrayList<>();
+    private final CharSequence sql;
+    private final SqlParameters.Result parameters;
+    private final DatabaseType type;
+    private final JBTextArea preview = new JBTextArea(4, 40);
 
     private final class Row {
-        final ComboBox<SqlParameterValue.Type> type = new ComboBox<>(TYPES);
-        final JBTextField value = new JBTextField(24);
+        final JComboBox<SqlParameterValue.Type> type = DatabaseInputs.comboBox(TYPES);
+        final JBTextField value = DatabaseInputs.textField(24);
         final JBCheckBox isNull = new JBCheckBox("NULL");
         final JBLabel error = new JBLabel();
 
@@ -39,7 +51,7 @@ public final class SqlParameterPanel extends JPanel {
             value.setText(initial.text());
             isNull.setSelected(nullValue);
             error.setForeground(JBColor.RED);
-            Runnable changed = () -> { refresh(); listeners.forEach(Runnable::run); };
+            Runnable changed = () -> { refresh(); updatePreview(); listeners.forEach(Runnable::run); };
             type.addActionListener(e -> changed.run());
             isNull.addActionListener(e -> changed.run());
             value.getDocument().addDocumentListener(new DocumentAdapter() {
@@ -62,8 +74,13 @@ public final class SqlParameterPanel extends JPanel {
     }
 
     /** @param initial values to start from; a key without one starts as empty text */
-    public SqlParameterPanel(@NotNull List<String> keys, @NotNull Map<String, SqlParameterValue> initial) {
+    public SqlParameterPanel(@NotNull CharSequence sql, @NotNull SqlParameters.Result parameters, @NotNull DatabaseType type,
+                             @NotNull Map<String, SqlParameterValue> initial) {
         super(new GridBagLayout());
+        this.sql = sql;
+        this.parameters = parameters;
+        this.type = type;
+        List<String> keys = parameters.keys();
         var constraints = new GridBagConstraints();
         constraints.gridy = 0;
         constraints.insets = JBUI.insets(2, 4);
@@ -84,6 +101,33 @@ public final class SqlParameterPanel extends JPanel {
             add(row.error, constraints);
             constraints.gridy++;
         }
+        preview.setEditable(false);
+        preview.setLineWrap(true);
+        preview.setWrapStyleWord(true);
+        // Tests and previews can run without an application, hence the monospaced fallback.
+        preview.setFont(ApplicationManager.getApplication() == null ? new Font(Font.MONOSPACED, Font.PLAIN, preview.getFont().getSize())
+                : EditorColorsManager.getInstance().getGlobalScheme().getFont(EditorFontType.PLAIN));
+        preview.getAccessibleContext().setAccessibleName("SQL preview");
+        constraints.gridx = 0; constraints.gridwidth = 4; constraints.weightx = 1; constraints.weighty = 1;
+        constraints.fill = GridBagConstraints.BOTH;
+        add(new JBScrollPane(preview), constraints);
+        updatePreview();
+    }
+
+    /** The SQL with the values written in, or the first validation error while a value does not fit its type. */
+    String previewText() { return preview.getText(); }
+
+    private void updatePreview() {
+        for (var entry : rows.entrySet()) {
+            String message = entry.getValue().current().validationError();
+            if (message != null) {
+                preview.setText(entry.getKey() + ": " + message);
+                preview.setCaretPosition(0);
+                return;
+            }
+        }
+        preview.setText(SqlLiteralRenderer.render(sql, parameters, values(), type));
+        preview.setCaretPosition(0);
     }
 
     /** The values as entered, by key, in the order of the keys. */

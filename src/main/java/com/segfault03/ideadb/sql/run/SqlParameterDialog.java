@@ -14,7 +14,7 @@ public final class SqlParameterDialog extends DialogWrapper {
 
     public SqlParameterDialog(@NotNull Project project, @NotNull SqlRunTarget target, @NotNull Map<String, SqlParameterValue> initial) {
         super(project);
-        panel = new SqlParameterPanel(target.parameters().keys(), initial);
+        panel = new SqlParameterPanel(target.sql(), target.parameters(), target.connection().getType(), initial);
         panel.addChangeListener(() -> setOKActionEnabled(panel.valuesValid()));
         setTitle("SQL Parameters");
         init();

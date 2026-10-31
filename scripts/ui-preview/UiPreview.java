@@ -460,6 +460,17 @@ public final class UiPreview {
             throw new AssertionError("Featured value workspace must open on a selected table cell");
         return editor;
     }
+    static void renderSqlParameters(String theme) throws Exception {
+        String sql = "select * from orders where customer_id = :customer and placed_at >= :since";
+        var panel = new com.segfault03.ideadb.sql.run.SqlParameterPanel(sql,
+                com.segfault03.ideadb.sql.run.SqlParameters.of(sql, com.segfault03.ideadb.sql.dialect.SqlDialects.MYSQL, false),
+                DatabaseType.MYSQL, Map.of(
+                        ":customer", new com.segfault03.ideadb.sql.run.SqlParameterValue(com.segfault03.ideadb.sql.run.SqlParameterValue.Type.NUMBER, "42"),
+                        ":since", new com.segfault03.ideadb.sql.run.SqlParameterValue(com.segfault03.ideadb.sql.run.SqlParameterValue.Type.DATE, "2026-01-01")));
+        panel.setBorder(javax.swing.BorderFactory.createEmptyBorder(12, 12, 12, 12));
+        render(panel, theme + "-sql-parameters-640", 640, 300);
+    }
+
     static void renderCellDetails(String theme) throws Exception {
         renderApprovedInspector(theme);
         renderCachedMenuThemeRefresh(theme);
@@ -1294,6 +1305,7 @@ public final class UiPreview {
                 renderExplorerSearch(theme);
                 renderTableTabIcons(theme);
                 render(valueWorkspacePreview(), theme + "-cell-details-1440", 1440, 900);
+                renderSqlParameters(theme);
                 render(ExplorerPreview.create(config(DatabaseType.MYSQL), true), theme + "-side-panel-empty-340", 340, 620);
                 connectionMenuPreview(ExplorerPreview.create(config(DatabaseType.MYSQL), true),
                         "Add a connection…", theme + "-side-panel-connection-menu-340", 340, 620);
