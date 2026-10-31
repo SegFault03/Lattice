@@ -2,7 +2,11 @@ package com.segfault03.ideadb.ui
 
 import com.intellij.driver.sdk.invokeAction
 import com.intellij.driver.sdk.ui.ui
+import com.intellij.driver.client.Driver
 import com.intellij.driver.client.Remote
+import com.intellij.driver.sdk.FileEditorManager
+import com.intellij.driver.sdk.openFile
+import com.intellij.driver.sdk.singleProject
 import com.intellij.driver.model.OnDispatcher
 import com.intellij.driver.sdk.ui.components.UiComponent.Companion.waitFound
 import com.intellij.driver.sdk.ui.components.UiComponent
@@ -72,6 +76,7 @@ class IntellijUiScreenshotTest {
         val alterTableOnly = System.getProperty("ui.alterTable.only").toBoolean()
         val createTableOnly = System.getProperty("ui.createTable.only").toBoolean()
         val cellDetailsOnly = System.getProperty("ui.cellDetails.only").toBoolean()
+        val sqlEditorOnly = System.getProperty("ui.sqlEditor.only").toBoolean()
         val postgresPort = Integer.getInteger("ui.postgres.port", 0)
         val postgres = postgresPort > 0
         val h2 = System.getProperty("ui.h2.enabled", "false").toBoolean()
@@ -133,7 +138,7 @@ class IntellijUiScreenshotTest {
         // IDEA's own ProxySelector supersedes JVM proxy flags. Configure the real
         // HTTP Proxy settings in this isolated profile, preserving cloud routing.
         val proxyAddress = System.getenv("HTTPS_PROXY") ?: System.getenv("HTTP_PROXY")
-        val downloadFixture = if (!sourceFilterOnly && !explorerSearchOnly && !alterTableOnly && !createTableOnly && !postgres && !System.getProperty("ui.skip.remote.downloads", "false").toBoolean())
+        val downloadFixture = if (!sourceFilterOnly && !explorerSearchOnly && !alterTableOnly && !createTableOnly && !sqlEditorOnly && !postgres && !System.getProperty("ui.skip.remote.downloads", "false").toBoolean())
             DriverDownloadUiFixture(proxyAddress) else null
         try {
         val configuredProxy = downloadFixture?.let { "http://127.0.0.1:${it.port}" } ?: proxyAddress
@@ -178,6 +183,16 @@ class IntellijUiScreenshotTest {
                     statement.execute("INSERT INTO \"customers\"(\"name\",\"email\") VALUES('Ada Lovelace','ada@example.com')")
                 }
             }
+        }
+        if (sqlEditorOnly) {
+            check(jdbcFixture != null && !postgres && !h2) { "The focused SQL editor scenario owns its HSQLDB fixture; enable ui.review.enabled" }
+            java.sql.DriverManager.getConnection(jdbcFixture.jdbcUrl,"SA","").use { conn ->
+                conn.createStatement().use { statement ->
+                    statement.execute("CREATE TABLE ORDERS (ID INT PRIMARY KEY, STATUS VARCHAR(20), CUSTOMER_ID INT)")
+                    statement.execute("INSERT INTO ORDERS VALUES (1, 'new', 42), (2, 'new', 7)")
+                }
+            }
+            projectDirectory.resolve(SQL_EDITOR_FILE).writeText(SQL_EDITOR_TEXT)
         }
         try {
         testContext.apply {
@@ -275,6 +290,18 @@ class IntellijUiScreenshotTest {
                     Owned HSQLDB fixture; CREATE SQL, column order, identity, primary key, precision, defaults and inserted data verified using JDBC.
                     Checked hidden invalid drafts, filtering, duplicate names, add/remove/reorder, discard handling, busy animation and database failure with retry.
                     Captures are actual desktop pixels; create-composer-dialog.png is a crop of the live modal.
+                """.trimIndent())
+                return@useDriverAndCloseIde
+            }
+            if (sqlEditorOnly) {
+                verifySqlEditorRunActions(frame, pluginRoot, requireNotNull(jdbcFixture), screenshotsDirectory)
+                screenshotsDirectory.resolve("runtime-evidence.txt").writeText("""
+                    Running IDE: ${actualTheme.getName()} ($themeId)
+                    Lattice SQL editor actions in the installed plugin, on a project .sql file bound to an owned HSQLDB server fixture.
+                    Send to Console filled :status and :customer through the values dialog and appended literal SQL to the console without running it.
+                    Explain Statement opened the Dry Run tab with HSQLDB's plan (values written in, as HSQLDB rejects bound EXPLAIN parameters).
+                    Run and Roll Back asked for confirmation, reported one row and Rolled back; JDBC confirmed ORDERS was unchanged.
+                    CREATE TABLE was refused before any connection. Captures are actual desktop pixels.
                 """.trimIndent())
                 return@useDriverAndCloseIde
             }
@@ -2169,6 +2196,125 @@ class IntellijUiScreenshotTest {
         println("Column Composer: real creation, order, keys, identity, precision, defaults, hidden drafts, validation, cancellation, busy animation and retry verified in the running IDE")
     }
 
+    /** Send to Console, Explain Statement and Run and Roll Back on a project .sql file bound to the HSQLDB fixture. */
+    private fun Driver.verifySqlEditorRunActions(frame: IdeaFrameUI, root: UiComponent, fixture: JdbcUiFixture, directory: Path) {
+        openConnectionMenu(root, frame, "HSQLDB…")
+        frame.x(DialogUiComponent::class.java) { byTitle("New connection") }.waitFound().also { dialog ->
+            inspectorInput(dialog, "Name:").text = "Orders fixture"
+            dialog.x { byVisibleText("Driver options ▸") }.waitFound().click()
+            dialog.x(JComboBoxUiComponent::class.java) {
+                and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"), byAccessibleName("Available driver"))
+            }.waitFound().selectItem("2.7.4 · Bundled")
+            dialog.x { byVisibleText("JDBC URL") }.waitFound().click()
+            inspectorInput(dialog, "JDBC URL:").text = fixture.jdbcUrl
+            inspectorInput(dialog, "User:").text = "SA"
+            waitUntil("SQL editor fixture connection ready") { dialog.x { byVisibleText("Add connection") }.waitFound().component.isEnabled() }
+            dialog.pressButton("Add connection")
+        }
+        frame.waitForNoOpenedDialogs()
+        ideFrame { invokeAction("HideAllWindows") }
+
+        // The only saved connection applies to the project's SQL files, so the file is HSQLDB SQL.
+        openFile(SQL_EDITOR_FILE)
+        val editor = frame.x { byJavaClass("com.intellij.openapi.editor.impl.EditorComponentImpl") }.waitFound()
+        // A bound file shows no banner; the status bar names its dialect and connection.
+        waitUntil("SQL file bound to the fixture connection") { frame.xx { byVisibleText("SQL: HSQLDB · Orders fixture") }.list().isNotEmpty() }
+        fun caretAt(text: String): Int {
+            editor.click()
+            val offset = SQL_EDITOR_TEXT.indexOf(text).also { check(it >= 0) { "Missing $text in the fixture file" } } + 1
+            withContext(OnDispatcher.EDT) {
+                requireNotNull(service(FileEditorManager::class, singleProject()).getSelectedTextEditor()).getCaretModel().moveToOffset(offset)
+            }
+            return offset
+        }
+        // Asynchronous, against the editor: the actions open modal dialogs.
+        fun run(actionId: String) = invokeAction("com.segfault03.lattice.sql.run.$actionId", false, editor.component)
+        fun dialog(title: String) = frame.x(DialogUiComponent::class.java) { byTitle(title) }.waitFound()
+        fun textOf(component: UiComponent): String = cast(component.component, JTextComponent::class).getText()
+        fun orderStatus(): String = java.sql.DriverManager.getConnection(fixture.jdbcUrl, "SA", "").use { conn ->
+            conn.createStatement().use { it.executeQuery("SELECT STATUS FROM ORDERS WHERE ID = 1").use { rows -> rows.next(); rows.getString(1) } }
+        }
+
+        // Editor popup menu with the Lattice SQL group open.
+        val menuOffset = caretAt("SELECT ID")
+        // Right-click where the caret is, so the menu acts on that statement.
+        val caretPoint = withContext(OnDispatcher.EDT) {
+            requireNotNull(service(FileEditorManager::class, singleProject()).getSelectedTextEditor()).offsetToXY(menuOffset)
+        }
+        editor.rightClick(Point(caretPoint.x + 2, caretPoint.y + 6))
+        frame.x { byVisibleText("Lattice SQL") }.waitFound().moveMouse()
+        waitUntil("Lattice SQL submenu open") { frame.xx { byVisibleText("Run and Roll Back") }.list().isNotEmpty() }
+        captureScreen(directory.resolve("sql-editor-context-menu.png"))
+        pressEscape(); pressEscape()
+
+        // Send to Console: the values dialog, then literal SQL in the console, not run.
+        caretAt("SELECT ID")
+        run("sendToConsole")
+        dialog("SQL Parameters").also { values ->
+            val fields = values.xx(JTextFieldUI::class.java) { byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField") }.list()
+            val types = values.xx(JComboBoxUiComponent::class.java) { byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox") }.list()
+            check(fields.size == 2 && types.size == 2) { "Expected rows for :status and :customer" }
+            fields[0].text = "new"
+            types[1].selectItem("NUMBER")
+            fields[1].text = "42"
+            val preview = values.x { byAccessibleName("SQL preview") }.waitFound()
+            waitUntil("parameter preview shows literals") { textOf(preview).let { it.contains("STATUS = 'new'") && it.contains("CUSTOMER_ID = 42") } }
+            captureScreen(directory.resolve("sql-editor-parameters.png"))
+            values.pressButton("OK")
+        }
+        val console = frame.x { byJavaClass("com.segfault03.ideadb.ui.SqlQueryConsolePanel") }.waitFound()
+        val consoleText = console.x { byJavaClass("com.intellij.ui.components.JBTextArea") }.waitFound()
+        waitUntil("statement sent to the console") { textOf(consoleText).contains("CUSTOMER_ID = 42") }
+        check(!textOf(consoleText).contains(":status")) { "The console must receive literal SQL" }
+        // A URL connection names no database; the console must start on the connection's own schema.
+        waitUntil("console on the connection's default schema") {
+            console.xx(JComboBoxUiComponent::class.java) { byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox") }.list()
+                .firstOrNull { "INFORMATION_SCHEMA" in it.listValues() }?.getSelectedItem() == "PUBLIC"
+        }
+        captureScreen(directory.resolve("sql-editor-send-to-console.png"))
+
+        // Explain: values are remembered, HSQLDB's plan appears in the Dry Run tab.
+        openFile(SQL_EDITOR_FILE)
+        caretAt("SELECT ID")
+        run("explain")
+        dialog("SQL Parameters").also { values ->
+            val fields = values.xx(JTextFieldUI::class.java) { byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField") }.list()
+            check(fields.map { it.text } == listOf("new", "42")) { "Remembered values must fill the dialog: ${fields.map { it.text }}" }
+            values.pressButton("OK")
+        }
+        val dryRun = frame.x { byJavaClass("com.segfault03.ideadb.sql.run.DryRunPanel") }.waitFound()
+        waitUntil("plan in the Dry Run tab", 60_000) { dryRun.xx { byVisibleText("Copy") }.list().isNotEmpty() &&
+            dryRun.xx { byJavaClass("com.intellij.ui.components.JBTextArea") }.list().any { textOf(it).contains("ORDERS", ignoreCase = true) } }
+        captureScreen(directory.resolve("sql-editor-explain.png"))
+
+        // Run and Roll Back: confirmation, one row, rolled back, data unchanged.
+        openFile(SQL_EDITOR_FILE)
+        caretAt("UPDATE ORDERS")
+        run("rollback")
+        dialog("Run and Roll Back").also { confirm ->
+            confirm.x { byVisibleText("Don't ask again for this project") }.waitFound()
+            captureScreen(directory.resolve("sql-editor-rollback-confirm.png"))
+            confirm.pressButton("Run and Roll Back")
+        }
+        waitUntil("Rolled back badge", 60_000) { dryRun.xx { byVisibleText("Rolled back") }.list().isNotEmpty() }
+        check(orderStatus() == "new") { "Run and Roll Back must leave ORDERS unchanged" }
+        captureScreen(directory.resolve("sql-editor-rolled-back.png"))
+
+        // Refused before connecting: DDL.
+        openFile(SQL_EDITOR_FILE)
+        caretAt("CREATE TABLE")
+        run("rollback")
+        dialog("Lattice SQL").also { refusal ->
+            captureScreen(directory.resolve("sql-editor-rollback-refused.png"))
+            refusal.pressButton("OK")
+        }
+        frame.waitForNoOpenedDialogs()
+        val created = java.sql.DriverManager.getConnection(fixture.jdbcUrl, "SA", "").use { conn ->
+            conn.metaData.getTables(null, "PUBLIC", "AUDIT_LOG", null).use { it.next() }
+        }
+        check(!created) { "A refused statement must never reach the database" }
+    }
+
     private fun verifyMutationRefresh(frame: IdeaFrameUI, tree: JTreeUiComponent, schema: Array<String>, directory: Path) {
         val tablePath = schema + arrayOf("Tables (2)", "customers")
         val explorerStatus = frame.driver.cast(frame.x { byAccessibleName("Database explorer status") }.waitFound().component, LiveLabel::class)
@@ -2612,6 +2758,17 @@ class IntellijUiScreenshotTest {
         assertTrue(condition(), "Timed out waiting for $description")
     }
 }
+
+private const val SQL_EDITOR_FILE = "orders.sql"
+private val SQL_EDITOR_TEXT = """
+    -- Orders awaiting shipment
+    SELECT ID, STATUS FROM ORDERS
+    WHERE STATUS = :status AND CUSTOMER_ID = :customer;
+
+    UPDATE ORDERS SET STATUS = 'shipped' WHERE ID = 1;
+
+    CREATE TABLE AUDIT_LOG (ID INT);
+""".trimIndent() + "\n"
 
 @Remote("javax.swing.JFrame")
 interface LiveFrame {

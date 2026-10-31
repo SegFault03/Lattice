@@ -414,7 +414,7 @@ def run_ui_suite(suite, context):
     environment.update({
         "LATTICE_UI_REVIEW_OUTPUT": str(output), "LATTICE_UI_SCALE": "1.0",
         "LATTICE_UI_ALTER_TABLE_ONLY": "false", "LATTICE_UI_CREATE_TABLE_ONLY": "false",
-        "LATTICE_UI_CELL_DETAILS_ONLY": "false", "LATTICE_UI_EXPLORER_SEARCH_ONLY": "false",
+        "LATTICE_UI_CELL_DETAILS_ONLY": "false", "LATTICE_UI_SQL_EDITOR_ONLY": "false", "LATTICE_UI_EXPLORER_SEARCH_ONLY": "false",
         "LATTICE_UI_SOURCE_FILTER_ONLY": "false", "LATTICE_UI_STYLE_ONLY": "false",
         "LATTICE_UI_INPUTS_ONLY": "false", "LATTICE_UI_DIALOG_AUDIT": "false",
         "LATTICE_UI_H2": "false", "LATTICE_UI_POSTGRES_PORT": "0",

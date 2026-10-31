@@ -332,7 +332,7 @@ and requires both the backend's failure status and its error dialog.
 
 For pull requests targeting `main`, Linux CI runs the dark functional review,
 search review, PostgreSQL review, mixed alter/recovery,
-a 125% create/alter flow, and one cell-inspector review at 125%
+a 125% create/alter flow, one cell-inspector review at 125%, and a light-theme SQL editor review
 as separate checks
 after their shared prerequisites pass. Each suite can
 fail the job independently, and a failure does not suppress the other suites'
@@ -347,6 +347,26 @@ Reproduce the inspector job with:
 
 ```bash
 LATTICE_UI_CELL_DETAILS_ONLY=true LATTICE_UI_SCALE=1.25 LATTICE_UI_REVIEW_OUTPUT=build/ui-review/cell-inspector-scaled ./scripts/linux/review-intellij-ui.sh ExperimentalDark
+```
+
+The SQL editor job sets `LATTICE_UI_SQL_EDITOR_ONLY=true`. It writes `orders.sql`
+into the test project, adds the owned HSQLDB fixture as the only connection, and
+drives the installed plugin's actions from the editor:
+
+| Screenshot | Checked |
+|---|---|
+| `sql-editor-context-menu.png` | The editor popup's **Lattice SQL** group with its three actions |
+| `sql-editor-parameters.png` | The values dialog for `:status` and `:customer`, with the preview showing literals |
+| `sql-editor-send-to-console.png` | The console holds the literal SQL; nothing ran |
+| `sql-editor-explain.png` | Remembered values fill the dialog; the Dry Run tab shows HSQLDB's plan |
+| `sql-editor-rollback-confirm.png` | The confirmation lists the three caveats |
+| `sql-editor-rolled-back.png` | **Rolled back** with one row; JDBC confirms the table is unchanged |
+| `sql-editor-rollback-refused.png` | `CREATE TABLE` is refused before connecting |
+
+Reproduce it with:
+
+```bash
+LATTICE_UI_SQL_EDITOR_ONLY=true LATTICE_UI_REVIEW_OUTPUT=build/ui-review/sql-editor ./scripts/linux/review-intellij-ui.sh ExperimentalLight ExperimentalDark
 ```
 
 ## PostgreSQL end-to-end review

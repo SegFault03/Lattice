@@ -577,7 +577,7 @@ Build/load the plugin in a real test IDEA and capture its tool window. This uses
 | `-Review` | Exercise complete review flows as well as capture. |
 | `-InputsOnly` | Focus on connection-dialog input alignment; also accepts LATTICE_UI_INPUTS_ONLY=true. |
 | `-StyleOnly` | Focus on styling, toolbar/action glyphs and editing surfaces; also accepts LATTICE_UI_STYLE_ONLY=true. |
-| CI scenario environment | `LATTICE_UI_EXPLORER_SEARCH_ONLY`, `LATTICE_UI_ALTER_TABLE_ONLY`, `LATTICE_UI_CREATE_TABLE_ONLY`, `LATTICE_UI_CELL_DETAILS_ONLY` and `LATTICE_UI_SCALE` select the matching focused test and UI scale. |
+| CI scenario environment | `LATTICE_UI_EXPLORER_SEARCH_ONLY`, `LATTICE_UI_ALTER_TABLE_ONLY`, `LATTICE_UI_CREATE_TABLE_ONLY`, `LATTICE_UI_CELL_DETAILS_ONLY`, `LATTICE_UI_SQL_EDITOR_ONLY` and `LATTICE_UI_SCALE` select the matching focused test and UI scale. |
 | `-GradleArgs @(...)` | Additional individual Gradle arguments, e.g. @("--stacktrace"). |
 | `-BinariesDir PATH` | Reusable asset collection. |
 | `-DownloadDir PATH` | Owned dependency workspace parent. |

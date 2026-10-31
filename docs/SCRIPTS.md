@@ -143,6 +143,8 @@ For a faster review of connection-dialog spacing, explorer overflow, table edito
 
 For a focused native cell inspector capture, set `LATTICE_UI_CELL_DETAILS_ONLY=true` with the Linux review wrapper (direct Gradle: `-Plattice.ui.review=true -Plattice.ui.cellDetailsOnly=true`). It opens a populated 12-row fixture in the real IDE, captures cell and header details, verifies selection following, confirms header clicks leave the inspector closed when Inspect is off, double-clicks the value area into edit mode, checks close/reopen, and requires an opposite theme. It also closes a tab with unconfirmed text, refreshes explorer metadata, and verifies that reopening restores that text without staging it. Screenshots and `runtime-evidence.txt` are written to the selected review output directory; the focused flow exits before the longer table review. Main PR CI enables it once at 125% scale with both-theme behavior checks; use `LATTICE_UI_SCALE=1.25` to reproduce the scaled case.
 
+For the SQL editor actions, set `LATTICE_UI_SQL_EDITOR_ONLY=true` (direct Gradle: `-Plattice.ui.review=true -Plattice.ui.sqlEditorOnly=true`). It binds a project `orders.sql` to the owned HSQLDB fixture and runs Send to Console with parameter values, Explain Statement and Run and Roll Back, checking the console text, the Dry Run tab and the unchanged table over JDBC. Main PR CI runs it once in the light theme; see [UI review](UI_PREVIEW.md).
+
 Direct Gradle/capture reviews accept `-Plattice.ui.scale=1.25` or `1.5` for
 larger IDE UI sizes. The default remains 100%; this changes IDE UI scaling
 without changing Driver/desktop device coordinates. The Linux review wrapper accepts
