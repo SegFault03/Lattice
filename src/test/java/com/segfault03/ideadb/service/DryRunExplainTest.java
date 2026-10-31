@@ -24,7 +24,7 @@ class DryRunExplainTest {
 
     private static String h2Url() { return "jdbc:h2:mem:dry_" + UUID.randomUUID().toString().replace('-', '_') + ";DB_CLOSE_DELAY=-1"; }
 
-    private static String hsqldbUrl() { return "jdbc:hsqldb:mem:dry_" + UUID.randomUUID().toString().replace('-', '_'); }
+    private static String hsqldbUrl() { return "jdbc:hsqldb:mem:dry_" + UUID.randomUUID().toString().replace('-', '_') + ";shutdown=true"; }
 
     /** Straight to the embedded driver: DriverManager would load every driver on the classpath, including MySQL's cleanup thread. */
     private static Connection connect(String url) throws SQLException {
@@ -66,11 +66,14 @@ class DryRunExplainTest {
 
     @Test void hsqldbExplainWithBoundParameter() throws Exception {
         String url = hsqldbUrl();
-        seed(url, TABLE);
-        var result = new DryRunService(c -> connect(url))
-                .explain(config(DatabaseType.HSQLDB), SELECT, "select * from t where id = 1", new QueryExecution());
-        var plan = assertInstanceOf(DryRunResult.Plan.class, result);
-        assertFalse(plan.text().isBlank());
+        try (Connection keeper = connect(url)) { // the last close shuts the in-memory database down, ending its timer thread
+            try (var statement = keeper.createStatement()) { for (String sql : TABLE) statement.execute(sql); }
+            var result = new DryRunService(c -> connect(url))
+                    .explain(config(DatabaseType.HSQLDB), SELECT, "select * from t where id = 1", new QueryExecution());
+            var plan = assertInstanceOf(DryRunResult.Plan.class, result);
+            assertTrue(plan.literalFallback(), "HSQLDB cannot bind parameters in EXPLAIN PLAN FOR");
+            assertFalse(plan.text().isBlank());
+        }
     }
 
     @Test void explainDoesNotExecuteDml() throws Exception {
@@ -144,9 +147,15 @@ class DryRunExplainTest {
                 try { return method.invoke(real, args); } catch (java.lang.reflect.InvocationTargetException e) { throw e.getCause(); }
             });
         };
-        var result = new DryRunService(opener).explain(config(DatabaseType.H2), SELECT, "select * from t where id = 1", new QueryExecution());
+        var update = new SqlLiteralRenderer.JdbcStatement("update t set a = 99 where id = ?", List.of(1));
+        var result = new DryRunService(opener).explain(config(DatabaseType.H2), update, "update t set a = 99 where id = 1", new QueryExecution());
         var plan = assertInstanceOf(DryRunResult.Plan.class, result);
         assertTrue(plan.literalFallback());
         assertFalse(plan.text().isBlank());
+        try (Connection other = connect(url); var statement = other.createStatement();
+             var rows = statement.executeQuery("select a from t where id = 1")) {
+            assertTrue(rows.next());
+            assertEquals(5, rows.getInt(1), "the literal fallback must only explain, never run the UPDATE");
+        }
     }
 }

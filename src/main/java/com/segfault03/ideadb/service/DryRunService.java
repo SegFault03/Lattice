@@ -4,7 +4,10 @@ import com.intellij.openapi.Disposable;
 import com.intellij.openapi.util.Disposer;
 import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.model.DatabaseType;
+import com.segfault03.ideadb.provider.DatabaseProvider;
+import com.segfault03.ideadb.provider.DatabaseProviders;
 import com.segfault03.ideadb.sql.run.SqlLiteralRenderer;
+import com.segfault03.ideadb.sql.run.SqlStatementKind;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.TestOnly;
 
@@ -12,7 +15,12 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLWarning;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -60,15 +68,16 @@ public final class DryRunService {
         Connection connection = null;
         try {
             connection = opener.open(config);
+            var provider = DatabaseProviders.get(config.getType());
             String prefix = explainPrefix(config.getType(), connection);
             try {
-                String text = explainBound(connection, prefix + statement.sql(), statement, execution);
+                String text = explainBound(connection, provider, prefix + statement.sql(), statement, execution);
                 return new DryRunResult.Plan(text, false, elapsedMs(started));
             } catch (SQLException first) {
                 if (execution.isCancellationRequested()) return new DryRunResult.Cancelled(false);
                 if (statement.bindings().isEmpty()) return failed(first);
                 try {
-                    String text = explainLiteral(connection, prefix + literalSql, execution);
+                    String text = explainLiteral(connection, provider, prefix + literalSql, execution);
                     return new DryRunResult.Plan(text, true, elapsedMs(started));
                 } catch (Exception retry) {
                     return execution.isCancellationRequested() ? new DryRunResult.Cancelled(false) : failed(first);
@@ -81,6 +90,109 @@ public final class DryRunService {
         }
     }
 
+    private static final Set<String> ROLLBACK_ENGINES = Set.of("innodb", "ndbcluster", "ndb");
+
+    /**
+     * Runs DML in a transaction on its own connection and always rolls it back. Deliberately not
+     * {@link DataService#inTransaction}, which commits on success: nothing here ever calls commit().
+     * Runs off the EDT and never throws; every failure becomes a result.
+     */
+    public DryRunResult runAndRollBack(ConnectionConfig config, SqlStatementKind kind, SqlLiteralRenderer.JdbcStatement statement,
+                                       List<String> targetTables, QueryExecution execution) {
+        if (kind != SqlStatementKind.DML) return new DryRunResult.Failed(SqlStatementKind.rollbackRefusal(kind));
+        if (execution.isCancellationRequested()) return new DryRunResult.Cancelled(false);
+        long started = System.nanoTime();
+        Connection connection = null;
+        try {
+            try {
+                connection = opener.open(config);
+                if (config.getType() == DatabaseType.MYSQL) {
+                    String refusal = mysqlRollbackRefusal(connection, targetTables);
+                    if (refusal != null) return new DryRunResult.Failed(refusal);
+                    try (Statement set = connection.createStatement()) { set.execute("SET SESSION innodb_lock_wait_timeout = 60"); }
+                }
+                connection.setAutoCommit(false);
+            } catch (Exception beforeTransaction) {
+                return execution.isCancellationRequested() ? new DryRunResult.Cancelled(false) : failed(beforeTransaction);
+            }
+            return runInTransaction(config, connection, statement, execution, started);
+        } finally {
+            if (connection != null) try { connection.close(); } catch (Exception ignored) { }
+        }
+    }
+
+    /** Auto-commit is already off. The rollback in the finally is the only way out of the transaction. */
+    private DryRunResult runInTransaction(ConnectionConfig config, Connection connection, SqlLiteralRenderer.JdbcStatement statement,
+                                          QueryExecution execution, long started) {
+        int rows = 0;
+        List<String> warnings = new ArrayList<>();
+        Exception failure = null;
+        boolean rolledBack = false;
+        Exception rollbackFailure = null;
+        try {
+            try (PreparedStatement prepared = connection.prepareStatement(statement.sql())) {
+                for (int i = 0; i < statement.bindings().size(); i++) prepared.setObject(i + 1, statement.bindings().get(i));
+                prepared.setQueryTimeout(DataService.QueryOptions.defaults().timeoutSeconds());
+                var provider = DatabaseProviders.get(config.getType());
+                try {
+                    execution.attach(prepared, () -> provider.cancelStatement(prepared));
+                    execution.markSqlStarted();
+                    execution.checkCancelled();
+                    rows = prepared.executeUpdate();
+                    collectWarnings(prepared, warnings);
+                } finally {
+                    execution.detach();
+                }
+            }
+        } catch (Exception e) {
+            failure = e;
+        } finally {
+            try {
+                connection.rollback();
+                rolledBack = true;
+            } catch (Exception e) {
+                rollbackFailure = e;
+            }
+        }
+        if (!rolledBack) {
+            return new DryRunResult.OutcomeUnknown(config.getName(), "The changes may not have been rolled back: " + describe(rollbackFailure)
+                    + (failure == null ? "" : " (the statement itself failed with: " + describe(failure) + ")"));
+        }
+        if (failure != null) {
+            return execution.isCancellationRequested() ? new DryRunResult.Cancelled(true) : failed(failure);
+        }
+        return new DryRunResult.RolledBack(rows, warnings, elapsedMs(started));
+    }
+
+    private static void collectWarnings(Statement statement, List<String> into) {
+        try {
+            for (SQLWarning w = statement.getWarnings(); w != null; w = w.getNextWarning()) into.add(w.getMessage());
+        } catch (SQLException ignored) { }
+    }
+
+    /** Fail closed: null only when every table is known to be on an engine that can roll back. */
+    private static String mysqlRollbackRefusal(Connection connection, List<String> targetTables) throws SQLException {
+        if (targetTables.isEmpty()) return "Cannot confirm which tables this statement changes.";
+        for (String table : targetTables) {
+            int dot = table.lastIndexOf('.');
+            String schema = dot > 0 ? table.substring(0, dot) : connection.getCatalog();
+            String name = dot > 0 ? table.substring(dot + 1) : table;
+            String engine = null;
+            try (PreparedStatement lookup = connection.prepareStatement("select ENGINE from information_schema.TABLES where TABLE_SCHEMA = ? and TABLE_NAME = ?")) {
+                lookup.setString(1, schema);
+                lookup.setString(2, name);
+                try (ResultSet found = lookup.executeQuery()) {
+                    if (found.next()) engine = found.getString(1);
+                }
+            }
+            if (engine == null || schema == null) return "Cannot confirm that " + table + " can roll back.";
+            if (!ROLLBACK_ENGINES.contains(engine.toLowerCase(Locale.ROOT))) return table + " uses the " + engine + " engine, which cannot roll back.";
+        }
+        return null;
+    }
+
+    private static String describe(Exception e) { return e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName(); }
+
     private static String explainPrefix(DatabaseType type, Connection connection) {
         if (type != DatabaseType.MYSQL) return explainPrefix(type, 0, 0, 0);
         try {
@@ -90,25 +202,25 @@ public final class DryRunService {
         return "EXPLAIN ";
     }
 
-    private static String explainBound(Connection connection, String sql, SqlLiteralRenderer.JdbcStatement statement, QueryExecution execution) throws SQLException {
+    private static String explainBound(Connection connection, DatabaseProvider provider, String sql, SqlLiteralRenderer.JdbcStatement statement, QueryExecution execution) throws SQLException {
         try (PreparedStatement prepared = connection.prepareStatement(sql)) {
             for (int i = 0; i < statement.bindings().size(); i++) prepared.setObject(i + 1, statement.bindings().get(i));
-            return run(prepared, execution, prepared::executeQuery);
+            return run(prepared, provider, execution, prepared::executeQuery);
         }
     }
 
-    private static String explainLiteral(Connection connection, String sql, QueryExecution execution) throws SQLException {
+    private static String explainLiteral(Connection connection, DatabaseProvider provider, String sql, QueryExecution execution) throws SQLException {
         try (Statement plain = connection.createStatement()) {
-            return run(plain, execution, () -> plain.executeQuery(sql));
+            return run(plain, provider, execution, () -> plain.executeQuery(sql));
         }
     }
 
     private interface Query { ResultSet execute() throws SQLException; }
 
-    private static String run(Statement statement, QueryExecution execution, Query query) throws SQLException {
+    private static String run(Statement statement, DatabaseProvider provider, QueryExecution execution, Query query) throws SQLException {
         statement.setQueryTimeout(DataService.QueryOptions.defaults().timeoutSeconds());
-        execution.attach(statement);
         try {
+            execution.attach(statement, () -> provider.cancelStatement(statement));
             execution.markSqlStarted();
             execution.markQueryOnly();
             execution.checkCancelled();
