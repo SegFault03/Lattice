@@ -16,6 +16,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.BiFunction;
 
@@ -78,9 +79,16 @@ final class SqlRunActionSupport {
     /** The value of each parameter; empty without asking when there are none, null when the user cancels. */
     static @Nullable Map<String, SqlParameterValue> askValues(@NotNull Project project, @NotNull SqlRunTarget target) {
         if (target.parameters().keys().isEmpty()) return Map.of();
+        SqlRunState remembered = SqlRunState.getInstance(project);
+        String fileUrl = target.file().getUrl();
+        Map<String, SqlParameterValue> initial = new LinkedHashMap<>(remembered.values(fileUrl));
+        initial.keySet().retainAll(target.parameters().keys());
         var provider = valuesProvider;
-        if (provider != null) return provider.apply(target, Map.of());
-        return new SqlParameterDialog(project, target, Map.of()).showAndGetValues();
+        Map<String, SqlParameterValue> values = provider != null
+                ? provider.apply(target, initial)
+                : new SqlParameterDialog(project, target, initial).showAndGetValues();
+        if (values != null) remembered.remember(fileUrl, values);
+        return values;
     }
 
     static void openConsole(@NotNull Project project, @NotNull ConnectionConfig config, @NotNull String sql) {

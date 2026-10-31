@@ -123,4 +123,20 @@ public class SendToConsoleFixtureTest extends H2SqlFixtureTestCase {
         myFixture.launchAction(intention);
         assertEquals(List.of("select 1"), opened);
     }
+
+    public void testDialogPrefilledFromRememberedValues() {
+        Map<String, SqlParameterValue> first = Map.of("1", new SqlParameterValue(SqlParameterValue.Type.NUMBER, "42"),
+                "2", new SqlParameterValue(SqlParameterValue.Type.TEXT, "abc"));
+        List<Map<String, SqlParameterValue>> initials = new ArrayList<>();
+        SqlRunActionSupport.setValuesProviderForTests((target, initial) -> {
+            initials.add(initial);
+            return first;
+        }, getTestRootDisposable());
+        myFixture.configureByText("q.sql", "select * from t where a = <caret>? and b = ?");
+        send();
+        send();
+        assertEquals(2, initials.size());
+        assertTrue(initials.get(0).isEmpty());
+        assertEquals(first, initials.get(1));
+    }
 }
