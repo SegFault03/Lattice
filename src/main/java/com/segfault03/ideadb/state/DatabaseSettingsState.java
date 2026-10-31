@@ -86,6 +86,7 @@ public class DatabaseSettingsState implements PersistentStateComponent<DatabaseS
             if (restored.connections.stream().noneMatch(c -> c.getId().equals(old.getId()))) {
                 manager.removeConfiguration(old.getId());
                 MetadataCacheState.getInstance().remove(old.getId());
+                dropDrafts(old.getId());
             }
         }
         restored.connections.forEach(manager::registerConfiguration);
@@ -103,12 +104,23 @@ public class DatabaseSettingsState implements PersistentStateComponent<DatabaseS
         com.segfault03.ideadb.service.DatabaseConnectionManager.getInstance().removeConfiguration(id);
         state.connections.removeIf(c -> c.getId().equals(id));
         MetadataCacheState.getInstance().remove(id);
+        dropDrafts(id);
         notifyChanged();
+    }
+    /** Pending table edits are per project; only open projects can be reached here. */
+    private static void dropDrafts(String connectionId) {
+        if (com.intellij.openapi.application.ApplicationManager.getApplication() == null) return;
+        var projects = com.intellij.openapi.project.ProjectManager.getInstanceIfCreated();
+        if (projects == null) return;
+        for (var project : projects.getOpenProjects()) TableDraftState.getInstance(project).removeConnection(connectionId);
     }
     public synchronized void updateConnection(ConnectionConfig config) {
         credentials.set(config.getId(), new Secret(config.getPassword(), config.getCustomUrl()));
-        state.connections.removeIf(c -> c.getId().equals(config.getId()));
-        state.connections.add(config.copy());
+        // Replace in place so editing a connection keeps its position in the list.
+        ConnectionConfig stored = config.copy();
+        int index = -1;
+        for (int i = 0; i < state.connections.size(); i++) if (state.connections.get(i).getId().equals(config.getId())) { index = i; break; }
+        if (index < 0) state.connections.add(stored); else state.connections.set(index, stored);
         com.segfault03.ideadb.service.DatabaseConnectionManager.getInstance().registerConfiguration(config);
         notifyChanged();
     }

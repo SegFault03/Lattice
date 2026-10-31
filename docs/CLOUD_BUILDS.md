@@ -4,7 +4,7 @@ This guide covers building and testing Lattice in Claude cloud sessions (ephemer
 
 ## Environment facts
 
-- JDK 21 and Python 3.13 are preinstalled. Xvfb is installed; `xdpyinfo` and a window manager are not.
+- JDK 21 and Python 3.13 are preinstalled. Xvfb, `xdpyinfo` (x11-utils) and openbox are installed; `scripts/linux/cloud-setup.sh` installs them if they are missing.
 - Outbound HTTPS goes through `$HTTPS_PROXY`. The proxy's own status is at `curl -sS "$HTTPS_PROXY/__agentproxy/status"`. Never disable TLS verification or unset `HTTPS_PROXY`.
 - Maven Central (`repo.maven.apache.org`, `repo1.maven.org`) is shared across all sessions and rate-limits aggressively. Expect HTTP 429 during dependency resolution.
 - `plugins.gradle.org` resolves normally.
@@ -98,13 +98,15 @@ Fix: fetch the fixture jars into `build/ui-test-maven/repository` with the same 
 
 The plugin's `DriverCatalog` downloads from `https://repo.maven.apache.org/maven2/`, which is rate-limited.
 
-Fix: set `LATTICE_UI_MAVEN_CENTRAL=https://maven-central.storage-download.googleapis.com/maven2/` when running `capture-intellij-ui.sh`. The launcher passes it to the IDE as `-Dlattice.maven.central`. The product default is unchanged.
+Fix: set `LATTICE_UI_MAVEN_CENTRAL=https://maven-central.storage-download.googleapis.com/maven2/` when running `capture-intellij-ui.sh`. The launcher passes it to the IDE as `-Dlattice.maven.central`. The product default is unchanged. The download-progress step in the UI test gates responses from whichever host that property names, so the mirror works with it. Without the override, a 429 from `repo.maven.apache.org` shows as `Download failed` in the dialog and the step times out.
 
-## Failure: `Find JComboBoxUiComponent ... 'Available driver'`
+## Failure: `Find JComboBoxUiComponent ... 'Available driver'` or `Repeating click. Click was unsuccessful`
 
-The new-connection dialog collapses **Driver options**. The screenshot test expects that section to be open.
+The screenshot test clicks **Driver options ▸** in the new-connection dialog, then waits for the **Available driver** combo. The click never reaches the link, the dialog stays collapsed and the wait times out. `idea.log` shows `SmoothRobot - Repeating click. Click was unsuccessful on ActionLink[... text=Driver options ▸]`.
 
-Fix: this is a UI-automation step in `src/uiTest`, not a build problem. Expand the section in the test flow before locating the combo.
+Cause: under openbox with default window decorations, the IDE's XAWT peer reports a dialog's `getLocationOnScreen()` offset by the frame insets (about 1px left, 20px top). Robot clicks on dialogs land that far above their target and miss small targets such as links.
+
+Fix: `scripts/linux/capture-intellij-ui.sh` starts openbox with a copy of `/etc/xdg/openbox/rc.xml` (written to `build/ui-openbox-rc.xml`) that sets `<decor>no</decor>` for every window. Swing and X11 coordinates then agree to within 1px. Screenshots taken this way have no window-manager title bars. Do not work around this with sleeps or retries in the test.
 
 ## Failure: `xkbcomp` warnings or `Could not resolve keysym`
 

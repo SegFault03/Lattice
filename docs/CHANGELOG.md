@@ -22,6 +22,20 @@ Patch notes are selected by the exact release version, including prerelease suff
 ### Data sources and explorer
 
 - List PostgreSQL partitioned tables, materialized views and foreign tables in the explorer and the SQL editor. Materialized views are read-only like views; foreign tables are dropped with `DROP FOREIGN TABLE` and have no Alter or Truncate.
+- Connect MySQL with TLS when the server offers it, and stop MySQL connects to unreachable hosts after 10 seconds. A slow connect no longer blocks the explorer or the IDE.
+- Check the connection form on Save as well as on Test, and mask passwords in the JDBC URL shown and copied by the connection dialog. Driver origins read Bundled, Downloaded or Local Maven.
+- Report MySQL generated columns as generated rather than auto-increment, so SQL INSERT exports leave them out.
+- Keep a connection's position in the explorer after editing it, and look up table columns without listing the whole schema first.
+
+### Table and SQL tools
+
+- Keep NULL when an untouched NULL cell is committed, and show and edit binary values as hex instead of `[B@…`.
+- Load tables with oversized BLOB or CLOB values: the value shows a truncated, read-only preview with its full size, and page or selection exports refuse it rather than writing it incomplete.
+- Stop auto-refresh after a failed load and report it in the status line instead of opening an error dialog on every tick.
+- Add SQL to an open console below the existing text instead of replacing it; plain queries in the console no longer reload open table editors and the explorer.
+- Keep the selection and column widths when a table refreshes, reuse an editor's read connection between pages, and keep the page-size control in sync when a reload is refused.
+- Offer each engine's common column types in create and alter dialogs, accept typed types for every engine, quote text defaults such as `42`, and change only the edited clauses when altering a PostgreSQL column.
+- Show the table footer in one row, show key columns by icon alone (auto-increment is listed in the inspector), and use platform selection colors and a dark-theme MySQL logo in the table dialogs.
 
 ## [0.1.0-alpha]
 

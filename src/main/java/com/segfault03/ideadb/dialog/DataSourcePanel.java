@@ -21,7 +21,7 @@ final class DataSourcePanel extends JPanel {
         setBorder(BorderFactory.createCompoundBorder(
                 JBUI.Borders.customLineRight(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR),
                 JBUI.Borders.empty(16, 8, 8, 12)));
-        JLabel title = new JLabel("Data source");
+        JLabel title = new JLabel("Database type");
         title.setFont(title.getFont().deriveFont(Font.BOLD));
         add(title, BorderLayout.NORTH);
         JPanel rows = new JPanel(new GridBagLayout());
@@ -73,7 +73,7 @@ final class DataSourcePanel extends JPanel {
         scroll.setPreferredSize(JBUI.size(144, 240));
         scroll.setMinimumSize(JBUI.size(144, 80));
         scroll.getVerticalScrollBar().setUnitIncrement(JBUI.scale(24));
-        scroll.getAccessibleContext().setAccessibleName("Data source");
+        scroll.getAccessibleContext().setAccessibleName("Database type");
         add(scroll, BorderLayout.CENTER);
     }
 

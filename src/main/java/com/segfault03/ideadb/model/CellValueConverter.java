@@ -11,6 +11,7 @@ import java.util.*;
 public final class CellValueConverter {
     private CellValueConverter() {}
     public static Object convert(DatabaseType dialect,ColumnMetadata column,Object value) {
+        if(value instanceof TruncatedValue) throw new IllegalArgumentException("Truncated value cannot be written to the database");
         if(column==null || value==RowDefaults.Value.USE_DEFAULT) return value;
         if(value==null) { if(!column.isNullable() && !column.isAutoIncrement()) throw new IllegalArgumentException("Column '" + column.getName() + "' cannot be NULL"); return null; }
         var special = com.segfault03.ideadb.provider.DatabaseProviders.get(dialect).convertSpecialValue(column,value);

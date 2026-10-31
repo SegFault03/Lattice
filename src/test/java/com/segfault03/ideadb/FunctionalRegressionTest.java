@@ -510,6 +510,10 @@ public class FunctionalRegressionTest {
         for (int col=1;col<5;col++) check(Objects.deepEquals(original.get(col),restored.values().get(0).get(col)),"Typed draft cell must survive XML: " + col);
         original.set(0,99); ((byte[])original.get(2))[0]=7;
         check(restored.originalValues().get(0).get(0).equals(1) && ((byte[])restored.values().get(0).get(2))[0]==0,"Draft captures independent values");
+        var cut = new com.segfault03.ideadb.model.TruncatedValue(new byte[]{1, 2}, 5_000_000L); var cutText = new com.segfault03.ideadb.model.TruncatedValue("a:b", 2_000_000L);
+        var cutDraft = com.segfault03.ideadb.state.TableDraftState.Draft.capture(List.of("B","T"), List.of("type","type"), List.of(List.of(cut,cutText)), List.of(List.of(cut,cutText)));
+        var cutRestored = com.intellij.util.xmlb.XmlSerializer.deserialize(com.intellij.util.xmlb.XmlSerializer.serialize(cutDraft), com.segfault03.ideadb.state.TableDraftState.Draft.class);
+        check(cut.equals(cutRestored.values().get(0).get(0)) && cutText.equals(cutRestored.values().get(0).get(1)),"Truncated values must stay truncated across draft restore");
         var remaining = restored.withoutRows(List.of(0));
         check(remaining.originals.isEmpty() && remaining.values().get(0).get(0).equals(3),"Delete reconciliation must preserve unsaved inserts");
         check(!restored.withoutRows(List.of(0,1)).hasChanges(),"Deleting all pending rows must clear draft");

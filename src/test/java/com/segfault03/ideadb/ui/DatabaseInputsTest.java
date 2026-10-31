@@ -49,6 +49,19 @@ class DatabaseInputsTest {
             assertEquals("42", table.getValueAt(0, 0));
         });
     }
+    @Test void committingAnUntouchedNullCellKeepsNull() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            JTable table = new JTable(new DefaultTableModel(new Object[][]{{null}}, new Object[]{"note"}));
+            DatabaseInputs.styleTableEditors(table);
+            assertTrue(table.editCellAt(0, 0));
+            assertTrue(table.getCellEditor().stopCellEditing());
+            assertNull(table.getValueAt(0, 0));
+            assertTrue(table.editCellAt(0, 0));
+            ((JTextField)table.getEditorComponent()).setText("x");
+            assertTrue(table.getCellEditor().stopCellEditing());
+            assertEquals("x", table.getValueAt(0, 0));
+        });
+    }
     @Test void browseButtonIsDistinctAndPreservesItsActionAndDisabledState() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             com.intellij.openapi.ui.TextFieldWithBrowseButton browse = DatabaseInputs.browseField();

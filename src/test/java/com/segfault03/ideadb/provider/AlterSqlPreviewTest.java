@@ -86,7 +86,17 @@ class AlterSqlPreviewTest {
         var sql=new PostgresDialect().buildModifyColumnSql(metadataOnly(true,16),config,"public","customers",requested);
         String prefix="ALTER TABLE \"public\".\"customers\" ALTER COLUMN \"email\"";
         assertEquals(List.of(prefix+" DROP DEFAULT;",prefix+" TYPE VARCHAR(255) USING \"email\"::VARCHAR(255);",
-                prefix+" SET DEFAULT 'old'::character varying;",prefix+" DROP NOT NULL;"),sql);
+                prefix+" SET DEFAULT 'old'::character varying;"),sql);
+    }
+    @Test void postgresNullabilityOnlyEditEmitsOnlyTheNullabilityClause() throws Exception {
+        var config=new ConnectionConfig(DatabaseType.POSTGRESQL,"preview");
+        var dialect=new PostgresDialect(); String prefix="ALTER TABLE \"public\".\"customers\" ALTER COLUMN \"email\"";
+        var notNull=new ColumnDefinition("email","VARCHAR",180,false,false,false,"'old'::character varying");
+        assertEquals(List.of(prefix+" SET NOT NULL;"),dialect.buildModifyColumnSql(metadataOnly(true,16),config,"public","customers",notNull));
+        var droppedDefault=new ColumnDefinition("email","VARCHAR",180,true,false,false,"");
+        assertEquals(List.of(prefix+" DROP DEFAULT;"),dialect.buildModifyColumnSql(metadataOnly(true,16),config,"public","customers",droppedDefault));
+        var unchanged=new ColumnDefinition("email","VARCHAR",180,true,false,false,"'old'::character varying");
+        assertEquals(List.of(),dialect.buildModifyColumnSql(metadataOnly(true,16),config,"public","customers",unchanged));
     }
     private static Connection metadataOnly(boolean postgres,int major) {
         Map<Object,Object> column=new HashMap<>();

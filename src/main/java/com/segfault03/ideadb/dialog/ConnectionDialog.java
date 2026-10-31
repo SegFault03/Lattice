@@ -40,6 +40,7 @@ import java.awt.event.ItemEvent;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 public class ConnectionDialog extends DialogWrapper {
     private final @Nullable Project project;
@@ -258,7 +259,7 @@ public class ConnectionDialog extends DialogWrapper {
             Component rendered = versionRenderer.getListCellRendererComponent(list, value, index, selected, focus);
             if (value instanceof String version && rendered instanceof JLabel label
                     && (downloadedDriverVersions.contains(version) || discoveredDriverVersions.contains(version))) {
-                String source = downloadedDriverVersions.contains(version) ? "DOWNLOADED" : "DISCOVERED";
+                String source = (downloadedDriverVersions.contains(version) ? InstalledDriver.Kind.DOWNLOADED : InstalledDriver.Kind.DISCOVERED).displayName();
                 label.setText(version + " · " + source);
                 label.setForeground(JBColor.namedColor("Label.disabledForeground", new JBColor(0x8C8C8C, 0x777777)));
                 label.setEnabled(false);
@@ -580,8 +581,20 @@ public class ConnectionDialog extends DialogWrapper {
             return;
         }
         String resolvedUrl = createTempConfig().buildJdbcUrl();
-        urlPreviewLabel.setText(resolvedUrl);
-        urlPreviewLabel.setToolTipText(resolvedUrl);
+        // The label, tooltip and Copy action all read the masked text, so a pasted URL never carries the secret.
+        String shown = maskUrlSecrets(resolvedUrl);
+        urlPreviewLabel.setText(shown);
+        urlPreviewLabel.setToolTipText(shown);
+    }
+
+    private static final Pattern URL_SECRET_PARAM = Pattern.compile("(?i)([?&;,(]\\s*[^=&;,)\\s]*(?:password|passwd|pwd|secret|token)[^=&;,)\\s]*=)[^&;,)]*");
+    private static final Pattern URL_USERINFO_PASSWORD = Pattern.compile("(://[^/:@?\\s]*:)[^/@?\\s]*(@)");
+
+    /** Replaces passwords in JDBC URL userinfo and secret-like parameters with {@code ****}. */
+    static String maskUrlSecrets(String url) {
+        if (url == null) return null;
+        String masked = URL_SECRET_PARAM.matcher(url).replaceAll("$1****");
+        return URL_USERINFO_PASSWORD.matcher(masked).replaceAll("$1****$2");
     }
 
     private void updateTestAvailability() {
@@ -804,10 +817,10 @@ public class ConnectionDialog extends DialogWrapper {
         String origin = switch (source) {
             case BUNDLED -> bundledDriverCombo.getSelectedItem() instanceof InstalledDriver driver
                     ? !driver.packaged() && !discoveryBusy && !driverInventory.getOrDefault(type, List.of()).contains(driver)
-                    ? "UNAVAILABLE" : driver.kind().name() : "BUNDLED";
-            case DOWNLOAD -> downloadedDriverVersions.contains(selectedDriver) ? "DOWNLOADED"
-                    : discoveredDriverVersions.contains(selectedDriver) ? "DISCOVERED" : "DOWNLOAD";
-            case LOCAL_JAR -> "LOCAL JAR";
+                    ? "Unavailable" : driver.kind().displayName() : "Bundled";
+            case DOWNLOAD -> downloadedDriverVersions.contains(selectedDriver) ? "Downloaded"
+                    : discoveredDriverVersions.contains(selectedDriver) ? "Local Maven" : "Not downloaded";
+            case LOCAL_JAR -> "Local JAR";
         };
         driverSummary.setText((selectedDriver.isBlank() ? source == DriverSource.LOCAL_JAR ? "Choose a JAR" : "Choose a version" : selectedDriver) + " · " + origin);
         driverSummary.setToolTipText(formatDriverLabel(type, selectedDriver) + " · " + origin);
@@ -953,7 +966,10 @@ public class ConnectionDialog extends DialogWrapper {
         if (customUrlRadio.isSelected() && customUrlField.getText().trim().isEmpty()) {
             return new ValidationInfo("Enter a JDBC URL", customUrlField);
         }
+        if (nameField.getText().trim().isEmpty()) return new ValidationInfo("Enter a connection name", nameField);
         ConnectionConfig candidate = createTempConfig();
+        String problem = ConnectionReadiness.problem(candidate, customUrlRadio.isSelected());
+        if (problem != null) return new ValidationInfo(problem, problemField(problem, candidate));
         try {
             if (candidate.getDriverSource() == DriverSource.DOWNLOAD) {
                 var downloaded = DriverCatalog.downloadedJar(candidate.getType(), candidate.getDriverVersion());
@@ -969,6 +985,17 @@ public class ConnectionDialog extends DialogWrapper {
             }
         } catch (Exception error) { return new ValidationInfo(error.getMessage(), driverSourceCombo); }
         return null;
+    }
+    private javax.swing.JComponent problemField(String problem, ConnectionConfig candidate) {
+        if (customUrlRadio.isSelected()) return problem.startsWith("Enter a JDBC URL") ? customUrlField : driverSourceCombo;
+        boolean server = DatabaseProviders.get(candidate.getType()).connectionForm() == DatabaseProvider.ConnectionForm.SERVER;
+        boolean hsqlServer = !server && candidate.getHsqlMode() == HsqlMode.SERVER;
+        if (problem.startsWith("Enter a host")) return server ? mysqlHostField : hsqlServerHostField;
+        if (problem.startsWith("Enter a port")) return server ? mysqlPortField : hsqlServerPortField;
+        if (problem.startsWith("Enter a user")) return server ? mysqlUserField : hsqlUserField;
+        if (problem.contains("database")) return server ? mysqlDatabaseField : hsqlServer ? hsqlServerDbField
+                : candidate.getHsqlMode() == HsqlMode.FILE ? hsqlFileField : hsqlMemNameField;
+        return driverSourceCombo;
     }
     @Override protected void dispose() {
         if (discoveryTask != null) discoveryTask.cancel(true);
