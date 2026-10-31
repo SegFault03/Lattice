@@ -97,9 +97,11 @@ class DryRunPanelTest {
         DryRunPanel panel = running();
         panel.show(new DryRunResult.OutcomeUnknown("shop db", "connection reset"));
         String banner = panel.bannerText();
-        assertTrue(banner.contains("Outcome unknown"), banner);
-        assertTrue(banner.contains("shop db"), banner);
+        assertEquals("Outcome unknown: the rollback on \"shop db\" could not be confirmed", banner);
         assertTrue(panel.bodyText().contains("connection reset"), panel.bodyText());
+        assertTrue(panel.bodyText().contains("Lattice closed its connection, so the database should discard the changes; check the data if it matters."),
+                panel.bodyText());
+        assertFalse(panel.bodyText().contains("uncommitted"));
         assertFalse(panel.bodyText().contains("Rolled back"));
     }
 

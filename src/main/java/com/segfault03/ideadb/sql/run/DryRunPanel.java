@@ -160,10 +160,17 @@ public final class DryRunPanel extends JPanel {
                 showBody(text.toString(), false, "", "", "Rolled back");
             }
             case DryRunResult.Failed failed -> showBody(failed.message(), false, "", "", "");
-            case DryRunResult.OutcomeUnknown unknown -> showBody(unknown.message(), false,
-                    "Outcome unknown: \"" + unknown.connectionName() + "\" may hold uncommitted changes", "", "");
+            case DryRunResult.OutcomeUnknown unknown -> showBody(unknownBody(unknown), false, unknownBanner(unknown), "", "");
             case DryRunResult.Cancelled cancelled -> showBody(cancelled.rolledBack() ? "Cancelled; any changes were rolled back" : "Cancelled", false, "", "", "");
         }
+    }
+
+    static String unknownBanner(DryRunResult.OutcomeUnknown unknown) {
+        return "Outcome unknown: the rollback on \"" + unknown.connectionName() + "\" could not be confirmed";
+    }
+
+    static String unknownBody(DryRunResult.OutcomeUnknown unknown) {
+        return unknown.message() + "\nLattice closed its connection, so the database should discard the changes; check the data if it matters.";
     }
 
     private void showBody(String text, boolean monospaced, String bannerText, String noteText, String badgeText) {

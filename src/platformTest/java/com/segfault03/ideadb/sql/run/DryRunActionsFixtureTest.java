@@ -39,6 +39,7 @@ public class DryRunActionsFixtureTest extends H2SqlFixtureTestCase {
     private final List<SqlRunTarget> asked = new ArrayList<>();
     private final Set<VirtualFile> tabs = new LinkedHashSet<>();
     private volatile Boolean runningWhileOpening;
+    private volatile boolean closeTabWhileOpening;
 
     @Override protected String[] schemaStatements() {
         return new String[] {"create table t (id int primary key, name varchar(20))", "insert into t values (1, 'a')"};
@@ -50,6 +51,7 @@ public class DryRunActionsFixtureTest extends H2SqlFixtureTestCase {
             opens.incrementAndGet();
             DryRunPanel opening = DryRunVirtualFile.existingPanel(getProject(), config);
             runningWhileOpening = opening != null && opening.isRunning();
+            if (closeTabWhileOpening) synchronized (tabs) { tabs.clear(); }
             return DatabaseConnectionManager.getInstance().openConnection(config);
         }), getTestRootDisposable());
         TestDialogManager.setTestDialog(message -> {
@@ -192,18 +194,11 @@ public class DryRunActionsFixtureTest extends H2SqlFixtureTestCase {
         assertEquals("seen from the thread that opens the connection", Boolean.TRUE, runningWhileOpening);
     }
 
-    /**
-     * The platform runs a Task.Backgroundable to completion inside queue() in tests, so a run cannot be held open from
-     * here with a latch; the panel is put into its running state directly, as the action does before it queues the task.
-     */
     public void testSecondRunWhileRunningRefused() {
         myFixture.configureByText("q.sql", "update t set name = 'z' where <caret>id = ?");
-        SqlRunTarget target = ((SqlRunTarget.Found) com.intellij.openapi.application.ReadAction.compute(
-                () -> SqlRunTarget.resolve(getProject(), myFixture.getEditor(), myFixture.getFile()))).target();
-        DryRunPanel panel = DryRunVirtualFile.open(getProject(), h2);
-        panel.showRunning(target, "DML", Map.of());
-        assertTrue(panel.isRunning());
-        assertFalse(panel.rerunEnabled());
+        DryRunRegistry registry = DryRunRegistry.getInstance(getProject());
+        assertTrue(registry.tryBegin(h2.getId()));
+        assertFalse("one run per connection", registry.tryBegin(h2.getId()));
 
         perform(EXPLAIN);
         perform(ROLLBACK);
@@ -211,12 +206,51 @@ public class DryRunActionsFixtureTest extends H2SqlFixtureTestCase {
         assertTrue("the guard comes before the values dialog", asked.isEmpty());
         assertEquals(0, opens.get());
 
-        panel.show(new com.segfault03.ideadb.service.DryRunResult.Cancelled(false));
+        registry.end(h2.getId());
         perform(EXPLAIN);
         waitUntilDone();
         assertEquals(1, opens.get());
         assertEquals("no further error", 2, errors.size());
         assertEquals("a", selectedRowQuietly());
+    }
+
+    public void testSecondRunRefusedAfterTabClosed() {
+        myFixture.configureByText("q.sql", "update t set name = 'z' where <caret>id = ?");
+        DryRunRegistry.getInstance(getProject()).tryBegin(h2.getId());
+        tabs.clear();
+        assertNull("the tab is gone", panel());
+
+        perform(ROLLBACK);
+        assertEquals(List.of(ALREADY_RUNNING), errors);
+        assertEquals(0, opens.get());
+        assertTrue(asked.isEmpty());
+    }
+
+    public void testRegistryClearedWhenTaskFinishes() {
+        myFixture.configureByText("q.sql", "select * from t where <caret>id = ?");
+        perform(EXPLAIN);
+        waitUntilDone();
+        PlatformTestUtil.waitWithEventsDispatching("The connection stayed busy", () -> !DryRunRegistry.getInstance(getProject()).isBusy(h2.getId()), 30);
+        assertTrue(errors.isEmpty());
+        perform(EXPLAIN);
+        waitUntilDone();
+        assertTrue("a second run is allowed once the first finished", errors.isEmpty());
+        assertEquals(2, opens.get());
+    }
+
+    public void testResultOfAClosedTabIsNotified() {
+        List<String> notified = new ArrayList<>();
+        getProject().getMessageBus().connect(getTestRootDisposable()).subscribe(com.intellij.notification.Notifications.TOPIC,
+                new com.intellij.notification.Notifications() {
+                    @Override public void notify(com.intellij.notification.Notification notification) { notified.add(notification.getTitle() + "|" + notification.getContent()); }
+                });
+        closeTabWhileOpening = true;
+        myFixture.configureByText("q.sql", "update t set name = 'z' where <caret>id = ?");
+        perform(ROLLBACK);
+        PlatformTestUtil.waitWithEventsDispatching("No notification", () -> !notified.isEmpty(), 30);
+        assertEquals(1, notified.size());
+        assertTrue(notified.get(0), notified.get(0).contains("1 row(s) affected"));
+        assertTrue(notified.get(0), notified.get(0).contains("fixture H2"));
     }
 
     public void testActionsRegisteredInOrderInTheGroup() {
