@@ -149,7 +149,7 @@ class SqlLiteralRendererTest {
     }
 
     @Test void numbersMustBeAscii() {
-        for (String text : new String[] {"\uff11\uff12", "\u0661\u0662", "1e5;--", "1 2", "1,5", "--1", "."}) {
+        for (String text : new String[] {"\uff11\uff12", "\u0661\u0662", "1e5;--", "1E99999999999999999999", "1 2", "1,5", "--1", "."}) {
             assertNotNull(v(Type.NUMBER, text).validationError(), text);
         }
         for (String text : new String[] {"12", "-1.5", "+.5", "1.", "1E3", "2e-4"}) {

@@ -26,6 +26,7 @@ public record SqlParameterValue(@NotNull Type type, @NotNull String text) {
             switch (type) {
                 case NUMBER -> {
                     if (!NUMBER.matcher(text.trim()).matches()) return "Enter a number such as 12 or 3.5";
+                    new BigDecimal(text.trim());
                 }
                 case BOOLEAN -> {
                     if (!isBoolean()) return "Enter true or false";
