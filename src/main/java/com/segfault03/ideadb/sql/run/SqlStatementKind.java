@@ -75,8 +75,10 @@ public enum SqlStatementKind {
         Set<String> calls = new LinkedHashSet<>();
         // For each open "(": true when a name of any type precedes it, i.e. it holds a function's arguments or a subquery after IN.
         java.util.ArrayDeque<Boolean> parens = new java.util.ArrayDeque<>();
+        boolean mainStatementStarted = false;
         for (int i = 0; i < code.size(); i++) {
             SqlToken token = code.get(i);
+            if (parens.isEmpty() && Set.of("SELECT", "INSERT", "UPDATE", "DELETE", "MERGE", "REPLACE", "VALUES", "TABLE").contains(word(sql, code, i))) mainStatementStarted = true;
             if (isPunct(sql, token, ')')) { if (!parens.isEmpty()) parens.pop(); continue; }
             if (isPunct(sql, token, '(')) { parens.push(i > 0 && isNameOfAnyType(code.get(i - 1))); continue; }
             if (!isPunct(sql, code, i + 1, '(')) continue;
@@ -84,7 +86,11 @@ public enum SqlStatementKind {
             // MySQL reads db.name(...) as a stored function whatever name follows the dot.
             if (!LatticeSqlTokens.NAMES.contains(token.type()) && !(qualified && isNameOfAnyType(token))) continue;
             String name = unquote(token.text(sql));
-            if (!qualified && parsed.cteNames.contains(name.toLowerCase(Locale.ROOT))) continue;
+            // "with f(x) as (...)" defines f; the same name in an expression is still a call.
+            if (!qualified && parens.isEmpty() && !mainStatementStarted && parsed.cteNames.contains(name.toLowerCase(Locale.ROOT))) {
+                int close = closing(sql, code, i + 1);
+                if (close >= 0 && word(sql, code, close + 1).equals("AS")) continue;
+            }
             int first = i;
             while (first >= 2 && isPunct(sql, code, first - 1, '.') && LatticeSqlTokens.NAMES.contains(code.get(first - 2).type())) first -= 2;
             boolean insideArguments = !parens.isEmpty() && parens.peek();

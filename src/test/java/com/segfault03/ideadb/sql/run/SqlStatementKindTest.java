@@ -180,6 +180,15 @@ class SqlStatementKindTest {
         }
     }
 
+    @Test void userFunctionCallsCteNameOnlySkippedAsDefinitionOrTable() {
+        for (var dialect : List.of(PG, SqlDialects.MYSQL)) {
+            assertEquals(List.of("f"), SqlStatementKind.userFunctionCalls("with f(x) as (select 1) update t set a = f(2)", dialect));
+            assertEquals(List.of(), SqlStatementKind.userFunctionCalls("with c as (select 1) update t set a = 1 where id in (select x from c)", dialect));
+            assertEquals(List.of(), SqlStatementKind.userFunctionCalls("with c(x) as (select 1) delete from t where id in (select x from c)", dialect));
+            assertEquals(List.of(), SqlStatementKind.userFunctionCalls("with a(x) as (select 1), b(y) as (select 2) insert into t select x from a", dialect));
+        }
+    }
+
     @Test void targetTableNamesKeepQualifierApart() {
         var names = SqlStatementKind.targetTableNames("update `a.b` set x = 1", SqlDialects.MYSQL);
         assertEquals(List.of(new SqlStatementKind.QualifiedName(null, "a.b")), names);
