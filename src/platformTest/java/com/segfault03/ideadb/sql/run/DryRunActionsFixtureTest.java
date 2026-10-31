@@ -10,12 +10,9 @@ import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.ui.TestDialogManager;
 import com.intellij.testFramework.PlatformTestUtil;
 import com.intellij.util.ui.UIUtil;
-import com.segfault03.ideadb.model.ConnectionConfig;
-import com.segfault03.ideadb.model.DatabaseType;
 import com.segfault03.ideadb.service.DatabaseConnectionManager;
 import com.segfault03.ideadb.service.DryRunService;
 import com.segfault03.ideadb.sql.H2SqlFixtureTestCase;
-import com.segfault03.ideadb.sql.coexist.UltimateDatabasePlugin;
 import com.segfault03.ideadb.sql.settings.SqlProjectConfigurable;
 
 import javax.swing.JCheckBox;
@@ -272,31 +269,6 @@ public class DryRunActionsFixtureTest extends H2SqlFixtureTestCase {
         myFixture.launchAction(myFixture.getAvailableIntention("Run and Roll Back"));
         DryRunPanel panel = waitUntilDone();
         assertTrue(panel.bodyText(), panel.bodyText().contains("Rolled back"));
-    }
-
-    public void testDisabledWithoutConnection() {
-        connections.removeConnection(h2.getId());
-        connections.addConnection(new ConnectionConfig(DatabaseType.H2, "a"));
-        connections.addConnection(new ConnectionConfig(DatabaseType.H2, "b"));
-        myFixture.configureByText("q.sql", "update t set name = 'z' where <caret>id = 1");
-        for (String id : List.of(EXPLAIN, ROLLBACK)) {
-            Presentation presentation = perform(id);
-            assertTrue(presentation.isVisible());
-            assertFalse(presentation.isEnabled());
-        }
-        assertNull(myFixture.getAvailableIntention("Explain Statement"));
-        assertNull(myFixture.getAvailableIntention("Run and Roll Back"));
-        assertEquals(0, opens.get());
-    }
-
-    public void testActionsHiddenWhenUltimateActive() {
-        UltimateDatabasePlugin.setActiveForTests(true, getTestRootDisposable());
-        myFixture.configureByText("q.sql", "update t set name = 'z' where <caret>id = 1");
-        assertFalse(perform(EXPLAIN).isVisible());
-        assertFalse(perform(ROLLBACK).isVisible());
-        assertNull(myFixture.getAvailableIntention("Explain Statement"));
-        assertNull(myFixture.getAvailableIntention("Run and Roll Back"));
-        assertEquals(0, opens.get());
     }
 
     public void testProjectSettingsCheckboxReenablesConfirmation() {

@@ -34,6 +34,7 @@ Patch notes are selected by the exact release version, including prerelease suff
 - Keep NULL when an untouched NULL cell is committed, and show and edit binary values as hex instead of `[B@…`.
 - Load tables with oversized BLOB or CLOB values: the value shows a truncated, read-only preview with its full size, and page or selection exports refuse it rather than writing it incomplete.
 - Stop auto-refresh after a failed load and report it in the status line instead of opening an error dialog on every tick.
+- Open a console for a connection that names no database (a JDBC URL connection, for example) on the connection's own default schema instead of the first schema in the list.
 - Add SQL to an open console below the existing text instead of replacing it; plain queries in the console no longer reload open table editors and the explorer.
 - Keep the selection and column widths when a table refreshes, reuse an editor's read connection between pages, and keep the page-size control in sync when a reload is refused.
 - Offer each engine's common column types in create and alter dialogs, accept typed types for every engine, quote text defaults such as `42`, and change only the edited clauses when altering a PostgreSQL column.

@@ -93,26 +93,35 @@ public class SendToConsoleFixtureTest extends H2SqlFixtureTestCase {
         assertTrue(opened.isEmpty());
     }
 
+    /** All three run actions share SqlRunActionSupport.update; check each action and intention once here. */
+    private static final Map<String, String> RUN_ACTIONS = Map.of(
+            ACTION_ID, "Send to Console",
+            "com.segfault03.lattice.sql.run.explain", "Explain Statement",
+            "com.segfault03.lattice.sql.run.rollback", "Run and Roll Back");
+
     public void testDisabledWithoutConnection() {
         connections.removeConnection(h2.getId());
         connections.addConnection(new ConnectionConfig(DatabaseType.H2, "a"));
         connections.addConnection(new ConnectionConfig(DatabaseType.H2, "b"));
         myFixture.configureByText("q.sql", "select <caret>1");
-        Presentation presentation = send();
-        assertTrue(presentation.isVisible());
-        assertFalse(presentation.isEnabled());
-        assertEquals("Bind this file to a connection first", presentation.getDescription());
+        RUN_ACTIONS.forEach((id, text) -> {
+            Presentation presentation = myFixture.testAction(ActionManager.getInstance().getAction(id));
+            assertTrue(id, presentation.isVisible());
+            assertFalse(id, presentation.isEnabled());
+            assertEquals(id, "Bind this file to a connection first", presentation.getDescription());
+            assertNull(text, myFixture.getAvailableIntention(text));
+        });
         assertTrue(opened.isEmpty());
-        assertNull(myFixture.getAvailableIntention("Send to Console"));
     }
 
     public void testHiddenWhenUltimateActive() {
         UltimateDatabasePlugin.setActiveForTests(true, getTestRootDisposable());
         myFixture.configureByText("q.sql", "select <caret>1");
-        Presentation presentation = send();
-        assertFalse(presentation.isVisible());
+        RUN_ACTIONS.forEach((id, text) -> {
+            assertFalse(id, myFixture.testAction(ActionManager.getInstance().getAction(id)).isVisible());
+            assertNull(text, myFixture.getAvailableIntention(text));
+        });
         assertTrue(opened.isEmpty());
-        assertNull(myFixture.getAvailableIntention("Send to Console"));
     }
 
     public void testIntentionAvailableOnStatement() {

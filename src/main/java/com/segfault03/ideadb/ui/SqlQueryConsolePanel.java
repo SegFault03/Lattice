@@ -220,6 +220,14 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         add(statusBar, BorderLayout.SOUTH);
     }
 
+    private @org.jetbrains.annotations.Nullable String defaultNamespace(java.sql.Connection connection) {
+        try {
+            return com.segfault03.ideadb.provider.DatabaseProviders.get(config.getType()).metadata().defaultNamespace(connection, config);
+        } catch (Exception ignored) {
+            return null; // the list still loads; the console then starts on its first database
+        }
+    }
+
     private void loadDatabases() {
         loadingDatabases = true;
         setRunning(false);
@@ -228,9 +236,12 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
             try (var read = tasks.openRead(config)) {
                 List<String> databases = com.segfault03.ideadb.service.MetadataService.getInstance()
                         .getDatabases(read.connection(), config);
+                // Without a requested database, start where the connection itself starts rather than on the first name.
+                String connectionDefault = activeDatabase.isEmpty() ? defaultNamespace(read.connection()) : null;
                 SwingUtilities.invokeLater(() -> {
                     if (disposed) return;
-                    String selected = activeDatabase;
+                    String selected = activeDatabase.isEmpty() && connectionDefault != null && databases.contains(connectionDefault)
+                            ? connectionDefault : activeDatabase;
                     databaseCombo.removeAllItems();
                     for (String database : databases) databaseCombo.addItem(database);
                     if (!selected.isEmpty()) {
