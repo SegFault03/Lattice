@@ -13,6 +13,7 @@ Lattice is a database client for IntelliJ IDEA. Connect to MySQL, PostgreSQL, HS
 
 - Explorer groups connections by database type, with search and filters for sources, schemas, tables and columns.
 - SQL console with results, history, row limits, timeouts and cancellation.
+- SQL editor for `.sql` files and SQL in Java and Kotlin strings: dialect highlighting, completion, hover, validation, Send to Console with parameter values, Explain and Run and Roll Back ([details](docs/SQL_EDITOR.md)).
 - Value Workspace for formatted/raw inspection, column details, editing and explicit change staging.
 - Editable table grids with pagination, filtering, batch saves, explicit NULL/default values and draft recovery.
 - Create/alter table dialogs with a full SQL preview, batched changes and recovery after partial DDL failures.
@@ -212,7 +213,7 @@ Planned work includes:
 
 1. Broader database compatibility coverage and support for more relational databases.
 2. More SQL and schema actions, including generating POJOs, DTOs and JavaBeans from tables and query results.
-3. Query preview and running a SQL file or string in the Lattice console. Highlighting, completion and hover details for `.sql` files and for SQL in Java and Kotlin strings are described in [SQL editor support](docs/SQL_EDITOR.md).
+3. Running a whole SQL file in the Lattice console. Sending one statement to the console, parameter preview and dry runs are described in [SQL editor support](docs/SQL_EDITOR.md#running-statements).
 4. Relationship graphs and dependency trees to explore how tables connect through foreign keys.
 
 More improvements are planned as Lattice evolves. These features are not available yet, and priorities may change based on feedback and technical feasibility.

@@ -1,6 +1,6 @@
 # SQL editor support
 
-Lattice edits SQL in your own project, not only in its console. Today that means dialect-aware syntax highlighting, code completion, hover details and local validation, in `.sql` files and in SQL strings of Java and Kotlin code.
+Lattice edits SQL in your own project, not only in its console. Today that means dialect-aware syntax highlighting, code completion, hover details, local validation, and sending, explaining or dry-running a statement, in `.sql` files and in SQL strings of Java and Kotlin code.
 
 ## What you get
 
@@ -55,6 +55,64 @@ Hover over a name in a `.sql` file (or press `Ctrl+Q`, `F1` on macOS) to see wha
 | A schema | Its tables, as links |
 
 Links in a card open the card of the target. Names resolve the way completion resolves them: through aliases, schema-qualified names, `UPDATE ... SET` and `INSERT` column lists, ignoring case, and with quoted names unquoted. Keywords, unknown names and derived-table aliases show nothing, as does a file with no connection or a connection whose schema has not been read yet; hovering starts that read, so the card appears on the next hover. The cards read the metadata cache and never contact the database.
+
+## Running statements
+
+Right-click in a `.sql` file or in a SQL string of Java or Kotlin code and open **Lattice SQL**, or press `Alt+Enter` on the statement:
+
+| Action | What it does |
+|---|---|
+| **Send to Console** | Appends the statement to the Lattice console of the file's connection and schema, with parameter values written in. It does not run it |
+| **Explain Statement** | Shows the database's execution plan in a **Dry Run** tab. The statement is not executed |
+| **Run and Roll Back** | Runs an `INSERT`, `UPDATE`, `DELETE` or `MERGE` (and MySQL `REPLACE`) in a transaction, reports the rows it affects, and always rolls it back |
+
+The actions work on the selection if there is one, otherwise on the statement around the caret. In a Java or Kotlin string they work on the whole string. They need a file bound to a connection (see [Choosing a connection](#choosing-a-connection)) and have no default shortcuts; search for them by name under Settings | Keymap to assign one.
+
+### Parameters
+
+`?`, `:name` and `$1` are parameters. MySQL `@name` is a session variable and is left alone. In a `.sql` file for PostgreSQL, `?`, `?|` and `?&` are jsonb operators; in a Java or Kotlin string `?` is a JDBC parameter for every database. The parts of a string that are only known at run time (`"... where id = " + id`) become positional parameters. A statement that mixes positional and named parameters is refused.
+
+Before a statement with parameters is sent or run, a dialog asks for each value with a type (text, number, boolean, date `yyyy-MM-dd`, timestamp `yyyy-MM-dd HH:mm:ss[.fffffffff]`) or NULL, and shows the resulting SQL below. A repeated `:name` asks once. Values are remembered per file and parameter in the project's workspace file (`.idea/workspace.xml`), never in shared project files, and fill the dialog the next time.
+
+Send to Console writes values into the SQL as literals for the dialect. Explain and Run and Roll Back bind them as JDBC parameters instead.
+
+### Dry Run tab
+
+Each connection has one **Dry Run** tab, reused by every run. Its header names the connection, schema, statement kind and the values used; **Copy**, **Re-run** (same statement and values) and **Send to Console** act on the shown run. One dry run per connection runs at a time.
+
+| Database | Explain sends |
+|---|---|
+| MySQL | `EXPLAIN FORMAT=TREE` from 8.0.16, `EXPLAIN` before |
+| PostgreSQL | `EXPLAIN (FORMAT TEXT, VERBOSE)` |
+| H2 | `EXPLAIN` |
+| HSQLDB | `EXPLAIN PLAN FOR` |
+
+`EXPLAIN ANALYZE` is never sent. Explain accepts queries and the statements Run and Roll Back accepts. When a database does not accept bound parameters in its explain statement (HSQLDB), the plan is computed with the values written into the SQL and the tab says so.
+
+Dry runs use a connection of their own, opened for the run and closed after it, so the console and any transaction open in it are never touched.
+
+### Run and Roll Back
+
+Before connecting, Run and Roll Back refuses anything that could commit or change the schema: DDL, `COMMIT`, `ROLLBACK`, `SET`, `CALL`, `LOCK TABLES`, `LOAD DATA`, `COPY`, `SELECT ... INTO`, more than one statement, and MySQL executable comments (`/*! ... */`). Queries are refused too; use Explain for them.
+
+On MySQL it also refuses, without running the statement, when it cannot confirm the change can be rolled back: a table on an engine without transactions (MyISAM, MEMORY, ARCHIVE...), a table that has triggers, a view, a table it cannot find, and a call to a function that is not built in. MySQL's lock wait is limited to the run's 60-second timeout.
+
+A confirmation lists what a rollback does not undo:
+
+- Sequence and auto-increment values are consumed.
+- Triggers fire, including any effects outside the database.
+- Row locks are held until the rollback, and other sessions can wait on them.
+
+**Don't ask again for this project** skips it; turn it back on with **Confirm before Run and Roll Back** under Settings | Tools | Lattice SQL Editor | Project Defaults.
+
+| Result | Meaning |
+|---|---|
+| **Rolled back** | Rows affected, time taken and any warnings; the changes were undone |
+| An error | The statement failed and was rolled back |
+| **Cancelled** | Stopped from the progress bar; "Cancelled; any changes were rolled back" once it had started |
+| **Outcome unknown** | The rollback could not be confirmed. Lattice closed its connection, so the database should discard the changes; check the data if it matters |
+
+If the tab was closed while a run was going, a rolled-back or unknown outcome is also shown as a notification.
 
 ## SQL in Java and Kotlin strings
 
@@ -187,7 +245,8 @@ The Database plugin brings its own SQL support. Where it is enabled, Lattice's S
 
 ## Limits
 
-- Not available yet: filling in parameters (`?`, `:name`, `$1`) to preview the final SQL, sending a statement from the editor to the Lattice console, and a read-only dry run.
+- Run and Roll Back reports the number of rows affected, not the changed rows themselves. A whole SQL file cannot be sent or dry-run at once, and the actions work on one statement.
+- Explain and Run and Roll Back run against the connection's default database; a statement that relies on another schema must qualify its names.
 - Strings are found by what is written at the call site. Kotlin calls are matched by name only, because Kotlin PSI cannot resolve a call here; Java also honors `@Language` on a resolved method's parameters.
 - R2DBC URLs, other databases and URLs assembled in code are not read, and a URL whose parts are all unresolved placeholders matches by type only.
 - Validation is a tolerant scanner, not a full SQL parser: it finds the mistakes above, not every way a statement can be invalid for a particular server, and it can miss a mistake that sits behind something it cannot see through.
