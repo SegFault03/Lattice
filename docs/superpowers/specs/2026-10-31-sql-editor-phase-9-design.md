@@ -18,7 +18,7 @@ The console (`SqlQueryConsolePanel`) is not changed.
 | Values | A values dialog with a preview, remembered per file and parameter key, also used by dry-run |
 | Send to Console | Inserts the SQL and does not run it |
 | Binding | Send to Console writes the values in as dialect literals, because the console runs plain text. Dry-run binds the values with `PreparedStatement` |
-| Run and Roll Back confirmation | Shown every time by default; can be suppressed per project. Refusal rules and the MySQL engine check always apply |
+| Run and Roll Back confirmation | Shown every time by default; can be suppressed per project. Refusal rules and the MySQL checks always apply |
 | Changed-rows preview | Not in this phase |
 
 ## Components
@@ -78,14 +78,16 @@ This package does not depend on the console or on `service/`.
 
 - `OTHER` is refused: "Only queries and DML can be explained."
 - `EXPLAIN ANALYZE` is never sent, because it executes the statement.
-- **Assumption to confirm in the live tests:** PostgreSQL accepts bound parameters in `EXPLAIN`, and MySQL does so with server-side prepares. If a dialect rejects them, Explain falls back to the SQL with the values written in as literals, and the result says so. The fallback is kept only if those tests show it is needed.
+- PostgreSQL accepts bound parameters in `EXPLAIN` (confirmed against a live server). HSQLDB rejects them in `EXPLAIN PLAN FOR`, so when a bound explain fails, Explain retries once with the SQL with the values written in as literals, and the result says so.
 
 ## Run and Roll Back
 
 1. **Refusal rules**, checked before any connection is opened:
    - Only `DML` is accepted. DDL, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `SET`, `CALL` (procedures can commit), `LOCK TABLES`, `LOAD DATA`, `COPY` and other `OTHER` statements are refused.
    - `SELECT` is refused; Explain covers it.
-2. **MySQL engine check**, on the dedicated connection before the statement runs. The statement's target tables are looked up in `information_schema.TABLES.ENGINE`. If any table uses an engine without transactions (MyISAM, MEMORY, ARCHIVE...), the run is refused and the table is named.
+2. **MySQL checks**, before the statement runs. All fail closed:
+   - Before connecting: no target tables found, a table name containing `.`, or a call to anything that is not a built-in function (including qualified calls such as `s.concat(...)`).
+   - On the dedicated connection: each target table is looked up in `information_schema.TABLES.ENGINE` and must be InnoDB or NDB; a missing row or NULL engine (a view) is refused; a table with a row in `information_schema.TRIGGERS` is refused. The message names the table.
 3. **Confirmation** names the connection and the statement kind, and lists the caveats:
    - Sequence and auto-increment values are consumed.
    - Triggers fire, including any effects outside the database.
@@ -93,11 +95,11 @@ This package does not depend on the console or on `service/`.
 
    A "Don't ask again for this project" checkbox suppresses the dialog for that project only.
 4. **Execution**:
-   - `DataService.inTransaction` on the dedicated connection, then `executeUpdate`, then an unconditional rollback.
+   - A local transaction on the dedicated connection: `setAutoCommit(false)`, `executeUpdate`, then `rollback()` in `finally`. `commit()` is never called anywhere in the service; `DataService.inTransaction` is not used because it commits on success.
    - The statement timeout is the console's (60 s by default).
    - On MySQL, the session's `innodb_lock_wait_timeout` is set to the same limit.
 5. **Result**: affected row count, elapsed time, `SQLWarning`s and a "Rolled back" badge.
-   - If the rollback fails, the connection is closed without restoring auto-commit, which is the existing `inTransaction` behavior. The result shows "Outcome unknown" and names the connection.
+   - If the rollback fails, the connection is closed without restoring auto-commit. The result shows "Outcome unknown: the rollback on "<connection>" could not be confirmed".
 
 ## UI
 
@@ -126,7 +128,7 @@ This package does not depend on the console or on `service/`.
 | No resolvable statement, or several statements selected | Message at the caret: "Select a single statement" |
 | Mixed positional and named parameters, or a value that does not parse | Validation inside the dialog; OK stays disabled |
 | Refusal rule | Message dialog naming the rule; no connection is opened |
-| MySQL engine check fails | Message dialog naming the table; the dedicated connection is closed and the statement never runs |
+| A MySQL check fails | Message dialog naming the table; the dedicated connection is closed and the statement never runs |
 | Connection or SQL error | Shown in the Dry Run tab with the driver's message, in the console's error format |
 | Rollback failure | Red "Outcome unknown" banner naming the connection; the connection is discarded |
 | Cancelled | "Cancelled". For Run and Roll Back: "Cancelled; any changes were rolled back", or "Outcome unknown" if the rollback could not be confirmed |

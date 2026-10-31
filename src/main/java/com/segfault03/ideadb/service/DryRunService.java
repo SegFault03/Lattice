@@ -24,7 +24,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** Shows a statement's execution plan on its own connection, without running the statement. */
+/** Dry runs on a connection of their own: an execution plan without running the statement, and DML run and always rolled back. */
 public final class DryRunService {
     public interface ConnectionOpener { Connection open(ConnectionConfig config) throws Exception; }
 
@@ -116,7 +116,7 @@ public final class DryRunService {
                 if (config.getType() == DatabaseType.MYSQL) {
                     String refusal = mysqlRollbackRefusal(connection, targetTables);
                     if (refusal != null) return new DryRunResult.Failed(refusal);
-                    try (Statement set = connection.createStatement()) { set.execute("SET SESSION innodb_lock_wait_timeout = 60"); }
+                    try (Statement set = connection.createStatement()) { set.execute("SET SESSION innodb_lock_wait_timeout = " + DataService.QueryOptions.defaults().timeoutSeconds()); }
                 }
                 connection.setAutoCommit(false);
             } catch (Exception beforeTransaction) {

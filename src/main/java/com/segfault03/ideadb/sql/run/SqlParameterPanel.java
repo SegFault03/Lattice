@@ -108,7 +108,7 @@ public final class SqlParameterPanel extends JPanel {
         updatePreview();
     }
 
-    /** The SQL with the values written in, or the first validation error while a value does not fit its type. */
+    /** The SQL with the values written in; otherwise the statement's parameter error, or the first value that does not fit its type. */
     String previewText() { return preview.getText(); }
 
     private void updatePreview() {

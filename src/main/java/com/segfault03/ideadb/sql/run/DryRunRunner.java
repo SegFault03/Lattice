@@ -81,15 +81,19 @@ final class DryRunRunner {
             Messages.showErrorDialog(project, ALREADY_RUNNING, TITLE);
             return;
         }
-        DryRunPanel panel;
         try {
-            panel = DryRunVirtualFile.open(project, config);
-        } catch (RuntimeException e) {
-            registry.end(config.getId());
+            DryRunPanel panel = DryRunVirtualFile.open(project, config);
+            panel.showRunning(target, kind == SqlStatementKind.DML ? "DML" : "Query", values);
+            panel.setRerunHandler(() -> rerun(project, target, kind, mode, values));
+            queue(project, config, mode, kind, statement, literalSql, tables, functions, panel, registry);
+        } catch (RuntimeException | Error e) {
+            registry.end(config.getId()); // nothing was queued, so onFinished will not clear it
             throw e;
         }
-        panel.showRunning(target, kind == SqlStatementKind.DML ? "DML" : "Query", values);
-        panel.setRerunHandler(() -> rerun(project, target, kind, mode, values));
+    }
+
+    private static void queue(Project project, ConnectionConfig config, Mode mode, SqlStatementKind kind, SqlLiteralRenderer.JdbcStatement statement,
+                              String literalSql, List<SqlStatementKind.QualifiedName> tables, List<String> functions, DryRunPanel panel, DryRunRegistry registry) {
         new Task.Backgroundable(project, mode.taskTitle, true) {
             private volatile DryRunResult result = new DryRunResult.Failed("The dry run did not finish.");
 
