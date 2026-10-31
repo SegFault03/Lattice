@@ -6,7 +6,6 @@ import com.intellij.openapi.editor.colors.EditorFontType;
 import com.segfault03.ideadb.model.DatabaseType;
 import com.segfault03.ideadb.ui.DatabaseInputs;
 import com.intellij.ui.DocumentAdapter;
-import com.intellij.ui.JBColor;
 import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBScrollPane;
@@ -43,14 +42,12 @@ public final class SqlParameterPanel extends JPanel {
         final JComboBox<SqlParameterValue.Type> type = DatabaseInputs.comboBox(TYPES);
         final JBTextField value = DatabaseInputs.textField(24);
         final JBCheckBox isNull = new JBCheckBox("NULL");
-        final JBLabel error = new JBLabel();
 
         Row(SqlParameterValue initial) {
             boolean nullValue = initial.type() == SqlParameterValue.Type.NULL;
             if (!nullValue) type.setSelectedItem(initial.type());
             value.setText(initial.text());
             isNull.setSelected(nullValue);
-            error.setForeground(JBColor.RED);
             Runnable changed = () -> { refresh(); updatePreview(); listeners.forEach(Runnable::run); };
             type.addActionListener(e -> changed.run());
             isNull.addActionListener(e -> changed.run());
@@ -68,8 +65,6 @@ public final class SqlParameterPanel extends JPanel {
         void refresh() {
             type.setEnabled(!isNull.isSelected());
             value.setEnabled(!isNull.isSelected());
-            String message = current().validationError();
-            error.setText(message == null ? " " : message);
         }
     }
 
@@ -89,16 +84,15 @@ public final class SqlParameterPanel extends JPanel {
             Row row = new Row(initial.getOrDefault(key, new SqlParameterValue(SqlParameterValue.Type.TEXT, "")));
             rows.put(key, row);
             constraints.gridx = 0; constraints.weightx = 0; constraints.fill = GridBagConstraints.NONE;
+            constraints.insets = JBUI.insets(2, 8, 2, 4);
             add(new JBLabel(key), constraints);
+            constraints.insets = JBUI.insets(2, 4);
             constraints.gridx = 1;
             add(row.type, constraints);
             constraints.gridx = 2; constraints.weightx = 1; constraints.fill = GridBagConstraints.HORIZONTAL;
             add(row.value, constraints);
             constraints.gridx = 3; constraints.weightx = 0; constraints.fill = GridBagConstraints.NONE;
             add(row.isNull, constraints);
-            constraints.gridy++;
-            constraints.gridx = 2; constraints.weightx = 1; constraints.fill = GridBagConstraints.HORIZONTAL;
-            add(row.error, constraints);
             constraints.gridy++;
         }
         preview.setEditable(false);
@@ -118,16 +112,21 @@ public final class SqlParameterPanel extends JPanel {
     String previewText() { return preview.getText(); }
 
     private void updatePreview() {
+        preview.setText(previewContent());
+        preview.setCaretPosition(0);
+    }
+
+    private String previewContent() {
+        if (parameters.error() != null) return parameters.error();
         for (var entry : rows.entrySet()) {
             String message = entry.getValue().current().validationError();
-            if (message != null) {
-                preview.setText(entry.getKey() + ": " + message);
-                preview.setCaretPosition(0);
-                return;
-            }
+            if (message != null) return entry.getKey() + ": " + message;
         }
-        preview.setText(SqlLiteralRenderer.render(sql, parameters, values(), type));
-        preview.setCaretPosition(0);
+        try {
+            return SqlLiteralRenderer.render(sql, parameters, values(), type);
+        } catch (IllegalArgumentException e) {
+            return String.valueOf(e.getMessage());
+        }
     }
 
     /** The values as entered, by key, in the order of the keys. */
@@ -139,7 +138,7 @@ public final class SqlParameterPanel extends JPanel {
 
     /** Named so it does not override {@link java.awt.Component#isValid()}, which Swing layout relies on. */
     public boolean valuesValid() {
-        return rows.values().stream().allMatch(row -> row.current().validationError() == null);
+        return parameters.error() == null && rows.values().stream().allMatch(row -> row.current().validationError() == null);
     }
 
     /** Called after any row changes. */

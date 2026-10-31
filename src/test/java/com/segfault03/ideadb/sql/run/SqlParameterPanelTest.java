@@ -75,6 +75,14 @@ class SqlParameterPanelTest {
         assertTrue(fields(panel).get(0).isEnabled());
     }
 
+    @Test void previewShowsParametersErrorWithoutThrowing() {
+        var panel = panel("select ?, :a", Map.of());
+        assertEquals(SqlParameters.MIXED_STYLES, panel.previewText());
+        assertFalse(panel.valuesValid());
+        fields(panel).get(0).setText("x");
+        assertEquals(SqlParameters.MIXED_STYLES, panel.previewText());
+    }
+
     @Test void okDisabledWhileInvalid() {
         var panel = panel(SQL, Map.of(":customer", new SqlParameterValue(SqlParameterValue.Type.NUMBER, "abc")));
         var changes = new AtomicInteger();
