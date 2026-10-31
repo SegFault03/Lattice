@@ -96,6 +96,9 @@ public final class DryRunService {
      * Runs DML in a transaction on its own connection and always rolls it back. Deliberately not
      * {@link DataService#inTransaction}, which commits on success: nothing here ever calls commit().
      * Runs off the EDT and never throws; every failure becomes a result.
+     * <p>On MySQL the caller must pass {@code SqlStatementKind.targetTableNames(sql, profile)} and
+     * {@code SqlStatementKind.userFunctionCalls(sql, profile)}, both computed from the same SQL as {@code statement}.
+     * Other database types ignore both lists.
      */
     public DryRunResult runAndRollBack(ConnectionConfig config, SqlStatementKind kind, SqlLiteralRenderer.JdbcStatement statement,
                                        List<SqlStatementKind.QualifiedName> targetTables, List<String> userFunctionCalls, QueryExecution execution) {

@@ -154,9 +154,30 @@ class SqlStatementKindTest {
             assertEquals(List.of(), SqlStatementKind.userFunctionCalls("update t set a = 1 where id in (select id from u)", dialect));
             assertEquals(List.of(), SqlStatementKind.userFunctionCalls("delete from t where exists (select 1 from u where u.id = t.id)", dialect));
             assertEquals(List.of(), SqlStatementKind.userFunctionCalls("with c(x) as (select 1) insert into t select x from c", dialect));
-            assertEquals(List.of("log_it"), SqlStatementKind.userFunctionCalls("update t set a = audit.log_it(1)", dialect));
+            assertEquals(List.of("audit.log_it"), SqlStatementKind.userFunctionCalls("update t set a = audit.log_it(1)", dialect));
         }
         assertEquals(List.of(), SqlStatementKind.userFunctionCalls("merge into t using s on t.id = s.id when not matched then insert (a) values (1)", PG));
+    }
+
+    @Test void userFunctionCallsCatchQualifiedAndNestedCalls() {
+        for (var dialect : List.of(PG, SqlDialects.MYSQL)) {
+            assertEquals(List.of("s.concat"), SqlStatementKind.userFunctionCalls("update t set a = s.concat(1)", dialect));
+            assertEquals(List.of("s.now"), SqlStatementKind.userFunctionCalls("update t set a = s.now()", dialect));
+            assertEquals(List.of("s.left"), SqlStatementKind.userFunctionCalls("update t set a = s.left(1)", dialect));
+            assertEquals(List.of("f"), SqlStatementKind.userFunctionCalls("update t set a = extract(year from f(d))", dialect));
+            assertEquals(List.of("f"), SqlStatementKind.userFunctionCalls("update t set a = trim(both 'x' from f(a))", dialect));
+            assertEquals(List.of("f"), SqlStatementKind.userFunctionCalls("update t set a = substring(s from f(1))", dialect));
+        }
+    }
+
+    @Test void userFunctionCallsRegressionGuards() {
+        assertEquals(List.of("f"), SqlStatementKind.userFunctionCalls("update t set a = `f`(1)", SqlDialects.MYSQL));
+        for (var dialect : List.of(PG, SqlDialects.MYSQL)) {
+            assertEquals(List.of("f"), SqlStatementKind.userFunctionCalls("update t set a = f /*c*/ (1)", dialect));
+            assertEquals(List.of(), SqlStatementKind.userFunctionCalls("update t set a = now()", dialect));
+            assertEquals(List.of(), SqlStatementKind.userFunctionCalls("insert into t (a) select a from u", dialect));
+            assertEquals(List.of(), SqlStatementKind.userFunctionCalls("insert into s.t (a) select a from u", dialect));
+        }
     }
 
     @Test void targetTableNamesKeepQualifierApart() {

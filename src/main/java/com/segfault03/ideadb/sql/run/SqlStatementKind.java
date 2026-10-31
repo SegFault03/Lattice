@@ -73,15 +73,28 @@ public enum SqlStatementKind {
         List<SqlToken> code = new ArrayList<>();
         for (SqlToken token : parsed.tokens) if (!LatticeSqlTokens.COMMENTS.contains(token.type())) code.add(token);
         Set<String> calls = new LinkedHashSet<>();
-        for (int i = 0; i + 1 < code.size(); i++) {
+        // For each open "(": true when a name of any type precedes it, i.e. it holds a function's arguments or a subquery after IN.
+        java.util.ArrayDeque<Boolean> parens = new java.util.ArrayDeque<>();
+        for (int i = 0; i < code.size(); i++) {
             SqlToken token = code.get(i);
-            if (!LatticeSqlTokens.NAMES.contains(token.type()) || !isPunct(sql, code, i + 1, '(')) continue;
+            if (isPunct(sql, token, ')')) { if (!parens.isEmpty()) parens.pop(); continue; }
+            if (isPunct(sql, token, '(')) { parens.push(i > 0 && isNameOfAnyType(code.get(i - 1))); continue; }
+            if (!isPunct(sql, code, i + 1, '(')) continue;
+            boolean qualified = isPunct(sql, code, i - 1, '.');
+            // MySQL reads db.name(...) as a stored function whatever name follows the dot.
+            if (!LatticeSqlTokens.NAMES.contains(token.type()) && !(qualified && isNameOfAnyType(token))) continue;
             String name = unquote(token.text(sql));
-            if (parsed.cteNames.contains(name.toLowerCase(Locale.ROOT))) continue;
+            if (!qualified && parsed.cteNames.contains(name.toLowerCase(Locale.ROOT))) continue;
             int first = i;
             while (first >= 2 && isPunct(sql, code, first - 1, '.') && LatticeSqlTokens.NAMES.contains(code.get(first - 2).type())) first -= 2;
-            if (TABLE_POSITION.contains(word(sql, code, first - 1))) continue;
-            calls.add(name);
+            boolean insideArguments = !parens.isEmpty() && parens.peek();
+            if (!insideArguments && TABLE_POSITION.contains(word(sql, code, first - 1))) continue;
+            StringBuilder full = new StringBuilder();
+            for (int k = first; k <= i; k += 2) {
+                if (k > first) full.append('.');
+                full.append(unquote(code.get(k).text(sql)));
+            }
+            calls.add(qualified ? full.toString() : name);
         }
         return new ArrayList<>(calls);
     }
@@ -203,6 +216,11 @@ public enum SqlStatementKind {
         SqlToken token = tokens.get(i);
         if (token.type() != LatticeSqlTokens.KEYWORD && token.type() != LatticeSqlTokens.IDENTIFIER) return "";
         return token.text(sql).toUpperCase(Locale.ROOT);
+    }
+
+    /** A name, keyword, built-in function or type name: anything that can sit directly before the "(" of a call. */
+    private static boolean isNameOfAnyType(SqlToken token) {
+        return isName(token) || token.type() == LatticeSqlTokens.FUNCTION || token.type() == LatticeSqlTokens.TYPE;
     }
 
     private static boolean isName(SqlToken token) {
