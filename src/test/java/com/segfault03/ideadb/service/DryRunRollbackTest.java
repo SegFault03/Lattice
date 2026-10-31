@@ -29,6 +29,11 @@ class DryRunRollbackTest {
     private static final SqlLiteralRenderer.JdbcStatement UPDATE = new SqlLiteralRenderer.JdbcStatement("update t set a = 99 where id = ?", List.of(1));
     private static final String[] TABLE = {"create table t (id int primary key, a int)", "insert into t values (1, 5)"};
 
+    private static SqlStatementKind.QualifiedName name(String table) { return new SqlStatementKind.QualifiedName(null, table); }
+
+    private static final List<SqlStatementKind.QualifiedName> T = List.of(name("t"));
+    private static final List<String> NO_CALLS = List.of();
+
     private static ConnectionConfig config(DatabaseType type) { return new ConnectionConfig(type, "dry run " + type); }
 
     private static String h2Url() { return "jdbc:h2:mem:rb_" + UUID.randomUUID().toString().replace('-', '_') + ";DB_CLOSE_DELAY=-1"; }
@@ -113,7 +118,7 @@ class DryRunRollbackTest {
         String url = h2Url();
         seed(url, TABLE);
         var result = new DryRunService(c -> connect(url))
-                .runAndRollBack(config(DatabaseType.H2), DML, UPDATE, List.of("t"), new QueryExecution());
+                .runAndRollBack(config(DatabaseType.H2), DML, UPDATE, T, NO_CALLS, new QueryExecution());
         var rolledBack = assertInstanceOf(DryRunResult.RolledBack.class, result);
         assertEquals(1, rolledBack.rows());
         assertEquals(5, readA(url));
@@ -125,7 +130,7 @@ class DryRunRollbackTest {
         try (Connection keeper = connect(url)) { // the last close shuts the in-memory database down, ending its timer thread
             try (var statement = keeper.createStatement()) { for (String sql : TABLE) statement.execute(sql); }
             var result = new DryRunService(c -> connect(url))
-                    .runAndRollBack(config(DatabaseType.HSQLDB), DML, delete, List.of("t"), new QueryExecution());
+                    .runAndRollBack(config(DatabaseType.HSQLDB), DML, delete, T, NO_CALLS, new QueryExecution());
             assertEquals(1, assertInstanceOf(DryRunResult.RolledBack.class, result).rows());
             assertEquals(5, readA(url));
         }
@@ -137,7 +142,7 @@ class DryRunRollbackTest {
         var spy = new Spy();
         var bad = new SqlLiteralRenderer.JdbcStatement("update missing_table set a = 1", List.of());
         var result = new DryRunService(c -> spy.wrap(connect(url)))
-                .runAndRollBack(config(DatabaseType.H2), DML, bad, List.of("missing_table"), new QueryExecution());
+                .runAndRollBack(config(DatabaseType.H2), DML, bad, List.of(name("missing_table")), NO_CALLS, new QueryExecution());
         var failed = assertInstanceOf(DryRunResult.Failed.class, result);
         assertTrue(failed.message().toUpperCase().contains("MISSING_TABLE"), failed.message());
         assertEquals(1, spy.rollbacks.get());
@@ -150,7 +155,7 @@ class DryRunRollbackTest {
         seed(url, TABLE);
         var spy = new Spy();
         var result = new DryRunService(c -> spy.wrap(connect(url)))
-                .runAndRollBack(config(DatabaseType.H2), DML, UPDATE, List.of("t"), new QueryExecution());
+                .runAndRollBack(config(DatabaseType.H2), DML, UPDATE, T, NO_CALLS, new QueryExecution());
         assertInstanceOf(DryRunResult.RolledBack.class, result);
         assertEquals(0, spy.commits.get(), "commit() must never be called");
         assertEquals(List.of("false"), spy.autoCommits, "auto-commit is switched off once and never restored");
@@ -165,7 +170,7 @@ class DryRunRollbackTest {
         var spy = new Spy();
         spy.failRollback = true;
         var result = new DryRunService(c -> spy.wrap(connect(url)))
-                .runAndRollBack(config(DatabaseType.H2), DML, UPDATE, List.of("t"), new QueryExecution());
+                .runAndRollBack(config(DatabaseType.H2), DML, UPDATE, T, NO_CALLS, new QueryExecution());
         var unknown = assertInstanceOf(DryRunResult.OutcomeUnknown.class, result);
         assertEquals("dry run H2", unknown.connectionName());
         assertTrue(unknown.message().contains("link down"), unknown.message());
@@ -181,7 +186,7 @@ class DryRunRollbackTest {
         var execution = new QueryExecution();
         spy.cancelDuringUpdate = execution;
         var result = new DryRunService(c -> spy.wrap(connect(url)))
-                .runAndRollBack(config(DatabaseType.H2), DML, UPDATE, List.of("t"), execution);
+                .runAndRollBack(config(DatabaseType.H2), DML, UPDATE, T, NO_CALLS, execution);
         assertEquals(new DryRunResult.Cancelled(true), result);
         assertEquals(1, spy.rollbacks.get());
         assertEquals(1, spy.closes.get());
@@ -199,7 +204,7 @@ class DryRunRollbackTest {
         var execution = new QueryExecution();
         spy.cancelDuringUpdate = execution;
         var result = new DryRunService(c -> spy.wrap(connect(url)))
-                .runAndRollBack(config(DatabaseType.H2), DML, UPDATE, List.of("t"), execution);
+                .runAndRollBack(config(DatabaseType.H2), DML, UPDATE, T, NO_CALLS, execution);
         assertInstanceOf(DryRunResult.OutcomeUnknown.class, result);
         assertEquals(1, spy.closes.get());
     }
@@ -209,7 +214,7 @@ class DryRunRollbackTest {
         var execution = new QueryExecution();
         execution.requestCancellation();
         var result = new DryRunService(c -> { opens.incrementAndGet(); throw new SQLException("must not open"); })
-                .runAndRollBack(config(DatabaseType.H2), DML, UPDATE, List.of("t"), execution);
+                .runAndRollBack(config(DatabaseType.H2), DML, UPDATE, T, NO_CALLS, execution);
         assertEquals(new DryRunResult.Cancelled(false), result);
         assertEquals(0, opens.get());
     }
@@ -218,7 +223,7 @@ class DryRunRollbackTest {
         var opens = new AtomicInteger();
         var service = new DryRunService(c -> { opens.incrementAndGet(); throw new SQLException("must not open"); });
         for (SqlStatementKind kind : new SqlStatementKind[]{SqlStatementKind.QUERY, SqlStatementKind.OTHER}) {
-            var result = service.runAndRollBack(config(DatabaseType.H2), kind, UPDATE, List.of("t"), new QueryExecution());
+            var result = service.runAndRollBack(config(DatabaseType.H2), kind, UPDATE, T, NO_CALLS, new QueryExecution());
             assertEquals(new DryRunResult.Failed(SqlStatementKind.rollbackRefusal(kind)), result);
         }
         assertEquals(0, opens.get());
@@ -226,7 +231,7 @@ class DryRunRollbackTest {
 
     @Test void connectFailureGivesFailedNothingRan() {
         var result = new DryRunService(c -> { throw new SQLException("no route to host"); })
-                .runAndRollBack(config(DatabaseType.H2), DML, UPDATE, List.of("t"), new QueryExecution());
+                .runAndRollBack(config(DatabaseType.H2), DML, UPDATE, T, NO_CALLS, new QueryExecution());
         assertEquals(new DryRunResult.Failed("no route to host"), result);
     }
 
@@ -236,6 +241,7 @@ class DryRunRollbackTest {
     private static final class FakeMysql {
         final java.util.Map<String, String> engines = new java.util.HashMap<>();
         final List<String> executed = new ArrayList<>();
+        final java.util.Set<String> tablesWithTriggers = new java.util.HashSet<>();
         final List<String> engineLookups = new ArrayList<>();
         final AtomicInteger updates = new AtomicInteger(), rollbacks = new AtomicInteger(), closes = new AtomicInteger(), commits = new AtomicInteger();
 
@@ -249,7 +255,8 @@ class DryRunRollbackTest {
                     if (n.equals("execute")) executed.add((String) a[0]);
                     return null;
                 });
-                case "prepareStatement" -> ((String) args[0]).contains("information_schema") ? lookup() : dml();
+                case "prepareStatement" -> ((String) args[0]).contains("information_schema.TRIGGERS") ? triggers()
+                        : ((String) args[0]).contains("information_schema") ? lookup() : dml();
                 default -> null;
             });
         }
@@ -266,6 +273,24 @@ class DryRunRollbackTest {
                         public Object intercept(String n, Object[] a) {
                             if (n.equals("next")) { boolean has = !served && engines.containsKey(params.get(1)); served = true; return has; }
                             if (n.equals("getString")) return engine;
+                            return null;
+                        }
+                    });
+                }
+                default -> null;
+            });
+        }
+
+        private PreparedStatement triggers() {
+            var params = new ArrayList<String>();
+            return stub(PreparedStatement.class, (name, args) -> switch (name) {
+                case "setString" -> { params.add((String) args[1]); yield null; }
+                case "executeQuery" -> {
+                    boolean has = tablesWithTriggers.contains(params.get(1));
+                    yield stub(ResultSet.class, new Hook() {
+                        boolean served;
+                        public Object intercept(String n, Object[] a) {
+                            if (n.equals("next")) { boolean next = !served && has; served = true; return next; }
                             return null;
                         }
                     });
@@ -296,15 +321,19 @@ class DryRunRollbackTest {
         return (T) Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[]{type}, handler);
     }
 
-    private DryRunResult runMysql(FakeMysql fake, List<String> tables) {
+    private DryRunResult runMysql(FakeMysql fake, List<SqlStatementKind.QualifiedName> tables) {
+        return runMysql(fake, tables, NO_CALLS);
+    }
+
+    private DryRunResult runMysql(FakeMysql fake, List<SqlStatementKind.QualifiedName> tables, List<String> calls) {
         return new DryRunService(c -> fake.connection())
-                .runAndRollBack(config(DatabaseType.MYSQL), DML, UPDATE, tables, new QueryExecution());
+                .runAndRollBack(config(DatabaseType.MYSQL), DML, UPDATE, tables, calls, new QueryExecution());
     }
 
     @Test void mysqlNonTransactionalEngineRefusedBeforeExecute() {
         var fake = new FakeMysql();
         fake.engines.put("t", "MyISAM");
-        var result = runMysql(fake, List.of("t"));
+        var result = runMysql(fake, T);
         assertEquals(new DryRunResult.Failed("t uses the MyISAM engine, which cannot roll back."), result);
         assertEquals(0, fake.updates.get());
         assertTrue(fake.executed.isEmpty(), "not even the SET ran: " + fake.executed);
@@ -314,7 +343,7 @@ class DryRunRollbackTest {
 
     @Test void mysqlUnknownTableOrViewRefused() {
         var fake = new FakeMysql(); // no row for t, as for a view or a missing table
-        var result = runMysql(fake, List.of("t"));
+        var result = runMysql(fake, T);
         assertEquals(new DryRunResult.Failed("Cannot confirm that t can roll back."), result);
         assertEquals(0, fake.updates.get());
         assertEquals(1, fake.closes.get());
@@ -325,14 +354,14 @@ class DryRunRollbackTest {
         var result = runMysql(fake, List.of());
         assertEquals(new DryRunResult.Failed("Cannot confirm which tables this statement changes."), result);
         assertEquals(0, fake.updates.get());
-        assertEquals(1, fake.closes.get());
+        assertTrue(fake.executed.isEmpty());
     }
 
     @Test void mysqlSetsLockWaitTimeout() {
         var fake = new FakeMysql();
         fake.engines.put("t", "innodb");
         fake.engines.put("u", "NDB");
-        var result = runMysql(fake, List.of("t", "audit.u"));
+        var result = runMysql(fake, List.of(name("t"), new SqlStatementKind.QualifiedName("audit", "u")));
         assertEquals(3, assertInstanceOf(DryRunResult.RolledBack.class, result).rows());
         assertEquals(List.of("SET SESSION innodb_lock_wait_timeout = 60"), fake.executed);
         assertEquals(List.of("shop.t", "audit.u"), fake.engineLookups, "unqualified tables use the connection's catalog");
@@ -340,5 +369,37 @@ class DryRunRollbackTest {
         assertEquals(1, fake.rollbacks.get());
         assertEquals(1, fake.closes.get());
         assertEquals(0, fake.commits.get());
+    }
+
+    @Test void mysqlTableWithTriggersRefused() {
+        var fake = new FakeMysql();
+        fake.engines.put("t", "InnoDB");
+        fake.tablesWithTriggers.add("t");
+        var result = runMysql(fake, T);
+        assertEquals(new DryRunResult.Failed("t has triggers; cannot confirm they can roll back."), result);
+        assertEquals(0, fake.updates.get());
+        assertTrue(fake.executed.isEmpty(), "not even the SET ran: " + fake.executed);
+        assertEquals(1, fake.closes.get());
+        assertEquals(0, fake.commits.get());
+    }
+
+    @Test void mysqlUserFunctionRefused() {
+        var fake = new FakeMysql();
+        fake.engines.put("t", "InnoDB");
+        var result = runMysql(fake, T, List.of("f"));
+        assertEquals(new DryRunResult.Failed("f is not a built-in function; cannot confirm it can roll back."), result);
+        assertEquals(0, fake.updates.get());
+        assertTrue(fake.executed.isEmpty());
+    }
+
+    @Test void mysqlDottedNameRefused() {
+        var fake = new FakeMysql();
+        fake.engines.put("a.b", "InnoDB");
+        fake.engines.put("b", "InnoDB");
+        var result = runMysql(fake, List.of(name("a.b")));
+        assertEquals(new DryRunResult.Failed("Cannot confirm that a.b can roll back."), result);
+        assertEquals(0, fake.updates.get());
+        assertTrue(fake.executed.isEmpty());
+        assertTrue(fake.engineLookups.isEmpty(), "no guess was made at a split");
     }
 }

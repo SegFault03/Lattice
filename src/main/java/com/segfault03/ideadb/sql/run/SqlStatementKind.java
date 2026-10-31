@@ -34,20 +34,56 @@ public enum SqlStatementKind {
         return parse(sql, profile).kind;
     }
 
+    /** An unquoted table name with its qualifier kept apart, so a dot inside a quoted name is never mistaken for a qualifier. */
+    public record QualifiedName(@Nullable String schema, @NotNull String name) {
+        @Override public String toString() { return schema == null ? name : schema + "." + name; }
+    }
+
     /**
      * The unquoted, optionally schema-qualified names of the tables the statement reads or writes, distinct and in
      * first-seen order. WITH names and derived tables are not tables.
      */
     public static @NotNull List<String> targetTables(@NotNull CharSequence sql, @NotNull SqlDialectProfile profile) {
+        List<String> names = new ArrayList<>();
+        for (QualifiedName name : targetTableNames(sql, profile)) names.add(name.toString());
+        return names;
+    }
+
+    /** {@link #targetTables} with each name split into schema and name by the parser. */
+    public static @NotNull List<QualifiedName> targetTableNames(@NotNull CharSequence sql, @NotNull SqlDialectProfile profile) {
         Parsed parsed = parse(sql, profile);
-        Set<String> names = new LinkedHashSet<>();
+        Set<QualifiedName> names = new LinkedHashSet<>();
         for (TableRef ref : SqlStatementAnalyzer.structure(sql, parsed.tokens, profile).refs()) {
             if (ref.derived() || ref.name() == null || ref.name().isEmpty()) continue;
             String namespace = ref.namespace() == null || ref.namespace().isEmpty() ? null : ref.namespace();
             if (namespace == null && parsed.cteNames.contains(ref.name().toLowerCase(Locale.ROOT))) continue;
-            names.add(namespace == null ? ref.name() : namespace + "." + ref.name());
+            names.add(new QualifiedName(namespace, ref.name()));
         }
         return new ArrayList<>(names);
+    }
+
+    private static final Set<String> TABLE_POSITION = Set.of("INTO", "UPDATE", "FROM", "JOIN", "TABLE", "USING", "ONLY");
+
+    /**
+     * Names the dialect does not know as built-in functions, followed by "(": calls to stored functions, which may write
+     * anywhere. Keywords, built-in functions and types before "(", and table or WITH names before a column list, are not calls.
+     */
+    public static @NotNull List<String> userFunctionCalls(@NotNull CharSequence sql, @NotNull SqlDialectProfile profile) {
+        Parsed parsed = parse(sql, profile);
+        List<SqlToken> code = new ArrayList<>();
+        for (SqlToken token : parsed.tokens) if (!LatticeSqlTokens.COMMENTS.contains(token.type())) code.add(token);
+        Set<String> calls = new LinkedHashSet<>();
+        for (int i = 0; i + 1 < code.size(); i++) {
+            SqlToken token = code.get(i);
+            if (!LatticeSqlTokens.NAMES.contains(token.type()) || !isPunct(sql, code, i + 1, '(')) continue;
+            String name = unquote(token.text(sql));
+            if (parsed.cteNames.contains(name.toLowerCase(Locale.ROOT))) continue;
+            int first = i;
+            while (first >= 2 && isPunct(sql, code, first - 1, '.') && LatticeSqlTokens.NAMES.contains(code.get(first - 2).type())) first -= 2;
+            if (TABLE_POSITION.contains(word(sql, code, first - 1))) continue;
+            calls.add(name);
+        }
+        return new ArrayList<>(calls);
     }
 
     public static @Nullable String explainRefusal(@NotNull SqlStatementKind kind) {

@@ -98,9 +98,13 @@ public final class DryRunService {
      * Runs off the EDT and never throws; every failure becomes a result.
      */
     public DryRunResult runAndRollBack(ConnectionConfig config, SqlStatementKind kind, SqlLiteralRenderer.JdbcStatement statement,
-                                       List<String> targetTables, QueryExecution execution) {
+                                       List<SqlStatementKind.QualifiedName> targetTables, List<String> userFunctionCalls, QueryExecution execution) {
         if (kind != SqlStatementKind.DML) return new DryRunResult.Failed(SqlStatementKind.rollbackRefusal(kind));
         if (execution.isCancellationRequested()) return new DryRunResult.Cancelled(false);
+        if (config.getType() == DatabaseType.MYSQL) {
+            String refusal = mysqlStatementRefusal(targetTables, userFunctionCalls);
+            if (refusal != null) return new DryRunResult.Failed(refusal);
+        }
         long started = System.nanoTime();
         Connection connection = null;
         try {
@@ -170,13 +174,22 @@ public final class DryRunService {
         } catch (SQLException ignored) { }
     }
 
-    /** Fail closed: null only when every table is known to be on an engine that can roll back. */
-    private static String mysqlRollbackRefusal(Connection connection, List<String> targetTables) throws SQLException {
+    /** Refusals that need no connection. A stored function can write to any table, and a quoted name with a dot cannot be split safely. */
+    private static String mysqlStatementRefusal(List<SqlStatementKind.QualifiedName> targetTables, List<String> userFunctionCalls) {
         if (targetTables.isEmpty()) return "Cannot confirm which tables this statement changes.";
-        for (String table : targetTables) {
-            int dot = table.lastIndexOf('.');
-            String schema = dot > 0 ? table.substring(0, dot) : connection.getCatalog();
-            String name = dot > 0 ? table.substring(dot + 1) : table;
+        for (var table : targetTables) {
+            if (table.name().contains(".") || (table.schema() != null && table.schema().contains("."))) return "Cannot confirm that " + table + " can roll back.";
+        }
+        if (!userFunctionCalls.isEmpty()) return userFunctionCalls.get(0) + " is not a built-in function; cannot confirm it can roll back.";
+        return null;
+    }
+
+    /** Fail closed: null only when every table is known to be on an engine that can roll back and has no triggers. */
+    private static String mysqlRollbackRefusal(Connection connection, List<SqlStatementKind.QualifiedName> targetTables) throws SQLException {
+        for (var qualified : targetTables) {
+            String table = qualified.toString();
+            String schema = qualified.schema() != null ? qualified.schema() : connection.getCatalog();
+            String name = qualified.name();
             String engine = null;
             try (PreparedStatement lookup = connection.prepareStatement("select ENGINE from information_schema.TABLES where TABLE_SCHEMA = ? and TABLE_NAME = ?")) {
                 lookup.setString(1, schema);
@@ -187,6 +200,14 @@ public final class DryRunService {
             }
             if (engine == null || schema == null) return "Cannot confirm that " + table + " can roll back.";
             if (!ROLLBACK_ENGINES.contains(engine.toLowerCase(Locale.ROOT))) return table + " uses the " + engine + " engine, which cannot roll back.";
+            // A trigger can write to a table on another engine, and that write survives the rollback.
+            try (PreparedStatement triggers = connection.prepareStatement("select 1 from information_schema.TRIGGERS where EVENT_OBJECT_SCHEMA = ? and EVENT_OBJECT_TABLE = ? limit 1")) {
+                triggers.setString(1, schema);
+                triggers.setString(2, name);
+                try (ResultSet found = triggers.executeQuery()) {
+                    if (found.next()) return table + " has triggers; cannot confirm they can roll back.";
+                }
+            }
         }
         return null;
     }

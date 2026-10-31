@@ -145,6 +145,26 @@ class SqlStatementKindTest {
                 SqlStatementKind.targetTables("select * from \"Mixed Case\" join s.t on 1=1 join \"Mixed Case\" x on 1=1", PG));
     }
 
+    @Test void userFunctionCallsFindsOnlyNonBuiltIns() {
+        for (var dialect : List.of(PG, SqlDialects.MYSQL)) {
+            assertEquals(List.of("f"), SqlStatementKind.userFunctionCalls("update t set a = f(1)", dialect));
+            assertEquals(List.of(), SqlStatementKind.userFunctionCalls("update t set a = coalesce(b, 1), c = now()", dialect));
+            assertEquals(List.of(), SqlStatementKind.userFunctionCalls("insert into t (a) values (1)", dialect));
+            assertEquals(List.of(), SqlStatementKind.userFunctionCalls("insert into s.t (a, b) values (1, 2)", dialect));
+            assertEquals(List.of(), SqlStatementKind.userFunctionCalls("update t set a = 1 where id in (select id from u)", dialect));
+            assertEquals(List.of(), SqlStatementKind.userFunctionCalls("delete from t where exists (select 1 from u where u.id = t.id)", dialect));
+            assertEquals(List.of(), SqlStatementKind.userFunctionCalls("with c(x) as (select 1) insert into t select x from c", dialect));
+            assertEquals(List.of("log_it"), SqlStatementKind.userFunctionCalls("update t set a = audit.log_it(1)", dialect));
+        }
+        assertEquals(List.of(), SqlStatementKind.userFunctionCalls("merge into t using s on t.id = s.id when not matched then insert (a) values (1)", PG));
+    }
+
+    @Test void targetTableNamesKeepQualifierApart() {
+        var names = SqlStatementKind.targetTableNames("update `a.b` set x = 1", SqlDialects.MYSQL);
+        assertEquals(List.of(new SqlStatementKind.QualifiedName(null, "a.b")), names);
+        assertEquals(List.of(new SqlStatementKind.QualifiedName("s", "t")), SqlStatementKind.targetTableNames("update s.t set x = 1", SqlDialects.MYSQL));
+    }
+
     @Test void targetTablesExcludeCteNames() {
         assertEquals(List.of("t"), SqlStatementKind.targetTables("with a as (select * from t) select * from a", PG));
         assertEquals(List.of("t"), SqlStatementKind.targetTables("select * from (select * from t) d", PG));
