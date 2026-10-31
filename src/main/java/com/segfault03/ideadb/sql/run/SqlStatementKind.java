@@ -19,7 +19,8 @@ import java.util.Set;
 
 /**
  * What a statement does, for Explain and for Run and Roll Back. Classification reads the dialect's tokens, so keywords
- * in strings and comments never count. Anything that could commit or change the schema is {@link #OTHER}.
+ * in strings and comments never count. MySQL and MariaDB execute the body of {@code /*!} and {@code /*M!} comments, so in
+ * every dialect a statement containing one is {@link #OTHER}. Anything that could commit or change the schema is {@link #OTHER}.
  */
 public enum SqlStatementKind {
     QUERY, DML, OTHER;
@@ -67,9 +68,19 @@ public enum SqlStatementKind {
     private static @NotNull Parsed parse(CharSequence sql, SqlDialectProfile profile) {
         List<SqlToken> tokens = SqlTokenizer.tokenize(sql, profile);
         List<SqlToken> code = new ArrayList<>();
-        for (SqlToken token : tokens) if (!LatticeSqlTokens.COMMENTS.contains(token.type())) code.add(token);
         Set<String> cteNames = new HashSet<>();
+        for (SqlToken token : tokens) {
+            if (token.type() == LatticeSqlTokens.BLOCK_COMMENT && isExecutableComment(sql, token)) {
+                return new Parsed(OTHER, tokens, cteNames);
+            }
+            if (!LatticeSqlTokens.COMMENTS.contains(token.type())) code.add(token);
+        }
         return new Parsed(classify(sql, code, profile, cteNames), tokens, cteNames);
+    }
+
+    private static boolean isExecutableComment(CharSequence sql, SqlToken token) {
+        String text = token.text(sql);
+        return text.startsWith("/*!") || text.startsWith("/*M!");
     }
 
     private static @NotNull SqlStatementKind classify(CharSequence sql, List<SqlToken> code, SqlDialectProfile profile, Set<String> cteNames) {

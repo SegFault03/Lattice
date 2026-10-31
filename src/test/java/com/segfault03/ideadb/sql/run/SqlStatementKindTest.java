@@ -104,6 +104,28 @@ class SqlStatementKindTest {
         }));
     }
 
+    @Test void executableCommentsAreOther() {
+        for (String sql : List.of("/*!50000 drop table t */ update t set a=1", "update t set a=1 /*!50000 ; commit */",
+                "/*!50000 DROP */ TABLE t", "/*M!100000 drop table t */ update t set a=1")) {
+            assertEquals(OTHER, SqlStatementKind.of(sql, SqlDialects.MYSQL), sql);
+        }
+        assertEquals(OTHER, SqlStatementKind.of("/*! drop table t */ update t set a=1", PG));
+        assertEquals(DML, SqlStatementKind.of("/* plain */ update t set a=1", SqlDialects.MYSQL));
+    }
+
+    @Test void statementBoundaryRules() {
+        assertEquals(OTHER, kind("update t set a=1; commit"));
+        assertEquals(DML, kind("update t set a=1;"));
+        assertEquals(OTHER, kind("select 1; select 2"));
+        assertEquals(OTHER, kind("with x as (select 1) create table t2 (a int)"));
+        assertEquals(DML, kind("update t set a=';'"));
+        assertTrue(SqlStatementKind.targetTables("merge into t using s on t.id=s.id when matched then update set a=1", PG).contains("t"));
+        for (SqlDialectProfile profile : List.of(SqlDialects.H2, SqlDialects.MYSQL)) {
+            assertEquals(QUERY, SqlStatementKind.of("table t", profile));
+            assertEquals(QUERY, SqlStatementKind.of("values (1)", profile));
+        }
+    }
+
     @Test void refusalMessages() {
         assertNull(explainRefusal(QUERY));
         assertNull(explainRefusal(DML));
