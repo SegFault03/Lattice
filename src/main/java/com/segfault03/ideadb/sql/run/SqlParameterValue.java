@@ -17,16 +17,23 @@ public record SqlParameterValue(@NotNull Type type, @NotNull String text) {
 
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("uuuu-MM-dd").withResolverStyle(ResolverStyle.STRICT);
     private static final DateTimeFormatter SECONDS = DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm:ss").withResolverStyle(ResolverStyle.STRICT);
+    private static final Pattern NUMBER = Pattern.compile("[+-]?(\\d+\\.?\\d*|\\.\\d+)([eE][+-]?\\d+)?");
+    private static final Pattern DATE_TEXT = Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
     private static final Pattern TIMESTAMP = Pattern.compile("(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2})(\\.\\d{1,9})?");
 
     public @Nullable String validationError() {
         try {
             switch (type) {
-                case NUMBER -> new BigDecimal(text.trim());
+                case NUMBER -> {
+                    if (!NUMBER.matcher(text.trim()).matches()) return "Enter a number such as 12 or 3.5";
+                }
                 case BOOLEAN -> {
                     if (!isBoolean()) return "Enter true or false";
                 }
-                case DATE -> LocalDate.parse(text, DATE);
+                case DATE -> {
+                    if (!DATE_TEXT.matcher(text).matches()) return "Enter a date as yyyy-MM-dd";
+                    LocalDate.parse(text, DATE);
+                }
                 case TIMESTAMP -> {
                     var matcher = TIMESTAMP.matcher(text);
                     if (!matcher.matches()) return "Enter a timestamp as yyyy-MM-dd HH:mm:ss[.fffffffff]";
