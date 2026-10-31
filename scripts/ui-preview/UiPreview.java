@@ -955,7 +955,9 @@ public final class UiPreview {
         @SuppressWarnings("unchecked") JComboBox<QueryHistoryEntry> history = (JComboBox<QueryHistoryEntry>)field(panel, "historyCombo");
         history.addItem(new QueryHistoryEntry("SELECT 42;"));
         history.setSelectedIndex(1);
-        if (!editor.getText().equals("SELECT 42;")) throw new AssertionError("History must restore the full query");
+        // History inserts beside what was typed rather than replacing it, and selects the restored query.
+        if (!editor.getText().endsWith("SELECT 42;") || !"SELECT 42;".equals(editor.getSelectedText()))
+            throw new AssertionError("History must restore the full query");
         performToolbarAction(panel, "Clear query text");
         if (!editor.getText().isEmpty()) throw new AssertionError("Clear action must clear the query");
         if (run.isEnabled() || clear.isEnabled()) throw new AssertionError("Clear must update both action states");
@@ -987,8 +989,12 @@ public final class UiPreview {
         TableDataEditorPanel panel = table(false);
         JTable table = (JTable)field(panel, "dataTable");
         TableModel model = (TableModel)field(panel, "tableModel");
-        if (!model.isCellEditable(0, 0) || !model.getColumnName(0).contains("Auto") || model.getColumnName(0).contains("AI"))
-            throw new AssertionError("Auto columns must be labeled Auto and allow editing");
+        // Header tags are icon-only; auto-increment is named in the inspector, not the column title.
+        var getColumnMeta = model.getClass().getMethod("getColumnMeta", int.class);
+        getColumnMeta.setAccessible(true);
+        ColumnMetadata idColumn = (ColumnMetadata)getColumnMeta.invoke(model, 0);
+        if (!model.isCellEditable(0, 0) || !model.getColumnName(0).equals("id") || idColumn == null || !idColumn.isAutoIncrement())
+            throw new AssertionError("Auto columns must keep a plain title, stay auto-increment and allow editing");
         model.setValueAt("invalid identity", 0, 0);
         if (((JButton)field(panel, "saveBtn")).isEnabled()) throw new AssertionError("Invalid auto values must disable Commit");
         model.setValueAt(2001L, 0, 0);
@@ -1225,7 +1231,7 @@ public final class UiPreview {
         icon.paintIcon(new JLabel(), graphics, 0, 0);
         graphics.dispose();
         int expected = switch (type) {
-            case MYSQL -> 0x00758F;
+            case MYSQL -> JBColor.isBright() ? 0x00758F : 0x2A8FA8; // source-mysql-badge_dark.svg lightens it for contrast
             case HSQLDB -> 0x7256A8;
             case POSTGRESQL -> 0x4169E1;
             case H2 -> 0x2471A3;
