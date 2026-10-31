@@ -93,7 +93,8 @@ public final class SqlParameterPanel extends JPanel {
         return values;
     }
 
-    public boolean isValid() {
+    /** Named so it does not override {@link java.awt.Component#isValid()}, which Swing layout relies on. */
+    public boolean valuesValid() {
         return rows.values().stream().allMatch(row -> row.current().validationError() == null);
     }
 

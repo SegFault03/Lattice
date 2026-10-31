@@ -15,10 +15,10 @@ public final class SqlParameterDialog extends DialogWrapper {
     public SqlParameterDialog(@NotNull Project project, @NotNull SqlRunTarget target, @NotNull Map<String, SqlParameterValue> initial) {
         super(project);
         panel = new SqlParameterPanel(target.parameters().keys(), initial);
-        panel.addChangeListener(() -> setOKActionEnabled(panel.isValid()));
+        panel.addChangeListener(() -> setOKActionEnabled(panel.valuesValid()));
         setTitle("SQL Parameters");
         init();
-        setOKActionEnabled(panel.isValid());
+        setOKActionEnabled(panel.valuesValid());
     }
 
     @Override protected @NotNull JComponent createCenterPanel() { return panel; }
