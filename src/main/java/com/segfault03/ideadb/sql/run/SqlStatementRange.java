@@ -29,6 +29,13 @@ public record SqlStatementRange(int start, int end) {
             if (range.start() <= clamped && clamped <= range.end()) return range;
             if (range.end() < clamped) preceding = range;
         }
+        if (preceding != null || window.start() == 0) return preceding;
+        // A large text's window starts just after the semicolon before the caret, so the preceding statement is in the
+        // window ending at that semicolon.
+        SqlTextWindow.Range before = SqlTextWindow.around(text, window.start() - 1);
+        for (SqlStatementRange range : split(text, before.start(), before.end(), profile)) {
+            if (range.end() < clamped) preceding = range;
+        }
         return preceding;
     }
 

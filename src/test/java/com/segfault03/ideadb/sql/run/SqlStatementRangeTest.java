@@ -66,6 +66,25 @@ class SqlStatementRangeTest {
         assertTrue(SqlStatementRange.inSelection(text, 0, text.length(), SqlDialects.ANSI).isEmpty());
     }
 
+    private static String bigDump() {
+        StringBuilder text = new StringBuilder();
+        for (int i = 0; text.length() < 300_000; i++) text.append("INSERT INTO orders (id, total) VALUES (%d, 1);\n".formatted(i));
+        return text.toString();
+    }
+
+    @Test void betweenStatementsInALargeFilePicksThePrecedingStatement() {
+        String text = bigDump();
+        String previous = "INSERT INTO orders (id, total) VALUES (3000, 1)";
+        int afterSemicolon = text.indexOf(previous) + previous.length() + 1;
+        assertEquals(previous, at(text, SqlStatementRange.atCaret(text, afterSemicolon, SqlDialects.POSTGRESQL)));
+
+        String blank = text.substring(0, afterSemicolon + 1) + "\n\n" + text.substring(afterSemicolon + 1);
+        assertEquals(previous, at(blank, SqlStatementRange.atCaret(blank, afterSemicolon + 2, SqlDialects.POSTGRESQL)));
+
+        String comment = text.substring(0, afterSemicolon + 1) + "-- a note\n" + text.substring(afterSemicolon + 1);
+        assertEquals(previous, at(comment, SqlStatementRange.atCaret(comment, afterSemicolon + 4, SqlDialects.POSTGRESQL)));
+    }
+
     @Test void fiveMegabyteDumpResolvesUnder200ms() {
         StringBuilder text = new StringBuilder();
         String line = "INSERT INTO orders (id, total) VALUES (%d, 1);\n";
