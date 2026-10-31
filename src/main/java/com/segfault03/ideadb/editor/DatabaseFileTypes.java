@@ -30,6 +30,15 @@ public final class DatabaseFileTypes {
         @Override public boolean isReadOnly() { return false; }
     };
 
+    public static final FileType DRY_RUN = new FileType() {
+        @Override public @NotNull String getName() { return "DatabaseDryRun"; }
+        @Override public @NotNull @Nls String getDescription() { return "Database Dry Run"; }
+        @Override public @NotNull String getDefaultExtension() { return "dbdryrun"; }
+        @Override public @Nullable Icon getIcon() { return Icons.CONSOLE; }
+        @Override public boolean isBinary() { return true; }
+        @Override public boolean isReadOnly() { return true; }
+    };
+
     public static final FileType WELCOME = new FileType() {
         @Override public @NotNull String getName() { return "DatabaseWelcome"; }
         @Override public @NotNull @Nls String getDescription() { return "Lattice Welcome"; }

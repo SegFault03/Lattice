@@ -15,6 +15,7 @@ import com.segfault03.ideadb.model.ConnectionConfig
 import com.segfault03.ideadb.sql.binding.SqlBindingsState
 import com.segfault03.ideadb.sql.binding.SqlEditorRefresh
 import com.segfault03.ideadb.sql.discovery.JdbcDiscovery
+import com.segfault03.ideadb.sql.run.SqlRunState
 import com.segfault03.ideadb.state.DatabaseSettingsState
 import com.segfault03.ideadb.ui.Icons
 
@@ -23,12 +24,14 @@ class SqlProjectConfigurable(private val project: Project) : BoundConfigurable("
     private val connections = CollectionComboBoxModel<Any>()
     private lateinit var useProjectFiles: Cell<JBCheckBox>
     private lateinit var offerAgain: Cell<JBCheckBox>
+    private lateinit var confirmRollback: Cell<JBCheckBox>
     private lateinit var offerRow: Row
 
     override fun getId(): String = "com.segfault03.lattice.sql.editor.project"
 
     override fun createPanel(): DialogPanel {
         val bindings = SqlBindingsState.getInstance(project)
+        val runState = SqlRunState.getInstance(project)
         // The panel shows the saved state as soon as it exists, whether or not the caller resets it.
         val dialog = panel {
             row("Default connection:") {
@@ -55,6 +58,12 @@ class SqlProjectConfigurable(private val project: Project) : BoundConfigurable("
                     .onIsModified { offerAgain.component.isSelected }
                     .onReset { loadOffer(bindings) }
             }
+            row {
+                confirmRollback = checkBox("Confirm before Run and Roll Back")
+                    .comment("Run and Roll Back executes the statement for real and then undoes it. Sequences and triggers are not undone.")
+                    .onIsModified { confirmRollback.component.isSelected != runState.confirmRollbackRuns() }
+                    .onReset { confirmRollback.component.isSelected = runState.confirmRollbackRuns() }
+            }
         }
         dialog.reset()
         return dialog
@@ -65,6 +74,7 @@ class SqlProjectConfigurable(private val project: Project) : BoundConfigurable("
         val filesChanged = useProjectFiles.component.isSelected != bindings.useProjectFiles()
         bindings.setDefaultConnectionId(selectedId())
         bindings.useProjectFiles(useProjectFiles.component.isSelected)
+        SqlRunState.getInstance(project).setConfirmRollbackRuns(confirmRollback.component.isSelected)
         if (offerAgain.component.isSelected) bindings.clearDismissedDiscoveries()
         if (filesChanged) JdbcDiscovery.getInstance(project).refresh()
         SqlEditorRefresh.refreshAll(project)

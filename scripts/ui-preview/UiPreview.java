@@ -471,6 +471,30 @@ public final class UiPreview {
         render(panel, theme + "-sql-parameters-640", 640, 300);
     }
 
+    static void renderDryRun(String theme) throws Exception {
+        String sql = "update orders set status = :status where customer_id = :customer";
+        ConnectionConfig config = config(DatabaseType.MYSQL);
+        var target = new com.segfault03.ideadb.sql.run.SqlRunTarget(sql, com.segfault03.ideadb.sql.dialect.SqlDialects.MYSQL, config,
+                new com.intellij.testFramework.LightVirtualFile("orders.sql"),
+                com.segfault03.ideadb.sql.run.SqlParameters.of(sql, com.segfault03.ideadb.sql.dialect.SqlDialects.MYSQL, false));
+        var values = new java.util.LinkedHashMap<String, com.segfault03.ideadb.sql.run.SqlParameterValue>();
+        values.put(":status", new com.segfault03.ideadb.sql.run.SqlParameterValue(com.segfault03.ideadb.sql.run.SqlParameterValue.Type.TEXT, "shipped"));
+        values.put(":customer", new com.segfault03.ideadb.sql.run.SqlParameterValue(com.segfault03.ideadb.sql.run.SqlParameterValue.Type.NUMBER, "42"));
+        var plan = new com.segfault03.ideadb.sql.run.DryRunPanel(null, config);
+        plan.showRunning(target, "DML", values);
+        plan.show(new com.segfault03.ideadb.service.DryRunResult.Plan(
+                "-> Update orders on orders  (cost=1.10 rows=1)\n    -> Index lookup on orders using idx_customer (customer_id=42)  (cost=1.10 rows=1)", false, 6));
+        render(plan, theme + "-dry-run-plan-720", 720, 300);
+        var rolledBack = new com.segfault03.ideadb.sql.run.DryRunPanel(null, config);
+        rolledBack.showRunning(target, "DML", values);
+        rolledBack.show(new com.segfault03.ideadb.service.DryRunResult.RolledBack(3, java.util.List.of("Data truncated for column 'status' at row 2"), 18));
+        render(rolledBack, theme + "-dry-run-rolled-back-720", 720, 300);
+        var unknown = new com.segfault03.ideadb.sql.run.DryRunPanel(null, config);
+        unknown.showRunning(target, "DML", values);
+        unknown.show(new com.segfault03.ideadb.service.DryRunResult.OutcomeUnknown(config.getName(), "Communications link failure during rollback"));
+        render(unknown, theme + "-dry-run-outcome-unknown-720", 720, 300);
+    }
+
     static void renderCellDetails(String theme) throws Exception {
         renderApprovedInspector(theme);
         renderCachedMenuThemeRefresh(theme);
@@ -1306,6 +1330,7 @@ public final class UiPreview {
                 renderTableTabIcons(theme);
                 render(valueWorkspacePreview(), theme + "-cell-details-1440", 1440, 900);
                 renderSqlParameters(theme);
+                renderDryRun(theme);
                 render(ExplorerPreview.create(config(DatabaseType.MYSQL), true), theme + "-side-panel-empty-340", 340, 620);
                 connectionMenuPreview(ExplorerPreview.create(config(DatabaseType.MYSQL), true),
                         "Add a connection…", theme + "-side-panel-connection-menu-340", 340, 620);

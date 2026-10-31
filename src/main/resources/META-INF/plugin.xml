@@ -90,6 +90,14 @@
             <className>com.segfault03.ideadb.sql.run.SqlRunIntentions$SendToConsole</className>
             <category>Lattice SQL</category>
         </intentionAction>
+        <intentionAction>
+            <className>com.segfault03.ideadb.sql.run.SqlRunIntentions$Explain</className>
+            <category>Lattice SQL</category>
+        </intentionAction>
+        <intentionAction>
+            <className>com.segfault03.ideadb.sql.run.SqlRunIntentions$RunAndRollBack</className>
+            <category>Lattice SQL</category>
+        </intentionAction>
         <typedHandler implementation="com.segfault03.ideadb.sql.completion.LatticeSqlTypedHandler"/>
         <platform.backend.documentation.targetProvider implementation="com.segfault03.ideadb.sql.doc.LatticeSqlDocumentationTargetProvider"/>
         <platform.backend.documentation.linkHandler implementation="com.segfault03.ideadb.sql.doc.LatticeSqlDocumentationLinkHandler"/>
@@ -139,6 +147,14 @@
                     class="com.segfault03.ideadb.sql.run.SendToConsoleAction"
                     text="Send to Console"
                     description="Append the SQL statement at the caret to the connection's console without running it"/>
+            <action id="com.segfault03.lattice.sql.run.explain"
+                    class="com.segfault03.ideadb.sql.run.ExplainStatementAction"
+                    text="Explain Statement"
+                    description="Show the execution plan of the SQL statement at the caret without running it"/>
+            <action id="com.segfault03.lattice.sql.run.rollback"
+                    class="com.segfault03.ideadb.sql.run.RunAndRollBackAction"
+                    text="Run and Roll Back"
+                    description="Run the INSERT, UPDATE or DELETE at the caret in a transaction that is always rolled back"/>
         </group>
         <action id="com.segfault03.lattice.sql.chooseFileConnection"
                 class="com.segfault03.ideadb.sql.binding.ChooseSqlConnectionAction"

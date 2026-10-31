@@ -1,0 +1,285 @@
+package com.segfault03.ideadb.sql.run;
+
+import com.intellij.codeInsight.intention.IntentionAction;
+import com.intellij.openapi.actionSystem.ActionGroup;
+import com.intellij.openapi.actionSystem.ActionManager;
+import com.intellij.openapi.actionSystem.AnAction;
+import com.intellij.openapi.actionSystem.Presentation;
+import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.ui.Messages;
+import com.intellij.openapi.ui.TestDialogManager;
+import com.intellij.testFramework.PlatformTestUtil;
+import com.intellij.util.ui.UIUtil;
+import com.segfault03.ideadb.model.ConnectionConfig;
+import com.segfault03.ideadb.model.DatabaseType;
+import com.segfault03.ideadb.service.DatabaseConnectionManager;
+import com.segfault03.ideadb.service.DryRunService;
+import com.segfault03.ideadb.sql.H2SqlFixtureTestCase;
+import com.segfault03.ideadb.sql.coexist.UltimateDatabasePlugin;
+import com.segfault03.ideadb.sql.settings.SqlProjectConfigurable;
+
+import javax.swing.JCheckBox;
+import javax.swing.JComponent;
+import java.sql.Connection;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.Set;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/** Explain Statement and Run and Roll Back against the H2 fixture: the refusals, the tab, the confirmation and the guard. */
+public class DryRunActionsFixtureTest extends H2SqlFixtureTestCase {
+    private static final String EXPLAIN = "com.segfault03.lattice.sql.run.explain";
+    private static final String ROLLBACK = "com.segfault03.lattice.sql.run.rollback";
+    private static final String ALREADY_RUNNING = "A dry run is already running for this connection.";
+
+    private final AtomicInteger opens = new AtomicInteger();
+    private final List<String> errors = new ArrayList<>();
+    private final List<SqlRunTarget> asked = new ArrayList<>();
+    private final Set<VirtualFile> tabs = new LinkedHashSet<>();
+    private volatile Boolean runningWhileOpening;
+
+    @Override protected String[] schemaStatements() {
+        return new String[] {"create table t (id int primary key, name varchar(20))", "insert into t values (1, 'a')"};
+    }
+
+    @Override protected void setUp() throws Exception {
+        super.setUp();
+        DryRunService.setInstanceForTests(new DryRunService(config -> {
+            opens.incrementAndGet();
+            DryRunPanel opening = DryRunVirtualFile.existingPanel(getProject(), config);
+            runningWhileOpening = opening != null && opening.isRunning();
+            return DatabaseConnectionManager.getInstance().openConnection(config);
+        }), getTestRootDisposable());
+        TestDialogManager.setTestDialog(message -> {
+            errors.add(message);
+            return Messages.OK;
+        }, getTestRootDisposable());
+        // A light test has no editor window to open a Lattice tab in, so the open tabs are recorded instead.
+        DryRunVirtualFile.setTabsForTests(new DryRunVirtualFile.Tabs() {
+            @Override public boolean isOpen(com.intellij.openapi.project.Project project, VirtualFile file) { return tabs.contains(file); }
+            @Override public void open(com.intellij.openapi.project.Project project, VirtualFile file) { tabs.add(file); }
+        }, getTestRootDisposable());
+        RollbackConfirmation.setAnswerForTests(true, getTestRootDisposable());
+        SqlRunState.getInstance(getProject()).loadState(new SqlRunState.State());
+        SqlRunActionSupport.setValuesProviderForTests((target, initial) -> {
+            asked.add(target);
+            return Map.of("1", new SqlParameterValue(SqlParameterValue.Type.NUMBER, "1"));
+        }, getTestRootDisposable());
+    }
+
+    @Override protected void tearDown() throws Exception {
+        try {
+            SqlRunState.getInstance(getProject()).loadState(new SqlRunState.State());
+        } finally {
+            super.tearDown();
+        }
+    }
+
+    private Presentation perform(String id) {
+        return myFixture.testAction(ActionManager.getInstance().getAction(id));
+    }
+
+    private DryRunPanel panel() {
+        return DryRunVirtualFile.existingPanel(getProject(), h2);
+    }
+
+    private DryRunPanel waitUntilDone() {
+        PlatformTestUtil.waitWithEventsDispatching("The dry run never finished", () -> panel() != null && !panel().isRunning(), 30);
+        return panel();
+    }
+
+    private String selectedRowQuietly() {
+        try { return selectedRow(); } catch (Exception e) { throw new IllegalStateException(e); }
+    }
+
+    private String selectedRow() throws Exception {
+        Connection connection = DatabaseConnectionManager.getInstance().getConnection(h2);
+        synchronized (connection) {
+            try (var statement = connection.createStatement(); var rows = statement.executeQuery("select name from t where id = 1")) {
+                rows.next();
+                return rows.getString(1);
+            }
+        }
+    }
+
+    public void testExplainOpensTabWithPlan() {
+        myFixture.configureByText("q.sql", "select * from t where <caret>id = ?");
+        perform(EXPLAIN);
+        DryRunPanel panel = waitUntilDone();
+        assertNotNull(panel);
+        assertTrue(panel.bodyText(), panel.bodyText().toUpperCase().contains("SELECT"));
+        assertTrue(panel.headerText(), panel.headerText().contains("fixture H2"));
+        assertTrue(panel.headerText(), panel.headerText().contains("Query"));
+        assertTrue(panel.headerText(), panel.headerText().contains("1 = 1"));
+        assertEquals(1, opens.get());
+        assertEquals(1, asked.size());
+        assertEquals("Dry Run: fixture H2", tabs.iterator().next().getName());
+        assertTrue(errors.isEmpty());
+    }
+
+    public void testExplainRefusesOtherStatements() {
+        myFixture.configureByText("q.sql", "create table <caret>x (id int)");
+        perform(EXPLAIN);
+        assertEquals(List.of("Only queries and DML can be explained."), errors);
+        assertEquals(0, opens.get());
+        assertNull(panel());
+    }
+
+    public void testRollbackRefusesSelectWithoutConnecting() {
+        myFixture.configureByText("q.sql", "select * from t where <caret>id = ?");
+        perform(ROLLBACK);
+        assertEquals(List.of(SqlStatementKind.rollbackRefusal(SqlStatementKind.QUERY)), errors);
+        assertEquals(0, opens.get());
+        assertTrue("no values were asked for", asked.isEmpty());
+        assertNull(panel());
+    }
+
+    public void testRollbackRunsAndShowsRolledBack() throws Exception {
+        myFixture.configureByText("q.sql", "update t set name = 'z' where <caret>id = ?");
+        perform(ROLLBACK);
+        DryRunPanel panel = waitUntilDone();
+        assertTrue(panel.bodyText(), panel.bodyText().contains("1 row(s) affected"));
+        assertTrue(panel.bodyText(), panel.bodyText().contains("Rolled back"));
+        assertTrue(panel.headerText(), panel.headerText().contains("DML"));
+        assertEquals("the table is unchanged", "a", selectedRow());
+    }
+
+    public void testRollbackAsksConfirmationUnlessSuppressed() throws Exception {
+        myFixture.configureByText("q.sql", "update t set name = 'z' where <caret>id = ?");
+        RollbackConfirmation.setAnswerForTests(false, getTestRootDisposable());
+        perform(ROLLBACK);
+        assertEquals("declined: nothing runs", 0, opens.get());
+        assertNull(panel());
+
+        // Suppressed: confirm() answers true without a dialog, which would otherwise fail the test.
+        RollbackConfirmation.setAnswerForTests(null, getTestRootDisposable());
+        SqlRunState.getInstance(getProject()).setConfirmRollbackRuns(false);
+        assertTrue(RollbackConfirmation.confirm(getProject(), h2, SqlStatementKind.DML));
+        perform(ROLLBACK);
+        waitUntilDone();
+        assertEquals(1, opens.get());
+        assertEquals("a", selectedRow());
+    }
+
+    public void testTabReusedPerConnection() {
+        myFixture.configureByText("q.sql", "select * from t where <caret>id = ?");
+        perform(EXPLAIN);
+        DryRunPanel first = waitUntilDone();
+        perform(EXPLAIN);
+        DryRunPanel second = waitUntilDone();
+        assertSame(first, second);
+        assertEquals(1, tabs.size());
+        assertEquals(2, opens.get());
+    }
+
+    public void testRerunRunsAgainWithoutAskingForValues() {
+        myFixture.configureByText("q.sql", "select * from t where <caret>id = ?");
+        perform(EXPLAIN);
+        DryRunPanel panel = waitUntilDone();
+        panel.clickRerun();
+        PlatformTestUtil.waitWithEventsDispatching("The re-run never started", () -> opens.get() == 2, 30);
+        waitUntilDone();
+        assertEquals(1, asked.size());
+        assertEquals(2, opens.get());
+    }
+
+    public void testPanelIsRunningWhileTheConnectionIsOpened() {
+        myFixture.configureByText("q.sql", "select * from t where <caret>id = ?");
+        perform(EXPLAIN);
+        waitUntilDone();
+        assertEquals("seen from the thread that opens the connection", Boolean.TRUE, runningWhileOpening);
+    }
+
+    /**
+     * The platform runs a Task.Backgroundable to completion inside queue() in tests, so a run cannot be held open from
+     * here with a latch; the panel is put into its running state directly, as the action does before it queues the task.
+     */
+    public void testSecondRunWhileRunningRefused() {
+        myFixture.configureByText("q.sql", "update t set name = 'z' where <caret>id = ?");
+        SqlRunTarget target = ((SqlRunTarget.Found) com.intellij.openapi.application.ReadAction.compute(
+                () -> SqlRunTarget.resolve(getProject(), myFixture.getEditor(), myFixture.getFile()))).target();
+        DryRunPanel panel = DryRunVirtualFile.open(getProject(), h2);
+        panel.showRunning(target, "DML", Map.of());
+        assertTrue(panel.isRunning());
+        assertFalse(panel.rerunEnabled());
+
+        perform(EXPLAIN);
+        perform(ROLLBACK);
+        assertEquals(List.of(ALREADY_RUNNING, ALREADY_RUNNING), errors);
+        assertTrue("the guard comes before the values dialog", asked.isEmpty());
+        assertEquals(0, opens.get());
+
+        panel.show(new com.segfault03.ideadb.service.DryRunResult.Cancelled(false));
+        perform(EXPLAIN);
+        waitUntilDone();
+        assertEquals(1, opens.get());
+        assertEquals("no further error", 2, errors.size());
+        assertEquals("a", selectedRowQuietly());
+    }
+
+    public void testActionsRegisteredInOrderInTheGroup() {
+        ActionManager manager = ActionManager.getInstance();
+        AnAction[] children = ((ActionGroup) manager.getAction("com.segfault03.lattice.sql.run.group")).getChildren(null);
+        assertEquals(List.of("com.segfault03.lattice.sql.run.sendToConsole", EXPLAIN, ROLLBACK),
+                List.of(manager.getId(children[0]), manager.getId(children[1]), manager.getId(children[2])));
+        assertEquals("Explain Statement", manager.getAction(EXPLAIN).getTemplatePresentation().getText());
+        assertEquals("Run and Roll Back", manager.getAction(ROLLBACK).getTemplatePresentation().getText());
+    }
+
+    public void testIntentionsOfferBothActions() {
+        myFixture.configureByText("q.sql", "update t set name = 'z' where <caret>id = 1");
+        for (String text : List.of("Explain Statement", "Run and Roll Back")) {
+            IntentionAction intention = myFixture.getAvailableIntention(text);
+            assertNotNull(text, intention);
+            assertEquals("Lattice SQL", intention.getFamilyName());
+        }
+        myFixture.launchAction(myFixture.getAvailableIntention("Run and Roll Back"));
+        DryRunPanel panel = waitUntilDone();
+        assertTrue(panel.bodyText(), panel.bodyText().contains("Rolled back"));
+    }
+
+    public void testDisabledWithoutConnection() {
+        connections.removeConnection(h2.getId());
+        connections.addConnection(new ConnectionConfig(DatabaseType.H2, "a"));
+        connections.addConnection(new ConnectionConfig(DatabaseType.H2, "b"));
+        myFixture.configureByText("q.sql", "update t set name = 'z' where <caret>id = 1");
+        for (String id : List.of(EXPLAIN, ROLLBACK)) {
+            Presentation presentation = perform(id);
+            assertTrue(presentation.isVisible());
+            assertFalse(presentation.isEnabled());
+        }
+        assertNull(myFixture.getAvailableIntention("Explain Statement"));
+        assertNull(myFixture.getAvailableIntention("Run and Roll Back"));
+        assertEquals(0, opens.get());
+    }
+
+    public void testActionsHiddenWhenUltimateActive() {
+        UltimateDatabasePlugin.setActiveForTests(true, getTestRootDisposable());
+        myFixture.configureByText("q.sql", "update t set name = 'z' where <caret>id = 1");
+        assertFalse(perform(EXPLAIN).isVisible());
+        assertFalse(perform(ROLLBACK).isVisible());
+        assertNull(myFixture.getAvailableIntention("Explain Statement"));
+        assertNull(myFixture.getAvailableIntention("Run and Roll Back"));
+        assertEquals(0, opens.get());
+    }
+
+    public void testProjectSettingsCheckboxReenablesConfirmation() {
+        SqlRunState state = SqlRunState.getInstance(getProject());
+        state.setConfirmRollbackRuns(false);
+        var page = new SqlProjectConfigurable(getProject());
+        JComponent component = page.createComponent();
+        JCheckBox box = UIUtil.findComponentsOfType(component, JCheckBox.class).stream()
+                .filter(candidate -> "Confirm before Run and Roll Back".equals(candidate.getText())).findFirst().orElse(null);
+        assertNotNull(box);
+        assertFalse(box.isSelected());
+        assertFalse(page.isModified());
+        box.setSelected(true);
+        assertTrue(page.isModified());
+        page.apply();
+        assertTrue(state.confirmRollbackRuns());
+        assertFalse(page.isModified());
+        page.disposeUIResources();
+    }
+}

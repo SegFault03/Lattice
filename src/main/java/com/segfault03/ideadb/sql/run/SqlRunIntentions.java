@@ -25,4 +25,27 @@ public final class SqlRunIntentions {
             if (editor != null && file != null) SendToConsoleAction.sendToConsole(project, editor, file);
         }
     }
+
+    public static final class Explain extends DryRunIntention {
+        @Override public @Nls @NotNull String getText() { return "Explain Statement"; }
+        @Override public void invoke(@NotNull Project project, Editor editor, PsiFile file) {
+            if (editor != null && file != null) ExplainStatementAction.explain(project, editor, file);
+        }
+    }
+
+    public static final class RunAndRollBack extends DryRunIntention {
+        @Override public @Nls @NotNull String getText() { return "Run and Roll Back"; }
+        @Override public void invoke(@NotNull Project project, Editor editor, PsiFile file) {
+            if (editor != null && file != null) RunAndRollBackAction.runAndRollBack(project, editor, file);
+        }
+    }
+
+    private abstract static class DryRunIntention implements IntentionAction, DumbAware {
+        @Override public @NotNull String getFamilyName() { return "Lattice SQL"; }
+        @Override public boolean startInWriteAction() { return false; }
+        @Override public boolean isAvailable(@NotNull Project project, Editor editor, PsiFile file) {
+            if (editor == null || file == null || UltimateDatabasePlugin.isActive()) return false;
+            return SqlRunTarget.resolve(project, editor, file) instanceof SqlRunTarget.Found found && found.target().connection() != null;
+        }
+    }
 }
