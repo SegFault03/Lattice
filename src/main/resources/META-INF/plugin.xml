@@ -86,6 +86,10 @@
             <className>com.segfault03.ideadb.sql.inject.SqlStringIntentions$AsSql</className>
             <category>Lattice SQL</category>
         </intentionAction>
+        <intentionAction>
+            <className>com.segfault03.ideadb.sql.run.SqlRunIntentions$SendToConsole</className>
+            <category>Lattice SQL</category>
+        </intentionAction>
         <typedHandler implementation="com.segfault03.ideadb.sql.completion.LatticeSqlTypedHandler"/>
         <platform.backend.documentation.targetProvider implementation="com.segfault03.ideadb.sql.doc.LatticeSqlDocumentationTargetProvider"/>
         <platform.backend.documentation.linkHandler implementation="com.segfault03.ideadb.sql.doc.LatticeSqlDocumentationLinkHandler"/>
@@ -128,6 +132,13 @@
     </extensions>
 
     <actions>
+        <group id="com.segfault03.lattice.sql.run.group" text="Lattice SQL" popup="true">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <action id="com.segfault03.lattice.sql.run.sendToConsole"
+                    class="com.segfault03.ideadb.sql.run.SendToConsoleAction"
+                    text="Send to Console"
+                    description="Append the SQL statement at the caret to the connection's console without running it"/>
+        </group>
         <action id="com.segfault03.lattice.sql.chooseFileConnection"
                 class="com.segfault03.ideadb.sql.binding.ChooseSqlConnectionAction"
                 text="Lattice: SQL Connection for This File..."
