@@ -60,6 +60,25 @@ class SqlLiteralRendererTest {
         }
     }
 
+    @Test void mysqlPlainTextIsReadable() {
+        assertEquals("select 'abc d\u00e9'", render("select :t", DatabaseType.MYSQL, Map.of(":t", v(Type.TEXT, "abc d\u00e9"))));
+    }
+
+    @Test void mysqlTextWithQuoteBackslashOrNewlineFallsBackToProviderForm() {
+        for (String text : new String[] {"'", "\\", "\n", "\u007f"}) {
+            assertEquals("select " + DatabaseProviders.get(DatabaseType.MYSQL).sqlLiteral(text, "VARCHAR"),
+                    render("select :t", DatabaseType.MYSQL, Map.of(":t", v(Type.TEXT, text))));
+        }
+    }
+
+    @Test void numberRendersAsEntered() {
+        for (DatabaseType type : DatabaseType.values()) {
+            assertEquals("select 1E3", render("select :v", type, Map.of(":v", v(Type.NUMBER, " 1E3 "))), type.name());
+            assertEquals("select -0.50", render("select :v", type, Map.of(":v", v(Type.NUMBER, "-0.50"))), type.name());
+        }
+        assertEquals(new BigDecimal("1E3"), v(Type.NUMBER, "1E3").jdbcValue());
+    }
+
     @Test void valueContainingParameterTextIsNotReplacedAgain() {
         String out = render("select :x, :y", DatabaseType.H2,
                 Map.of(":x", v(Type.TEXT, "? :x $1"), ":y", v(Type.NUMBER, "2")));

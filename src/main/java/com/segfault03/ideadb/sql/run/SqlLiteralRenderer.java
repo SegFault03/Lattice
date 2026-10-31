@@ -24,7 +24,7 @@ public final class SqlLiteralRenderer {
         List<SqlParameters.Occurrence> occurrences = params.occurrences();
         for (int i = occurrences.size() - 1; i >= 0; i--) {
             SqlParameters.Occurrence occurrence = occurrences.get(i);
-            out.replace(occurrence.start(), occurrence.end(), literal(provider, valueOf(values, occurrence.key())));
+            out.replace(occurrence.start(), occurrence.end(), literal(provider, type, valueOf(values, occurrence.key())));
         }
         return out.toString();
     }
@@ -59,14 +59,24 @@ public final class SqlLiteralRenderer {
         return value;
     }
 
-    private static String literal(DatabaseProvider provider, SqlParameterValue value) {
+    private static String literal(DatabaseProvider provider, DatabaseType type, SqlParameterValue value) {
         return switch (value.type()) {
-            case TEXT -> provider.sqlLiteral(value.text(), "VARCHAR");
-            case NUMBER -> provider.sqlLiteral(value.jdbcValue(), "NUMERIC");
+            case TEXT -> type == DatabaseType.MYSQL && isPlain(value.text())
+                    ? "'" + value.text() + "'" : provider.sqlLiteral(value.text(), "VARCHAR");
+            case NUMBER -> value.text().trim();
             case BOOLEAN -> provider.sqlLiteral(value.jdbcValue(), "BOOLEAN");
             case DATE -> "DATE '" + value.text() + "'";
             case TIMESTAMP -> "TIMESTAMP '" + value.text() + "'";
             case NULL -> "NULL";
         };
+    }
+
+    /** Text that reads the same under every MySQL sql_mode, including NO_BACKSLASH_ESCAPES. */
+    private static boolean isPlain(String text) {
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '\'' || c == '\\' || c < 0x20 || c == 0x7f) return false;
+        }
+        return true;
     }
 }
