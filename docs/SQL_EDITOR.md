@@ -49,12 +49,12 @@ Hover over a name in a `.sql` file (or press `Ctrl+Q`, `F1` on macOS) to see wha
 
 | Over | Card |
 |---|---|
-| A table or view | Comment, the columns as an aligned table of name and type with the flags `PK`, `FK` and `not null`, foreign keys (each a link to its target column), the columns that reference it, and **Open in Lattice** to open its data editor |
+| A table or view | Comment, the columns as an aligned table of name and type with the flags `PK`, `FK` and `not null`, foreign keys (`column → target`, the target a link), the columns that reference it (`column ← table.column`, naming which column of this table is pointed at), and **Open in Lattice** to open its data editor |
 | A column, bare or after `alias.`, `table.` or `schema.table.` | Type, comment, nullability (`nullable` or `not null`), default, primary or foreign key (the target is a link), auto increment or generated |
 | An alias | The table it stands for, as a link, then the table's card: comment, columns, keys and what references it |
 | A schema | Its tables, as links |
 
-Links in a card open the card of the target. Names resolve the way completion resolves them: through aliases, schema-qualified names, `UPDATE ... SET` and `INSERT` column lists, ignoring case, and with quoted names unquoted. Keywords, unknown names and derived-table aliases show nothing, as does a file with no connection or a connection whose schema has not been read yet; hovering starts that read, so the card appears on the next hover. The cards read the metadata cache and never contact the database.
+Cards are colored to be read at a glance: primary key columns and their `PK` flag are gold, foreign key columns and `FK` purple, and each type has the color of what it holds (numbers blue, text green, dates and times orange, booleans teal, binary pink, JSON, enums and the like tan). The palette is lighter on a dark editor color scheme and deeper on a light one. Links in a card open the card of the target. Names resolve the way completion resolves them: through aliases, schema-qualified names, `UPDATE ... SET` and `INSERT` column lists, ignoring case, and with quoted names unquoted. Keywords, unknown names and derived-table aliases show nothing, as does a file with no connection or a connection whose schema has not been read yet; hovering starts that read, so the card appears on the next hover. The cards read the metadata cache and never contact the database.
 
 ## Running statements
 

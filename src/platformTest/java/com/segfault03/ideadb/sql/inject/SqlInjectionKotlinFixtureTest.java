@@ -118,7 +118,7 @@ public class SqlInjectionKotlinFixtureTest extends H2SqlFixtureTestCase {
         var targets = IdeDocumentationTargetProvider.getInstance(getProject())
                 .documentationTargets(myFixture.getEditor(), myFixture.getFile(), myFixture.getCaretOffset());
         assertEquals(targets.toString(), 1, targets.size());
-        assertTrue(((SqlDocumentationTarget) targets.get(0)).html().contains("PUBLIC.BOOKS"));
+        assertTrue(((SqlDocumentationTarget) targets.get(0)).html().replaceAll("<[^>]*>", "").contains("PUBLIC.BOOKS"));
     }
 
     /** What the intention changed is in the source file, whose editor the fixture hides while the caret is inside SQL. */

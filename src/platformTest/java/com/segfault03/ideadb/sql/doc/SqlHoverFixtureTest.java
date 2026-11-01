@@ -39,9 +39,23 @@ public class SqlHoverFixtureTest extends H2SqlFixtureTestCase {
     public void testATableShowsItsCommentColumnsAndKeys() {
         loadSchema();
         String html = card("select * from <caret>authors");
-        assertTrue(html, html.contains("PUBLIC.AUTHORS") && html.contains("People who write"));
-        assertTrue(html.contains("<b>ID</b></td>") && html.contains("Referenced by") && html.contains("BOOKS.AUTHOR_ID"));
+        assertTrue(html, html.replaceAll("<[^>]*>", "").contains("PUBLIC.AUTHORS") && html.contains("People who write"));
+        assertTrue(html.contains(">ID</span></b></td>") && html.contains("Referenced by") && html.replaceAll("<[^>]*>", "").contains("BOOKS.AUTHOR_ID"));
         assertFalse("the source is the popup's location bar, not a line of the card", html.contains("fixture H2"));
+    }
+
+    public void testTheCardsColorsFollowTheEditorColorScheme() {
+        var scheme = com.intellij.openapi.editor.colors.EditorColorsManager.getInstance().getGlobalScheme();
+        var key = com.segfault03.ideadb.sql.lang.LatticeSqlSyntaxHighlighter.NUMBER;
+        var before = scheme.getAttributes(key);
+        try {
+            scheme.setAttributes(key, new com.intellij.openapi.editor.markup.TextAttributes(new java.awt.Color(0x123456), null, null, null, 0));
+            assertEquals("#123456", SqlDocPalette.current().numeric());
+            scheme.setAttributes(key, new com.intellij.openapi.editor.markup.TextAttributes(scheme.getDefaultForeground(), null, null, null, 0));
+            assertFalse("a color that is only the plain text color says nothing: the fixed one is used", scheme.getDefaultForeground().equals(java.awt.Color.decode(SqlDocPalette.current().numeric())));
+        } finally {
+            scheme.setAttributes(key, before);
+        }
     }
 
     public void testTheLocationBarNamesTheConnectionAndTheDatabaseTypeWithItsIcon() {
@@ -64,7 +78,7 @@ public class SqlHoverFixtureTest extends H2SqlFixtureTestCase {
         loadSchema();
         String html = card("select * from books <caret>b");
         assertTrue(html, html.contains("alias for") && html.contains("PUBLIC.BOOKS"));
-        assertTrue("the alias card has the table card's columns and keys", html.contains("<b>TITLE</b></td>") && html.contains("Foreign keys"));
+        assertTrue("the alias card has the table card's columns and keys", html.contains(">TITLE</b></td>") && html.contains("Foreign keys"));
     }
 
     public void testNothingIsShownForKeywordsUnknownNamesOrWhitespace() {

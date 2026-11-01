@@ -169,7 +169,7 @@ public class SqlInjectionJavaFixtureTest extends H2SqlFixtureTestCase {
                 .documentationTargets(myFixture.getEditor(), myFixture.getFile(), myFixture.getCaretOffset());
         assertEquals(targets.toString(), 1, targets.size());
         String html = ((SqlDocumentationTarget) targets.get(0)).html();
-        assertTrue(html, html.contains("PUBLIC.BOOKS"));
+        assertTrue(html, html.replaceAll("<[^>]*>", "").contains("PUBLIC.BOOKS"));
     }
 
     public void testTheJavaFilesBindingGivesTheInjectedSqlItsDialect() {
