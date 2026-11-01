@@ -85,7 +85,8 @@ public final class SqlStatementAnalyzer {
         int caretIdx = 0;
         for (int i = first; i < last; i++) {
             SqlToken token = all.get(i);
-            if (token == word) continue;
+            // a comment before or inside the statement is not one of its words
+            if (token == word || token.type() == LatticeSqlTokens.LINE_COMMENT || token.type() == LatticeSqlTokens.BLOCK_COMMENT) continue;
             if (token.end() <= wordStart) caretIdx++;
             stmt.add(token);
         }

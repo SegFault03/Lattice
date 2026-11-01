@@ -5,6 +5,7 @@ import com.intellij.codeInsight.intention.IntentionAction;
 import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.lang.documentation.ide.IdeDocumentationTargetProvider;
 import com.intellij.lang.injection.InjectedLanguageManager;
+import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.ui.popup.ListPopupStepEx;
@@ -339,6 +340,42 @@ public class SqlInjectionJavaFixtureTest extends H2SqlFixtureTestCase {
         assertTrue(found.get(0), found.get(0).contains("authorz"));
         assertEquals(1, problemsIn(inClass("String q = \"select titel from books where id = ?\";")).size());
         assertEquals(1, problemsIn(inClass("String q = \"select * from books where\";")).size());
+    }
+
+    public void testAStringPassedToAJdbcCallInATryResourceIsValidated() {
+        loadSchema();
+        myFixture.enableInspections(LatticeSqlSyntaxInspection.class);
+        myFixture.configureByText("A.java", inClass("void f(Connection c) throws SQLException {\n"
+                + "  try (Statement s = c.createStatement();\n"
+                + "       ResultSet r = s.executeQuery(\n"
+                + "           \"SELECT name, COUNT(*) AS n FROM authors ORDER BY name GROUP BY name\")) {\n"
+                + "  }\n}"));
+        var found = myFixture.doHighlighting().stream().map(info -> info.getDescription())
+                .filter(d -> d != null && d.contains("cannot come after")).toList();
+        assertEquals(found.toString(), 1, found.size());
+    }
+
+    public void testEditingAStringRevalidatesIt() {
+        loadSchema();
+        myFixture.enableInspections(LatticeSqlSyntaxInspection.class);
+        myFixture.configureByText("A.java", inClass("void f(Statement s) throws SQLException {\n"
+                + "  s.executeQuery(\"SELECT name FROM authors GROUP BY name ORDER BY name\");\n}"));
+        assertEquals(List.of(), clauseOrderProblems());
+        // Move GROUP BY after ORDER BY by editing the Java file, as in the editor.
+        Document document = myFixture.getEditor().getDocument();
+        int group = document.getText().indexOf("GROUP BY name ");
+        WriteCommandAction.runWriteCommandAction(getProject(), () -> document.deleteString(group, group + "GROUP BY name ".length()));
+        PsiDocumentManager.getInstance(getProject()).commitAllDocuments();
+        assertEquals(List.of(), clauseOrderProblems());
+        int end = document.getText().indexOf("\");");
+        WriteCommandAction.runWriteCommandAction(getProject(), () -> document.insertString(end, " GROUP BY name"));
+        PsiDocumentManager.getInstance(getProject()).commitAllDocuments();
+        assertEquals(document.getText(), 1, clauseOrderProblems().size());
+    }
+
+    private List<String> clauseOrderProblems() {
+        return myFixture.doHighlighting().stream().map(info -> info.getDescription())
+                .filter(d -> d != null && d.contains("cannot come after")).toList();
     }
 
     public void testAStringBuiltFromUnknownPartsIsNotJudged() {

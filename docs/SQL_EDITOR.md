@@ -18,7 +18,7 @@ Keywords, built-in functions and data types are colored from per-dialect word li
 
 ## Completion
 
-Completion works in `.sql` files, follows the file's dialect, and needs no shortcut after a dot or after a clause word that expects a table or column (`FROM`, `JOIN`, `WHERE`, `SET`, `ORDER BY`...). `Ctrl+Space` opens it anywhere else.
+Completion works in `.sql` files, follows the file's dialect, and needs no shortcut while you type a word, after a dot, after a clause word that expects a table or column (`FROM`, `JOIN`, `ON`, `WHERE`, `SET`, `ORDER BY`...), and after the `(` or `,` of an `INSERT` column list, a `SET` list or an `ORDER BY` list. `Ctrl+Space` opens it anywhere else. Comments before or inside a statement do not change what is suggested.
 
 | Where the caret is | Suggestions |
 |---|---|

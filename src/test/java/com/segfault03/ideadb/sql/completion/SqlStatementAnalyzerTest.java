@@ -34,6 +34,17 @@ class SqlStatementAnalyzerTest {
         assertEquals(Position.STATEMENT_START, at("select 1;\nupd^").position());
     }
 
+    @Test void commentsBeforeOrInsideAStatementAreNotItsWords() {
+        assertEquals(Position.STATEMENT_START, at("-- a note\nsel^").position());
+        assertEquals(Position.STATEMENT_START, at("/* a note */ sel^").position());
+        assertEquals(Position.STATEMENT_START, at("select 1;\n-- a note\n\nsel^").position());
+        SqlContext on = at("select * from order_items oi\n-- a note\njoin products p on ^");
+        assertEquals(Position.CONDITION, on.position());
+        assertEquals(List.of("order_items oi", "products p"), names(on));
+        assertEquals(Position.AFTER_TABLE, at("select * from order_items oi\n-- a note\njoin products p o^").position());
+        assertEquals(Position.INSERT_COLUMNS, at("-- a note\ninsert into reviews (product_id, ^ rating) values (1, 2)").position());
+    }
+
     @Test void theSelectListSeesTablesNamedAfterTheCaret() {
         SqlContext context = at("select ^ from orders o join customers c on c.id = o.customer_id");
         assertEquals(Position.SELECT_LIST, context.position());
