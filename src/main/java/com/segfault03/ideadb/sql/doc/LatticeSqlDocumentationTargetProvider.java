@@ -27,7 +27,7 @@ public final class LatticeSqlDocumentationTargetProvider implements Documentatio
         ConnectionConfig connection = SqlDialectResolver.connection(project, file.getOriginalFile().getVirtualFile());
         if (connection == null) return List.of();
         SqlSchemaService service = SqlSchemaService.getInstance();
-        SqlSchema schema = service.schema(connection);
+        SqlSchema schema = SqlDialectResolver.schema(connection, file.getOriginalFile().getVirtualFile());
         service.ensureLoaded(connection);
         if (schema == null) return List.of();
         SqlDialectProfile profile = SqlDialectResolver.resolve(project, file.getOriginalFile().getVirtualFile());

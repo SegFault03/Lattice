@@ -6,6 +6,8 @@ import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.sql.dialect.SqlDialectProfile;
 import com.segfault03.ideadb.sql.dialect.SqlDialects;
 import com.segfault03.ideadb.sql.discovery.JdbcDiscovery;
+import com.segfault03.ideadb.sql.schema.SqlSchema;
+import com.segfault03.ideadb.sql.schema.SqlSchemaService;
 import com.segfault03.ideadb.state.DatabaseSettingsState;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -21,6 +23,8 @@ public final class SqlDialectResolver {
 
     public static @NotNull SqlDialectProfile resolve(@Nullable Project project, @Nullable VirtualFile file) {
         if (project == null || project.isDisposed()) return SqlDialects.ANSI;
+        ConnectionConfig embedded = embeddedConnection(file);
+        if (embedded != null) return SqlDialects.of(embedded.getType());
         SqlBindingsState bindings = SqlBindingsState.getInstance(project);
         SqlBindingsState.Binding binding = file == null ? null : bindings.fileBinding(file);
         if (binding != null) {
@@ -36,6 +40,8 @@ public final class SqlDialectResolver {
 
     /** The connection that applies to a file, from its binding or else the project default; null when none does. */
     public static @Nullable ConnectionConfig connection(@NotNull Project project, @Nullable VirtualFile file) {
+        ConnectionConfig embedded = embeddedConnection(file);
+        if (embedded != null) return embedded;
         SqlBindingsState bindings = SqlBindingsState.getInstance(project);
         SqlBindingsState.Binding binding = file == null ? null : bindings.fileBinding(file);
         if (binding != null) {
@@ -60,6 +66,7 @@ public final class SqlDialectResolver {
 
     /** Whether the file's connection comes from what the project's configuration files say, rather than from a choice. */
     public static boolean isFromProjectFiles(@NotNull Project project, @Nullable VirtualFile file) {
+        if (embeddedConnection(file) != null) return false;
         SqlBindingsState bindings = SqlBindingsState.getInstance(project);
         SqlBindingsState.Binding binding = file == null ? null : bindings.fileBinding(file);
         if (binding != null && (connection(binding.connectionId) != null || !binding.dialectId.isEmpty())) return false;
@@ -80,6 +87,18 @@ public final class SqlDialectResolver {
 
     private static @Nullable ConnectionConfig matchedByProjectFiles(Project project) {
         return JdbcDiscovery.getInstance(project).matchedConnection();
+    }
+
+    /** The schema the file's connection has cached, seen from the namespace an embedded editor works in. */
+    public static @Nullable SqlSchema schema(@NotNull ConnectionConfig connection, @Nullable VirtualFile file) {
+        SqlSchema schema = SqlSchemaService.getInstance().schema(connection);
+        SqlEmbeddedBinding embedded = SqlEmbeddedBinding.of(file);
+        return schema == null || embedded == null ? schema : schema.withDefaultNamespace(embedded.namespace());
+    }
+
+    private static @Nullable ConnectionConfig embeddedConnection(@Nullable VirtualFile file) {
+        SqlEmbeddedBinding embedded = SqlEmbeddedBinding.of(file);
+        return embedded == null ? null : connection(embedded.connectionId());
     }
 
     private static @Nullable ConnectionConfig connection(@Nullable String id) {

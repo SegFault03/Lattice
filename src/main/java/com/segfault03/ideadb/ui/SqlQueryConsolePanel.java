@@ -18,6 +18,9 @@ import com.segfault03.ideadb.model.ReadOnlyResultModel;
 import com.segfault03.ideadb.service.DataService;
 import com.segfault03.ideadb.service.DatabaseConnectionManager;
 import com.segfault03.ideadb.service.DatabaseSession;
+import com.segfault03.ideadb.sql.view.EmbeddedSqlInput;
+import com.segfault03.ideadb.sql.view.SqlInput;
+import com.segfault03.ideadb.sql.view.SwingSqlInput;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableCellRenderer;
@@ -44,6 +47,9 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     private volatile boolean disposed;
 
     private JComboBox<String> databaseCombo;
+    /** The query editor: an IDE editor with Lattice SQL support in the IDE, a plain text area where there is no project. */
+    private SqlInput input;
+    /** The text area behind {@link #input} when there is no project to build an editor in; null otherwise. */
     private JBTextArea editorArea;
     private JButton runBtn;
     private JButton clearBtn;
@@ -87,6 +93,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
             Object selected = databaseCombo.getSelectedItem();
             if (selected != null) {
                 activeDatabase = selected.toString();
+                if (input != null) input.setNamespace(activeDatabase);
             }
         });
         int menuShortcut = GraphicsEnvironment.isHeadless() ? java.awt.event.InputEvent.CTRL_DOWN_MASK
@@ -101,7 +108,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         resultLimit.setSelectedItem(1000);
         resultLimit.setToolTipText("Maximum rows returned by the next query");
         clearBtn = DatabaseUi.action("Clear", Icons.CLEAR, "Clear query text");
-        clearBtn.addActionListener(e -> editorArea.setText(""));
+        clearBtn.addActionListener(e -> input.setText(""));
         JComponent toolbar = DatabaseActionToolbar.create(this, "SQL actions", runBtn, cancelBtn, null,
                 clearBtn, null, DatabaseActionToolbar.picker("Database", databaseCombo));
         heading.add(toolbar, BorderLayout.NORTH);
@@ -130,7 +137,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         snippetCombo.addActionListener(e -> {
             if (snippetCombo.getSelectedIndex() > 0) {
                 String snip = (String) snippetCombo.getSelectedItem();
-                editorArea.insert(snip + "\n", editorArea.getCaretPosition());
+                input.insertAtCaret(snip + "\n");
                 snippetCombo.setSelectedIndex(0);
             }
         });
@@ -145,25 +152,30 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         splitter.setDividerWidth(JBUI.scale(4));
 
         // Editor
-        editorArea = new JBTextArea();
-        editorArea.setFont(EditorColorsManager.getInstance().getGlobalScheme().getFont(EditorFontType.PLAIN));
-        editorArea.setMargin(JBUI.insets(10, 12));
-        editorArea.setTabSize(4);
-        editorArea.setText("-- " + config.getName() + "\n-- Write your query and press " + runShortcut + " to execute\n\n");
-        editorArea.setCaretPosition(editorArea.getText().length());
-        DatabaseUi.onTextChange(editorArea, this::updateRunEnabled);
-        editorArea.addCaretListener(event -> updateRunEnabled());
+        String introduction = "-- " + config.getName() + "\n-- Write your query and press " + runShortcut + " to execute\n\n";
+        JComponent editorView;
+        if (EmbeddedSqlInput.isAvailable(project)) {
+            input = EmbeddedSqlInput.create(project, config, activeDatabase, "", true, introduction, "SQL query");
+            editorView = input.component();
+        } else {
+            editorArea = new JBTextArea();
+            editorArea.setFont(EditorColorsManager.getInstance().getGlobalScheme().getFont(EditorFontType.PLAIN));
+            editorArea.setMargin(JBUI.insets(10, 12));
+            editorArea.setTabSize(4);
+            editorArea.setText(introduction);
+            editorArea.setCaretPosition(editorArea.getText().length());
+            JBScrollPane editorScroll = new JBScrollPane(editorArea);
+            editorScroll.setBorder(JBUI.Borders.empty());
+            editorScroll.setRowHeaderView(new SqlLineNumbers(editorArea));
+            input = new SwingSqlInput(editorArea, editorScroll);
+            editorView = editorScroll;
+        }
+        input.onChange(this::updateRunEnabled);
+        input.onCaretMoved(this::updateRunEnabled);
         updateRunEnabled();
 
         // Keyboard Shortcut: Ctrl+Enter / Cmd+Enter to Run
-        KeyStroke runKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, menuShortcut);
-        editorArea.getInputMap().put(runKeyStroke, "runSql");
-        editorArea.getActionMap().put("runSql", new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                executeCurrentSql();
-            }
-        });
+        input.registerShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, menuShortcut), this::executeCurrentSql);
 
         JPanel queryPanel = new JPanel(new WidthAwareBorderLayout());
         JPanel queryCaption = new JPanel(new WrapLayout(FlowLayout.LEFT, JBUI.scale(8), JBUI.scale(4)));
@@ -175,10 +187,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         shortcutHint.setForeground(JBColor.namedColor("Label.infoForeground", JBColor.GRAY));
         queryCaption.add(shortcutHint);
         queryPanel.add(queryCaption, BorderLayout.NORTH);
-        JBScrollPane editorScroll = new JBScrollPane(editorArea);
-        editorScroll.setBorder(JBUI.Borders.empty());
-        editorScroll.setRowHeaderView(new SqlLineNumbers(editorArea));
-        queryPanel.add(editorScroll, BorderLayout.CENTER);
+        queryPanel.add(editorView, BorderLayout.CENTER);
         splitter.setFirstComponent(queryPanel);
 
         // Results Pane
@@ -271,18 +280,17 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     }
 
     public void setSqlText(String sql) {
-        editorArea.setText(sql);
-        editorArea.setCaretPosition(sql.length());
+        input.setText(sql);
     }
 
     /** Insert SQL without discarding what the user typed; an empty or identical console is simply set. */
     public void insertSqlText(String sql) {
-        String existing = editorArea.getText();
+        String existing = input.text();
         if (existing.isBlank() || existing.equals(sql)) { setSqlText(sql); return; }
         String separator = existing.endsWith("\n\n") ? "" : existing.endsWith("\n") ? "\n" : "\n\n";
         int start = existing.length() + separator.length();
-        editorArea.append(separator + sql);
-        editorArea.select(start, start + sql.length());
+        input.append(separator + sql);
+        input.select(start, start + sql.length());
     }
 
     private void executeCurrentSql() {
@@ -409,17 +417,17 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     }
 
     private String currentSql() {
-        String text = editorArea.getText();
+        String text = input.text();
         // Document listeners may run before the caret is clamped after a replacement.
-        int start = Math.min(editorArea.getSelectionStart(), text.length());
-        int end = Math.min(editorArea.getSelectionEnd(), text.length());
+        int start = Math.min(input.selectionStart(), text.length());
+        int end = Math.min(input.selectionEnd(), text.length());
         String selected = text.substring(start, end);
         return selected.isBlank() ? text.trim() : selected.trim();
     }
 
     private void updateRunEnabled() {
         runBtn.setEnabled(!running && !loadingDatabases && !disposed && hasExecutableSql(currentSql()));
-        clearBtn.setEnabled(!running && !disposed && !editorArea.getText().isEmpty());
+        clearBtn.setEnabled(!running && !disposed && !input.text().isEmpty());
     }
 
     /** Introductory comments and empty statement separators are not a query. */
@@ -448,6 +456,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     }
     @Override public void close() {
         disposed = true; cancelExecution();
+        if (input != null) input.dispose();
         tasks.cancelPending();
         com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(tasks::close);
         com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(session::close);

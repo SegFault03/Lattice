@@ -33,6 +33,12 @@ import com.segfault03.ideadb.service.ExportService;
 import com.segfault03.ideadb.service.MetadataService;
 import com.segfault03.ideadb.service.DatabaseChange;
 import com.segfault03.ideadb.service.DatabaseChangeListener;
+import com.segfault03.ideadb.sql.completion.SqlIdentifiers;
+import com.segfault03.ideadb.sql.dialect.SqlDialects;
+import com.segfault03.ideadb.sql.view.EmbeddedSqlInput;
+import com.segfault03.ideadb.sql.view.SqlInput;
+import com.segfault03.ideadb.sql.view.SwingSqlInput;
+import com.segfault03.ideadb.sql.view.ViewedSqlInput;
 import com.segfault03.ideadb.state.TableDraftState;
 
 import javax.swing.*;
@@ -58,6 +64,10 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     private final String databaseName;
     private final TableMetadata tableMetadata;
 
+    /** The WHERE and ORDER BY inputs: IDE editors with Lattice SQL support in the IDE, plain text fields where there is no project. */
+    private SqlInput whereInput;
+    private SqlInput orderInput;
+    /** The text fields behind the inputs when there is no project to build editors in; null otherwise. */
     private JBTextField whereField;
     private JBTextField orderField;
     private JComboBox<String> pageSizeCombo;
@@ -171,25 +181,23 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         autoRefreshCombo.setToolTipText("Periodic auto-refresh interval");
         autoRefreshCombo.addActionListener(e -> onAutoRefreshChanged());
 
-        whereField = DatabaseInputs.textField(20);
-        whereField.setToolTipText("SQL WHERE condition; press Enter to apply");
-        whereField.addActionListener(e -> loadData(1, pageSize));
-        orderField = DatabaseInputs.textField(14);
-        orderField.setToolTipText("SQL ORDER BY clause; blank uses the primary key when available");
-        orderField.addActionListener(e -> loadData(1, pageSize));
+        whereInput = filterInput("where", 20, "SQL WHERE condition; press Enter to apply", "SQL WHERE condition");
+        orderInput = filterInput("order by", 14, "SQL ORDER BY clause; blank uses the primary key when available", "SQL ORDER BY clause");
+        whereInput.onSubmit(() -> loadData(1, pageSize));
+        orderInput.onSubmit(() -> loadData(1, pageSize));
         filterBtn = DatabaseUi.action("Apply", AllIcons.Actions.Execute, "Apply filter and sort");
         filterBtn.addActionListener(e -> loadData(1, pageSize));
-        DatabaseUi.onTextChange(whereField, this::updateContextActions);
-        DatabaseUi.onTextChange(orderField, this::updateContextActions);
+        whereInput.onChange(this::updateContextActions);
+        orderInput.onChange(this::updateContextActions);
         clearFilterBtn = DatabaseUi.action("Clear", Icons.CLEAR, "Clear WHERE and ORDER BY clauses");
         clearFilterBtn.addActionListener(event -> {
-            whereField.setText("");
-            orderField.setText("");
+            whereInput.setText("");
+            orderInput.setText("");
         });
         JBLabel whereLabel = new JBLabel("WHERE");
         JBLabel orderLabel = new JBLabel("ORDER BY");
-        JPanel filters = new TableFilterPanel(DatabaseUi.labeledInput(whereLabel, whereField),
-                DatabaseUi.labeledInput(orderLabel, orderField), DatabaseUi.group(filterBtn, clearFilterBtn));
+        JPanel filters = new TableFilterPanel(DatabaseUi.labeledInput(whereLabel, whereInput.component()),
+                DatabaseUi.labeledInput(orderLabel, orderInput.component()), DatabaseUi.group(filterBtn, clearFilterBtn));
         filters.setBorder(BorderFactory.createCompoundBorder(
                 JBUI.Borders.customLineBottom(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR),
                 JBUI.Borders.empty(2, 12, 6, 12)));
@@ -297,7 +305,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 refreshBtn, null, addRowBtn, delRowBtn, null, saveBtn, revertBtn, null,
                 exportBtn, consoleBtn, optionsBtn, inspectBtn, null, autoRefreshCombo);
         operationControls.addAll(List.of(refreshBtn, filterBtn, clearFilterBtn, addRowBtn, delRowBtn, exportBtn,
-                consoleBtn, optionsBtn, autoRefreshCombo, whereField, orderField,
+                consoleBtn, optionsBtn, autoRefreshCombo, whereInput.component(), orderInput.component(),
                 pageSizeCombo, prevPageBtn, nextPageBtn));
         heading.add(toolbar, BorderLayout.NORTH);
         heading.add(filters, BorderLayout.CENTER);
@@ -609,13 +617,34 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         dataTable.repaint();
     }
 
+    /**
+     * One of the two filter inputs. In the IDE it is an editor that completes and checks against the table's connection,
+     * reading what it holds as the end of {@code select * from <table> <clause>}; without a project, a plain text field.
+     */
+    private SqlInput filterInput(String clause, int columns, String tooltip, String accessibleName) {
+        if (EmbeddedSqlInput.isAvailable(project)) {
+            var dialect = SqlDialects.of(config.getType());
+            String table = SqlIdentifiers.forInsertion(tableMetadata.getName(), dialect);
+            String qualified = databaseName == null || databaseName.isEmpty() ? table : SqlIdentifiers.forInsertion(databaseName, dialect) + "." + table;
+            SqlInput editor = EmbeddedSqlInput.create(project, config, databaseName, "select * from " + qualified + " " + clause + " ", false, "", accessibleName);
+            JComponent framed = DatabaseInputs.editorField(editor.component(), columns);
+            framed.setToolTipText(tooltip);
+            editor.component().setToolTipText(tooltip);
+            return new ViewedSqlInput(editor, framed);
+        }
+        JBTextField field = DatabaseInputs.textField(columns);
+        field.setToolTipText(tooltip);
+        if (clause.equals("where")) whereField = field; else orderField = field;
+        return new SwingSqlInput(field, field);
+    }
+
     private void updateContextActions() {
         if (dataTable == null) return;
         boolean available = !isBusy() && !disposed;
         delRowBtn.setEnabled(available && dataTable.getSelectedRowCount() > 0);
-        clearFilterBtn.setEnabled(available && (!whereField.getText().isEmpty() || !orderField.getText().isEmpty()));
+        clearFilterBtn.setEnabled(available && (!whereInput.text().isEmpty() || !orderInput.text().isEmpty()));
         filterBtn.setEnabled(available && !tableModel.hasPendingChanges()
-                && canApplyFilter(whereField.getText(), orderField.getText(), appliedWhere, appliedOrder));
+                && canApplyFilter(whereInput.text(), orderInput.text(), appliedWhere, appliedOrder));
     }
 
     static boolean canApplyFilter(String where, String order, String appliedWhere, String appliedOrder) {
@@ -712,8 +741,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         refreshPending = false;
         final boolean reloadMetadata = refreshMetadata;
         long generation = ++loadGeneration;
-        String where = whereField.getText().trim();
-        String order = orderField.getText().trim();
+        String where = whereInput.text().trim();
+        String order = orderInput.text().trim();
         List<ColumnMetadata> knownColumns=new ArrayList<>(tableMetadata.getColumns());
         long knownCount=!refreshMetadata && where.equals(appliedWhere) ? totalRowCount : -1;
         setReadRunning(true);
@@ -957,7 +986,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     if(disposed) return;
                     setReadRunning(false);
                     DatabaseUi.status(statusLabel, "CREATE TABLE statement loaded", DatabaseUi.Tone.NORMAL);
-                    new GeneratedSqlDialog(project, "CREATE TABLE DDL - " + tableMetadata.getName(), ddl,
+                    new GeneratedSqlDialog(project, "CREATE TABLE DDL - " + tableMetadata.getName(), config.getType(), ddl,
                             () -> DatabaseEditorManager.getInstance(project).openConsole(config, databaseName, ddl + "\n")).show();
                 });
             } catch (Exception ex) {
@@ -1130,6 +1159,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         updatePendingChangesState();
         captureDraft();
         disposed = true; loadGeneration++;
+        if (whereInput != null) whereInput.dispose();
+        if (orderInput != null) orderInput.dispose();
         if (changeSubscription != null) changeSubscription.disconnect();
         tasks.cancelPending();
         com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(tasks::close);

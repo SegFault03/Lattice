@@ -261,14 +261,7 @@ public final class CreateTablePanel extends JPanel {
         enabled.put(component,component.isEnabled()); component.setEnabled(false);
         if (component instanceof Container container) for (Component child:container.getComponents()) disable(child);
     }
-    private void highlightSql() {
-        StyledDocument doc = sql.getStyledDocument(); SimpleAttributeSet normal = new SimpleAttributeSet();
-        StyleConstants.setForeground(normal,JBColor.namedColor("Label.foreground",new JBColor(0x000000,0xDFE1E5)));
-        doc.setCharacterAttributes(0,doc.getLength(),normal,true);
-        var tokens = java.util.regex.Pattern.compile("`(?:``|[^`])*`|\"(?:\"\"|[^\"])*\"|'(?:''|[^'])*'|\\b(?:CREATE|TABLE|PRIMARY|KEY|NOT|NULL|DEFAULT|AUTO_INCREMENT|GENERATED|BY|AS|IDENTITY|CURRENT_TIMESTAMP)\\b").matcher(sql.getText());
-        SimpleAttributeSet keyword = new SimpleAttributeSet(); StyleConstants.setForeground(keyword,accent());
-        while(tokens.find())if(Character.isLetter(tokens.group().charAt(0)))doc.setCharacterAttributes(tokens.start(),tokens.end()-tokens.start(),keyword,false);
-    }
+    private void highlightSql() { com.segfault03.ideadb.sql.view.SqlSwingHighlighter.apply(sql, com.segfault03.ideadb.sql.dialect.SqlDialects.of(config.getType())); }
     private static DocumentListener listener(Runnable callback) { return new DocumentListener() {
         public void insertUpdate(DocumentEvent e) { callback.run(); } public void removeUpdate(DocumentEvent e) { callback.run(); } public void changedUpdate(DocumentEvent e) { callback.run(); }
     }; }

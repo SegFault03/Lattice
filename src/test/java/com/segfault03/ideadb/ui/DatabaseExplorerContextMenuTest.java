@@ -63,7 +63,7 @@ class DatabaseExplorerContextMenuTest {
                 assertEquals(List.of(DatabaseExplorerContextMenu.Action.GENERATE_SELECT, DatabaseExplorerContextMenu.Action.GENERATE_INSERT), calls);
                 assertFalse(DatabaseConnectionManager.getInstance().isConnected(config.getId()));
                 var sql = DdlService.getInstance().buildSelectSql(config, "PUBLIC", metadata.getName(), List.of("id"));
-                var preview = GeneratedSqlDialog.sqlView(sql);
+                var preview = GeneratedSqlDialog.sqlView(sql, com.segfault03.ideadb.sql.dialect.SqlDialects.of(config.getType()));
                 assertEquals(sql, preview.getText());
                 assertFalse(preview.isEditable(), "Offline SQL must open in a read-only preview");
                 assertTrue(preview.isEnabled(), "SQL remains selectable for copying");

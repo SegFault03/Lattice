@@ -56,6 +56,18 @@ Hover over a name in a `.sql` file (or press `Ctrl+Q`, `F1` on macOS) to see wha
 
 Cards are colored to be read at a glance: primary key columns and their `PK` flag are gold, foreign key columns and `FK` purple, and each type has the color of what it holds (numbers blue, text green, dates and times orange, booleans teal, binary pink, JSON, enums and the like tan). The palette is lighter on a dark editor color scheme and deeper on a light one. Links in a card open the card of the target. Names resolve the way completion resolves them: through aliases, schema-qualified names, `UPDATE ... SET` and `INSERT` column lists, ignoring case, and with quoted names unquoted. Keywords, unknown names and derived-table aliases show nothing, as does a file with no connection or a connection whose schema has not been read yet; hovering starts that read, so the card appears on the next hover. The cards read the metadata cache and never contact the database.
 
+## SQL in Lattice's own editors
+
+The SQL that Lattice itself shows follows the same support as a `.sql` file, for the dialect of the connection it belongs to, with the colors of the editor color scheme (Settings | Editor | Color Scheme | Lattice SQL):
+
+| Where | What it has |
+|---|---|
+| **SQL console** | Highlighting, completion, hover and the checks of [Validation](#validation), against the connection and the database chosen in the console's picker; the findings are underlined as in a file and shown on hover. `Ctrl+Enter` still runs the selection or the whole text |
+| **WHERE and ORDER BY fields** of the table editor | Highlighting and completion. The field holds the end of `select * from <table> where ...` (or `order by ...`), so it completes the table's columns, functions and keywords; `Enter` applies the filter unless the completion popup is open |
+| **Create and Alter table preview**, **Generated SQL**, **parameter preview** | Highlighting only, as these are generated and read-only. A parameter preview that shows an error instead of SQL is not colored |
+
+The console and the filter fields are IDE editors only inside a project and while **Enable Lattice SQL editor support** is on; otherwise they are plain text fields as before. Their findings come from the same cached schema as a file's and are not inspections, so they cannot be silenced with `-- noinspection`; **Validation** in the settings turns them off with the rest. Console history and templates are not colored.
+
 ## Running statements
 
 Right-click in a `.sql` file or in a SQL string of Java or Kotlin code and open **Lattice SQL**, or press `Alt+Enter` on the statement:

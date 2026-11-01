@@ -7,6 +7,7 @@ import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.PsiFile;
 import com.segfault03.ideadb.sql.binding.SqlDialectResolver;
+import com.segfault03.ideadb.sql.binding.SqlEmbeddedBinding;
 import com.segfault03.ideadb.sql.lang.LatticeSqlLanguage;
 import com.segfault03.ideadb.sql.settings.SqlEditorSettings;
 import org.jetbrains.annotations.NotNull;
@@ -34,7 +35,13 @@ public final class LatticeSqlTypedHandler extends TypedHandlerDelegate implement
         CharSequence text = editor.getDocument().getImmutableCharSequence();
         var window = SqlTextWindow.around(text, caret);
         String typed = text.subSequence(window.start(), caret) + String.valueOf(charTyped) + text.subSequence(caret, window.end());
-        SqlContext context = SqlStatementAnalyzer.analyze(typed, caret - window.start() + 1, profile);
+        int typedCaret = caret - window.start() + 1;
+        var embedded = SqlEmbeddedBinding.of(file.getVirtualFile());
+        if (embedded != null && !embedded.leadIn().isEmpty()) {
+            typed = embedded.leadIn() + typed;
+            typedCaret += embedded.leadIn().length();
+        }
+        SqlContext context = SqlStatementAnalyzer.analyze(typed, typedCaret, profile);
         if (!context.prefix().isEmpty() || context.afterOperand()) return false;
         return switch (context.position()) {
             case SET_COLUMN, ORDER_GROUP, INSERT_COLUMNS -> true;

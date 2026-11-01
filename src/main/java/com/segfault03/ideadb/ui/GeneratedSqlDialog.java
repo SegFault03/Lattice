@@ -7,8 +7,11 @@ import com.intellij.openapi.ide.CopyPasteManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.ui.components.JBScrollPane;
-import com.intellij.ui.components.JBTextArea;
 import com.intellij.util.ui.JBUI;
+import com.segfault03.ideadb.model.DatabaseType;
+import com.segfault03.ideadb.sql.dialect.SqlDialectProfile;
+import com.segfault03.ideadb.sql.dialect.SqlDialects;
+import com.segfault03.ideadb.sql.view.SqlSwingHighlighter;
 
 import javax.swing.*;
 import java.awt.*;
@@ -18,14 +21,16 @@ import java.awt.event.ActionEvent;
 /** Cached metadata can generate SQL without opening a live database console. */
 final class GeneratedSqlDialog extends DialogWrapper {
     private final String sql;
+    private final SqlDialectProfile dialect;
     private final Runnable openInConsole;
 
-    GeneratedSqlDialog(Project project, String sql) { this(project, "Generated SQL from cached metadata", sql, null); }
+    GeneratedSqlDialog(Project project, DatabaseType type, String sql) { this(project, "Generated SQL from cached metadata", type, sql, null); }
 
     /** {@code openInConsole}, when given, adds an action that closes the dialog and runs it. */
-    GeneratedSqlDialog(Project project, String title, String sql, Runnable openInConsole) {
+    GeneratedSqlDialog(Project project, String title, DatabaseType type, String sql, Runnable openInConsole) {
         super(project, false);
         this.sql = sql;
+        this.dialect = SqlDialects.of(type);
         this.openInConsole = openInConsole;
         setTitle(title);
         setOKButtonText("Close");
@@ -33,13 +38,14 @@ final class GeneratedSqlDialog extends DialogWrapper {
     }
 
     @Override protected JComponent createCenterPanel() {
-        var scroll = new JBScrollPane(sqlView(sql));
+        var scroll = new JBScrollPane(sqlView(sql, dialect));
         scroll.setPreferredSize(JBUI.size(640, 240));
         return scroll;
     }
 
-    static JTextArea sqlView(String sql) {
-        var text = new JBTextArea(sql);
+    static JTextPane sqlView(String sql, SqlDialectProfile dialect) {
+        var text = new JTextPane();
+        text.setText(sql);
         text.setEditable(false);
         // Tests and previews can run without an application, hence the monospaced fallback.
         text.setFont(ApplicationManager.getApplication() == null ? new Font(Font.MONOSPACED, Font.PLAIN, text.getFont().getSize())
@@ -47,6 +53,7 @@ final class GeneratedSqlDialog extends DialogWrapper {
         text.setBorder(JBUI.Borders.empty(8));
         text.setCaretPosition(0);
         text.getAccessibleContext().setAccessibleName("Generated SQL");
+        SqlSwingHighlighter.apply(text, dialect);
         return text;
     }
 

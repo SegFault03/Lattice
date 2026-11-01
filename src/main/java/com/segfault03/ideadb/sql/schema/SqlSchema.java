@@ -42,6 +42,12 @@ public final class SqlSchema {
         return new SqlSchema(config.getId(), config.getType(), List.copyOf(snapshot.namespaces()), defaultNamespace, revision);
     }
 
+    /** The same view where unqualified names resolve to another namespace, such as the database a console works in. */
+    public @NotNull SqlSchema withDefaultNamespace(@Nullable String name) {
+        var named = name == null ? null : namespace(name);
+        return named == null || named.name().equals(defaultNamespace) ? this : new SqlSchema(connectionId, type, namespaces, named.name(), revision);
+    }
+
     public @NotNull String connectionId() { return connectionId; }
     public @NotNull DatabaseType type() { return type; }
     /** The cache revision this view was built from. */

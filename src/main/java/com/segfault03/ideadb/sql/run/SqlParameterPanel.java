@@ -4,18 +4,20 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.editor.colors.EditorColorsManager;
 import com.intellij.openapi.editor.colors.EditorFontType;
 import com.segfault03.ideadb.model.DatabaseType;
+import com.segfault03.ideadb.sql.dialect.SqlDialects;
+import com.segfault03.ideadb.sql.view.SqlSwingHighlighter;
 import com.segfault03.ideadb.ui.DatabaseInputs;
 import com.intellij.ui.DocumentAdapter;
 import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBScrollPane;
-import com.intellij.ui.components.JBTextArea;
 import com.intellij.ui.components.JBTextField;
 import com.intellij.util.ui.JBUI;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.JComboBox;
 import javax.swing.JPanel;
+import javax.swing.JTextPane;
 import javax.swing.event.DocumentEvent;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
@@ -36,7 +38,8 @@ public final class SqlParameterPanel extends JPanel {
     private final CharSequence sql;
     private final SqlParameters.Result parameters;
     private final DatabaseType type;
-    private final JBTextArea preview = new JBTextArea(4, 40);
+    private final JTextPane preview = new JTextPane();
+    private boolean previewIsSql;
 
     private final class Row {
         final JComboBox<SqlParameterValue.Type> type = DatabaseInputs.comboBox(TYPES);
@@ -96,15 +99,16 @@ public final class SqlParameterPanel extends JPanel {
             constraints.gridy++;
         }
         preview.setEditable(false);
-        preview.setLineWrap(true);
-        preview.setWrapStyleWord(true);
         // Tests and previews can run without an application, hence the monospaced fallback.
         preview.setFont(ApplicationManager.getApplication() == null ? new Font(Font.MONOSPACED, Font.PLAIN, preview.getFont().getSize())
                 : EditorColorsManager.getInstance().getGlobalScheme().getFont(EditorFontType.PLAIN));
         preview.getAccessibleContext().setAccessibleName("SQL preview");
         constraints.gridx = 0; constraints.gridwidth = 4; constraints.weightx = 1; constraints.weighty = 1;
         constraints.fill = GridBagConstraints.BOTH;
-        add(new JBScrollPane(preview), constraints);
+        var metrics = preview.getFontMetrics(preview.getFont());
+        var previewScroll = new JBScrollPane(preview);
+        previewScroll.setPreferredSize(new java.awt.Dimension(metrics.charWidth('m') * 40 + 16, metrics.getHeight() * 4 + 12));
+        add(previewScroll, constraints);
         updatePreview();
     }
 
@@ -112,8 +116,12 @@ public final class SqlParameterPanel extends JPanel {
     String previewText() { return preview.getText(); }
 
     private void updatePreview() {
+        previewIsSql = false;
         preview.setText(previewContent());
         preview.setCaretPosition(0);
+        // An error in the place of the SQL is plain text.
+        if (previewIsSql) SqlSwingHighlighter.apply(preview, SqlDialects.of(type));
+        else SqlSwingHighlighter.clear(preview);
     }
 
     private String previewContent() {
@@ -123,7 +131,9 @@ public final class SqlParameterPanel extends JPanel {
             if (message != null) return entry.getKey() + ": " + message;
         }
         try {
-            return SqlLiteralRenderer.render(sql, parameters, values(), type);
+            String rendered = SqlLiteralRenderer.render(sql, parameters, values(), type);
+            previewIsSql = true;
+            return rendered;
         } catch (IllegalArgumentException e) {
             return String.valueOf(e.getMessage());
         }

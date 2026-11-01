@@ -26,6 +26,8 @@ public final class DatabaseInputs {
     public static JBTextField textField(String text) { return new InputTextField(text, 0); }
     public static JBTextField textField(int columns) { return new InputTextField("", columns); }
     public static JPasswordField passwordField() { return new InputPasswordField(); }
+    /** An embedded one-line editor, framed and sized like the other single-line inputs. */
+    public static JComponent editorField(JComponent editor, int columns) { return new InputEditorField(editor, columns); }
     public static <E> JComboBox<E> comboBox() { return new InputComboBox<>(); }
     public static <E> JComboBox<E> comboBox(E[] items) { return new InputComboBox<>(items); }
     /** Share the real selection model with a native overflow popup, detaching when it closes. */
@@ -187,6 +189,54 @@ public final class DatabaseInputs {
         }
         @Override public Dimension getPreferredSize() { return inputSize(this, super.getPreferredSize()); }
         @Override public Dimension getMinimumSize() { return inputSize(this, super.getMinimumSize()); }
+        @Override public void paint(Graphics graphics) { paintRounded(this, graphics, super::paint); }
+    }
+
+    /** The frame of a text field around an IDE editor, which paints its own text and background. */
+    private static final class InputEditorField extends JPanel implements SizedInput {
+        private final JComponent editor;
+        private final int columns;
+        private final java.beans.PropertyChangeListener repaintOnFocus = event -> repaint();
+
+        InputEditorField(JComponent editor, int columns) {
+            super(new BorderLayout());
+            this.editor = editor;
+            this.columns = columns;
+            setOpaque(false);
+            setBorder(new InputBorder());
+            add(editor, BorderLayout.CENTER);
+        }
+
+        @Override public void addNotify() {
+            super.addNotify();
+            KeyboardFocusManager.getCurrentKeyboardFocusManager().addPropertyChangeListener("permanentFocusOwner", repaintOnFocus);
+        }
+
+        @Override public void removeNotify() {
+            KeyboardFocusManager.getCurrentKeyboardFocusManager().removePropertyChangeListener("permanentFocusOwner", repaintOnFocus);
+            super.removeNotify();
+        }
+
+        @Override public void setEnabled(boolean enabled) {
+            super.setEnabled(enabled);
+            editor.setEnabled(enabled);
+        }
+
+        private Dimension sized() {
+            Insets insets = getInsets();
+            Font font = editor.getFont() != null ? editor.getFont() : getFont();
+            int width = columns * getFontMetrics(font).charWidth('m') + insets.left + insets.right;
+            return new Dimension(width, fitted());
+        }
+
+        /** At least the usual input height, and tall enough for a line of the editor's own font. */
+        private int fitted() {
+            Insets insets = getInsets();
+            return Math.max(height(this), editor.getPreferredSize().height + insets.top + insets.bottom);
+        }
+
+        @Override public Dimension getPreferredSize() { return sized(); }
+        @Override public Dimension getMinimumSize() { return new Dimension(JBUI.scale(40), fitted()); }
         @Override public void paint(Graphics graphics) { paintRounded(this, graphics, super::paint); }
     }
 

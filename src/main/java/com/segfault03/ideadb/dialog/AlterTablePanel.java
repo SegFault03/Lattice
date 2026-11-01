@@ -384,14 +384,7 @@ public final class AlterTablePanel extends JPanel {
         preview.add(scroll, BorderLayout.CENTER);
         return TableDialogLayout.preview(preview, title, sql, 132);
     }
-    private void highlightSql() {
-        StyledDocument doc = sql.getStyledDocument(); SimpleAttributeSet normal = new SimpleAttributeSet();
-        StyleConstants.setForeground(normal, JBColor.namedColor("Label.foreground", new JBColor(0x000000,0xDFE1E5)));
-        doc.setCharacterAttributes(0, doc.getLength(), normal, true);
-        var tokens = java.util.regex.Pattern.compile("`(?:``|[^`])*`|\"(?:\"\"|[^\"])*\"|'(?:''|[^'])*'|\\b(?:ALTER|TABLE|COLUMN|ADD|MODIFY|DROP|RENAME|TO|SET|DATA|TYPE|DEFAULT|NULL|NOT|USING)\\b").matcher(sql.getText());
-        SimpleAttributeSet keyword = new SimpleAttributeSet(); StyleConstants.setForeground(keyword, accent());
-        while (tokens.find()) if (Character.isLetter(tokens.group().charAt(0))) doc.setCharacterAttributes(tokens.start(), tokens.end()-tokens.start(), keyword, false);
-    }
+    private void highlightSql() { com.segfault03.ideadb.sql.view.SqlSwingHighlighter.apply(sql, com.segfault03.ideadb.sql.dialect.SqlDialects.of(config.getType())); }
     private static JPanel panel(LayoutManager layout) { JPanel p = new JPanel(layout); p.setOpaque(false); return p; }
     private static JPanel vertical() { return TableDialogLayout.column(); }
     private static void stack(JPanel p, JComponent c) { TableDialogLayout.stack(p, c); }
