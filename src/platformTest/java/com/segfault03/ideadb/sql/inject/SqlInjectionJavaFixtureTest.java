@@ -290,6 +290,18 @@ public class SqlInjectionJavaFixtureTest extends H2SqlFixtureTestCase {
         assertEquals("SQL: Generic SQL", presentation.getSelectedValue());
     }
 
+    public void testTheStatusBarEntryCanBeReadWithoutAReadLock() throws Exception {
+        var widget = new SqlConnectionWidgetFactory().createWidget(getProject());
+        Disposer.register(getTestRootDisposable(), widget);
+        var presentation = (StatusBarWidget.MultipleTextValuesPresentation) widget.getPresentation();
+        myFixture.configureByText("A.java", inClass("void f(Connection c) throws Exception { c.prepareStatement(\"select * from books\"); }"));
+        myFixture.doHighlighting();
+        // The status bar reads its widgets on the EDT without a read lock, as a pooled thread has none.
+        var read = com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(
+                () -> presentation.getSelectedValue() + "|" + presentation.getTooltipText());
+        assertTrue(read.get(), read.get().startsWith("SQL: H2"));
+    }
+
     /** The sequence in the IDE: the file is selected and the bar reads an empty entry; injections appear only after the daemon ran. */
     public void testTheStatusBarIsRefreshedWhenTheDaemonFinishesOverASourceFile() {
         var updates = new ArrayList<String>();

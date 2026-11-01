@@ -2,6 +2,7 @@ package com.segfault03.ideadb.sql.binding;
 
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.fileEditor.FileEditorManagerEvent;
 import com.intellij.openapi.fileEditor.FileEditorManagerListener;
@@ -54,13 +55,18 @@ final class SqlConnectionWidget implements StatusBarWidget, StatusBarWidget.Mult
 
     @Override public void dispose() {}
 
-    /** The selected file when it is SQL or hosts SQL; null otherwise. */
+    /**
+     * The selected file when it is SQL or hosts SQL; null otherwise. The status bar reads its widgets on the EDT without a
+     * read lock, and the file's type and injections need one.
+     */
     private @Nullable VirtualFile sqlFile() {
         if (project.isDisposed()) return null;
-        VirtualFile[] selected = FileEditorManager.getInstance(project).getSelectedFiles();
-        if (selected.length == 0) return null;
-        VirtualFile file = selected[0];
-        return file.getFileType() == LatticeSqlFileType.INSTANCE || SqlInjectionHosts.hostsSql(project, file) ? file : null;
+        return ReadAction.compute(() -> {
+            VirtualFile[] selected = FileEditorManager.getInstance(project).getSelectedFiles();
+            if (selected.length == 0) return null;
+            VirtualFile file = selected[0];
+            return file.getFileType() == LatticeSqlFileType.INSTANCE || SqlInjectionHosts.hostsSql(project, file) ? file : null;
+        });
     }
 
     /** The entry's text for the selected file, without recording it as shown. */
