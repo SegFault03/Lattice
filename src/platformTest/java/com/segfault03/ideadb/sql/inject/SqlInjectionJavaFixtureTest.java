@@ -250,6 +250,16 @@ public class SqlInjectionJavaFixtureTest extends H2SqlFixtureTestCase {
         assertFalse("inside a string that is not SQL", myFixture.testAction(action).isEnabledAndVisible());
     }
 
+    public void testAskingWhetherAFileHostsSqlTakesItsOwnReadAction() throws Exception {
+        myFixture.configureByText("A.java", inClass("String q = \"select * from books\";"));
+        myFixture.doHighlighting();
+        var file = myFixture.getFile().getVirtualFile();
+        // The status bar asks from the EDT, which holds no read lock of its own; a pooled thread has none either.
+        boolean hosts = com.intellij.openapi.application.ApplicationManager.getApplication()
+                .executeOnPooledThread(() -> com.segfault03.ideadb.sql.binding.SqlInjectionHosts.hostsSql(getProject(), file)).get();
+        assertTrue(hosts);
+    }
+
     public void testTheStatusBarEntryShowsForASourceFileOnlyWhileItHostsSql() {
         var widget = new SqlConnectionWidgetFactory().createWidget(getProject());
         Disposer.register(getTestRootDisposable(), widget);
