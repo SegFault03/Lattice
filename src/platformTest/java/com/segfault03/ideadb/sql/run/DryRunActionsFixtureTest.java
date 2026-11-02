@@ -253,8 +253,9 @@ public class DryRunActionsFixtureTest extends H2SqlFixtureTestCase {
     public void testActionsRegisteredInOrderInTheGroup() {
         ActionManager manager = ActionManager.getInstance();
         AnAction[] children = ((ActionGroup) manager.getAction("com.segfault03.lattice.sql.run.group")).getChildren(null);
-        assertEquals(List.of("com.segfault03.lattice.sql.run.sendToConsole", EXPLAIN, ROLLBACK),
-                List.of(manager.getId(children[0]), manager.getId(children[1]), manager.getId(children[2])));
+        assertEquals(List.of("com.segfault03.lattice.sql.run.run", "com.segfault03.lattice.sql.run.sendToConsole", EXPLAIN, ROLLBACK),
+                java.util.Arrays.stream(children).map(manager::getId).toList());
+        assertEquals("Run", manager.getAction("com.segfault03.lattice.sql.run.run").getTemplatePresentation().getText());
         assertEquals("Explain Statement", manager.getAction(EXPLAIN).getTemplatePresentation().getText());
         assertEquals("Run and Roll Back", manager.getAction(ROLLBACK).getTemplatePresentation().getText());
     }

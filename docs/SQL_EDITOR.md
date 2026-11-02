@@ -74,6 +74,7 @@ Right-click in a `.sql` file or in a SQL string of Java or Kotlin code and open 
 
 | Action | What it does |
 |---|---|
+| **Run** | Runs a query (`SELECT`, or a `WITH` that only reads) in the Lattice console of the file's connection and schema, with parameter values written in, and shows its results there. Other statements are refused |
 | **Send to Console** | Appends the statement to the Lattice console of the file's connection and schema, with parameter values written in. It does not run it |
 | **Explain Statement** | Shows the database's execution plan in a **Dry Run** tab. The statement is not executed |
 | **Run and Roll Back** | Runs an `INSERT`, `UPDATE`, `DELETE` or `MERGE` (and MySQL `REPLACE`) in a transaction, reports the rows it affects, and always rolls it back |
@@ -87,12 +88,13 @@ Each statement of a `.sql` file, and the SQL of each Java or Kotlin string, sits
 | Button | What it does |
 |---|---|
 | **No connection** | Shown only while the file has no connection; chooses one |
-| **Run and Roll Back** | As above, on the card's statement |
+| **Run** | On a query card: runs the query in the console straight away |
+| **Run and Roll Back** | On any other card: as above, on the card's statement |
 | **Send to Console** | As above, on the card's SQL |
 | **Copy SQL** | Copies the SQL as plain text: quotes, escapes and concatenation removed, `?` for the parts built at run time |
 | **More** | **Explain Statement** and **SQL Connection for This File...** |
 
-The toolbar acts on the card under the mouse, not on the caret. A button that does not suit the card stays visible but disabled, and its tooltip says why: Run and Roll Back on a query or DDL, Explain on DDL, either on a string holding more than one statement ("Select a single statement"), and every action except Copy SQL while the file has no connection.
+The toolbar acts on the card under the mouse, not on the caret. A query card (`SELECT`, or a `WITH` that only reads) shows **Run**; every other card shows **Run and Roll Back** in its place. A button that does not suit the card stays visible but disabled, and its tooltip says why: Run and Roll Back on DDL, Explain on DDL, either on a string holding more than one statement ("Select a single statement"), and every action except Copy SQL while the file has no connection.
 
 Cards are not shown in Lattice's own SQL editors, in viewers and diffs, or in files too large to analyse. A card is drawn over the IDE's injected-language background and the caret-row highlight, and the selection is drawn over the card.
 

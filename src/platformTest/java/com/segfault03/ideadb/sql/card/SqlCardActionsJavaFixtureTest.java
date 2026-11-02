@@ -66,6 +66,16 @@ public class SqlCardActionsJavaFixtureTest extends H2SqlFixtureTestCase {
         assertTrue(update("com.segfault03.lattice.sql.chooseFileConnection", card).isEnabledAndVisible());
     }
 
+    public void testRunAndRollBackHasTheGreenRunIconOnACard() {
+        SqlCard card = card("String q = \"update orders set status = 'x' where id = ?\";");
+        assertSame(com.intellij.icons.AllIcons.Actions.Execute, update("com.segfault03.lattice.sql.run.rollback", card).getIcon());
+    }
+
+    public void testRunHasTheGreenRunIcon() {
+        SqlCard card = card("String q = \"select id from orders where id = ?\";");
+        assertSame(com.intellij.icons.AllIcons.Actions.Execute, update("com.segfault03.lattice.sql.run.run", card).getIcon());
+    }
+
     public void testRunActionsHaveIconsOnACard() {
         SqlCard card = card("String q = \"update orders set status = 'x' where id = ?\";");
         for (String id : List.of("com.segfault03.lattice.sql.run.rollback", "com.segfault03.lattice.sql.run.sendToConsole", "com.segfault03.lattice.sql.run.explain")) {
@@ -79,7 +89,7 @@ public class SqlCardActionsJavaFixtureTest extends H2SqlFixtureTestCase {
         AnAction[] children = ((DefaultActionGroup) manager.getAction("com.segfault03.lattice.sql.card.toolbar")).getChildActionsOrStubs();
         List<String> ids = new ArrayList<>();
         for (AnAction child : children) ids.add(child instanceof Separator ? "-" : manager.getId(child));
-        assertEquals(List.of(CHIP, "com.segfault03.lattice.sql.run.rollback", "com.segfault03.lattice.sql.run.sendToConsole", COPY, "-",
+        assertEquals(List.of(CHIP, "com.segfault03.lattice.sql.run.run", "com.segfault03.lattice.sql.run.rollback", "com.segfault03.lattice.sql.run.sendToConsole", COPY, "-",
                 "com.segfault03.lattice.sql.card.more"), ids);
         AnAction[] more = ((DefaultActionGroup) manager.getAction("com.segfault03.lattice.sql.card.more")).getChildActionsOrStubs();
         assertEquals(List.of("com.segfault03.lattice.sql.run.explain", "com.segfault03.lattice.sql.chooseFileConnection"),

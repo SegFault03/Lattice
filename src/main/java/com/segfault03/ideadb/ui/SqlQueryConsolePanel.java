@@ -41,6 +41,8 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     private final DatabaseSession session;
     private boolean running;
     private boolean loadingDatabases;
+    /** A run asked for while the console was loading or busy. */
+    private boolean runWhenReady;
     private volatile com.segfault03.ideadb.service.QueryExecution execution;
     private JButton cancelBtn;
     private JComboBox<Integer> resultLimit;
@@ -293,6 +295,19 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         input.select(start, start + sql.length());
     }
 
+    /** Inserts {@code sql} as {@link #insertSqlText} does and runs it, once databases have loaded and no query is running. */
+    public void runSqlText(String sql) {
+        insertSqlText(sql);
+        runWhenReady = true;
+        runPendingIfReady();
+    }
+
+    private void runPendingIfReady() {
+        if (!runWhenReady || running || loadingDatabases || disposed) return;
+        runWhenReady = false;
+        executeCurrentSql();
+    }
+
     private void executeCurrentSql() {
         if (running || loadingDatabases || disposed) return;
         String sql = currentSql();
@@ -406,6 +421,8 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
 
     private void setRunning(boolean running) {
         this.running = running;
+        // After whatever the caller does next (showing the last results), start a run that was waiting for the console.
+        if (!running && runWhenReady) SwingUtilities.invokeLater(this::runPendingIfReady);
         if (running && resultsModel.getRowCount() > 0) {
             resultsTabs.setTitleAt(0, "Previous results");
             resultsTabs.setToolTipTextAt(0, "These results are from the last successful query");

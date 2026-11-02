@@ -30,16 +30,18 @@ import java.util.function.BiFunction;
 /** What the "Lattice SQL" editor actions share: availability, the target statement and the parameter values. */
 final class SqlRunActionSupport {
     static final String BIND_FIRST = "Bind this file to a connection first";
+    static final String RUN_REFUSAL = "Run is for queries such as SELECT. Use Run and Roll Back to try an INSERT, UPDATE, DELETE or MERGE.";
 
     interface ConsoleOpener { void open(@NotNull ConnectionConfig config, @Nullable String db, @NotNull String sql); }
 
     private static volatile BiFunction<SqlRunTarget, Map<String, SqlParameterValue>, Map<String, SqlParameterValue>> valuesProvider;
     private static volatile ConsoleOpener consoleOpener;
+    private static volatile ConsoleOpener consoleRunner;
 
     private SqlRunActionSupport() {}
 
     /** What a card toolbar action is for, which decides the cards it refuses. */
-    enum CardUse { CONSOLE, EXPLAIN, ROLLBACK }
+    enum CardUse { CONSOLE, EXPLAIN, ROLLBACK, RUN }
 
     /**
      * Hidden outside Lattice SQL and where the IDE's own database plugin is active; disabled until the file has a
@@ -55,12 +57,16 @@ final class SqlRunActionSupport {
             return;
         }
         SqlCard card = event.getData(SqlCardDataKeys.SQL_CARD);
+        if (card != null && !shownOnCard(card, use)) {
+            presentation.setEnabledAndVisible(false);
+            return;
+        }
         if (card != null) {
             String refusal = cardRefusal(card, use, isBound(project, file));
             presentation.setVisible(true);
             presentation.setEnabled(refusal == null);
             presentation.setIcon(switch (use) {
-                case ROLLBACK -> AllIcons.Actions.Rollback;
+                case ROLLBACK, RUN -> AllIcons.Actions.Execute;
                 case CONSOLE -> AllIcons.Debugger.Console;
                 case EXPLAIN -> AllIcons.Actions.Preview;
             });
@@ -79,12 +85,27 @@ final class SqlRunActionSupport {
         }
     }
 
+    /** A query card offers Run in place of Run and Roll Back; every other card the other way round. */
+    private static boolean shownOnCard(SqlCard card, CardUse use) {
+        boolean query = card.kind() == SqlStatementKind.QUERY;
+        return switch (use) {
+            case RUN -> query;
+            case ROLLBACK -> !query;
+            case CONSOLE, EXPLAIN -> true;
+        };
+    }
+
     /** Why a card does not suit {@code use}, or null when it does. */
     static @Nullable String cardRefusal(@NotNull SqlCard card, @NotNull CardUse use, boolean bound) {
         if (!bound) return BIND_FIRST;
         if (use == CardUse.CONSOLE) return null;
         if (card.statementCount() != 1 || card.kind() == null) return SqlRunTarget.SELECT_SINGLE_STATEMENT;
-        return use == CardUse.EXPLAIN ? SqlStatementKind.explainRefusal(card.kind()) : SqlStatementKind.rollbackRefusal(card.kind());
+        return switch (use) {
+            case EXPLAIN -> SqlStatementKind.explainRefusal(card.kind());
+            case ROLLBACK -> SqlStatementKind.rollbackRefusal(card.kind());
+            case RUN -> card.kind() == SqlStatementKind.QUERY ? null : RUN_REFUSAL;
+            case CONSOLE -> null;
+        };
     }
 
     private static boolean isBound(Project project, PsiFile file) {
@@ -149,6 +170,20 @@ final class SqlRunActionSupport {
         var opener = consoleOpener;
         if (opener != null) opener.open(config, config.getDatabaseName(), sql);
         else DatabaseEditorManager.getInstance(project).openConsole(config, config.getDatabaseName(), sql);
+    }
+
+    /** Opens the console with {@code sql} and runs it there at once. */
+    static void runInConsole(@NotNull Project project, @NotNull ConnectionConfig config, @NotNull String sql) {
+        var runner = consoleRunner;
+        if (runner != null) runner.open(config, config.getDatabaseName(), sql);
+        else DatabaseEditorManager.getInstance(project).openConsole(config, config.getDatabaseName(), sql, true);
+    }
+
+    /** Takes the place of opening and running in the console tab, which needs a real editor window. */
+    @TestOnly
+    static void setConsoleRunnerForTests(@NotNull ConsoleOpener runner, @NotNull Disposable parent) {
+        consoleRunner = runner;
+        Disposer.register(parent, () -> consoleRunner = null);
     }
 
     @TestOnly

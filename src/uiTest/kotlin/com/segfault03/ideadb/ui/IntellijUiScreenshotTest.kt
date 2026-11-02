@@ -307,7 +307,7 @@ class IntellijUiScreenshotTest {
                     Explain Statement opened the Dry Run tab with HSQLDB's plan (values written in, as HSQLDB rejects bound EXPLAIN parameters).
                     Run and Roll Back asked for confirmation, reported one row and Rolled back; JDBC confirmed ORDERS was unchanged.
                     CREATE TABLE was refused before any connection.
-                    SQL cards were painted behind both SQL strings of a Java file; hovering the UPDATE card showed its toolbar with Run and Roll Back enabled, and on the SELECT card it was disabled. Captures are actual desktop pixels.
+                    SQL cards were painted behind both SQL strings of a Java file. Hovering the UPDATE card showed Run and Roll Back, enabled; hovering the SELECT card showed Run instead, and Run ran the query in the console. Captures are actual desktop pixels.
                 """.trimIndent())
                 return@useDriverAndCloseIde
             }
@@ -2337,26 +2337,33 @@ class IntellijUiScreenshotTest {
         }
         // Empty space below the code: resting on code would open the IDE's own quick documentation over the cards.
         fun park() = Point(editor.component.width - 20, editor.component.height - 20)
+        /** Hovers the card and returns its Copy SQL button, which every card's toolbar has. */
         fun hover(text: String): UiComponent {
             editor.moveMouse(park())
             Thread.sleep(500)
             editor.moveMouse(pointAt(text))
-            return frame.x { byAccessibleName("Run and Roll Back") }.waitFound(15.seconds)
+            return frame.x { byAccessibleName("Copy SQL") }.waitFound(15.seconds)
+        }
+        // The console has its own Run button; a card's buttons are the showing ones on the Copy SQL button's row.
+        fun cardButtons(name: String, copy: UiComponent): List<UiComponent> {
+            val row = copy.component.getLocationOnScreen().y
+            return frame.xx { byAccessibleName(name) }.list().filter { it.component.isShowing() && it.component.getLocationOnScreen().y == row }
         }
         // Highlighting has run once the editor settles; the cards are painted by then.
         Thread.sleep(3_000)
         editor.moveMouse(park())
         captureScreen(directory.resolve("sql-cards.png"))
 
-        val updateRollback = hover("UPDATE ORDERS")
+        val copy = hover("UPDATE ORDERS")
+        val updateRollback = cardButtons("Run and Roll Back", copy).single()
         check(updateRollback.component.isEnabled()) { "Run and Roll Back must be enabled on the UPDATE card" }
-        val copy = frame.x { byAccessibleName("Copy SQL") }.waitFound()
+        check(cardButtons("Run", copy).isEmpty()) { "A DML card offers Run and Roll Back, not Run" }
         // The toolbar fills itself after the popup opens; once it has, the popup must sit inside the editor's visible area.
         Thread.sleep(500)
         val editorOrigin = editor.component.getLocationOnScreen()
         val visible = Rectangle(editorOrigin.x, editorOrigin.y, editor.component.width, editor.component.height)
-        val console = frame.x { byAccessibleName("Send to Console") }.waitFound()
-        for (button in listOf(updateRollback, console, copy)) {
+        val sendToConsole = cardButtons("Send to Console", copy).single()
+        for (button in listOf(updateRollback, sendToConsole, copy)) {
             val at = button.component.getLocationOnScreen()
             val bounds = Rectangle(at.x, at.y, button.component.width, button.component.height)
             check(visible.contains(bounds)) { "Card toolbar button at $bounds outside the editor's visible area $visible" }
@@ -2370,10 +2377,18 @@ class IntellijUiScreenshotTest {
         }
         captureScreen(directory.resolve("sql-cards-hover.png"))
 
-        val selectRollback = hover("SELECT ID")
-        waitUntil("Run and Roll Back disabled on the SELECT card") { !selectRollback.component.isEnabled() }
+        val selectCopy = hover("SELECT ID")
+        Thread.sleep(500)
+        check(cardButtons("Run and Roll Back", selectCopy).isEmpty()) { "A query card offers Run, not Run and Roll Back" }
+        val run = cardButtons("Run", selectCopy).single()
+        check(run.component.isEnabled()) { "Run must be enabled on the SELECT card" }
         captureScreen(directory.resolve("sql-cards-hover-select.png"))
-        editor.moveMouse(park())
+
+        // Run: the console opens with the query and runs it at once.
+        run.click()
+        val console = frame.x { byJavaClass("com.segfault03.ideadb.ui.SqlQueryConsolePanel") }.waitFound()
+        waitUntil("the query ran in the console", 60_000) { console.xx { byVisibleText("Results (1)") }.list().isNotEmpty() }
+        captureScreen(directory.resolve("sql-cards-run.png"))
     }
 
     private fun verifyMutationRefresh(frame: IdeaFrameUI, tree: JTreeUiComponent, schema: Array<String>, directory: Path) {
@@ -2835,7 +2850,7 @@ private const val SQL_CARDS_FILE = "src/main/java/Orders.java"
 private val SQL_CARDS_TEXT = """
     class Orders {
         void ship(java.sql.Connection c) throws Exception {
-            c.prepareStatement("SELECT ID, STATUS FROM ORDERS WHERE ID = ?");
+            c.prepareStatement("SELECT ID, STATUS FROM ORDERS WHERE ID = 2");
             String sql = ${'"'}""
                 UPDATE ORDERS
                    SET STATUS = 'shipped'

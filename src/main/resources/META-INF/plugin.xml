@@ -147,6 +147,10 @@
     <actions>
         <group id="com.segfault03.lattice.sql.run.group" text="Lattice SQL" popup="true">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <action id="com.segfault03.lattice.sql.run.run"
+                    class="com.segfault03.ideadb.sql.run.RunQueryAction"
+                    text="Run"
+                    description="Run the query in the connection's console and show its results"/>
             <action id="com.segfault03.lattice.sql.run.sendToConsole"
                     class="com.segfault03.ideadb.sql.run.SendToConsoleAction"
                     text="Send to Console"
@@ -173,6 +177,7 @@
                     text="No connection"
                     description="Choose the connection for this file"
                     icon="AllIcons.General.Warning"/>
+            <reference ref="com.segfault03.lattice.sql.run.run"/>
             <reference ref="com.segfault03.lattice.sql.run.rollback"/>
             <reference ref="com.segfault03.lattice.sql.run.sendToConsole"/>
             <action id="com.segfault03.lattice.sql.card.copy"
