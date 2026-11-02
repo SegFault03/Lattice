@@ -19,6 +19,8 @@ import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.sql.binding.SqlDialectResolver;
 import com.segfault03.ideadb.sql.binding.SqlEmbeddedBinding;
 import com.segfault03.ideadb.sql.dialect.SqlDialectProfile;
+import com.segfault03.ideadb.sql.lang.SqlSemanticColoring;
+import com.segfault03.ideadb.sql.lang.SqlSemanticColors;
 import com.segfault03.ideadb.sql.schema.SqlSchema;
 import com.segfault03.ideadb.sql.schema.SqlSchemaListener;
 import com.segfault03.ideadb.sql.schema.SqlSchemaService;
@@ -38,6 +40,8 @@ import java.util.List;
 final class SqlEmbeddedValidation implements Disposable {
     /** Highlights of this kind are replaced as a group on every run. */
     private static final int GROUP = 0x4C41_5453;
+    /** The schema colors of names, a group of their own so the findings and the colors replace each other independently. */
+    private static final int COLOR_GROUP = 0x4C41_5443;
     private static final int DELAY_MILLIS = 300;
 
     private final Project project;
@@ -72,8 +76,27 @@ final class SqlEmbeddedValidation implements Disposable {
 
     private void run() {
         long stamp = document.getModificationStamp();
-        List<SqlDiagnostic> found = ReadAction.compute(this::diagnose);
+        Result found = ReadAction.compute(() -> new Result(diagnose(), names()));
         ApplicationManager.getApplication().invokeLater(() -> show(found, stamp), project.getDisposed());
+    }
+
+    private record Result(List<SqlDiagnostic> findings, List<SqlSemanticColoring.Colored> names) {}
+
+    /** The names the file's connection gives a role, in the field's own text, from the cached schema alone. */
+    private List<SqlSemanticColoring.Colored> names() {
+        if (!SqlEditorSettings.getInstance().isHighlightingEffective()) return List.of();
+        SqlEmbeddedBinding binding = SqlEmbeddedBinding.of(file);
+        if (binding == null) return List.of();
+        SqlSchema schema = SqlSemanticColoring.currentSchema(SqlDialectResolver.connection(project, file), file);
+        if (schema == null) return List.of();
+        String leadIn = binding.leadIn();
+        List<SqlSemanticColoring.Colored> found = new ArrayList<>();
+        for (var colored : SqlSemanticColoring.colored(leadIn + document.getText(), SqlDialectResolver.resolve(project, file), schema)) {
+            // The lead-in is not the user's text, so what is colored in it is not shown.
+            if (colored.range().getStartOffset() < leadIn.length()) continue;
+            found.add(new SqlSemanticColoring.Colored(colored.range().shiftLeft(leadIn.length()), colored.role()));
+        }
+        return found;
     }
 
     private List<SqlDiagnostic> diagnose() {
@@ -101,12 +124,12 @@ final class SqlEmbeddedValidation implements Disposable {
         return found;
     }
 
-    private void show(List<SqlDiagnostic> found, long stamp) {
+    private void show(Result result, long stamp) {
         Editor target = editor;
         if (target == null || target.isDisposed() || project.isDisposed() || document.getModificationStamp() != stamp) return;
         List<HighlightInfo> infos = new ArrayList<>();
         int length = document.getTextLength();
-        for (SqlDiagnostic diagnostic : found) {
+        for (SqlDiagnostic diagnostic : result.findings()) {
             if (diagnostic.start() >= diagnostic.end() || diagnostic.end() > length) continue;
             var builder = HighlightInfo.newHighlightInfo(diagnostic.kind() == SqlDiagnostic.Kind.SYNTAX ? HighlightInfoType.ERROR : HighlightInfoType.WARNING)
                     .range(diagnostic.start(), diagnostic.end()).descriptionAndTooltip(diagnostic.message());
@@ -116,6 +139,13 @@ final class SqlEmbeddedValidation implements Disposable {
         }
         // The document's own markup is where the hover popup and Alt+Enter look for findings, so that is where they go.
         UpdateHighlightersUtil.setHighlightersToEditor(project, document, 0, length, infos, target.getColorsScheme(), GROUP);
+        List<HighlightInfo> colors = new ArrayList<>();
+        for (var colored : result.names()) {
+            if (colored.range().getEndOffset() > length) continue;
+            colors.add(HighlightInfo.newHighlightInfo(HighlightInfoType.INFORMATION).range(colored.range())
+                    .textAttributes(SqlSemanticColors.attributes(target.getColorsScheme(), colored.role())).createUnconditionally());
+        }
+        UpdateHighlightersUtil.setHighlightersToEditor(project, document, 0, length, colors, target.getColorsScheme(), COLOR_GROUP);
     }
 
     /** Puts the likely intended spelling in place of the flagged name or word, as the inspection of a file does. */

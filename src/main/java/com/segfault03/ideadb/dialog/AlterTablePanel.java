@@ -20,6 +20,7 @@ import java.util.*;
 /** Column Inspector view. JDBC work and dialog lifecycle belong to AlterTableDialog. */
 public final class AlterTablePanel extends JPanel {
     private final ConnectionConfig config;
+    private final String namespace;
     private String tableName;
     private String tableDraft;
     private final List<DraftColumn> drafts = new ArrayList<>();
@@ -79,7 +80,7 @@ public final class AlterTablePanel extends JPanel {
     public AlterTablePanel(ConnectionConfig config, String namespace, String tableName,
                            List<ColumnMetadata> columns) {
         super(new BorderLayout());
-        this.config = config; this.tableName = tableName; this.tableDraft = tableName; this.columns = List.copyOf(columns);
+        this.config = config; this.namespace = namespace; this.tableName = tableName; this.tableDraft = tableName; this.columns = List.copyOf(columns);
         type = DatabaseInputs.comboBox(DatabaseProviders.get(config.getType()).dataTypes().toArray(String[]::new));
         type.setEditable(true);
         setMinimumSize(JBUI.size(780, 570));
@@ -384,7 +385,7 @@ public final class AlterTablePanel extends JPanel {
         preview.add(scroll, BorderLayout.CENTER);
         return TableDialogLayout.preview(preview, title, sql, 132);
     }
-    private void highlightSql() { com.segfault03.ideadb.sql.view.SqlSwingHighlighter.apply(sql, com.segfault03.ideadb.sql.dialect.SqlDialects.of(config.getType())); }
+    private void highlightSql() { com.segfault03.ideadb.sql.view.SqlSwingHighlighter.apply(sql, config, namespace); }
     private static JPanel panel(LayoutManager layout) { JPanel p = new JPanel(layout); p.setOpaque(false); return p; }
     private static JPanel vertical() { return TableDialogLayout.column(); }
     private static void stack(JPanel p, JComponent c) { TableDialogLayout.stack(p, c); }

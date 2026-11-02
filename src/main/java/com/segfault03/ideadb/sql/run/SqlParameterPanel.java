@@ -3,6 +3,7 @@ package com.segfault03.ideadb.sql.run;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.editor.colors.EditorColorsManager;
 import com.intellij.openapi.editor.colors.EditorFontType;
+import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.model.DatabaseType;
 import com.segfault03.ideadb.sql.dialect.SqlDialects;
 import com.segfault03.ideadb.sql.view.SqlSwingHighlighter;
@@ -14,6 +15,7 @@ import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.components.JBTextField;
 import com.intellij.util.ui.JBUI;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import javax.swing.JComboBox;
 import javax.swing.JPanel;
@@ -40,6 +42,7 @@ public final class SqlParameterPanel extends JPanel {
     private final DatabaseType type;
     private final JTextPane preview = new JTextPane();
     private boolean previewIsSql;
+    private final @Nullable ConnectionConfig connection;
 
     private final class Row {
         final JComboBox<SqlParameterValue.Type> type = DatabaseInputs.comboBox(TYPES);
@@ -74,10 +77,22 @@ public final class SqlParameterPanel extends JPanel {
     /** @param initial values to start from; a key without one starts as empty text */
     public SqlParameterPanel(@NotNull CharSequence sql, @NotNull SqlParameters.Result parameters, @NotNull DatabaseType type,
                              @NotNull Map<String, SqlParameterValue> initial) {
+        this(sql, parameters, type, null, initial);
+    }
+
+    /** With the connection the statement runs on, the preview also colors the names its cached schema knows. */
+    public SqlParameterPanel(@NotNull CharSequence sql, @NotNull SqlParameters.Result parameters, @NotNull ConnectionConfig connection,
+                             @NotNull Map<String, SqlParameterValue> initial) {
+        this(sql, parameters, connection.getType(), connection, initial);
+    }
+
+    private SqlParameterPanel(CharSequence sql, SqlParameters.Result parameters, DatabaseType type, @Nullable ConnectionConfig connection,
+                              Map<String, SqlParameterValue> initial) {
         super(new GridBagLayout());
         this.sql = sql;
         this.parameters = parameters;
         this.type = type;
+        this.connection = connection;
         List<String> keys = parameters.keys();
         var constraints = new GridBagConstraints();
         constraints.gridy = 0;
@@ -120,7 +135,8 @@ public final class SqlParameterPanel extends JPanel {
         preview.setText(previewContent());
         preview.setCaretPosition(0);
         // An error in the place of the SQL is plain text.
-        if (previewIsSql) SqlSwingHighlighter.apply(preview, SqlDialects.of(type));
+        if (previewIsSql && connection != null) SqlSwingHighlighter.apply(preview, connection, null);
+        else if (previewIsSql) SqlSwingHighlighter.apply(preview, SqlDialects.of(type));
         else SqlSwingHighlighter.clear(preview);
     }
 

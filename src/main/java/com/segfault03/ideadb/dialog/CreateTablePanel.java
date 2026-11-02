@@ -261,7 +261,7 @@ public final class CreateTablePanel extends JPanel {
         enabled.put(component,component.isEnabled()); component.setEnabled(false);
         if (component instanceof Container container) for (Component child:container.getComponents()) disable(child);
     }
-    private void highlightSql() { com.segfault03.ideadb.sql.view.SqlSwingHighlighter.apply(sql, com.segfault03.ideadb.sql.dialect.SqlDialects.of(config.getType())); }
+    private void highlightSql() { com.segfault03.ideadb.sql.view.SqlSwingHighlighter.apply(sql, config, namespace); }
     private static DocumentListener listener(Runnable callback) { return new DocumentListener() {
         public void insertUpdate(DocumentEvent e) { callback.run(); } public void removeUpdate(DocumentEvent e) { callback.run(); } public void changedUpdate(DocumentEvent e) { callback.run(); }
     }; }

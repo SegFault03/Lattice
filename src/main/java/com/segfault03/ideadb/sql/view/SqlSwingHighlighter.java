@@ -6,9 +6,14 @@ import com.intellij.openapi.editor.colors.EditorColorsScheme;
 import com.intellij.openapi.editor.colors.TextAttributesKey;
 import com.intellij.openapi.editor.markup.TextAttributes;
 import com.intellij.ui.JBColor;
+import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.sql.dialect.SqlDialectProfile;
+import com.segfault03.ideadb.sql.dialect.SqlDialects;
 import com.segfault03.ideadb.sql.lang.LatticeSqlLexer;
 import com.segfault03.ideadb.sql.lang.LatticeSqlSyntaxHighlighter;
+import com.segfault03.ideadb.sql.lang.SqlSemanticColoring;
+import com.segfault03.ideadb.sql.lang.SqlSemanticColors;
+import com.segfault03.ideadb.sql.schema.SqlSchema;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -24,8 +29,9 @@ import java.awt.Font;
 /**
  * Colors the SQL shown in a read-only Swing text pane the way the editor colors it: the dialect's own lexer decides what
  * is a keyword, function, type, string, number or comment, and the colors are the editor color scheme's Lattice SQL
- * colors, so a pane follows the theme and the user's settings like a hover card does. Without an IDE (plain unit tests
- * and previews) fixed colors stand in.
+ * colors, so a pane follows the theme and the user's settings like a hover card does. Given a connection, the names its
+ * cached schema knows (tables, views, aliases, keys and columns) get their role colors on top, from the same resolution
+ * and the same keys as an editor. Without an IDE (plain unit tests and previews) fixed colors stand in.
  */
 public final class SqlSwingHighlighter {
     private SqlSwingHighlighter() {}
@@ -40,8 +46,21 @@ public final class SqlSwingHighlighter {
         document.setCharacterAttributes(0, document.getLength(), plain, true);
     }
 
-    /** Colors the text now in the pane. Call again whenever the text is replaced. */
-    public static void apply(@NotNull JTextPane pane, @NotNull SqlDialectProfile profile) {
+    /** Colors the text now in the pane by syntax alone. Call again whenever the text is replaced. */
+    public static void apply(@NotNull JTextPane pane, @NotNull SqlDialectProfile profile) { apply(pane, profile, null); }
+
+    /**
+     * Colors the text now in the pane by syntax and by what the connection's cached schema says its names are, with
+     * unqualified names read in {@code namespace} when it is given. Names the schema does not know, or a schema that may
+     * be out of date, leave the syntax colors.
+     */
+    public static void apply(@NotNull JTextPane pane, @NotNull ConnectionConfig connection, @Nullable String namespace) {
+        // Tests and previews can run without an application, and then there is no schema to read.
+        SqlSchema schema = ApplicationManager.getApplication() == null ? null : SqlSemanticColoring.currentSchema(connection, null);
+        apply(pane, SqlDialects.of(connection.getType()), schema == null ? null : schema.withDefaultNamespace(namespace));
+    }
+
+    static void apply(JTextPane pane, SqlDialectProfile profile, @Nullable SqlSchema schema) {
         StyledDocument document = pane.getStyledDocument();
         String text;
         try {
@@ -65,6 +84,29 @@ public final class SqlSwingHighlighter {
             AttributeSet style = style(keys[0], scheme);
             if (style != null) document.setCharacterAttributes(lexer.getTokenStart(), lexer.getTokenEnd() - lexer.getTokenStart(), style, false);
         }
+        if (schema == null) return;
+        for (var colored : SqlSemanticColoring.colored(text, profile, schema)) {
+            document.setCharacterAttributes(colored.range().getStartOffset(), colored.range().getLength(), roleStyle(colored.role(), scheme), false);
+        }
+    }
+
+    /** A role's color and style: the scheme's own, else the defaults for its brightness (light and dark by the IDE theme without a scheme). */
+    private static AttributeSet roleStyle(SqlSemanticColors.Role role, @Nullable EditorColorsScheme scheme) {
+        SimpleAttributeSet style = new SimpleAttributeSet();
+        Color color;
+        int type;
+        if (scheme != null) {
+            TextAttributes attributes = SqlSemanticColors.attributes(scheme, role);
+            color = attributes.getForegroundColor();
+            type = attributes.getFontType();
+        } else {
+            color = new JBColor(role.defaultColor(false), role.defaultColor(true));
+            type = role.defaultFontType();
+        }
+        StyleConstants.setForeground(style, color);
+        StyleConstants.setBold(style, (type & Font.BOLD) != 0);
+        StyleConstants.setItalic(style, (type & Font.ITALIC) != 0);
+        return style;
     }
 
     private static @Nullable EditorColorsScheme scheme() {

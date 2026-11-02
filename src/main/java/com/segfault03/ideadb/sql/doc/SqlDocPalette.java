@@ -25,13 +25,14 @@ import java.util.function.Function;
 record SqlDocPalette(@NotNull String key, @NotNull String foreignKey, @NotNull String numeric, @NotNull String text,
                      @NotNull String temporal, @NotNull String bool, @NotNull String binary, @NotNull String other,
                      @NotNull String accent, @NotNull String muted) {
-    static final SqlDocPalette DARK = fixed(true, "#6CA6DD", "#8C9096");
-    static final SqlDocPalette LIGHT = fixed(false, "#0B5CAD", "#777C82");
+    static final SqlDocPalette DARK = fixed(true, "#8C9096");
+    static final SqlDocPalette LIGHT = fixed(false, "#777C82");
 
-    private static SqlDocPalette fixed(boolean dark, String accent, String muted) {
+    /** The fixed palette of a dark or light scheme; the accent (what a card's "table" or "view" label is in) is the numeric blue. */
+    private static SqlDocPalette fixed(boolean dark, String muted) {
         Function<Role, String> hex = role -> SqlSemanticColors.hex(role.defaultColor(dark));
         return new SqlDocPalette(hex.apply(Role.PRIMARY_KEY), hex.apply(Role.FOREIGN_KEY), hex.apply(Role.NUMERIC), hex.apply(Role.TEXT),
-                hex.apply(Role.TEMPORAL), hex.apply(Role.BOOLEAN), hex.apply(Role.BINARY), hex.apply(Role.OTHER), accent, muted);
+                hex.apply(Role.TEMPORAL), hex.apply(Role.BOOLEAN), hex.apply(Role.BINARY), hex.apply(Role.OTHER), hex.apply(Role.NUMERIC), muted);
     }
 
     /** The palette for the editor's current color scheme; the light fixed one when no IDE is running (plain unit tests). */

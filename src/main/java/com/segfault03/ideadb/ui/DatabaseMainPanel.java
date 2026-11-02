@@ -471,7 +471,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         try {
             String sql = generatedSql(data, action);
             if (connectionAvailable(node)) DatabaseEditorManager.getInstance(project).openConsole(data.getConnectionConfig(), data.getDatabaseName(), sql);
-            else new GeneratedSqlDialog(project, data.getConnectionConfig().getType(), sql).show();
+            else new GeneratedSqlDialog(project, data.getConnectionConfig(), data.getDatabaseName(), sql).show();
         } catch (IllegalStateException error) {
             updateExplorerStatus("Could not generate SQL · Refresh the table", DatabaseUi.Tone.ERROR);
             Messages.showErrorDialog(project, error.getMessage(), "Could not generate SQL");

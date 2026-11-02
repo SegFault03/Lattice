@@ -986,7 +986,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     if(disposed) return;
                     setReadRunning(false);
                     DatabaseUi.status(statusLabel, "CREATE TABLE statement loaded", DatabaseUi.Tone.NORMAL);
-                    new GeneratedSqlDialog(project, "CREATE TABLE DDL - " + tableMetadata.getName(), config.getType(), ddl,
+                    new GeneratedSqlDialog(project, "CREATE TABLE DDL - " + tableMetadata.getName(), config, databaseName, ddl,
                             () -> DatabaseEditorManager.getInstance(project).openConsole(config, databaseName, ddl + "\n")).show();
                 });
             } catch (Exception ex) {

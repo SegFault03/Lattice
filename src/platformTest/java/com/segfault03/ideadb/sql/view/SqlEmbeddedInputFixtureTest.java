@@ -57,7 +57,8 @@ public class SqlEmbeddedInputFixtureTest extends H2SqlFixtureTestCase {
 
     private List<String> findings(Editor editor) {
         return Arrays.stream(highlighters(editor)).map(RangeHighlighter::getErrorStripeTooltip)
-                .filter(tooltip -> tooltip instanceof HighlightInfo).map(tooltip -> ((HighlightInfo) tooltip).getDescription()).toList();
+                .filter(tooltip -> tooltip instanceof HighlightInfo info && info.getDescription() != null)
+                .map(tooltip -> ((HighlightInfo) tooltip).getDescription()).toList();
     }
 
     /** The findings are in the document's markup, where hover and Alt+Enter look for them. */
@@ -103,13 +104,59 @@ public class SqlEmbeddedInputFixtureTest extends H2SqlFixtureTestCase {
         }
     }
 
+    /** "text:ROLE" for every range of the editor that carries a schema color, in text order. */
+    private List<String> roles(EditorEx editor) {
+        var scheme = editor.getColorsScheme();
+        var found = new java.util.ArrayList<RangeHighlighter>();
+        for (RangeHighlighter highlighter : highlighters(editor)) {
+            var attributes = highlighter.getTextAttributes(scheme);
+            if (attributes == null || attributes.getForegroundColor() == null) continue;
+            for (var role : com.segfault03.ideadb.sql.lang.SqlSemanticColors.Role.values()) {
+                if (attributes.getForegroundColor().equals(com.segfault03.ideadb.sql.lang.SqlSemanticColors.attributes(scheme, role).getForegroundColor())) {
+                    found.add(highlighter);
+                    highlighter.putUserData(ROLE, role);
+                }
+            }
+        }
+        found.sort(java.util.Comparator.comparingInt(RangeHighlighter::getStartOffset));
+        return found.stream().map(h -> editor.getDocument().getText(new com.intellij.openapi.util.TextRange(h.getStartOffset(), h.getEndOffset())) + ":" + h.getUserData(ROLE)).toList();
+    }
+
+    private static final com.intellij.openapi.util.Key<com.segfault03.ideadb.sql.lang.SqlSemanticColors.Role> ROLE = com.intellij.openapi.util.Key.create("test.role");
+
+    public void testAnEmbeddedConsoleColorsTheNamesItsSchemaKnows() {
+        loadSchema();
+        var input = EmbeddedSqlInput.create(getProject(), h2, null, "", true, "select id, title from books", "test console");
+        try {
+            EditorEx editor = ((EditorTextField) input.component()).getEditor(true);
+            PlatformTestUtil.waitWithEventsDispatching("The names were never colored", () -> roles(editor).size() == 3, 30);
+            assertEquals(List.of("id:PRIMARY_KEY", "title:TEXT", "books:TABLE"), roles(editor));
+            input.setText("select nowhere from books");
+            PlatformTestUtil.waitWithEventsDispatching("The colors did not follow the text", () -> roles(editor).equals(List.of("books:TABLE")), 30);
+        } finally {
+            input.dispose();
+        }
+    }
+
+    public void testAFilterFieldColorsItsColumnsAndNotItsHiddenLeadIn() {
+        loadSchema();
+        var input = EmbeddedSqlInput.create(getProject(), h2, null, "select * from BOOKS where ", false, "AUTHOR_ID > 3", "test filter");
+        try {
+            EditorEx editor = ((EditorTextField) input.component()).getEditor(true);
+            PlatformTestUtil.waitWithEventsDispatching("The column was never colored", () -> !roles(editor).isEmpty(), 30);
+            assertEquals(List.of("AUTHOR_ID:FOREIGN_KEY"), roles(editor));
+        } finally {
+            input.dispose();
+        }
+    }
+
     public void testAFieldDoesNotReportItsHiddenLeadIn() {
         loadSchema();
         var input = EmbeddedSqlInput.create(getProject(), h2, null, "select * from BOOKS where ", false, "TITEL = 'x'", "test filter");
         try {
             EditorEx editor = ((EditorTextField) input.component()).getEditor(true);
             PlatformTestUtil.waitWithEventsDispatching("The unknown column was never reported", () -> findings(editor).stream().anyMatch(d -> d.contains("TITEL")), 30);
-            var found = Arrays.stream(highlighters(editor)).filter(h -> h.getErrorStripeTooltip() instanceof HighlightInfo).toList();
+            var found = Arrays.stream(highlighters(editor)).filter(h -> h.getErrorStripeTooltip() instanceof HighlightInfo info && info.getDescription() != null).toList();
             assertEquals(1, found.size());
             assertEquals("the mark sits on the user's text, not shifted by the lead-in", "TITEL", editor.getDocument().getText(
                     new com.intellij.openapi.util.TextRange(found.get(0).getStartOffset(), found.get(0).getEndOffset())));

@@ -18,7 +18,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Which names of a statement get which role, over a schema with a key, a foreign key, a view and one column of each kind. */
-class SqlSemanticAnnotatorTest {
+class SqlSemanticColoringTest {
     private static ColumnMetadata column(String name, String type, int dataType, boolean key, ColumnReference reference) {
         var column = new ColumnMetadata(name, type, dataType, 10, 0, !key, key, false, null);
         return reference == null ? column : column.withReference(reference);
@@ -42,7 +42,7 @@ class SqlSemanticAnnotatorTest {
     /** The roles of the names in the statement, as "text:ROLE" in text order. */
     private List<String> roles(String sql) {
         List<String> found = new ArrayList<>();
-        for (var colored : SqlSemanticAnnotator.colored(sql, SqlDialects.MYSQL, schema)) {
+        for (var colored : SqlSemanticColoring.colored(sql, SqlDialects.MYSQL, schema)) {
             found.add(sql.substring(colored.range().getStartOffset(), colored.range().getEndOffset()) + ":" + colored.role());
         }
         return found;
@@ -75,6 +75,13 @@ class SqlSemanticAnnotatorTest {
     @Test void eachStatementOfAScriptIsReadOnItsOwn() {
         assertEquals(List.of("customers:TABLE", "total:NUMERIC", "orders:TABLE"),
                 roles("SELECT * FROM customers;\nSELECT total FROM orders;"));
+    }
+
+    @Test void aScriptTooLargeToResolveKeepsTheTokenColors() {
+        String statement = "SELECT id FROM customers;\n";
+        String dump = statement.repeat(SqlSemanticColoring.TEXT_LIMIT / statement.length() + 1);
+        assertTrue(dump.length() > SqlSemanticColoring.TEXT_LIMIT);
+        assertEquals(List.of(), roles(dump));
     }
 
     @Test void quotedNamesAreColoredToo() {
