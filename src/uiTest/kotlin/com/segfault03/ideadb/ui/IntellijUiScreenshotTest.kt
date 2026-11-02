@@ -2267,7 +2267,10 @@ class IntellijUiScreenshotTest {
             values.pressButton("OK")
         }
         val console = frame.x { byJavaClass("com.segfault03.ideadb.ui.SqlQueryConsolePanel") }.waitFound()
-        val consoleText = console.x { byJavaClass("com.intellij.ui.components.JBTextArea") }.waitFound()
+        // The console's input is the embedded SQL editor in a real IDE, a plain text area only where that is unavailable.
+        val consoleText = console.x {
+            or(byJavaClass("com.intellij.openapi.editor.impl.EditorComponentImpl"), byJavaClass("com.intellij.ui.components.JBTextArea"))
+        }.waitFound()
         waitUntil("statement sent to the console") { textOf(consoleText).contains("CUSTOMER_ID = 42") }
         check(!textOf(consoleText).contains(":status")) { "The console must receive literal SQL" }
         // A URL connection names no database; the console must start on the connection's own schema.
