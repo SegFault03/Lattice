@@ -69,6 +69,32 @@ public class SqlCardHoverJavaFixtureTest extends H2SqlFixtureTestCase {
         assertNull(first.getUserData(SqlCardPass.HOVERED));
     }
 
+    public void testToolbarClosesAfterOneOfItsActionsRuns() {
+        RangeHighlighter first = cards().get(0);
+        SqlCardHoverController controller = SqlCardHoverController.of(myFixture.getEditor());
+        controller.showForTests(first);
+        var action = com.intellij.openapi.actionSystem.ActionManager.getInstance().getAction("com.segfault03.lattice.sql.card.copy");
+        var event = com.intellij.openapi.actionSystem.AnActionEvent.createEvent(action, com.intellij.openapi.actionSystem.DataContext.EMPTY_CONTEXT,
+                new com.intellij.openapi.actionSystem.Presentation(), SqlCardHoverController.PLACE, com.intellij.openapi.actionSystem.ActionUiKind.TOOLBAR, null);
+        com.intellij.openapi.application.ApplicationManager.getApplication().getMessageBus()
+                .syncPublisher(com.intellij.openapi.actionSystem.ex.AnActionListener.TOPIC)
+                .afterActionPerformed(action, event, com.intellij.openapi.actionSystem.AnActionResult.PERFORMED);
+        assertNull(controller.shownCard());
+    }
+
+    public void testToolbarStaysForActionsElsewhere() {
+        RangeHighlighter first = cards().get(0);
+        SqlCardHoverController controller = SqlCardHoverController.of(myFixture.getEditor());
+        controller.showForTests(first);
+        var action = com.intellij.openapi.actionSystem.ActionManager.getInstance().getAction("com.segfault03.lattice.sql.card.copy");
+        var event = com.intellij.openapi.actionSystem.AnActionEvent.createEvent(action, com.intellij.openapi.actionSystem.DataContext.EMPTY_CONTEXT,
+                new com.intellij.openapi.actionSystem.Presentation(), "EditorPopup", com.intellij.openapi.actionSystem.ActionUiKind.POPUP, null);
+        com.intellij.openapi.application.ApplicationManager.getApplication().getMessageBus()
+                .syncPublisher(com.intellij.openapi.actionSystem.ex.AnActionListener.TOPIC)
+                .afterActionPerformed(action, event, com.intellij.openapi.actionSystem.AnActionResult.PERFORMED);
+        assertNotNull(controller.shownCard());
+    }
+
     public void testControllerNotInstalledForViewer() {
         myFixture.configureByText("A.java", TWO_ON_ONE_LINE);
         Editor viewer = EditorFactory.getInstance().createViewer(myFixture.getEditor().getDocument(), getProject());

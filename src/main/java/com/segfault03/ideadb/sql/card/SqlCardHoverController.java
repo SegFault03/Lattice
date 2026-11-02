@@ -3,6 +3,10 @@ package com.segfault03.ideadb.sql.card;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.actionSystem.ActionGroup;
+import com.intellij.openapi.actionSystem.AnAction;
+import com.intellij.openapi.actionSystem.AnActionEvent;
+import com.intellij.openapi.actionSystem.AnActionResult;
+import com.intellij.openapi.actionSystem.ex.AnActionListener;
 import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.ActionToolbar;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
@@ -38,6 +42,8 @@ import java.awt.Rectangle;
 import java.awt.event.ContainerAdapter;
 import java.awt.event.ContainerEvent;
 import java.awt.event.FocusAdapter;
+import java.awt.event.HierarchyEvent;
+import java.awt.event.HierarchyListener;
 import java.awt.event.FocusEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -59,6 +65,7 @@ final class SqlCardHoverController implements Disposable {
     private final FocusAdapter focus = new FocusAdapter() {
         @Override public void focusLost(FocusEvent event) { if (!overToolbar()) hideNow(); }
     };
+    private final HierarchyListener showing = this::showingChanged;
     private @Nullable RangeHighlighter shown;
     private @Nullable JBPopup popup;
     private @Nullable JPanel panel;
@@ -79,6 +86,13 @@ final class SqlCardHoverController implements Disposable {
             @Override public void documentChanged(@NotNull DocumentEvent event) { hideNow(); }
         }, this);
         editor.getContentComponent().addFocusListener(focus);
+        editor.getContentComponent().addHierarchyListener(showing);
+        // An action from the toolbar has done its work (it may have opened another tab under the mouse): close the toolbar.
+        ApplicationManager.getApplication().getMessageBus().connect(this).subscribe(AnActionListener.TOPIC, new AnActionListener() {
+            @Override public void afterActionPerformed(@NotNull AnAction action, @NotNull AnActionEvent event, @NotNull AnActionResult result) {
+                if (PLACE.equals(event.getPlace())) hideNow();
+            }
+        });
     }
 
     /** Installs the controller on an editor that shows cards, for the editor's lifetime. */
@@ -97,6 +111,11 @@ final class SqlCardHoverController implements Disposable {
             if (SqlCardRenderer.bounds(editor, highlighter).contains(point)) return highlighter;
         }
         return null;
+    }
+
+    /** Another tab or window took the editor's place. */
+    private void showingChanged(HierarchyEvent event) {
+        if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0 && !editor.getContentComponent().isShowing()) hideNow();
     }
 
     private void moved(@Nullable RangeHighlighter card) {
@@ -219,6 +238,7 @@ final class SqlCardHoverController implements Disposable {
     @Override public void dispose() {
         hideNow();
         editor.getContentComponent().removeFocusListener(focus);
+        editor.getContentComponent().removeHierarchyListener(showing);
         editor.putUserData(KEY, null);
     }
 

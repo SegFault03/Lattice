@@ -33,6 +33,7 @@ import com.intellij.ide.starter.runner.CurrentTestMethod
 import com.intellij.ide.starter.runner.Starter
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import com.intellij.driver.sdk.ui.components.elements.JLabelUiComponent
 import java.awt.event.InputEvent
 import java.awt.event.KeyEvent
 import java.awt.Rectangle
@@ -2387,7 +2388,9 @@ class IntellijUiScreenshotTest {
         // Run: the console opens with the query and runs it at once.
         run.click()
         val console = frame.x { byJavaClass("com.segfault03.ideadb.ui.SqlQueryConsolePanel") }.waitFound()
-        waitUntil("the query ran in the console", 60_000) { console.xx { byVisibleText("Results (1)") }.list().isNotEmpty() }
+        val status = console.x(JLabelUiComponent::class.java) { byAccessibleName("SQL query status") }.waitFound()
+        waitUntil("the query ran in the console", 60_000) { status.getText().startsWith("1 row") }
+        waitUntil("the card toolbar closed after Run") { frame.xx { byAccessibleName("Copy SQL") }.list().none { it.component.isShowing() } }
         captureScreen(directory.resolve("sql-cards-run.png"))
     }
 
