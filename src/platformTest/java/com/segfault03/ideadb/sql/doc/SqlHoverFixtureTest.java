@@ -46,7 +46,7 @@ public class SqlHoverFixtureTest extends H2SqlFixtureTestCase {
 
     public void testTheCardsColorsFollowTheEditorColorScheme() {
         var scheme = com.intellij.openapi.editor.colors.EditorColorsManager.getInstance().getGlobalScheme();
-        var key = com.segfault03.ideadb.sql.lang.LatticeSqlSyntaxHighlighter.NUMBER;
+        var key = com.segfault03.ideadb.sql.lang.SqlSemanticColors.Role.NUMERIC.key();
         var before = scheme.getAttributes(key);
         try {
             scheme.setAttributes(key, new com.intellij.openapi.editor.markup.TextAttributes(new java.awt.Color(0x123456), null, null, null, 0));

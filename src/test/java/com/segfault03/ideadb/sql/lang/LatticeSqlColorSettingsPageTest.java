@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class LatticeSqlColorSettingsPageTest {
     @Test void theDemoShowsEveryColoredKindIncludingATypeAndAFunction() {
         var lexer = new LatticeSqlLexer(SqlDialects.MYSQL);
-        String demo = new LatticeSqlColorSettingsPage().getDemoText();
+        String demo = withoutTags(new LatticeSqlColorSettingsPage().getDemoText());
         lexer.start(demo, 0, demo.length(), 0);
         Set<IElementType> seen = new HashSet<>();
         for (IElementType type = lexer.getTokenType(); type != null; lexer.advance(), type = lexer.getTokenType()) seen.add(type);
@@ -22,6 +22,20 @@ class LatticeSqlColorSettingsPageTest {
                 LatticeSqlTokens.NUMBER, LatticeSqlTokens.QUOTED_IDENTIFIER, LatticeSqlTokens.PARAMETER, LatticeSqlTokens.LINE_COMMENT,
                 LatticeSqlTokens.BLOCK_COMMENT, LatticeSqlTokens.OPERATOR}) {
             assertTrue(seen.contains(expected), expected + " is missing from the demo");
+        }
+    }
+
+    /** The preview's own markup, which marks where the schema-name colors apply, is not SQL. */
+    private static String withoutTags(String demo) { return demo.replaceAll("</?[a-z_]+>", ""); }
+
+    @Test void everySchemaNameRoleIsListedAndShownInTheDemo() {
+        var page = new LatticeSqlColorSettingsPage();
+        var listed = java.util.Arrays.stream(page.getAttributeDescriptors()).map(d -> d.getKey()).toList();
+        for (SqlSemanticColors.Role role : SqlSemanticColors.Role.values()) {
+            assertTrue(listed.contains(role.key()), role + " is not listed");
+            String tag = role.name().toLowerCase(java.util.Locale.ROOT);
+            assertSame(role.key(), page.getAdditionalHighlightingTagToDescriptorMap().get(tag), tag);
+            assertTrue(page.getDemoText().contains("<" + tag + ">"), role + " is not shown in the demo");
         }
     }
 

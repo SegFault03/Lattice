@@ -77,6 +77,7 @@
         <lang.parserDefinition language="LatticeSQL" implementationClass="com.segfault03.ideadb.sql.lang.LatticeSqlParserDefinition"/>
         <lang.syntaxHighlighterFactory language="LatticeSQL" implementationClass="com.segfault03.ideadb.sql.lang.LatticeSqlSyntaxHighlighterFactory"/>
         <lang.commenter language="LatticeSQL" implementationClass="com.segfault03.ideadb.sql.lang.LatticeSqlCommenter"/>
+        <annotator language="LatticeSQL" implementationClass="com.segfault03.ideadb.sql.lang.SqlSemanticAnnotator"/>
         <completion.contributor language="LatticeSQL" implementationClass="com.segfault03.ideadb.sql.completion.LatticeSqlCompletionContributor"/>
         <intentionAction>
             <className>com.segfault03.ideadb.sql.inject.SqlStringIntentions$NotSql</className>
@@ -104,6 +105,8 @@
         <colorSettingsPage implementation="com.segfault03.ideadb.sql.lang.LatticeSqlColorSettingsPage"/>
         <additionalTextAttributes scheme="Default" file="colorSchemes/LatticeSqlCardDefault.xml"/>
         <additionalTextAttributes scheme="Darcula" file="colorSchemes/LatticeSqlCardDarcula.xml"/>
+        <additionalTextAttributes scheme="Default" file="colorSchemes/LatticeSqlSemanticDefault.xml"/>
+        <additionalTextAttributes scheme="Darcula" file="colorSchemes/LatticeSqlSemanticDarcula.xml"/>
         <applicationService serviceImplementation="com.segfault03.ideadb.sql.settings.SqlEditorSettings"/>
         <projectService serviceImplementation="com.segfault03.ideadb.sql.binding.SqlBindingsState"/>
         <projectService serviceImplementation="com.segfault03.ideadb.sql.run.SqlRunState"/>

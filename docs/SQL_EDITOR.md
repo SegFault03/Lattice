@@ -43,6 +43,21 @@ Details:
 - Names come from the metadata cache. The first completion for a connection reads its default schema in the background (columns for up to 300 tables) and the popup says so; the next popup includes the result. Completion never connects on its own to a connection nobody used, and a DDL change run in the console refreshes only the affected table.
 - Without a connection that applies, keywords, functions and types are still offered.
 
+## Schema colors
+
+Once the file's connection has its schema cached, names the schema knows are colored by what they are, on top of the syntax colors:
+
+| Name | Color |
+|---|---|
+| Table | lime, bold |
+| View | yellow-green, bold italic |
+| Table alias, and the alias in `o.id` | light lime |
+| Primary key column | gold, bold |
+| Foreign key column | purple, bold |
+| Any other column | by the kind of value it holds: numbers blue, text green, dates and times orange, booleans teal, binary pink, JSON, enums and the like tan |
+
+A column that is both a primary key and a foreign key shows as a primary key. Names the schema does not know (a typo, an expression alias, a derived table) and files with no connection keep the syntax colors. The colors work in `.sql` files and in SQL in Java and Kotlin strings, are read from the cached schema only, and follow the editor color scheme: each is a key under **Settings | Editor | Color Scheme | Lattice SQL | Schema names**, with defaults that are lighter on a dark scheme and deeper on a light one. The hover cards use the same colors. They turn off with **Syntax highlighting** in the SQL editor settings, and files over 300,000 characters keep the syntax colors only.
+
 ## Hover details
 
 Hover over a name in a `.sql` file (or press `Ctrl+Q`, `F1` on macOS) to see what the file's connection knows about it. The popup's location bar names the connection and its database type (`shop-mysql · MySQL`) with the type's icon; the card itself does not repeat it.
@@ -54,7 +69,7 @@ Hover over a name in a `.sql` file (or press `Ctrl+Q`, `F1` on macOS) to see wha
 | An alias | The table it stands for, as a link, then the table's card: comment, columns, keys and what references it |
 | A schema | Its tables, as links |
 
-Cards are colored to be read at a glance: primary key columns and their `PK` flag are gold, foreign key columns and `FK` purple, and each type has the color of what it holds (numbers blue, text green, dates and times orange, booleans teal, binary pink, JSON, enums and the like tan). The palette is lighter on a dark editor color scheme and deeper on a light one. Links in a card open the card of the target. Names resolve the way completion resolves them: through aliases, schema-qualified names, `UPDATE ... SET` and `INSERT` column lists, ignoring case, and with quoted names unquoted. Keywords, unknown names and derived-table aliases show nothing, as does a file with no connection or a connection whose schema has not been read yet; hovering starts that read, so the card appears on the next hover. The cards read the metadata cache and never contact the database.
+Cards are colored to be read at a glance, with the same colors as [Schema colors](#schema-colors): primary key columns and their `PK` flag are gold, foreign key columns and `FK` purple, and each type has the color of what it holds (numbers blue, text green, dates and times orange, booleans teal, binary pink, JSON, enums and the like tan). The palette is lighter on a dark editor color scheme and deeper on a light one. Links in a card open the card of the target. Names resolve the way completion resolves them: through aliases, schema-qualified names, `UPDATE ... SET` and `INSERT` column lists, ignoring case, and with quoted names unquoted. Keywords, unknown names and derived-table aliases show nothing, as does a file with no connection or a connection whose schema has not been read yet; hovering starts that read, so the card appears on the next hover. The cards read the metadata cache and never contact the database.
 
 ## SQL in Lattice's own editors
 
@@ -251,7 +266,7 @@ Everything on the page except the first checkbox is disabled while Lattice SQL e
 
 The **Project Defaults** page sets what applies to the current project only: the default connection for its SQL (or Automatic, which uses the project's files and then the only connection), whether its configuration files are read to find the database, and, while some offers are turned down, a checkbox "Offer the N databases I turned down again" that takes effect when you apply the page.
 
-Colors are under **Settings | Editor | Color Scheme | Lattice SQL**; **SQL card** sets the card's background and its border (the effect colour). **Tools | Lattice: Restore the IDE's Built-in SQL Handling** switches off `.sql` handling in one step, with an undo in the notice it shows.
+Colors are under **Settings | Editor | Color Scheme | Lattice SQL**; **Schema names** sets the colors of tables, views, aliases and columns, and **SQL card** sets the card's background and its border (the effect colour). **Tools | Lattice: Restore the IDE's Built-in SQL Handling** switches off `.sql` handling in one step, with an undo in the notice it shows.
 
 ## Large files and projects
 

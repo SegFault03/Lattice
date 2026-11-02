@@ -1,0 +1,61 @@
+<list>
+  <option name="LATTICE_SQL_TABLE">
+    <value>
+      <option name="FOREGROUND" value="5C7D00"/>
+      <option name="FONT_TYPE" value="1"/>
+    </value>
+  </option>
+  <option name="LATTICE_SQL_VIEW">
+    <value>
+      <option name="FOREGROUND" value="7A7A00"/>
+      <option name="FONT_TYPE" value="3"/>
+    </value>
+  </option>
+  <option name="LATTICE_SQL_ALIAS">
+    <value>
+      <option name="FOREGROUND" value="7A9A2E"/>
+    </value>
+  </option>
+  <option name="LATTICE_SQL_COLUMN_PRIMARY_KEY">
+    <value>
+      <option name="FOREGROUND" value="996600"/>
+      <option name="FONT_TYPE" value="1"/>
+    </value>
+  </option>
+  <option name="LATTICE_SQL_COLUMN_FOREIGN_KEY">
+    <value>
+      <option name="FOREGROUND" value="6F42C1"/>
+      <option name="FONT_TYPE" value="1"/>
+    </value>
+  </option>
+  <option name="LATTICE_SQL_COLUMN_NUMERIC">
+    <value>
+      <option name="FOREGROUND" value="0B5CAD"/>
+    </value>
+  </option>
+  <option name="LATTICE_SQL_COLUMN_TEXT">
+    <value>
+      <option name="FOREGROUND" value="2E7D32"/>
+    </value>
+  </option>
+  <option name="LATTICE_SQL_COLUMN_TEMPORAL">
+    <value>
+      <option name="FOREGROUND" value="B5530E"/>
+    </value>
+  </option>
+  <option name="LATTICE_SQL_COLUMN_BOOLEAN">
+    <value>
+      <option name="FOREGROUND" value="00798C"/>
+    </value>
+  </option>
+  <option name="LATTICE_SQL_COLUMN_BINARY">
+    <value>
+      <option name="FOREGROUND" value="A0306E"/>
+    </value>
+  </option>
+  <option name="LATTICE_SQL_COLUMN_OTHER">
+    <value>
+      <option name="FOREGROUND" value="7A5C1C"/>
+    </value>
+  </option>
+</list>
