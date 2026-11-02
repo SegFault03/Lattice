@@ -94,7 +94,7 @@ Each statement of a `.sql` file, and the SQL of each Java or Kotlin string, sits
 
 The toolbar acts on the card under the mouse, not on the caret. A button that does not suit the card stays visible but disabled, and its tooltip says why: Run and Roll Back on a query or DDL, Explain on DDL, either on a string holding more than one statement ("Select a single statement"), and every action except Copy SQL while the file has no connection.
 
-Cards are not shown in Lattice's own SQL editors, in viewers and diffs, or in files too large to analyse. The selection and the caret's line are drawn over a card, so on the caret's line the card takes the caret-row colour.
+Cards are not shown in Lattice's own SQL editors, in viewers and diffs, or in files too large to analyse. A card is drawn over the IDE's injected-language background and the caret-row highlight, and the selection is drawn over the card.
 
 ### Parameters
 

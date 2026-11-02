@@ -7,6 +7,7 @@ import com.intellij.openapi.actionSystem.ActionToolbar;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.actionSystem.DataSink;
 import com.intellij.openapi.actionSystem.UiDataProvider;
+import com.intellij.openapi.actionSystem.toolbarLayout.ToolbarLayoutStrategy;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.event.DocumentEvent;
 import com.intellij.openapi.editor.event.DocumentListener;
@@ -134,6 +135,9 @@ final class SqlCardHoverController implements Disposable {
         if (card == null || project == null) return;
         ActionToolbar toolbar = ActionManager.getInstance().createActionToolbar(PLACE,
                 (ActionGroup) ActionManager.getInstance().getAction(TOOLBAR_GROUP), true);
+        // Laid out at its full width: an auto-layout toolbar sized before its first update folds every button into "more".
+        toolbar.setLayoutStrategy(ToolbarLayoutStrategy.NOWRAP_STRATEGY);
+        toolbar.setReservePlaceAutoPopupIcon(false);
         JPanel content = new CardToolbarPanel(project, card);
         toolbar.setTargetComponent(content);
         content.add(toolbar.getComponent(), BorderLayout.CENTER);
