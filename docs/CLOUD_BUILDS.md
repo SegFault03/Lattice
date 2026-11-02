@@ -8,7 +8,8 @@ This guide covers building and testing Lattice in Claude cloud sessions (ephemer
 - Outbound HTTPS goes through `$HTTPS_PROXY`. The proxy's own status is at `curl -sS "$HTTPS_PROXY/__agentproxy/status"`. Never disable TLS verification or unset `HTTPS_PROXY`.
 - Maven Central (`repo.maven.apache.org`, `repo1.maven.org`) is shared across all sessions and rate-limits aggressively. Expect HTTP 429 during dependency resolution.
 - `plugins.gradle.org` resolves normally.
-- JetBrains' own repositories (`packages.jetbrains.team`, `www.jetbrains.com/intellij-repository`) return 404 through the proxy for most paths. `cache-redirector.jetbrains.com/intellij-dependencies` serves some artifacts (for example JCEF).
+- `packages.jetbrains.team` returns 404 through the proxy for most paths. `cache-redirector.jetbrains.com/intellij-dependencies` serves some artifacts (for example JCEF).
+- The IntelliJ release repository serves the IDE Starter test libraries (`com.jetbrains.intellij.tools:ide-starter`, `ide-performance-testing-commands`, `ide-util-common` and the rest of that group), which are not in Central or its mirror. Use it through the redirector: `https://cache-redirector.jetbrains.com/www.jetbrains.com/intellij-repository/releases`.
 - A Central mirror that works: `https://maven-central.storage-download.googleapis.com/maven2`. It does not host IntelliJ `bundledModule` artifacts or every JetBrains tooling jar.
 - Each new session gets a fresh VM and a fresh clone. `~/.gradle`, the init script and anything installed mid-session do not carry over by default.
 - The exception is the environment cache. If the environment's setup script finishes in roughly five minutes, Anthropic snapshots the filesystem and new sessions start from that snapshot, skipping the script. The snapshot rebuilds when the script or allowed hosts change, and expires after about seven days. A script that runs longer than five minutes is not cached.
@@ -32,7 +33,7 @@ Notes on the script:
 - The whole script must finish in roughly five minutes, or the environment is not cached. If the Gradle warm-up (the last step of `scripts/linux/cloud-setup.sh`) alone takes longer, remove it from the script and run it from a SessionStart hook in the background. That hook runs on every session and does not benefit from the cache.
 - The script can still hit Central 429s. Two attempts with a two-minute gap is the most that fits the time budget. If it fails, the session still starts, so check the build output before assuming the cache exists.
 - Changing the script or the allowed hosts rebuilds the cache. An existing session picks up a change only when its VM is rebuilt, so start a new session to see it.
-- The mirror hosts must be reachable. Add `maven-central.storage-download.googleapis.com` and `cache-redirector.jetbrains.com` under **Allowed domains**, with **Allow package managers** ticked. See [network access](https://code.claude.com/docs/en/cloud-environments#network-access).
+- The mirror hosts must be reachable. Add `maven-central.storage-download.googleapis.com` and `cache-redirector.jetbrains.com` under **Allowed domains**, with **Allow package managers** ticked. The redirector sends IntelliJ release-repository requests on to `www.jetbrains.com`, which serves them from `d2cico3c979uwg.cloudfront.net`; allow both as well. See [network access](https://code.claude.com/docs/en/cloud-environments#network-access).
 
 Once the environment is cached, a new session starts with the mirror init script, the X11 tools and the fixture jars already on disk.
 
@@ -47,11 +48,15 @@ Create `~/.gradle/init.d/mirror.gradle.kts`:
 ```kotlin
 val centralMirror = "https://maven-central.storage-download.googleapis.com/maven2"
 val jetbrainsDeps = "https://cache-redirector.jetbrains.com/intellij-dependencies"
+val jetbrainsReleases = "https://cache-redirector.jetbrains.com/www.jetbrains.com/intellij-repository/releases"
 
 fun org.gradle.api.artifacts.dsl.RepositoryHandler.prependMirror() {
     val deps = maven { name = "jetbrainsDepsMirror"; url = uri(jetbrainsDeps) }
     remove(deps)
     add(0, deps)
+    val releases = maven { name = "jetbrainsReleasesMirror"; url = uri(jetbrainsReleases) }
+    remove(releases)
+    add(0, releases)
     val mirror = maven { name = "centralMirror"; url = uri(centralMirror) }
     remove(mirror)
     add(0, mirror)
@@ -70,17 +75,31 @@ beforeProject {
 
 Notes:
 
+- The resulting order is the Central mirror, the IntelliJ release repository, the JetBrains dependencies cache, then the build's own repositories. Each 404 moves Gradle on to the next one; only a 429 stops it, which is why Central must not come first.
 - The import type is `org.gradle.api.artifacts.dsl.RepositoryHandler`. The `repositories` package name fails to compile.
 - `pluginManagement` must keep `gradlePluginPortal()`, or the IntelliJ Platform plugin cannot be found.
 - The file is per-container. Recreate it each session, or add it to the environment setup script.
 
 If the build still returns 429 after the mirror is in place, wait several minutes and retry. Do not loop tightly; each attempt counts against the shared limit.
 
-## Failure: `Could not HEAD ... bundledModule/...` or `ide-starter` 429
+## Failure: `ide-starter`, `ide-performance-testing-commands` or `ide-util-common` not resolved
+
+`uiScreenshotTest` needs the IDE Starter libraries (`com.jetbrains.intellij.tools:*`, version matching the SDK build, for example `251.23774.435`). They are not in Central or the Central mirror, and not in `intellij-dependencies`; Central answers 429 or 404. The IntelliJ release repository has them.
+
+Fix: the `jetbrainsReleases` entry in the init script above. To check a coordinate by hand:
+
+```sh
+curl -sL -o /dev/null -w '%{http_code}\n' \
+  https://cache-redirector.jetbrains.com/www.jetbrains.com/intellij-repository/releases/com/jetbrains/intellij/tools/ide-starter/251.23774.435/ide-starter-251.23774.435.pom
+```
+
+`--offline` does not help until an online build has fetched these once.
+
+## Failure: `Could not HEAD ... bundledModule/...`
 
 These are IntelliJ Platform test-runtime artifacts resolved through Central. The mirror may not carry them.
 
-Fix: once an online build has populated `~/.gradle`, try `./gradlew --offline <task>`. Offline mode uses cached artifacts without network calls and reports the first artifact that was never fetched; that artifact then needs the JetBrains mirror above. Offline mode was verified for `compileUiTestKotlin` only up to the JCEF artifact, so treat it as a fallback, not a guarantee.
+Fix: once an online build has populated `~/.gradle`, try `./gradlew --offline <task>`. Offline mode uses cached artifacts without network calls and reports the first artifact that was never fetched; that artifact then needs one of the JetBrains mirrors above.
 
 ## Failure: `No cached version of org.jetbrains.intellij.deps.jcef:jcef`
 

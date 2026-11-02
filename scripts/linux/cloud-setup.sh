@@ -15,11 +15,15 @@ mkdir -p "$HOME/.gradle/init.d"
 cat > "$HOME/.gradle/init.d/mirror.gradle.kts" <<'EOF'
 val centralMirror = "https://maven-central.storage-download.googleapis.com/maven2"
 val jetbrainsDeps = "https://cache-redirector.jetbrains.com/intellij-dependencies"
+val jetbrainsReleases = "https://cache-redirector.jetbrains.com/www.jetbrains.com/intellij-repository/releases"
 
 fun org.gradle.api.artifacts.dsl.RepositoryHandler.prependMirror() {
     val deps = maven { name = "jetbrainsDepsMirror"; url = uri(jetbrainsDeps) }
     remove(deps)
     add(0, deps)
+    val releases = maven { name = "jetbrainsReleasesMirror"; url = uri(jetbrainsReleases) }
+    remove(releases)
+    add(0, releases)
     val mirror = maven { name = "centralMirror"; url = uri(centralMirror) }
     remove(mirror)
     add(0, mirror)
