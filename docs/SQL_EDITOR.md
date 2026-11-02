@@ -80,6 +80,22 @@ Right-click in a `.sql` file or in a SQL string of Java or Kotlin code and open 
 
 The actions work on the selection if there is one, otherwise on the statement around the caret. In a Java or Kotlin string they work on the whole string. They need a file bound to a connection (see [Choosing a connection](#choosing-a-connection)) and have no default shortcuts; search for them by name under Settings | Keymap to assign one.
 
+### SQL cards
+
+Each statement of a `.sql` file, and the SQL of each Java or Kotlin string, sits on a card: a rounded background that hugs the SQL text. A string built by concatenation or templates is one card. Rest the mouse on a card and a toolbar appears above its top-right corner:
+
+| Button | What it does |
+|---|---|
+| **No connection** | Shown only while the file has no connection; chooses one |
+| **Run and Roll Back** | As above, on the card's statement |
+| **Send to Console** | As above, on the card's SQL |
+| **Copy SQL** | Copies the SQL as plain text: quotes, escapes and concatenation removed, `?` for the parts built at run time |
+| **More** | **Explain Statement** and **SQL Connection for This File...** |
+
+The toolbar acts on the card under the mouse, not on the caret. A button that does not suit the card stays visible but disabled, and its tooltip says why: Run and Roll Back on a query or DDL, Explain on DDL, either on a string holding more than one statement ("Select a single statement"), and every action except Copy SQL while the file has no connection.
+
+Cards are not shown in Lattice's own SQL editors, in viewers and diffs, or in files too large to analyse. The selection and the caret's line are drawn over a card, so on the caret's line the card takes the caret-row colour.
+
 ### Parameters
 
 `?`, `:name` and `$1` are parameters. MySQL `@name` is a session variable and is left alone. In a `.sql` file for PostgreSQL, `?`, `?|` and `?&` are jsonb operators; in a Java or Kotlin string `?` is a JDBC parameter for every database. The parts of a string that are only known at run time (`"... where id = " + id`) become positional parameters. A statement that mixes positional and named parameters is refused.
@@ -224,6 +240,7 @@ The status bar entry says when a connection was chosen because of the project's 
 | Code completion | On |
 | Keyword case when inserted | As typed (or always upper or lower case) |
 | Hover documentation | On |
+| Show SQL cards | On |
 | Validation | On, as five inspections whose severities you set under Editor | Inspections; **Configure inspections...** opens that page at Lattice SQL |
 | SQL in Java and Kotlin strings | On, as three switches: marked strings, known calls and strict content check |
 | Known calls | A list of JDBC, Spring `JdbcTemplate`, JPA, Hibernate, jOOQ and Exposed method names, edited with the add, edit and remove buttons; an empty list means the default one |
@@ -232,7 +249,7 @@ Everything on the page except the first checkbox is disabled while Lattice SQL e
 
 The **Project Defaults** page sets what applies to the current project only: the default connection for its SQL (or Automatic, which uses the project's files and then the only connection), whether its configuration files are read to find the database, and, while some offers are turned down, a checkbox "Offer the N databases I turned down again" that takes effect when you apply the page.
 
-Colors are under **Settings | Editor | Color Scheme | Lattice SQL**. **Tools | Lattice: Restore the IDE's Built-in SQL Handling** switches off `.sql` handling in one step, with an undo in the notice it shows.
+Colors are under **Settings | Editor | Color Scheme | Lattice SQL**; **SQL card** sets the card's background and its border (the effect colour). **Tools | Lattice: Restore the IDE's Built-in SQL Handling** switches off `.sql` handling in one step, with an undo in the notice it shows.
 
 ## Large files and projects
 

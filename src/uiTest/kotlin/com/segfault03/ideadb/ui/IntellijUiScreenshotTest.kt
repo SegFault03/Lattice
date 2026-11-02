@@ -46,6 +46,7 @@ import java.nio.file.Path
 import javax.imageio.ImageIO
 import kotlin.io.path.writeText
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 class IntellijUiScreenshotTest {
     private var repaintIdeBeforeCapture: (() -> Unit)? = null
@@ -193,6 +194,7 @@ class IntellijUiScreenshotTest {
                 }
             }
             projectDirectory.resolve(SQL_EDITOR_FILE).writeText(SQL_EDITOR_TEXT)
+            projectDirectory.resolve(SQL_CARDS_FILE).writeText(SQL_CARDS_TEXT)
         }
         try {
         testContext.apply {
@@ -295,13 +297,15 @@ class IntellijUiScreenshotTest {
             }
             if (sqlEditorOnly) {
                 verifySqlEditorRunActions(frame, pluginRoot, requireNotNull(jdbcFixture), screenshotsDirectory)
+                verifySqlCards(frame, screenshotsDirectory)
                 screenshotsDirectory.resolve("runtime-evidence.txt").writeText("""
                     Running IDE: ${actualTheme.getName()} ($themeId)
                     Lattice SQL editor actions in the installed plugin, on a project .sql file bound to an owned HSQLDB server fixture.
                     Send to Console filled :status and :customer through the values dialog and appended literal SQL to the console without running it.
                     Explain Statement opened the Dry Run tab with HSQLDB's plan (values written in, as HSQLDB rejects bound EXPLAIN parameters).
                     Run and Roll Back asked for confirmation, reported one row and Rolled back; JDBC confirmed ORDERS was unchanged.
-                    CREATE TABLE was refused before any connection. Captures are actual desktop pixels.
+                    CREATE TABLE was refused before any connection.
+                    SQL cards were painted behind both SQL strings of a Java file; hovering the UPDATE card showed its toolbar with Run and Roll Back enabled, and on the SELECT card it was disabled. Captures are actual desktop pixels.
                 """.trimIndent())
                 return@useDriverAndCloseIde
             }
@@ -2315,6 +2319,39 @@ class IntellijUiScreenshotTest {
         check(!created) { "A refused statement must never reach the database" }
     }
 
+    /** SQL cards in a Java file: painted behind both strings, and a hover toolbar whose Run and Roll Back follows the statement kind. */
+    private fun Driver.verifySqlCards(frame: IdeaFrameUI, directory: Path) {
+        openFile(SQL_CARDS_FILE)
+        val editor = frame.x { byJavaClass("com.intellij.openapi.editor.impl.EditorComponentImpl") }.waitFound()
+        fun pointAt(text: String): Point {
+            val offset = SQL_CARDS_TEXT.indexOf(text).also { check(it >= 0) { "Missing $text in the cards fixture" } } + 2
+            val xy = withContext(OnDispatcher.EDT) {
+                requireNotNull(service(FileEditorManager::class, singleProject()).getSelectedTextEditor()).offsetToXY(offset)
+            }
+            return Point(xy.x + 4, xy.y + 6)
+        }
+        fun hover(text: String): UiComponent {
+            editor.moveMouse(Point(4, 4))
+            Thread.sleep(500)
+            editor.moveMouse(pointAt(text))
+            return frame.x { byAccessibleName("Run and Roll Back") }.waitFound(15.seconds)
+        }
+        // Highlighting has run once the editor settles; the cards are painted by then.
+        Thread.sleep(3_000)
+        editor.moveMouse(Point(4, 4))
+        captureScreen(directory.resolve("sql-cards.png"))
+
+        val updateRollback = hover("UPDATE ORDERS")
+        check(updateRollback.component.isEnabled()) { "Run and Roll Back must be enabled on the UPDATE card" }
+        frame.x { byAccessibleName("Copy SQL") }.waitFound()
+        captureScreen(directory.resolve("sql-cards-hover.png"))
+
+        val selectRollback = hover("SELECT ID")
+        waitUntil("Run and Roll Back disabled on the SELECT card") { !selectRollback.component.isEnabled() }
+        captureScreen(directory.resolve("sql-cards-hover-select.png"))
+        editor.moveMouse(Point(4, 4))
+    }
+
     private fun verifyMutationRefresh(frame: IdeaFrameUI, tree: JTreeUiComponent, schema: Array<String>, directory: Path) {
         val tablePath = schema + arrayOf("Tables (2)", "customers")
         val explorerStatus = frame.driver.cast(frame.x { byAccessibleName("Database explorer status") }.waitFound().component, LiveLabel::class)
@@ -2768,6 +2805,21 @@ private val SQL_EDITOR_TEXT = """
     UPDATE ORDERS SET STATUS = 'shipped' WHERE ID = 1;
 
     CREATE TABLE AUDIT_LOG (ID INT);
+""".trimIndent() + "\n"
+
+private const val SQL_CARDS_FILE = "Orders.java"
+private val SQL_CARDS_TEXT = """
+    class Orders {
+        void ship(java.sql.Connection c) throws Exception {
+            c.prepareStatement("SELECT ID, STATUS FROM ORDERS WHERE ID = ?");
+            String sql = ${'"'}""
+                UPDATE ORDERS
+                   SET STATUS = 'shipped'
+                 WHERE ID = ?
+                ${'"'}"";
+            c.prepareStatement(sql);
+        }
+    }
 """.trimIndent() + "\n"
 
 @Remote("javax.swing.JFrame")
