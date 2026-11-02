@@ -194,6 +194,8 @@ class IntellijUiScreenshotTest {
                 }
             }
             projectDirectory.resolve(SQL_EDITOR_FILE).writeText(SQL_EDITOR_TEXT)
+            // In a source root: the IDE runs no highlighting passes, cards included, on Java files outside one.
+            Files.createDirectories(projectDirectory.resolve(SQL_CARDS_FILE).parent)
             projectDirectory.resolve(SQL_CARDS_FILE).writeText(SQL_CARDS_TEXT)
         }
         try {
@@ -2820,7 +2822,7 @@ private val SQL_EDITOR_TEXT = """
     CREATE TABLE AUDIT_LOG (ID INT);
 """.trimIndent() + "\n"
 
-private const val SQL_CARDS_FILE = "Orders.java"
+private const val SQL_CARDS_FILE = "src/main/java/Orders.java"
 private val SQL_CARDS_TEXT = """
     class Orders {
         void ship(java.sql.Connection c) throws Exception {
