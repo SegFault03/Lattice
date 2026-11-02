@@ -3,6 +3,7 @@ package com.segfault03.ideadb.sql.card;
 import com.intellij.lang.injection.InjectedLanguageManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.TextRange;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiLanguageInjectionHost;
@@ -17,13 +18,15 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
- * Finds the cards of a file: each statement of a Lattice SQL file, or each Lattice SQL injection elsewhere. Segments
- * are cut per line and trimmed of surrounding whitespace, so a card hugs the SQL instead of the indentation around it.
+ * Finds the cards of a file: each statement of a Lattice SQL file, or each Lattice SQL injection elsewhere. Text over
+ * several lines is cut per line and trimmed of surrounding whitespace, so a card hugs the SQL instead of the indentation.
  */
 public final class SqlCardLocator {
     private SqlCardLocator() {}
@@ -51,29 +54,20 @@ public final class SqlCardLocator {
 
     private static List<SqlCard> injectionCards(Project project, PsiFile hostFile, CharSequence text, SqlDialectProfile profile) {
         InjectedLanguageManager injections = InjectedLanguageManager.getInstance(project);
-        Map<PsiFile, List<TextRange>> shreds = new IdentityHashMap<>();
+        Map<PsiFile, List<PsiLanguageInjectionHost.Shred>> shreds = new IdentityHashMap<>();
         PsiTreeUtil.processElements(hostFile, element -> {
             if (element instanceof PsiLanguageInjectionHost host) {
                 injections.enumerate(host, (injected, places) -> {
                     if (!injected.getLanguage().isKindOf(LatticeSqlLanguage.INSTANCE) || shreds.containsKey(injected)) return;
-                    List<TextRange> ranges = new ArrayList<>();
-                    for (PsiLanguageInjectionHost.Shred place : places) {
-                        PsiLanguageInjectionHost shredHost = place.getHost();
-                        if (shredHost == null) continue;
-                        ranges.add(place.getRangeInsideHost().shiftRight(shredHost.getTextRange().getStartOffset()));
-                    }
-                    shreds.put(injected, ranges);
+                    shreds.put(injected, List.copyOf(places));
                 });
             }
             return true;
         });
         List<SqlCard> cards = new ArrayList<>();
-        shreds.forEach((injected, ranges) -> {
-            List<TextRange> segments = new ArrayList<>();
-            for (TextRange range : ranges) segments.addAll(lines(text, range));
+        shreds.forEach((injected, places) -> {
+            List<TextRange> segments = segments(text, places);
             if (segments.isEmpty()) return;
-            segments.sort(Comparator.comparingInt(TextRange::getStartOffset));
-            if (ranges.size() == 1 && segments.size() == 1) segments.set(0, withQuotes(text, segments.get(0)));
             String sql = injected.getText();
             int count = SqlStatementRange.inSelection(sql, 0, sql.length(), profile).size();
             cards.add(new SqlCard(segments, sql, true, count == 1 ? SqlStatementKind.of(sql, profile) : null, count));
@@ -98,10 +92,24 @@ public final class SqlCardLocator {
         return lines;
     }
 
-    /** A one-line literal's card takes in its quotes when they sit right around it. */
-    private static TextRange withQuotes(CharSequence text, TextRange range) {
-        int start = range.getStartOffset(), end = range.getEndOffset();
-        boolean quoted = start > 0 && end < text.length() && text.charAt(start - 1) == '"' && text.charAt(end) == '"';
-        return quoted ? new TextRange(start - 1, end + 1) : range;
+    /**
+     * A one-line literal is covered whole, quotes and template entries included, since its SQL can stop short of the
+     * closing quote ({@code "... id = " + id}). A literal over several lines is covered line by line.
+     */
+    private static List<TextRange> segments(CharSequence text, List<PsiLanguageInjectionHost.Shred> places) {
+        List<TextRange> segments = new ArrayList<>();
+        Set<PsiLanguageInjectionHost> covered = new HashSet<>();
+        for (PsiLanguageInjectionHost.Shred place : places) {
+            PsiLanguageInjectionHost host = place.getHost();
+            if (host == null) continue;
+            TextRange hostRange = host.getTextRange();
+            if (!StringUtil.contains(text.subSequence(hostRange.getStartOffset(), hostRange.getEndOffset()), "\n")) {
+                if (covered.add(host)) segments.add(hostRange);
+            } else {
+                segments.addAll(lines(text, place.getRangeInsideHost().shiftRight(hostRange.getStartOffset())));
+            }
+        }
+        segments.sort(Comparator.comparingInt(TextRange::getStartOffset));
+        return segments;
     }
 }

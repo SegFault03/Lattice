@@ -39,6 +39,12 @@ public class SqlCardLocatorJavaFixtureTest extends H2SqlFixtureTestCase {
         assertEquals("select * from ? where id = ?", cards.get(0).sql());
     }
 
+    public void testTrailingConcatenatedValueKeepsQuotes() {
+        SqlCard card = cards("String f(int id) { return \"select * from t where id = \" + id; }").get(0);
+        assertEquals("select * from t where id = ?", card.sql());
+        assertEquals(List.of("\"select * from t where id = \""), segmentTexts(card));
+    }
+
     public void testTwoLiteralsOnOneLineAreTwoCards() {
         List<SqlCard> cards = cards("void f(Connection c) throws Exception { c.prepareStatement(\"select 1 from dual\"); c.prepareStatement(\"select 2 from dual\"); }");
         assertEquals(2, cards.size());

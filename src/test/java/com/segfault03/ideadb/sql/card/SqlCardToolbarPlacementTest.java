@@ -23,6 +23,15 @@ class SqlCardToolbarPlacementTest {
         assertEquals(880, SqlCardToolbarPlacement.place(new Rectangle(900, 100, 400, 60), TOOLBAR, new Rectangle(0, 0, 1000, 800)).x);
     }
 
+    @Test void clampedVerticallyWhenCardTopIsAboveView() {
+        assertEquals(200, SqlCardToolbarPlacement.place(new Rectangle(100, 50, 400, 600), TOOLBAR, new Rectangle(0, 200, 1000, 800)).y);
+    }
+
+    @Test void clampedVerticallyAtTheBottomOfTheView() {
+        Rectangle visible = new Rectangle(0, 0, 1000, 300);
+        assertEquals(300 - 28, SqlCardToolbarPlacement.place(new Rectangle(100, 350, 400, 20), TOOLBAR, visible).y);
+    }
+
     @Test void clampedToVisibleLeft() {
         assertEquals(0, SqlCardToolbarPlacement.place(new Rectangle(0, 100, 60, 20), TOOLBAR, new Rectangle(0, 0, 1000, 800)).x);
     }

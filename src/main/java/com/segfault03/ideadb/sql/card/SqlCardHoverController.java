@@ -18,6 +18,8 @@ import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.popup.JBPopup;
 import com.intellij.openapi.ui.popup.JBPopupFactory;
+import com.intellij.openapi.ui.popup.JBPopupListener;
+import com.intellij.openapi.ui.popup.LightweightWindowEvent;
 import com.intellij.openapi.util.Key;
 import com.intellij.psi.PsiDocumentManager;
 import com.intellij.ui.awt.RelativePoint;
@@ -28,10 +30,11 @@ import org.jetbrains.annotations.TestOnly;
 import javax.swing.JPanel;
 import javax.swing.Timer;
 import java.awt.BorderLayout;
-import java.awt.Dimension;
 import java.awt.GraphicsEnvironment;
 import java.awt.Point;
 import java.awt.Rectangle;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.MouseAdapter;
@@ -61,7 +64,10 @@ final class SqlCardHoverController implements Disposable {
     private SqlCardHoverController(@NotNull Editor editor) {
         this.editor = editor;
         editor.addEditorMouseMotionListener(new EditorMouseMotionListener() {
-            @Override public void mouseMoved(@NotNull EditorMouseEvent event) { moved(cardAt(editor, event.getMouseEvent().getPoint())); }
+            @Override public void mouseMoved(@NotNull EditorMouseEvent event) {
+                if (shown != null && !shown.isValid()) hideNow();
+                moved(cardAt(editor, event.getMouseEvent().getPoint()));
+            }
         }, this);
         editor.addEditorMouseListener(new EditorMouseListener() {
             @Override public void mouseExited(@NotNull EditorMouseEvent event) { moved(null); }
@@ -99,7 +105,7 @@ final class SqlCardHoverController implements Disposable {
     private void tick() {
         if (overToolbar()) timer.over(null, true, System.currentTimeMillis());
         Optional<RangeHighlighter> due = timer.due(System.currentTimeMillis());
-        show(due.filter(RangeHighlighter::isValid).orElse(null));
+        show(due.orElse(null));
         if (!timer.pending()) tick.stop();
     }
 
@@ -110,7 +116,9 @@ final class SqlCardHoverController implements Disposable {
                 && (current.getMousePosition(true) != null || !JBPopupFactory.getInstance().getChildPopups(current).isEmpty());
     }
 
+    /** A card read before the last edit is not shown: its SQL and its actions' states may no longer hold. */
     private void show(@Nullable RangeHighlighter highlighter) {
+        if (highlighter != null && !SqlCardPass.isFresh(editor, highlighter)) highlighter = null;
         if (highlighter == shown) return;
         hidePopup();
         if (highlighter == null) return;
@@ -133,18 +141,50 @@ final class SqlCardHoverController implements Disposable {
             @Override public void mouseExited(MouseEvent event) { moved(null); }
         });
         panel = content;
-        popup = JBPopupFactory.getInstance().createComponentPopupBuilder(content, null)
+        JBPopup opened = JBPopupFactory.getInstance().createComponentPopupBuilder(content, null)
                 .setFocusable(false).setRequestFocus(false).setCancelOnClickOutside(true).setCancelKeyEnabled(true)
                 .setMovable(false).setResizable(false).setShowShadow(true).createPopup();
-        Dimension size = content.getPreferredSize();
-        Point at = SqlCardToolbarPlacement.place(SqlCardRenderer.bounds(editor, highlighter), size, editor.getScrollingModel().getVisibleArea());
-        popup.show(new RelativePoint(editor.getContentComponent(), at));
+        opened.addListener(new JBPopupListener() {
+            @Override public void onClosed(@NotNull LightweightWindowEvent event) { if (event.asPopup() == popup) popupClosed(); }
+        });
+        popup = opened;
+        // The toolbar fills itself in the background; place the popup once its buttons are there, and again if they change.
+        toolbar.getComponent().addComponentListener(new ComponentAdapter() {
+            @Override public void componentResized(ComponentEvent event) { relocate(opened, content, highlighter); }
+        });
+        toolbar.updateActionsAsync();
+        opened.show(new RelativePoint(editor.getContentComponent(), placement(content, highlighter)));
+    }
+
+    private Point placement(JPanel content, RangeHighlighter highlighter) {
+        return SqlCardToolbarPlacement.place(SqlCardRenderer.bounds(editor, highlighter), content.getPreferredSize(),
+                editor.getScrollingModel().getVisibleArea());
+    }
+
+    private void relocate(JBPopup opened, JPanel content, RangeHighlighter highlighter) {
+        if (opened != popup || opened.isDisposed() || !highlighter.isValid()) return;
+        opened.setSize(content.getPreferredSize());
+        opened.setLocation(new RelativePoint(editor.getContentComponent(), placement(content, highlighter)).getScreenPoint());
+    }
+
+    /** The platform closed the popup (a click outside, Escape): forget it, so the next hover starts afresh. */
+    private void popupClosed() {
+        popup = null;
+        panel = null;
+        timer.cancel();
+        tick.stop();
+        clearShown();
     }
 
     private void hidePopup() {
-        if (popup != null) popup.cancel();
+        JBPopup closing = popup;
         popup = null;
         panel = null;
+        if (closing != null) closing.cancel();
+        clearShown();
+    }
+
+    private void clearShown() {
         RangeHighlighter previous = shown;
         shown = null;
         if (previous != null) {
@@ -160,7 +200,8 @@ final class SqlCardHoverController implements Disposable {
     }
 
     private void repaint(RangeHighlighter highlighter) {
-        if (!highlighter.isValid()) return;
+        // The controller is disposed after its editor, which can no longer be measured by then.
+        if (!highlighter.isValid() || editor.isDisposed()) return;
         Rectangle bounds = SqlCardRenderer.bounds(editor, highlighter);
         bounds.grow(2, 2);
         editor.getContentComponent().repaint(bounds);
@@ -171,6 +212,8 @@ final class SqlCardHoverController implements Disposable {
         editor.getContentComponent().removeFocusListener(focus);
         editor.putUserData(KEY, null);
     }
+
+    @TestOnly void popupClosedForTests() { popupClosed(); }
 
     @TestOnly void showForTests(@NotNull RangeHighlighter highlighter) { show(highlighter); }
 

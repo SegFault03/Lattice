@@ -48,6 +48,42 @@ public class SqlCardPassJavaFixtureTest extends H2SqlFixtureTestCase {
         assertEquals(located(), highlighted());
     }
 
+    public void testCardFollowsTypingBeforeNextPass() {
+        myFixture.configureByText("A.java", TWO_QUERIES);
+        highlighted();
+        Editor editor = myFixture.getEditor();
+        RangeHighlighter first = SqlCardPass.highlighters(editor).get(0);
+        editor.getCaretModel().moveToOffset(TWO_QUERIES.indexOf("from orders where") + 4);
+        myFixture.type("xxxxxxxxxxxxxxxxxxxx");
+        Rectangle bounds = SqlCardRenderer.boundsFor(editor, first);
+        int literalEnd = editor.offsetToXY(first.getEndOffset()).x;
+        assertTrue("card reaches the literal's new end: " + bounds + " vs " + literalEnd, bounds.x + bounds.width >= literalEnd);
+    }
+
+    public void testCardShrinksWithDeletionBeforeNextPass() {
+        myFixture.configureByText("A.java", TWO_QUERIES);
+        highlighted();
+        Editor editor = myFixture.getEditor();
+        RangeHighlighter first = SqlCardPass.highlighters(editor).get(0);
+        int from = TWO_QUERIES.indexOf(" where id = ?\");");
+        com.intellij.openapi.command.WriteCommandAction.runWriteCommandAction(getProject(),
+                () -> editor.getDocument().deleteString(from, from + " where id = ?".length()));
+        Rectangle bounds = SqlCardRenderer.boundsFor(editor, first);
+        int literalEnd = editor.offsetToXY(first.getEndOffset()).x;
+        assertTrue("card stops at the literal's end: " + bounds + " vs " + literalEnd,
+                bounds.x + bounds.width <= literalEnd + SqlCardGeometry.PADDING);
+    }
+
+    public void testUnchangedPassKeepsHighlighters() {
+        myFixture.configureByText("A.java", TWO_QUERIES);
+        highlighted();
+        List<RangeHighlighter> before = SqlCardPass.highlighters(myFixture.getEditor());
+        highlighted();
+        List<RangeHighlighter> after = SqlCardPass.highlighters(myFixture.getEditor());
+        assertEquals(2, after.size());
+        for (int i = 0; i < before.size(); i++) assertSame(before.get(i), after.get(i));
+    }
+
     public void testNoCardsWhenSettingOff() {
         myFixture.configureByText("A.java", TWO_QUERIES);
         assertEquals(2, highlighted().size());
@@ -83,6 +119,11 @@ public class SqlCardPassJavaFixtureTest extends H2SqlFixtureTestCase {
         highlighted();
         RangeHighlighter first = SqlCardPass.highlighters(myFixture.getEditor()).get(0);
         Rectangle bounds = SqlCardRenderer.boundsFor(myFixture.getEditor(), first);
-        assertTrue(bounds.toString(), bounds.height >= 2 * myFixture.getEditor().getLineHeight());
+        Editor editor = myFixture.getEditor();
+        assertTrue(bounds.toString(), bounds.height >= 2 * editor.getLineHeight());
+        int firstLine = editor.offsetToVisualPosition(first.getStartOffset()).line;
+        int wrapAt = com.intellij.openapi.editor.ex.util.EditorUtil.getVisualLineEndOffset(editor, firstLine);
+        int lastCharBeforeWrap = editor.offsetToXY(wrapAt, false, true).x;
+        assertTrue("card reaches the soft wrap: " + bounds + " vs " + lastCharBeforeWrap, bounds.x + bounds.width >= lastCharBeforeWrap);
     }
 }

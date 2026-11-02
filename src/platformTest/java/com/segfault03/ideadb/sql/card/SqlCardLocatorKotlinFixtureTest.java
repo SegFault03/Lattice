@@ -24,5 +24,8 @@ public class SqlCardLocatorKotlinFixtureTest extends H2SqlFixtureTestCase {
         List<SqlCard> cards = cards("fun f(id: Int) = \"select * from t where id = $id\"");
         assertEquals(1, cards.size());
         assertEquals("select * from t where id = ?", cards.get(0).sql());
+        String source = myFixture.getEditor().getDocument().getText();
+        assertEquals("the card hugs the whole literal, quotes and template included",
+                List.of("\"select * from t where id = $id\""), cards.get(0).segments().stream().map(segment -> segment.substring(source)).toList());
     }
 }

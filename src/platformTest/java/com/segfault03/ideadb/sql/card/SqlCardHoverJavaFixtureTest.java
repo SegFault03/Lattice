@@ -48,6 +48,27 @@ public class SqlCardHoverJavaFixtureTest extends H2SqlFixtureTestCase {
         assertNull(first.getUserData(SqlCardPass.HOVERED));
     }
 
+    public void testStaleCardIsNotShownAfterEdit() {
+        RangeHighlighter first = cards().get(0);
+        SqlCardHoverController controller = SqlCardHoverController.of(myFixture.getEditor());
+        myFixture.getEditor().getCaretModel().moveToOffset(TWO_ON_ONE_LINE.indexOf("select 1") + 3);
+        myFixture.type(" ");
+        controller.showForTests(first);
+        assertNull("the card's SQL is from before the edit", controller.shownCard());
+        myFixture.doHighlighting();
+        controller.showForTests(SqlCardPass.highlighters(myFixture.getEditor()).get(0));
+        assertNotNull("fresh again after the next pass", controller.shownCard());
+    }
+
+    public void testPopupClosedByThePlatformClearsHover() {
+        RangeHighlighter first = cards().get(0);
+        SqlCardHoverController controller = SqlCardHoverController.of(myFixture.getEditor());
+        controller.showForTests(first);
+        controller.popupClosedForTests();
+        assertNull(controller.shownCard());
+        assertNull(first.getUserData(SqlCardPass.HOVERED));
+    }
+
     public void testControllerNotInstalledForViewer() {
         myFixture.configureByText("A.java", TWO_ON_ONE_LINE);
         Editor viewer = EditorFactory.getInstance().createViewer(myFixture.getEditor().getDocument(), getProject());

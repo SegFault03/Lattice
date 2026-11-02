@@ -2343,7 +2343,17 @@ class IntellijUiScreenshotTest {
 
         val updateRollback = hover("UPDATE ORDERS")
         check(updateRollback.component.isEnabled()) { "Run and Roll Back must be enabled on the UPDATE card" }
-        frame.x { byAccessibleName("Copy SQL") }.waitFound()
+        val copy = frame.x { byAccessibleName("Copy SQL") }.waitFound()
+        // The toolbar fills itself after the popup opens; once it has, the popup must sit inside the editor's visible area.
+        Thread.sleep(500)
+        val editorOrigin = editor.component.getLocationOnScreen()
+        val visible = Rectangle(editorOrigin.x, editorOrigin.y, editor.component.width, editor.component.height)
+        for (button in listOf(updateRollback, copy)) {
+            val at = button.component.getLocationOnScreen()
+            check(visible.contains(Rectangle(at.x, at.y, button.component.width, button.component.height))) {
+                "Card toolbar button at $at outside the editor's visible area $visible"
+            }
+        }
         captureScreen(directory.resolve("sql-cards-hover.png"))
 
         val selectRollback = hover("SELECT ID")

@@ -1,13 +1,13 @@
 package com.segfault03.ideadb.sql.card;
 
 import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.editor.RangeMarker;
 import com.intellij.openapi.editor.VisualPosition;
 import com.intellij.openapi.editor.ex.util.EditorUtil;
 import com.intellij.openapi.editor.markup.CustomHighlighterOrder;
 import com.intellij.openapi.editor.markup.CustomHighlighterRenderer;
 import com.intellij.openapi.editor.markup.RangeHighlighter;
 import com.intellij.openapi.editor.markup.TextAttributes;
-import com.intellij.openapi.util.TextRange;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.TestOnly;
 
@@ -47,18 +47,22 @@ final class SqlCardRenderer implements CustomHighlighterRenderer {
 
     /** The card's rectangle in the editor's content component, from each visual line its segments cover. */
     static @NotNull Rectangle bounds(@NotNull Editor editor, @NotNull RangeHighlighter highlighter) {
-        SqlCard card = highlighter.getUserData(SqlCardPass.CARD);
-        if (card == null || !highlighter.isValid()) return new Rectangle();
-        int shift = highlighter.getStartOffset() - card.range().getStartOffset();
-        int length = editor.getDocument().getTextLength();
+        List<RangeMarker> segments = highlighter.getUserData(SqlCardPass.SEGMENTS);
+        if (segments == null || !highlighter.isValid()) return new Rectangle();
         List<SqlCardGeometry.Extent> extents = new ArrayList<>();
-        for (TextRange segment : card.segments()) {
-            int start = Math.min(segment.getStartOffset() + shift, length), end = Math.min(segment.getEndOffset() + shift, length);
+        for (RangeMarker segment : segments) {
+            if (!segment.isValid()) continue;
+            // Segments follow typing; the highlighter's own range bounds them, so a deletion never stretches a card past its string.
+            int start = Math.max(segment.getStartOffset(), highlighter.getStartOffset());
+            int end = Math.min(segment.getEndOffset(), highlighter.getEndOffset());
             if (start >= end) continue;
             VisualPosition from = editor.offsetToVisualPosition(start), to = editor.offsetToVisualPosition(end);
             for (int line = from.line; line <= to.line; line++) {
-                int x0 = line == from.line ? editor.visualPositionToXY(from).x : editor.visualPositionToXY(new VisualPosition(line, 0)).x;
-                int x1 = line == to.line ? editor.visualPositionToXY(to).x : editor.offsetToXY(EditorUtil.getVisualLineEndOffset(editor, line)).x;
+                // Across a soft wrap: a continuation line starts at its wrap indent, and a wrapped line ends before the wrap.
+                int x0 = line == from.line ? editor.visualPositionToXY(from).x
+                        : editor.offsetToXY(editor.visualPositionToOffset(new VisualPosition(line, 0)), false, false).x;
+                int x1 = line == to.line ? editor.visualPositionToXY(to).x
+                        : editor.offsetToXY(EditorUtil.getVisualLineEndOffset(editor, line), false, true).x;
                 extents.add(new SqlCardGeometry.Extent(x0, x1, editor.visualLineToY(line), editor.getLineHeight()));
             }
         }
