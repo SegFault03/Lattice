@@ -7,7 +7,6 @@ import com.intellij.openapi.editor.ex.util.EditorUtil;
 import com.intellij.openapi.editor.markup.CustomHighlighterOrder;
 import com.intellij.openapi.editor.markup.CustomHighlighterRenderer;
 import com.intellij.openapi.editor.markup.RangeHighlighter;
-import com.intellij.openapi.editor.markup.TextAttributes;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.TestOnly;
 
@@ -30,16 +29,16 @@ final class SqlCardRenderer implements CustomHighlighterRenderer {
     @Override public void paint(@NotNull Editor editor, @NotNull RangeHighlighter highlighter, @NotNull Graphics g) {
         Rectangle bounds = bounds(editor, highlighter);
         if (bounds.isEmpty()) return;
-        TextAttributes attributes = editor.getColorsScheme().getAttributes(SqlCardColors.CARD);
-        Color fill = attributes == null ? null : attributes.getBackgroundColor();
-        Color border = Boolean.TRUE.equals(highlighter.getUserData(SqlCardPass.HOVERED))
-                ? SqlCardColors.hoverBorder() : attributes == null ? null : attributes.getEffectColor();
+        Color fill = SqlCardColors.fill(editor.getColorsScheme());
+        Color border = SqlCardColors.border(editor.getColorsScheme(), Boolean.TRUE.equals(highlighter.getUserData(SqlCardPass.HOVERED)));
         Graphics2D g2 = (Graphics2D) g.create();
         try {
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             var shape = new RoundRectangle2D.Float(bounds.x, bounds.y, bounds.width - 1, bounds.height - 1, SqlCardGeometry.ARC, SqlCardGeometry.ARC);
-            if (fill != null) { g2.setColor(fill); g2.fill(shape); }
-            if (border != null) { g2.setColor(border); g2.draw(shape); }
+            g2.setColor(fill);
+            g2.fill(shape);
+            g2.setColor(border);
+            g2.draw(shape);
         } finally {
             g2.dispose();
         }

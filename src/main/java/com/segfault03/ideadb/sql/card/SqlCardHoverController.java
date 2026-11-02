@@ -235,7 +235,8 @@ final class SqlCardHoverController implements Disposable {
             sink.set(CommonDataKeys.PROJECT, project);
             sink.set(CommonDataKeys.EDITOR, editor);
             sink.set(CommonDataKeys.VIRTUAL_FILE, FileDocumentManager.getInstance().getFile(editor.getDocument()));
-            sink.set(CommonDataKeys.PSI_FILE, PsiDocumentManager.getInstance(project).getPsiFile(editor.getDocument()));
+            // PSI may only be handed out lazily: the platform reads it off the EDT, under a read action.
+            sink.lazy(CommonDataKeys.PSI_FILE, () -> PsiDocumentManager.getInstance(project).getPsiFile(editor.getDocument()));
         }
     }
 }
