@@ -6,7 +6,13 @@ import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.util.Disposer;
+import com.intellij.lang.injection.InjectedLanguageManager;
+import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiFile;
+import com.segfault03.ideadb.sql.binding.SqlBindingsState;
+import com.segfault03.ideadb.sql.binding.SqlDialectResolver;
+import com.segfault03.ideadb.sql.card.SqlCard;
+import com.segfault03.ideadb.sql.card.SqlCardDataKeys;
 import com.segfault03.ideadb.editor.DatabaseEditorManager;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.project.Project;
@@ -31,14 +37,28 @@ final class SqlRunActionSupport {
 
     private SqlRunActionSupport() {}
 
-    /** Hidden outside Lattice SQL and where the IDE's own database plugin is active; disabled until the file has a connection. */
-    static void update(@NotNull AnActionEvent event) {
+    /** What a card toolbar action is for, which decides the cards it refuses. */
+    enum CardUse { CONSOLE, EXPLAIN, ROLLBACK }
+
+    /**
+     * Hidden outside Lattice SQL and where the IDE's own database plugin is active; disabled until the file has a
+     * connection. On a card the action is always shown, and disabled with the reason when the card does not suit it.
+     */
+    static void update(@NotNull AnActionEvent event, @NotNull CardUse use) {
         var presentation = event.getPresentation();
         Project project = event.getProject();
         Editor editor = event.getData(CommonDataKeys.EDITOR);
         PsiFile file = event.getData(CommonDataKeys.PSI_FILE);
         if (UltimateDatabasePlugin.isActive() || project == null || editor == null || file == null) {
             presentation.setEnabledAndVisible(false);
+            return;
+        }
+        SqlCard card = event.getData(SqlCardDataKeys.SQL_CARD);
+        if (card != null) {
+            String refusal = cardRefusal(card, use, isBound(project, file));
+            presentation.setVisible(true);
+            presentation.setEnabled(refusal == null);
+            if (refusal != null) presentation.setDescription(refusal);
             return;
         }
         SqlRunTarget.Resolution resolution = SqlRunTarget.resolve(project, editor, file);
@@ -53,6 +73,19 @@ final class SqlRunActionSupport {
         }
     }
 
+    /** Why a card does not suit {@code use}, or null when it does. */
+    static @Nullable String cardRefusal(@NotNull SqlCard card, @NotNull CardUse use, boolean bound) {
+        if (!bound) return BIND_FIRST;
+        if (use == CardUse.CONSOLE) return null;
+        if (card.statementCount() != 1 || card.kind() == null) return SqlRunTarget.SELECT_SINGLE_STATEMENT;
+        return use == CardUse.EXPLAIN ? SqlStatementKind.explainRefusal(card.kind()) : SqlStatementKind.rollbackRefusal(card.kind());
+    }
+
+    private static boolean isBound(Project project, PsiFile file) {
+        VirtualFile virtualFile = InjectedLanguageManager.getInstance(project).getTopLevelFile(file).getVirtualFile();
+        return virtualFile != null && SqlDialectResolver.connection(project, SqlBindingsState.hostOf(virtualFile)) != null;
+    }
+
     /** The statement to work on, or null after telling the user why there is none. */
     static @Nullable SqlRunTarget targetOrShowProblem(@NotNull AnActionEvent event) {
         Project project = event.getProject();
@@ -62,7 +95,22 @@ final class SqlRunActionSupport {
     }
 
     static @Nullable SqlRunTarget targetOrShowProblem(@NotNull Project project, @NotNull Editor editor, @NotNull PsiFile file) {
-        SqlRunTarget.Resolution resolution = ReadAction.compute(() -> SqlRunTarget.resolve(project, editor, file));
+        return targetOrShowProblem(project, editor, file, null, CardUse.CONSOLE);
+    }
+
+    /** With a card, its SQL after checking the card suits {@code use}; without one, the caret's statement. */
+    static @Nullable SqlRunTarget targetOrShowProblem(@NotNull Project project, @NotNull Editor editor, @NotNull PsiFile file,
+                                                     @Nullable SqlCard card, @NotNull CardUse use) {
+        if (card != null) {
+            String refusal = ReadAction.compute(() -> cardRefusal(card, use, isBound(project, file)));
+            if (refusal != null) {
+                HintManager.getInstance().showErrorHint(editor, refusal);
+                return null;
+            }
+        }
+        SqlRunTarget.Resolution resolution = ReadAction.compute(() -> card != null
+                ? SqlRunTarget.resolve(project, card, InjectedLanguageManager.getInstance(project).getTopLevelFile(file).getVirtualFile())
+                : SqlRunTarget.resolve(project, editor, file));
         if (resolution instanceof SqlRunTarget.Problem problem) {
             HintManager.getInstance().showErrorHint(editor, problem.message());
             return null;

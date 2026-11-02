@@ -14,6 +14,7 @@ import com.intellij.psi.PsiLanguageInjectionHost;
 import com.intellij.psi.impl.source.tree.injected.InjectedLanguageUtil;
 import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.sql.binding.SqlBindingsState;
+import com.segfault03.ideadb.sql.card.SqlCard;
 import com.segfault03.ideadb.sql.binding.SqlDialectResolver;
 import com.segfault03.ideadb.sql.dialect.SqlDialectProfile;
 import com.segfault03.ideadb.sql.lang.LatticeSqlLanguage;
@@ -71,6 +72,15 @@ public record SqlRunTarget(@NotNull String sql, @NotNull SqlDialectProfile profi
             if (mapped != null && range == null) return new Problem(SELECT_SINGLE_STATEMENT);
         }
         return resolution(text, range != null ? range : new SqlStatementRange(0, text.length()), profile, connection, file, true);
+    }
+
+    /** The card's SQL, with the file's dialect and connection. Whether the card suits an action is the action's call. */
+    public static @NotNull Resolution resolve(@NotNull Project project, @NotNull SqlCard card, @NotNull VirtualFile file) {
+        VirtualFile host = SqlBindingsState.hostOf(file);
+        SqlDialectProfile profile = SqlDialectResolver.resolve(project, host);
+        ConnectionConfig connection = SqlDialectResolver.connection(project, host);
+        String sql = card.sql();
+        return new Found(new SqlRunTarget(sql, profile, connection, host, SqlParameters.of(sql, profile, card.injected())));
     }
 
     private static @Nullable SqlStatementRange statement(CharSequence text, boolean hasSelection, int caret, int start, int end, SqlDialectProfile profile) {

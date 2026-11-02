@@ -15,7 +15,9 @@ import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.service.DryRunResult;
 import com.segfault03.ideadb.service.DryRunService;
 import com.segfault03.ideadb.service.QueryExecution;
+import com.segfault03.ideadb.sql.card.SqlCard;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 import java.util.Map;
@@ -37,8 +39,12 @@ final class DryRunRunner {
     private DryRunRunner() {}
 
     /** The whole action, from the caret to the tab; call on the EDT. */
-    static void start(@NotNull Project project, @NotNull Editor editor, @NotNull PsiFile file, @NotNull Mode mode) {
-        SqlRunTarget target = SqlRunActionSupport.targetOrShowProblem(project, editor, file);
+    static void start(@NotNull Project project, @NotNull Editor editor, @NotNull PsiFile file, @NotNull Mode mode) { start(project, editor, file, null, mode); }
+
+    /** With a card, the card's SQL; otherwise the statement at the caret. */
+    static void start(@NotNull Project project, @NotNull Editor editor, @NotNull PsiFile file, @Nullable SqlCard card, @NotNull Mode mode) {
+        SqlRunTarget target = SqlRunActionSupport.targetOrShowProblem(project, editor, file, card,
+                mode == Mode.EXPLAIN ? SqlRunActionSupport.CardUse.EXPLAIN : SqlRunActionSupport.CardUse.ROLLBACK);
         if (target == null || target.connection() == null) return;
         ConnectionConfig config = target.connection();
         SqlStatementKind kind = SqlStatementKind.of(target.sql(), target.profile());
