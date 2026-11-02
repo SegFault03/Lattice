@@ -8,6 +8,7 @@ import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.AnActionResult;
 import com.intellij.openapi.actionSystem.ex.AnActionListener;
 import com.intellij.openapi.actionSystem.ActionManager;
+import com.intellij.openapi.actionSystem.ActionPlaces;
 import com.intellij.openapi.actionSystem.ActionToolbar;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.actionSystem.DataSink;
@@ -90,9 +91,19 @@ final class SqlCardHoverController implements Disposable {
         // An action from the toolbar has done its work (it may have opened another tab under the mouse): close the toolbar.
         ApplicationManager.getApplication().getMessageBus().connect(this).subscribe(AnActionListener.TOPIC, new AnActionListener() {
             @Override public void afterActionPerformed(@NotNull AnAction action, @NotNull AnActionEvent event, @NotNull AnActionResult result) {
-                if (PLACE.equals(event.getPlace())) hideNow();
+                if (closesToolbar(action, event.getPlace())) hideNow();
             }
         });
+    }
+
+    /**
+     * Whether {@code action}, performed in {@code place}, ends the toolbar's use. A group only opens its menu (the
+     * platform reports that as a performed action too), and closing then would take the menu down with the toolbar;
+     * the actions in that menu run in the menu's own place.
+     */
+    static boolean closesToolbar(@NotNull AnAction action, @Nullable String place) {
+        if (action instanceof ActionGroup) return false;
+        return PLACE.equals(place) || ActionPlaces.getActionGroupPopupPlace(PLACE).equals(place);
     }
 
     /** Installs the controller on an editor that shows cards, for the editor's lifetime. */

@@ -82,6 +82,26 @@ public class SqlCardHoverJavaFixtureTest extends H2SqlFixtureTestCase {
         assertNull(controller.shownCard());
     }
 
+    public void testOpeningTheMoreMenuKeepsTheToolbar() {
+        RangeHighlighter first = cards().get(0);
+        SqlCardHoverController controller = SqlCardHoverController.of(myFixture.getEditor());
+        controller.showForTests(first);
+        var more = com.intellij.openapi.actionSystem.ActionManager.getInstance().getAction("com.segfault03.lattice.sql.card.more");
+        var event = com.intellij.openapi.actionSystem.AnActionEvent.createEvent(more, com.intellij.openapi.actionSystem.DataContext.EMPTY_CONTEXT,
+                new com.intellij.openapi.actionSystem.Presentation(), SqlCardHoverController.PLACE, com.intellij.openapi.actionSystem.ActionUiKind.TOOLBAR, null);
+        com.intellij.openapi.application.ApplicationManager.getApplication().getMessageBus()
+                .syncPublisher(com.intellij.openapi.actionSystem.ex.AnActionListener.TOPIC)
+                .afterActionPerformed(more, event, com.intellij.openapi.actionSystem.AnActionResult.PERFORMED);
+        assertNotNull("the menu the group opened would close with the toolbar", controller.shownCard());
+    }
+
+    public void testActionChosenInTheMoreMenuClosesTheToolbar() {
+        var explain = com.intellij.openapi.actionSystem.ActionManager.getInstance().getAction("com.segfault03.lattice.sql.run.explain");
+        assertTrue(SqlCardHoverController.closesToolbar(explain,
+                com.intellij.openapi.actionSystem.ActionPlaces.getActionGroupPopupPlace(SqlCardHoverController.PLACE)));
+        assertFalse(SqlCardHoverController.closesToolbar(explain, "EditorPopup"));
+    }
+
     public void testToolbarStaysForActionsElsewhere() {
         RangeHighlighter first = cards().get(0);
         SqlCardHoverController controller = SqlCardHoverController.of(myFixture.getEditor());
