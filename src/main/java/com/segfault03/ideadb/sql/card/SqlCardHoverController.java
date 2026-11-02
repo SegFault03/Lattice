@@ -1,6 +1,7 @@
 package com.segfault03.ideadb.sql.card;
 
 import com.intellij.openapi.Disposable;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.actionSystem.ActionGroup;
 import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.ActionToolbar;
@@ -34,8 +35,8 @@ import java.awt.BorderLayout;
 import java.awt.GraphicsEnvironment;
 import java.awt.Point;
 import java.awt.Rectangle;
-import java.awt.event.ComponentAdapter;
-import java.awt.event.ComponentEvent;
+import java.awt.event.ContainerAdapter;
+import java.awt.event.ContainerEvent;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.MouseAdapter;
@@ -152,9 +153,11 @@ final class SqlCardHoverController implements Disposable {
             @Override public void onClosed(@NotNull LightweightWindowEvent event) { if (event.asPopup() == popup) popupClosed(); }
         });
         popup = opened;
-        // The toolbar fills itself in the background; place the popup once its buttons are there, and again if they change.
-        toolbar.getComponent().addComponentListener(new ComponentAdapter() {
-            @Override public void componentResized(ComponentEvent event) { relocate(opened, content, highlighter); }
+        // The toolbar fills itself in the background, inside a popup already sized for an empty toolbar; fit the popup
+        // to the toolbar each time its buttons change.
+        toolbar.getComponent().addContainerListener(new ContainerAdapter() {
+            @Override public void componentAdded(ContainerEvent event) { refit(opened, content, highlighter); }
+            @Override public void componentRemoved(ContainerEvent event) { refit(opened, content, highlighter); }
         });
         toolbar.updateActionsAsync();
         opened.show(new RelativePoint(editor.getContentComponent(), placement(content, highlighter)));
@@ -165,10 +168,12 @@ final class SqlCardHoverController implements Disposable {
                 editor.getScrollingModel().getVisibleArea());
     }
 
-    private void relocate(JBPopup opened, JPanel content, RangeHighlighter highlighter) {
-        if (opened != popup || opened.isDisposed() || !highlighter.isValid()) return;
-        opened.setSize(content.getPreferredSize());
-        opened.setLocation(new RelativePoint(editor.getContentComponent(), placement(content, highlighter)).getScreenPoint());
+    private void refit(JBPopup opened, JPanel content, RangeHighlighter highlighter) {
+        ApplicationManager.getApplication().invokeLater(() -> {
+            if (opened != popup || opened.isDisposed() || !opened.isVisible() || !highlighter.isValid()) return;
+            opened.pack(true, true);
+            opened.setLocation(new RelativePoint(editor.getContentComponent(), placement(content, highlighter)).getScreenPoint());
+        });
     }
 
     /** The platform closed the popup (a click outside, Escape): forget it, so the next hover starts afresh. */

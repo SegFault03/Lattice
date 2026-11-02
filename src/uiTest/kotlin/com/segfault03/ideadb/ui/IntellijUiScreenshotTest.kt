@@ -2353,10 +2353,17 @@ class IntellijUiScreenshotTest {
         Thread.sleep(500)
         val editorOrigin = editor.component.getLocationOnScreen()
         val visible = Rectangle(editorOrigin.x, editorOrigin.y, editor.component.width, editor.component.height)
-        for (button in listOf(updateRollback, copy)) {
+        val console = frame.x { byAccessibleName("Send to Console") }.waitFound()
+        for (button in listOf(updateRollback, console, copy)) {
             val at = button.component.getLocationOnScreen()
-            check(visible.contains(Rectangle(at.x, at.y, button.component.width, button.component.height))) {
-                "Card toolbar button at $at outside the editor's visible area $visible"
+            val bounds = Rectangle(at.x, at.y, button.component.width, button.component.height)
+            check(visible.contains(bounds)) { "Card toolbar button at $bounds outside the editor's visible area $visible" }
+            // Inside the popup's own window too: a popup sized before its toolbar filled clips the buttons after the first.
+            var window = button.component
+            while (window.getParent() != null) window = window.getParent()!!
+            val windowAt = window.getLocationOnScreen()
+            check(Rectangle(windowAt.x, windowAt.y, window.width, window.height).contains(bounds)) {
+                "Card toolbar button at $bounds clipped by its popup at $windowAt ${window.width}x${window.height}"
             }
         }
         captureScreen(directory.resolve("sql-cards-hover.png"))
