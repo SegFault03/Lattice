@@ -6,6 +6,7 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CustomShortcutSet;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
@@ -141,20 +142,23 @@ public final class EmbeddedSqlInput implements SqlInput {
         }
     }
 
+    // The console asks for the caret and selection from plain Swing callbacks, which hold no read lock; the editor's
+    // caret model needs one.
     @Override public int caretOffset() {
         Editor editor = editor();
-        return editor != null ? editor.getCaretModel().getOffset() : pendingCaret >= 0 ? pendingCaret : document.getTextLength();
+        return editor != null ? ReadAction.compute(() -> editor.getCaretModel().getOffset())
+                : pendingCaret >= 0 ? pendingCaret : document.getTextLength();
     }
 
     @Override public int selectionStart() {
         Editor editor = editor();
-        if (editor != null) return editor.getSelectionModel().getSelectionStart();
+        if (editor != null) return ReadAction.compute(() -> editor.getSelectionModel().getSelectionStart());
         return pendingStart >= 0 ? pendingStart : caretOffset();
     }
 
     @Override public int selectionEnd() {
         Editor editor = editor();
-        if (editor != null) return editor.getSelectionModel().getSelectionEnd();
+        if (editor != null) return ReadAction.compute(() -> editor.getSelectionModel().getSelectionEnd());
         return pendingStart >= 0 ? pendingEnd : caretOffset();
     }
 

@@ -81,6 +81,28 @@ public class SqlEmbeddedInputFixtureTest extends H2SqlFixtureTestCase {
         }
     }
 
+    /** The console reads its selection on the EDT outside any read action, as when it runs the selected SQL. */
+    public void testTheSelectionCanBeReadOutsideAReadAction() {
+        var input = EmbeddedSqlInput.create(getProject(), h2, null, "", true, "select 1;\nselect 2", "test console");
+        try {
+            assertNotNull(((EditorTextField) input.component()).getEditor(true));
+            input.select(10, 18);
+            // A plain Swing event, as the console's query callback is: it holds no lock of the platform's.
+            int[] read = new int[3];
+            javax.swing.SwingUtilities.invokeLater(() -> {
+                read[0] = input.selectionStart();
+                read[1] = input.selectionEnd();
+                read[2] = input.caretOffset();
+            });
+            PlatformTestUtil.dispatchAllEventsInIdeEventQueue();
+            assertEquals(10, read[0]);
+            assertEquals(18, read[1]);
+            assertEquals(18, read[2]);
+        } finally {
+            input.dispose();
+        }
+    }
+
     public void testAFieldDoesNotReportItsHiddenLeadIn() {
         loadSchema();
         var input = EmbeddedSqlInput.create(getProject(), h2, null, "select * from BOOKS where ", false, "TITEL = 'x'", "test filter");
