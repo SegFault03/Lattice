@@ -2335,15 +2335,17 @@ class IntellijUiScreenshotTest {
             }
             return Point(xy.x + 4, xy.y + 6)
         }
+        // Empty space below the code: resting on code would open the IDE's own quick documentation over the cards.
+        fun park() = Point(editor.component.width - 20, editor.component.height - 20)
         fun hover(text: String): UiComponent {
-            editor.moveMouse(Point(4, 4))
+            editor.moveMouse(park())
             Thread.sleep(500)
             editor.moveMouse(pointAt(text))
             return frame.x { byAccessibleName("Run and Roll Back") }.waitFound(15.seconds)
         }
         // Highlighting has run once the editor settles; the cards are painted by then.
         Thread.sleep(3_000)
-        editor.moveMouse(Point(4, 4))
+        editor.moveMouse(park())
         captureScreen(directory.resolve("sql-cards.png"))
 
         val updateRollback = hover("UPDATE ORDERS")
@@ -2371,7 +2373,7 @@ class IntellijUiScreenshotTest {
         val selectRollback = hover("SELECT ID")
         waitUntil("Run and Roll Back disabled on the SELECT card") { !selectRollback.component.isEnabled() }
         captureScreen(directory.resolve("sql-cards-hover-select.png"))
-        editor.moveMouse(Point(4, 4))
+        editor.moveMouse(park())
     }
 
     private fun verifyMutationRefresh(frame: IdeaFrameUI, tree: JTreeUiComponent, schema: Array<String>, directory: Path) {
