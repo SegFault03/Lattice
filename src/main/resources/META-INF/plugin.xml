@@ -102,6 +102,8 @@
         <platform.backend.documentation.targetProvider implementation="com.segfault03.ideadb.sql.doc.LatticeSqlDocumentationTargetProvider"/>
         <platform.backend.documentation.linkHandler implementation="com.segfault03.ideadb.sql.doc.LatticeSqlDocumentationLinkHandler"/>
         <colorSettingsPage implementation="com.segfault03.ideadb.sql.lang.LatticeSqlColorSettingsPage"/>
+        <additionalTextAttributes scheme="Default" file="colorSchemes/LatticeSqlCardDefault.xml"/>
+        <additionalTextAttributes scheme="Darcula" file="colorSchemes/LatticeSqlCardDarcula.xml"/>
         <applicationService serviceImplementation="com.segfault03.ideadb.sql.settings.SqlEditorSettings"/>
         <projectService serviceImplementation="com.segfault03.ideadb.sql.binding.SqlBindingsState"/>
         <projectService serviceImplementation="com.segfault03.ideadb.sql.run.SqlRunState"/>

@@ -5,6 +5,7 @@ import com.intellij.openapi.fileTypes.SyntaxHighlighter;
 import com.intellij.openapi.options.colors.AttributesDescriptor;
 import com.intellij.openapi.options.colors.ColorDescriptor;
 import com.intellij.openapi.options.colors.ColorSettingsPage;
+import com.segfault03.ideadb.sql.card.SqlCardColors;
 import com.segfault03.ideadb.sql.dialect.SqlDialects;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -24,6 +25,7 @@ public final class LatticeSqlColorSettingsPage implements ColorSettingsPage {
             new AttributesDescriptor("Line comment", LatticeSqlSyntaxHighlighter.LINE_COMMENT),
             new AttributesDescriptor("Block comment", LatticeSqlSyntaxHighlighter.BLOCK_COMMENT),
             new AttributesDescriptor("Operator", LatticeSqlSyntaxHighlighter.OPERATOR),
+            new AttributesDescriptor("SQL card", SqlCardColors.CARD),
     };
 
     private static final String DEMO = """

@@ -39,4 +39,10 @@ class LatticeSqlColorSettingsPageTest {
             assertNotEquals(DefaultLanguageHighlighterColors.FUNCTION_CALL, inherited, "nor do function calls");
         }
     }
+
+    @Test void cardIsListed() {
+        var card = java.util.Arrays.stream(new LatticeSqlColorSettingsPage().getAttributeDescriptors())
+                .filter(descriptor -> descriptor.getDisplayName().equals("SQL card")).findFirst().orElseThrow();
+        assertEquals("LATTICE_SQL_CARD", card.getKey().getExternalName());
+    }
 }

@@ -26,6 +26,8 @@ public final class SqlEditorSettings implements PersistentStateComponent<SqlEdit
         public boolean highlighting = true;
         public boolean completion = true;
         public boolean hover = true;
+        /** A card behind each piece of SQL in the editor, with a toolbar on hover. */
+        public boolean sqlCards = true;
         /** Local checks: syntax, and tables and columns against the cached schema. */
         public boolean validation = true;
         /** How keywords are cased when inserted: AS_TYPED follows the text around, UPPER and LOWER force it. */
@@ -90,6 +92,9 @@ public final class SqlEditorSettings implements PersistentStateComponent<SqlEdit
 
     public synchronized boolean isHover() { return state.hover; }
     public synchronized void setHover(boolean value) { state.hover = value; }
+    public synchronized boolean isSqlCards() { return state.sqlCards; }
+    public synchronized void setSqlCards(boolean value) { state.sqlCards = value; }
+    public synchronized boolean isSqlCardsEffective() { return isEnabled() && state.sqlCards; }
 
     /** Whether Lattice should own the .sql file type right now. */
     public synchronized boolean isTakeoverEffective() { return isEnabled() && state.handleSqlFiles; }

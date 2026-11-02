@@ -74,6 +74,7 @@ public class SqlEditorSettingsPageFixtureTest extends BasePlatformTestCase {
                 new Toggle("Syntax highlighting", settings::isHighlighting),
                 new Toggle("Code completion", settings::isCompletion),
                 new Toggle("Hover documentation", settings::isHover),
+                new Toggle("Show SQL cards", settings::isSqlCards),
                 new Toggle("Validation", settings::isValidation),
                 new Toggle("Recognize SQL in strings", settings::isInjection),
                 new Toggle("Strings marked", settings::isInjectExplicit),
@@ -93,6 +94,16 @@ public class SqlEditorSettingsPageFixtureTest extends BasePlatformTestCase {
             page.apply();
             assertTrue(toggle.saved().getAsBoolean());
         }
+    }
+
+    public void testShowSqlCardsCheckboxBindsSetting() {
+        SqlEditorSettings settings = SqlEditorSettings.getInstance();
+        assertTrue(box("Show SQL cards").isSelected());
+        assertTrue(settings.isSqlCardsEffective());
+        box("Show SQL cards").setSelected(false);
+        page.apply();
+        assertFalse(settings.isSqlCards());
+        assertFalse(settings.isSqlCardsEffective());
     }
 
     public void testTheMasterSwitchIsExplicitOnceChanged() {

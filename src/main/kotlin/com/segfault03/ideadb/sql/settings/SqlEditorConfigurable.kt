@@ -90,6 +90,11 @@ class SqlEditorConfigurable : BoundConfigurable("Lattice SQL Editor"), Searchabl
                         .bindSelected({ settings.isHover() }, { settings.setHover(it) })
                 }
                 row {
+                    checkBox("Show SQL cards")
+                        .comment("A card and hover toolbar on SQL in strings and .sql files")
+                        .bindSelected({ settings.isSqlCards() }, { settings.setSqlCards(it) })
+                }
+                row {
                     checkBox("Validation")
                         .comment("Syntax errors, unknown tables and columns")
                         .bindSelected({ settings.isValidation() }, { settings.setValidation(it) })
