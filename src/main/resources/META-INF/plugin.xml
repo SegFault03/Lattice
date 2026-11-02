@@ -126,6 +126,7 @@
                          enabledByDefault="true" level="WARNING" implementationClass="com.segfault03.ideadb.sql.validate.LatticeSqlAliasInspection"/>
         <lang.inspectionSuppressor language="LatticeSQL" implementationClass="com.segfault03.ideadb.sql.validate.LatticeSqlInspectionSuppressor"/>
         <highlightingPassFactory implementation="com.segfault03.ideadb.sql.card.SqlCardPassFactory"/>
+        <editorFactoryListener implementation="com.segfault03.ideadb.sql.card.SqlCardEditorListener"/>
         <editorNotificationProvider implementation="com.segfault03.ideadb.sql.binding.SqlConnectionBanner"/>
         <statusBarWidgetFactory id="com.segfault03.lattice.sql.connection"
                                 implementation="com.segfault03.ideadb.sql.binding.SqlConnectionWidgetFactory"/>
