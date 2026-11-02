@@ -1,6 +1,7 @@
 package com.segfault03.ideadb.sql.run;
 
 import com.intellij.codeInsight.hint.HintManager;
+import com.intellij.icons.AllIcons;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
@@ -58,6 +59,11 @@ final class SqlRunActionSupport {
             String refusal = cardRefusal(card, use, isBound(project, file));
             presentation.setVisible(true);
             presentation.setEnabled(refusal == null);
+            presentation.setIcon(switch (use) {
+                case ROLLBACK -> AllIcons.Actions.Rollback;
+                case CONSOLE -> AllIcons.Debugger.Console;
+                case EXPLAIN -> AllIcons.Actions.Preview;
+            });
             if (refusal != null) presentation.setDescription(refusal);
             return;
         }

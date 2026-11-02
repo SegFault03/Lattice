@@ -165,6 +165,26 @@
                 description="Choose the connection whose dialect applies to this SQL file">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
+        <!-- The hover toolbar of a SQL card; in no menu. -->
+        <group id="com.segfault03.lattice.sql.card.toolbar">
+            <action id="com.segfault03.lattice.sql.card.noConnection"
+                    class="com.segfault03.ideadb.sql.card.NoConnectionChipAction"
+                    text="No connection"
+                    description="Choose the connection for this file"
+                    icon="AllIcons.General.Warning"/>
+            <reference ref="com.segfault03.lattice.sql.run.rollback"/>
+            <reference ref="com.segfault03.lattice.sql.run.sendToConsole"/>
+            <action id="com.segfault03.lattice.sql.card.copy"
+                    class="com.segfault03.ideadb.sql.card.CopySqlAction"
+                    text="Copy SQL"
+                    description="Copy the SQL as plain text, with ? for the parts built at run time"
+                    icon="AllIcons.Actions.Copy"/>
+            <separator/>
+            <group id="com.segfault03.lattice.sql.card.more" text="More" popup="true" icon="AllIcons.Actions.More">
+                <reference ref="com.segfault03.lattice.sql.run.explain"/>
+                <reference ref="com.segfault03.lattice.sql.chooseFileConnection"/>
+            </group>
+        </group>
         <action id="com.segfault03.lattice.sql.chooseProjectConnection"
                 class="com.segfault03.ideadb.sql.binding.ChooseProjectSqlConnectionAction"
                 text="Lattice: SQL Connection for Project..."
