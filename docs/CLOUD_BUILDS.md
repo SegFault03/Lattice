@@ -10,7 +10,8 @@ This guide covers building and testing Lattice in Claude cloud sessions (ephemer
 - `plugins.gradle.org` resolves normally.
 - `packages.jetbrains.team` returns 404 through the proxy for most paths. `cache-redirector.jetbrains.com/intellij-dependencies` serves some artifacts (for example JCEF).
 - The IntelliJ release repository serves the IDE Starter test libraries (`com.jetbrains.intellij.tools:ide-starter`, `ide-performance-testing-commands`, `ide-util-common` and the rest of that group), which are not in Central or its mirror. Use it through the redirector: `https://cache-redirector.jetbrains.com/www.jetbrains.com/intellij-repository/releases`.
-- A Central mirror that works: `https://maven-central.storage-download.googleapis.com/maven2`. It does not host IntelliJ `bundledModule` artifacts or every JetBrains tooling jar.
+- A Central mirror that works: `https://maven-central.storage-download.googleapis.com/maven2`. It does not host IntelliJ `bundledModule` artifacts or every JetBrains tooling jar, and it lacks `maven-metadata.xml` for some groups, such as `com.jetbrains.intellij.platform:test-framework`.
+- A second Central mirror: `https://repo.huaweicloud.com/repository/maven`. It carries the metadata the Google mirror lacks, for example `com/jetbrains/intellij/java/java-compiler-ant-tasks`.
 - Each new session gets a fresh VM and a fresh clone. `~/.gradle`, the init script and anything installed mid-session do not carry over by default.
 - The exception is the environment cache. If the environment's setup script finishes in roughly five minutes, Anthropic snapshots the filesystem and new sessions start from that snapshot, skipping the script. The snapshot rebuilds when the script or allowed hosts change, and expires after about seven days. A script that runs longer than five minutes is not cached.
 
@@ -47,6 +48,7 @@ Create `~/.gradle/init.d/mirror.gradle.kts`:
 
 ```kotlin
 val centralMirror = "https://maven-central.storage-download.googleapis.com/maven2"
+val huaweiMirror = "https://repo.huaweicloud.com/repository/maven"
 val jetbrainsDeps = "https://cache-redirector.jetbrains.com/intellij-dependencies"
 val jetbrainsReleases = "https://cache-redirector.jetbrains.com/www.jetbrains.com/intellij-repository/releases"
 
@@ -60,6 +62,11 @@ fun org.gradle.api.artifacts.dsl.RepositoryHandler.prependMirror() {
     val mirror = maven { name = "centralMirror"; url = uri(centralMirror) }
     remove(mirror)
     add(0, mirror)
+    val huawei = maven { name = "huaweiMirror"; url = uri(huaweiMirror) }
+    remove(huawei)
+    add(1, huawei)
+    // Dynamic versions query every repository for metadata, so one 429 from Central fails the build: drop Central.
+    removeAll { it is org.gradle.api.artifacts.repositories.MavenArtifactRepository && it.url.host in setOf("repo.maven.apache.org", "repo1.maven.org") }
 }
 
 beforeSettings {
@@ -81,6 +88,12 @@ Notes:
 - The file is per-container. Recreate it each session, or add it to the environment setup script.
 
 If the build still returns 429 after the mirror is in place, wait several minutes and retry. Do not loop tightly; each attempt counts against the shared limit.
+
+## Failure: `Could not GET .../maven-metadata.xml` (429) with the mirror already in place
+
+Platform test tasks (`javaPlatformTest`, `kotlinPlatformTest`) resolve dynamic versions such as `test-framework:{strictly [251, 251.23774.435]}`. Gradle asks every repository for the metadata, and a 429 from Central fails the build even when a mirror answers first.
+
+Fix: the init script above removes the Central repositories (`repo.maven.apache.org`, `repo1.maven.org`) after prepending the mirrors, and adds the Huawei mirror behind the Google one. The IntelliJ release repository serves the `com.jetbrains.intellij.*` platform artifacts. Check a coordinate by hand with `curl -sL -o /dev/null -w '%{http_code}\n' <mirror>/<group path>/maven-metadata.xml`.
 
 ## Failure: `ide-starter`, `ide-performance-testing-commands` or `ide-util-common` not resolved
 
