@@ -121,7 +121,7 @@ public class ConnectionDialog extends DialogWrapper {
 
     // Preview and action components
     private JBLabel urlPreviewLabel;
-    private final ActionLink testButton = new ActionLink("Test connection");
+    private final JButton testButton = new JButton("Test connection");
     private final JBLabel testStatusLabel = new JBLabel("");
 
     public ConnectionDialog(@Nullable Project project, ConnectionConfig config) {
@@ -141,7 +141,6 @@ public class ConnectionDialog extends DialogWrapper {
                     config.getDriverVersion(), config.getDriverJarPath()));
         }
         this.showUrlPreview = !newConnection;
-        testButton.setAutoHideOnDisable(false);
         setTitle(newConnection ? "New connection" : "Edit connection");
         setOKButtonText(newConnection ? "Add connection" : "Save");
         init();
@@ -383,7 +382,9 @@ public class ConnectionDialog extends DialogWrapper {
                 BorderFactory.createCompoundBorder(
                         JBUI.Borders.customLineTop(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR),
                         JBUI.Borders.empty(12, 0, 0, 0))));
-        actions.add(testButton, BorderLayout.WEST);
+        JPanel testSlot = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        testSlot.add(testButton);
+        actions.add(testSlot, BorderLayout.WEST);
         JComponent defaultButtons = super.createSouthPanel();
         if (defaultButtons != null) actions.add(defaultButtons, BorderLayout.EAST);
         south.add(actions, BorderLayout.CENTER);
@@ -392,16 +393,16 @@ public class ConnectionDialog extends DialogWrapper {
 
     private JPanel createMysqlPanel() {
         ConnectionFormPanel form = new ConnectionFormPanel();
-        mysqlHostField = ConnectionFormPanel.width(DatabaseInputs.textField("localhost"), 220);
+        mysqlHostField = ConnectionFormPanel.width(DatabaseInputs.textField("localhost"), 360);
         mysqlPortField = ConnectionFormPanel.width(DatabaseInputs.textField("3306"), 76);
         form.addRow(0, "Host:", mysqlHostField, false);
         form.addRow(1, "Port:", mysqlPortField, false);
-        mysqlDatabaseField = ConnectionFormPanel.width(DatabaseInputs.textField(), 220);
+        mysqlDatabaseField = ConnectionFormPanel.width(DatabaseInputs.textField(), 360);
         form.addRow(2, "Database:", mysqlDatabaseField, false);
-        mysqlUserField = ConnectionFormPanel.width(DatabaseInputs.textField(), 220);
+        mysqlUserField = ConnectionFormPanel.width(DatabaseInputs.textField(), 360);
         form.addSection(3, "Authentication");
         form.addRow(4, "User:", mysqlUserField, false);
-        mysqlPasswordField = ConnectionFormPanel.width(DatabaseInputs.passwordField(), 220);
+        mysqlPasswordField = ConnectionFormPanel.width(DatabaseInputs.passwordField(), 360);
         form.addRow(5, "Password:", mysqlPasswordField, false);
         return form;
     }
@@ -424,11 +425,11 @@ public class ConnectionDialog extends DialogWrapper {
         hsqlSubCardLayout = new CardLayout();
         hsqlSubCardPanel = new VisibleCardPanel(hsqlSubCardLayout);
         ConnectionFormPanel serverForm = new ConnectionFormPanel();
-        hsqlServerHostField = ConnectionFormPanel.width(DatabaseInputs.textField("localhost"), 220);
+        hsqlServerHostField = ConnectionFormPanel.width(DatabaseInputs.textField("localhost"), 360);
         hsqlServerPortField = ConnectionFormPanel.width(DatabaseInputs.textField("9001"), 76);
         serverForm.addRow(0, "Host:", hsqlServerHostField, false);
         serverForm.addRow(1, "Port:", hsqlServerPortField, false);
-        hsqlServerDbField = ConnectionFormPanel.width(DatabaseInputs.textField(), 220);
+        hsqlServerDbField = ConnectionFormPanel.width(DatabaseInputs.textField(), 360);
         serverForm.addRow(2, "Database:", hsqlServerDbField, false);
         hsqlSubCardPanel.add(serverForm, HsqlMode.SERVER.name());
 
@@ -440,15 +441,15 @@ public class ConnectionDialog extends DialogWrapper {
         hsqlSubCardPanel.add(fileForm, HsqlMode.FILE.name());
 
         ConnectionFormPanel memoryForm = new ConnectionFormPanel();
-        hsqlMemNameField = ConnectionFormPanel.width(DatabaseInputs.textField(), 220);
+        hsqlMemNameField = ConnectionFormPanel.width(DatabaseInputs.textField(), 360);
         memoryForm.addRow(0, "Database name:", hsqlMemNameField, false);
         hsqlSubCardPanel.add(memoryForm, HsqlMode.MEM.name());
         form.addFullWidthRow(1, hsqlSubCardPanel);
 
-        hsqlUserField = ConnectionFormPanel.width(DatabaseInputs.textField(), 220);
+        hsqlUserField = ConnectionFormPanel.width(DatabaseInputs.textField(), 360);
         form.addSection(2, "Authentication");
         form.addRow(3, "User:", hsqlUserField, false);
-        hsqlPasswordField = ConnectionFormPanel.width(DatabaseInputs.passwordField(), 220);
+        hsqlPasswordField = ConnectionFormPanel.width(DatabaseInputs.passwordField(), 360);
         form.addRow(4, "Password:", hsqlPasswordField, false);
         return form;
     }
@@ -457,10 +458,10 @@ public class ConnectionDialog extends DialogWrapper {
         ConnectionFormPanel form = new ConnectionFormPanel();
         customUrlField = ConnectionFormPanel.width(DatabaseInputs.textField(), 360);
         form.addRow(0, "JDBC URL:", customUrlField, false);
-        customUrlUserField = ConnectionFormPanel.width(DatabaseInputs.textField(), 220);
+        customUrlUserField = ConnectionFormPanel.width(DatabaseInputs.textField(), 360);
         form.addSection(1, "Authentication");
         form.addRow(2, "User:", customUrlUserField, false);
-        customUrlPasswordField = ConnectionFormPanel.width(DatabaseInputs.passwordField(), 220);
+        customUrlPasswordField = ConnectionFormPanel.width(DatabaseInputs.passwordField(), 360);
         form.addRow(3, "Password:", customUrlPasswordField, false);
         JBLabel noteLabel = new JBLabel("<html><body width='340'>Enter the full JDBC connection string. Credentials entered above will be passed to the driver.</body></html>");
         noteLabel.setForeground(JBColor.GRAY);

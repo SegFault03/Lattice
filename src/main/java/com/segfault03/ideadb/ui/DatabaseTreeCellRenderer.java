@@ -91,14 +91,15 @@ public class DatabaseTreeCellRenderer extends ColoredTreeCellRenderer {
                     }
 
                     append(" : " + col.getFormattedType(), SimpleTextAttributes.GRAYED_ATTRIBUTES);
+                    // Constraints read as one quiet list at the type's size; a smaller font swallowed their spaces.
                     if (col.isPrimaryKey()) {
-                        append(" PK", data.isCached() ? SimpleTextAttributes.GRAYED_ATTRIBUTES : SimpleTextAttributes.DARK_TEXT);
+                        append(" · PK", data.isCached() ? SimpleTextAttributes.GRAYED_ATTRIBUTES : SimpleTextAttributes.DARK_TEXT);
                     }
-                    if (!col.isNullable()) {
-                        append(" NOT NULL", SimpleTextAttributes.GRAYED_SMALL_ATTRIBUTES);
+                    if (!col.isNullable() && !col.isPrimaryKey()) {
+                        append(" · NOT NULL", SimpleTextAttributes.GRAYED_ATTRIBUTES);
                     }
                     if (col.isAutoIncrement()) {
-                        append(" Auto", SimpleTextAttributes.GRAYED_SMALL_ATTRIBUTES);
+                        append(" · auto", SimpleTextAttributes.GRAYED_ATTRIBUTES);
                     }
                 } else {
                     setIcon(Icons.COLUMN);

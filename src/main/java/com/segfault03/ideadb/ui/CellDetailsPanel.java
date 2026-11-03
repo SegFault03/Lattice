@@ -2,7 +2,6 @@ package com.segfault03.ideadb.ui;
 
 import com.intellij.icons.AllIcons;
 import com.intellij.ui.JBColor;
-import com.intellij.util.IconUtil;
 import com.intellij.util.ui.JBUI;
 import com.segfault03.ideadb.model.ColumnMetadata;
 import com.segfault03.ideadb.model.RowDefaults;
@@ -81,7 +80,7 @@ final class CellDetailsPanel extends JPanel {
     private final JToggleButton formattedTab = new PresentationToggle("Formatted");
     private final JToggleButton rawTab = new PresentationToggle("Raw");
     private final JToggleButton wrap = new PresentationToggle("Wrap");
-    private final JButton edit = new InspectorButton("Edit value", AllIcons.Actions.Edit, ButtonStyle.PRIMARY);
+    private final JButton edit = new InspectorButton("Edit value", AllIcons.Actions.Edit, ButtonStyle.SECONDARY);
     private final JButton copy = new QuietButton("", AllIcons.Actions.Copy);
     private final JButton setNull = new InspectorButton("Set NULL", null, ButtonStyle.SECONDARY);
     private final JButton useDefault = new InspectorButton("Set default", null, ButtonStyle.SECONDARY);
@@ -806,7 +805,8 @@ final class CellDetailsPanel extends JPanel {
     private void refreshTheme() {
         if (valueArea == null) return;
         lastLookAndFeel = UIManager.getLookAndFeel();
-        Color panelBackground = new JBColor(0xF7F8FA, 0x25262A);
+        // The editor's own panel color, so the docked inspector reads as part of the editor chrome beside it.
+        Color panelBackground = com.intellij.util.ui.UIUtil.getPanelBackground();
         setBackground(panelBackground);
         header.setBackground(panelBackground);
         footer.setBackground(panelBackground);
@@ -866,10 +866,6 @@ final class CellDetailsPanel extends JPanel {
         copy.setForeground(JBColor.foreground());
         cancel.setForeground(JBColor.foreground());
         refreshTextToggle(formattedTab); refreshTextToggle(rawTab); refreshTextToggle(wrap);
-        edit.setIcon(IconUtil.filterIcon(AllIcons.Actions.Edit,
-                () -> new java.awt.image.RGBImageFilter() {
-                    @Override public int filterRGB(int x, int y, int rgb) { return (rgb & 0xFF000000) | 0xFFFFFF; }
-                }, null));
         resizeContentBlocks();
         revalidate(); repaint();
     }

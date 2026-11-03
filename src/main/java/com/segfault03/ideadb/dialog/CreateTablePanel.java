@@ -41,7 +41,7 @@ public final class CreateTablePanel extends JPanel {
     private final JButton down = DatabaseUi.action("", AllIcons.Actions.MoveDown, "Move column down");
     private final JButton create = DatabaseUi.dialogAction("Create table", AllIcons.General.Add, "Create new table");
     private final JButton cancel = new JButton("Cancel");
-    private final JLabel heading = new JLabel(), position = new JLabel(), count = new JLabel(), keys = new JLabel();
+    private final JLabel heading = new JLabel(), position = new JLabel(), count = new WrappingLabel("");
     private final JLabel summary = new JLabel(), status = new WrappingLabel("Ready"), empty = new JLabel("No matching columns");
     private final JTextPane sql = new JTextPane();
     private final JPanel form = vertical();
@@ -103,11 +103,7 @@ public final class CreateTablePanel extends JPanel {
         GridBagConstraints cell=new GridBagConstraints();cell.gridx=0;cell.gridy=0;cell.weightx=1;cell.fill=GridBagConstraints.HORIZONTAL;
         cell.anchor=GridBagConstraints.WEST;cell.insets=JBUI.insetsBottom(4);identity.add(label,cell);
         cell.gridy=1;cell.insets=JBUI.emptyInsets();cell.anchor=GridBagConstraints.BASELINE_LEADING;identity.add(tableName,cell);
-        count.setForeground(accent());keys.setForeground(info());
-        count.getAccessibleContext().setAccessibleName("Table column count");
-        keys.getAccessibleContext().setAccessibleName("Table primary key count");
-        cell.gridx=1;cell.weightx=0;cell.fill=GridBagConstraints.NONE;cell.insets=JBUI.insetsLeft(24);identity.add(count,cell);
-        cell.gridx=2;cell.insets=JBUI.insetsLeft(16);identity.add(keys,cell);return identity;
+        return identity;
     }
     private JComponent sidebar() {
         JPanel sidebar = panel(new BorderLayout(0, JBUI.scale(12))); sidebar.setPreferredSize(JBUI.size(210, 100));
@@ -121,7 +117,8 @@ public final class CreateTablePanel extends JPanel {
         list.getAccessibleContext().setAccessibleName("Table columns"); list.setOpaque(false);
         JBScrollPane scroll = new JBScrollPane(list); scroll.setBorder(JBUI.Borders.empty()); scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         JPanel middle = panel(new BorderLayout()); middle.add(scroll, BorderLayout.CENTER); empty.setForeground(info()); middle.add(empty, BorderLayout.SOUTH); sidebar.add(middle, BorderLayout.CENTER);
-        JPanel bottom = vertical(); JLabel hint = new WrappingLabel("Order follows the column list"); hint.setForeground(info()); stack(bottom, hint); gap(bottom, 12); stack(bottom, new JSeparator()); gap(bottom, 8);
+        list.setToolTipText("Columns are created in this order");
+        JPanel bottom = vertical(); count.setForeground(info()); count.getAccessibleContext().setAccessibleName("Table column count"); stack(bottom, count); gap(bottom, 12); stack(bottom, new JSeparator()); gap(bottom, 8);
         addBottom.setForeground(accent()); stack(bottom, addBottom); sidebar.add(bottom, BorderLayout.SOUTH); return sidebar;
     }
     private JComponent inspector() {
@@ -134,10 +131,10 @@ public final class CreateTablePanel extends JPanel {
         stack(form, field("Column name", name)); gap(form, 8);
         JPanel types = panel(new BorderLayout(JBUI.scale(16), 0)); types.add(field("Data type", type), BorderLayout.CENTER);
         types.add(TableDialogLayout.width(field("Length / precision", length), 160), BorderLayout.EAST);
-        stack(form, types); stack(form, DatabaseUi.section("Values & constraints"));
+        stack(form, types); stack(form, DatabaseUi.section(TableDialogChrome.VALUES_SECTION));
         stack(form, TableDialogChrome.constraints(nullable,primaryKey,identity)); gap(form, 8); stack(form, field("Default value", defaultValue)); gap(form, 4);
         defaultValue.getEmptyText().setText("No default"); defaultValue.putClientProperty("JTextField.placeholderText", "No default");
-        stack(form, help("Blank means no default · TEXT: literal · SQL: expression")); stack(detail, form); gap(detail, 12); stack(detail, preview());
+        defaultValue.setToolTipText(TableDialogChrome.DEFAULT_HELP); stack(form, help("Leave blank for no default. " + TableDialogChrome.DEFAULT_HELP)); stack(detail, form); gap(detail, 12); stack(detail, preview());
         return TableDialogLayout.inspector(detail);
     }
     private JComponent preview() {
@@ -153,7 +150,7 @@ public final class CreateTablePanel extends JPanel {
         JPanel footer = panel(new BorderLayout(JBUI.scale(16), 0)); footer.setBorder(JBUI.Borders.empty(10, 4, 0, 4));
         JPanel feedback = vertical(); summary.setFont(TableDialogChrome.font(Font.BOLD,-1)); stack(feedback, summary); gap(feedback, 3);
         status.setFont(TableDialogChrome.font(Font.PLAIN,-2)); status.getAccessibleContext().setAccessibleName("Create table status"); stack(feedback, status); footer.add(feedback, BorderLayout.CENTER);
-        DatabaseUi.setActionEmphasis(create, DatabaseUi.POSITIVE_ACTION_COLOR);
+        DatabaseUi.setActionEmphasis(create, DatabaseUi.PRIMARY_ACTION_COLOR);
         cancel.getAccessibleContext().setAccessibleName("Cancel create table"); footer.add(TableDialogChrome.buttons(cancel,create), BorderLayout.EAST); return footer;
     }
     private static JCheckBox check(String text, String accessibleName) {
@@ -230,12 +227,12 @@ public final class CreateTablePanel extends JPanel {
                 prepared = new Prepared(snapshot, statement); sql.setText(statement); sql.setCaretPosition(0); highlightSql();
             } catch (IllegalArgumentException | UnsupportedOperationException error) { problem = error.getMessage(); }
         }
-        if (problem != null) sql.setText(problem);
+        if (problem != null) com.segfault03.ideadb.sql.view.SqlSwingHighlighter.message(sql, problem);
         create.setEnabled(!busy && prepared != null);
         long keyColumns = columns.stream().filter(c -> c.values.primaryKey).count();
-        count.setText(columns.size() + " column" + (columns.size() == 1 ? "" : "s"));
-        keys.setText(keyColumns == 0 ? "No primary key" : keyColumns == 1 ? "1 primary key" : "Composite key (" + keyColumns + ")");
-        summary.setText(count.getText() + " · " + keys.getText().toLowerCase(Locale.ROOT));
+        count.setText(columns.size() + " column" + (columns.size() == 1 ? "" : "s") + " · "
+                + (keyColumns == 0 ? "no primary key" : keyColumns == 1 ? "1 primary key" : "composite key (" + keyColumns + ")"));
+        summary.setText("New table · " + namespace + "." + snapshot.name().trim());
         heading.setText(selected == null ? "Add a column" : selected.getName());
         int index = selected == null ? -1 : columns.indexOf(selected); position.setText(index < 0 ? "" : String.format("Column %02d", index+1));
         up.setEnabled(!busy && index > 0); down.setEnabled(!busy && index >= 0 && index < columns.size()-1); remove.setEnabled(!busy && selected != null);
@@ -245,7 +242,7 @@ public final class CreateTablePanel extends JPanel {
         nullable.setEnabled(!busy && v != null && !v.primaryKey && !v.identity);
         identity.setEnabled(!busy && v != null && (v.identity || TableCreation.identityType(config.getType(),v.type)));
         defaultValue.setEnabled(!busy && v != null && (!v.identity || !v.defaultValue.isBlank()));
-        if (!busy) DatabaseUi.status(status, problem == null ? "Ready to create · " + namespace + "." + snapshot.name() : problem, problem == null ? DatabaseUi.Tone.NORMAL : DatabaseUi.Tone.ERROR);
+        if (!busy) DatabaseUi.status(status, problem == null ? "Ready to create" : problem, problem == null ? DatabaseUi.Tone.NORMAL : DatabaseUi.Tone.ERROR);
         list.repaint();
     }
     public void status(String message, DatabaseUi.Tone tone) { DatabaseUi.status(status,message,tone); }
@@ -306,7 +303,7 @@ public final class CreateTablePanel extends JPanel {
             row.setOpaque(false);row.setBorder(JBUI.Borders.empty(9,10));row.add(new JLabel(column.values.primaryKey?Icons.KEY:Icons.COLUMN),BorderLayout.WEST);
             JPanel captions=vertical();JLabel title=new JLabel(column.getName());title.setFont(list.getFont());if(selected){title.setForeground(UIUtil.getListSelectionForeground(list.hasFocus()));title.setFont(title.getFont().deriveFont(Font.BOLD));}
             stack(captions,title);gap(captions,4);JLabel dataType=muted(column.formattedType());dataType.setFont(list.getFont().deriveFont(Math.max(10f,list.getFont().getSize2D()-1)));if(selected)dataType.setForeground(UIUtil.getListSelectionForeground(list.hasFocus()));stack(captions,dataType);row.add(captions,BorderLayout.CENTER);
-            row.add(muted(String.format("%02d",columns.indexOf(column)+1)),BorderLayout.EAST);return row;
+            return row;
         }
     }
 }

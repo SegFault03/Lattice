@@ -13,6 +13,9 @@ import java.awt.*;
 
 /** Shared header, provider badge and native footer geometry for both table editors. */
 final class TableDialogChrome {
+    static final String VALUES_SECTION = "Values & constraints";
+    static final String DEFAULT_HELP = "Prefix SQL: for an expression, TEXT: for exact text.";
+
     private TableDialogChrome() {}
 
     static Font font(int style, int delta) {

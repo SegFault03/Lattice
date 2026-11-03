@@ -893,7 +893,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         }
         DatabaseUi.setActionEmphasis(
                 saveBtn,
-                saveBtn.isEnabled() ? DatabaseUi.POSITIVE_ACTION_COLOR : null
+                saveBtn.isEnabled() ? DatabaseUi.PRIMARY_ACTION_COLOR : null
         );
         updateValidationDetails(errors);
         updateContextActions();

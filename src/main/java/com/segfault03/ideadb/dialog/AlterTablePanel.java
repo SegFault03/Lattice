@@ -131,13 +131,13 @@ public final class AlterTablePanel extends JPanel {
         typeRow.add(TableDialogLayout.width(lengthGroup, 160), BorderLayout.EAST); stack(definition, typeRow); gap(definition, 4);
         hint.setForeground(info()); hint.setFont(TableDialogChrome.font(Font.PLAIN,-1)); stack(definition, hint);
         stack(detail, definition);
-        stack(values, DatabaseUi.section("Values"));
+        stack(values, DatabaseUi.section(TableDialogChrome.VALUES_SECTION));
         nullable.setOpaque(false); stack(values, TableDialogChrome.constraints(nullable)); gap(values, 8);
         stack(values, field(new JLabel("Default value"), defaultValue, "Default value")); gap(values, 4);
         defaultValue.putClientProperty("JTextField.placeholderText", "No default");
         defaultValue.getEmptyText().setText("No default");
-        defaultValue.setToolTipText("Blank removes the default. Use TEXT: for a literal or SQL: for an expression.");
-        stack(values, help("Blank removes the default · TEXT: literal · SQL: expression"));
+        defaultValue.setToolTipText(TableDialogChrome.DEFAULT_HELP);
+        stack(values, help("Leave blank to remove the default. " + TableDialogChrome.DEFAULT_HELP));
         stack(detail, values);
         warnings.setBorder(JBUI.Borders.empty(8, 0)); warning.setForeground(JBColor.namedColor("Label.warningForeground", new JBColor(0x88600C, 0xE5BA6A)));
         stack(warnings, warning); stack(detail, warnings); gap(detail, 12);
@@ -318,9 +318,10 @@ public final class AlterTablePanel extends JPanel {
         long count = Math.max(changes.size(), drafts.stream().filter(this::draftChanged).count() + (!tableDraft.trim().equals(tableName) ? 1 : 0));
         summary.setText(pending ? count + " pending change" + (count == 1 ? "" : "s") : "No pending changes");
         apply.setText("Apply " + (count > 1 ? "all changes" : "changes"));
-        DatabaseUi.setActionEmphasis(apply, changes.stream().anyMatch(c -> c.kind() == TableAlteration.Kind.DROP) ? DatabaseUi.DESTRUCTIVE_ACTION_COLOR : DatabaseUi.POSITIVE_ACTION_COLOR);
+        DatabaseUi.setActionEmphasis(apply, changes.stream().anyMatch(c -> c.kind() == TableAlteration.Kind.DROP) ? DatabaseUi.DESTRUCTIVE_ACTION_COLOR : DatabaseUi.PRIMARY_ACTION_COLOR);
         long keys = columns.stream().filter(ColumnMetadata::isPrimaryKey).count();
-        columnCount.setText(drafts.size() + " columns · " + keys + " primary key" + (keys == 1 ? "" : "s"));
+        columnCount.setText(drafts.size() + " column" + (drafts.size() == 1 ? "" : "s") + " · "
+                + (keys == 0 ? "no primary key" : keys == 1 ? "1 primary key" : "composite key (" + keys + ")"));
         boolean properties = !tableMode && selected != null && !selected.dropped;
         ColumnMetadata original = selected == null ? null : selected.original;
         boolean generated = original != null && original.isGenerated();
@@ -332,7 +333,7 @@ public final class AlterTablePanel extends JPanel {
         revert.setEnabled(!busy && selected != null && draftChanged(selected));
         hint.setText(TableAlteration.numeric(currentType) ? "Precision, scale · for example 10, 2"
                 : original != null ? "Original type: " + original.getFormattedType() : "Maximum number of characters or bytes.");
-        sql.setText(problem != null && pending ? problem : pending ? "Preparing SQL preview…" : "Edit columns to preview the complete batch.");
+        com.segfault03.ideadb.sql.view.SqlSwingHighlighter.message(sql, problem != null && pending ? problem : pending ? "Preparing SQL preview…" : "Edit columns to preview the complete batch.");
         DatabaseUi.status(status, pending && problem != null ? problem : pending ? "Preparing batch preview…" : "Ready", pending && problem != null ? DatabaseUi.Tone.ERROR : DatabaseUi.Tone.NORMAL);
         columnList.repaint(); changed.run();
     }
@@ -344,7 +345,7 @@ public final class AlterTablePanel extends JPanel {
     }
     public void previewFailed(TableAlterationBatch request, String message) {
         if (!Objects.equals(request, batch) || busy) return;
-        prepared = null; apply.setEnabled(false); sql.setText("Batch preview unavailable. Reload columns or correct the values to retry.");
+        prepared = null; apply.setEnabled(false); com.segfault03.ideadb.sql.view.SqlSwingHighlighter.message(sql, "Batch preview unavailable. Reload columns or correct the values to retry.");
         DatabaseUi.status(status, message, DatabaseUi.Tone.ERROR);
     }
     public void status(String message, DatabaseUi.Tone tone) { DatabaseUi.status(status, message, tone); }

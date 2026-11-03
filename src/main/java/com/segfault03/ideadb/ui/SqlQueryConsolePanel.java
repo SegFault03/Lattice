@@ -218,16 +218,17 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         add(splitter, BorderLayout.CENTER);
 
         // South: Status Bar
-        JPanel statusBar = new JPanel(new WidthAwareBorderLayout(0, JBUI.scale(4)));
+        JPanel statusBar = new JPanel(new WidthAwareBorderLayout(JBUI.scale(8), JBUI.scale(4)));
         statusBar.setBorder(BorderFactory.createCompoundBorder(
                 JBUI.Borders.customLineTop(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR), JBUI.Borders.empty(4, 12)));
         statusLabel = new WrappingLabel("Ready");
         statusLabel.getAccessibleContext().setAccessibleName("SQL query status");
-        statusBar.add(statusLabel, BorderLayout.NORTH);
+        // One row, like the table editor's footer: the status reads left and the row limit sits at the right.
         JPanel limitRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 0, 0));
         limitRow.setOpaque(false);
         limitRow.add(DatabaseUi.labeledInput(new JBLabel("Max rows"), resultLimit));
-        statusBar.add(limitRow, BorderLayout.CENTER);
+        statusBar.add(statusLabel, BorderLayout.CENTER);
+        statusBar.add(limitRow, BorderLayout.EAST);
         add(statusBar, BorderLayout.SOUTH);
     }
 

@@ -46,6 +46,20 @@ public final class SqlSwingHighlighter {
         document.setCharacterAttributes(0, document.getLength(), plain, true);
     }
 
+    /** Shows a message in the place of SQL, in the interface font and the secondary text color. */
+    public static void message(@NotNull JTextPane pane, @NotNull String text) {
+        pane.setText(text);
+        StyledDocument document = pane.getStyledDocument();
+        SimpleAttributeSet prose = new SimpleAttributeSet();
+        Font font = javax.swing.UIManager.getFont("Label.font");
+        if (font != null) StyleConstants.setFontFamily(prose, font.getFamily());
+        StyleConstants.setForeground(prose, JBColor.namedColor("Lattice.secondaryForeground", new JBColor(0x6B7078, 0xA8ADB5)));
+        StyleConstants.setBold(prose, false);
+        StyleConstants.setItalic(prose, false);
+        document.setCharacterAttributes(0, document.getLength(), prose, true);
+        pane.setCaretPosition(0);
+    }
+
     /** Colors the text now in the pane by syntax alone. Call again whenever the text is replaced. */
     public static void apply(@NotNull JTextPane pane, @NotNull SqlDialectProfile profile) { apply(pane, profile, null); }
 

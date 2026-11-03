@@ -15,6 +15,8 @@ import java.awt.event.ActionEvent;
 /** Shared spacing and quiet native action styling for database editor controls. */
 public final class DatabaseUi {
     public static final Color POSITIVE_ACTION_COLOR = new JBColor(new Color(0x2E7D32), new Color(0x238636));
+    /** The platform's default-button blue, for the one action a dialog or editor is for. */
+    public static final Color PRIMARY_ACTION_COLOR = JBColor.namedColor("Button.default.startBackground", new JBColor(0x3574F0, 0x3574F0));
     public static final Color DESTRUCTIVE_ACTION_COLOR = new JBColor(new Color(0xC62828), new Color(0xC43D3D));
     // The new UI's toggled tool button fill; a theme's pressed color can be its light default under a dark theme.
     private static final Color TOGGLED_ACTION_BACKGROUND = new JBColor(new Color(0xDFE1E5), new Color(0x43454A));
