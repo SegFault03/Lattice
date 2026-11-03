@@ -19,7 +19,8 @@ public final class CopySqlAction extends AnAction implements DumbAware {
     @Override public @NotNull ActionUpdateThread getActionUpdateThread() { return ActionUpdateThread.BGT; }
 
     @Override public void update(@NotNull AnActionEvent event) {
-        event.getPresentation().setEnabledAndVisible(event.getData(SqlCardDataKeys.SQL_CARD) != null);
+        // Present while the card is being read again after an edit, so the toolbar does not change shape as you type.
+        event.getPresentation().setEnabled(event.getData(SqlCardDataKeys.SQL_CARD) != null);
     }
 
     @Override public void actionPerformed(@NotNull AnActionEvent event) {

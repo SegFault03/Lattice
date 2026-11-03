@@ -54,9 +54,13 @@ import java.util.Optional;
 
 /**
  * Shows the card toolbar in a popup above the card that never takes focus: for the card under the mouse (when
- * {@link SqlCardHoverTimer} says so), else for the card the caret is in, so a click inside a card keeps the toolbar. Typing,
- * scrolling or the editor losing focus hide it at once; it comes back once the card has been read again (after typing)
- * or the scrolling has stopped, if the caret is still in the card.
+ * {@link SqlCardHoverTimer} says so), else for the card the caret is in. A toolbar shown for the caret's card is pinned: it
+ * stays through clicks, typing and scrolling for as long as the caret is in the card, following the card as it changes
+ * and moves. Typing and scrolling hide a toolbar that is only there because the mouse rests on a card, and the editor
+ * losing focus or an action running hides either.
+ *
+ * <p>While a card's SQL is being read again after an edit, its toolbar offers no card to its actions, so they work on the
+ * statement at the caret (which is the pinned card) and Copy SQL waits, instead of using SQL that has changed.
  */
 final class SqlCardHoverController implements Disposable {
     static final String TOOLBAR_GROUP = "com.segfault03.lattice.sql.card.toolbar";
@@ -83,6 +87,9 @@ final class SqlCardHoverController implements Disposable {
     private @Nullable JPanel panel;
     /** The card whose toolbar an action has just closed; the caret does not bring it back until the caret leaves the card. */
     private @Nullable RangeHighlighter suppressed;
+    /** Whether the toolbar shown is for the card the caret is in, so edits and scrolling move it instead of closing it. */
+    private boolean pinned;
+    private @Nullable ActionToolbar actionToolbar;
     private boolean focusedForTests;
 
     private SqlCardHoverController(@NotNull Editor editor) {
@@ -102,7 +109,7 @@ final class SqlCardHoverController implements Disposable {
             @Override public void caretPositionChanged(@NotNull CaretEvent event) { caretMoved(); }
         }, this);
         editor.getDocument().addDocumentListener(new DocumentListener() {
-            @Override public void documentChanged(@NotNull DocumentEvent event) { hideNow(); }
+            @Override public void documentChanged(@NotNull DocumentEvent event) { edited(); }
         }, this);
         editor.getContentComponent().addFocusListener(focus);
         editor.getContentComponent().addHierarchyListener(showing);
@@ -163,9 +170,10 @@ final class SqlCardHoverController implements Disposable {
 
     /** Shows the toolbar of the card the mouse has rested on, else of the card the caret is in, else none. */
     private void refresh() {
-        if (shown != null && !shown.isValid()) hideNow();
-        Optional<RangeHighlighter> due = timer.due(System.currentTimeMillis());
-        show(due.orElseGet(this::anchor));
+        RangeHighlighter caret = anchor();
+        RangeHighlighter target = timer.due(System.currentTimeMillis()).orElse(caret);
+        pinned = target != null && target == caret;
+        show(target);
     }
 
     /** The card the caret is in, when the toolbar may show for it: the editor has the focus, the card is in view and no action has just closed it. */
@@ -194,14 +202,43 @@ final class SqlCardHoverController implements Disposable {
         refresh();
     }
 
-    /** Scrolling takes the toolbar away; it returns once the editor has been still for a moment. */
-    private void scrolled() {
-        hideNow();
-        quiet.restart();
+    /**
+     * The text changed. A toolbar pinned to the caret's card stays and follows the card, which is read again in a moment;
+     * one that is only there for the mouse goes, as the card under it is about to change.
+     */
+    private void edited() {
+        if (pinned && shown != null && shown.isValid()) {
+            reposition();
+            updateActions();
+        } else {
+            hideNow();
+        }
     }
 
-    /** The card pass has read the cards again, so a card the caret is in can show its toolbar once more. */
-    void cardsChanged() { refresh(); }
+    /**
+     * A pinned toolbar follows its card as the editor scrolls, and goes while the card is out of view and comes back when it
+     * is in view again. One that is there for the mouse goes, and returns once the editor has been still for a moment.
+     */
+    private void scrolled() {
+        if (shown != null && !pinned) {
+            hideNow();
+            quiet.restart();
+            return;
+        }
+        refresh();
+        reposition();
+    }
+
+    /** The card pass has read the cards again: a pinned toolbar moves to the card that replaced its card, and one for the caret's card can show. */
+    void cardsChanged() {
+        refresh();
+        updateActions();
+    }
+
+    private void updateActions() {
+        ActionToolbar toolbar = actionToolbar;
+        if (toolbar != null) toolbar.updateActionsAsync();
+    }
 
     /** The mouse is on the toolbar, or one of its menus is open. */
     private boolean overToolbar() {
@@ -210,16 +247,49 @@ final class SqlCardHoverController implements Disposable {
                 && (current.getMousePosition(true) != null || !JBPopupFactory.getInstance().getChildPopups(current).isEmpty());
     }
 
-    /** A card read before the last edit is not shown: its SQL and its actions' states may no longer hold. */
+    /**
+     * A card read before the last edit is not opened: its SQL and its actions' states may no longer hold. One that is
+     * already showing stays while it is read again, with its actions held back; when it is replaced by the card read
+     * from the new text, the toolbar moves to that card instead of closing and opening again.
+     */
     private void show(@Nullable RangeHighlighter highlighter) {
+        if (highlighter != null && highlighter == shown && highlighter.isValid()) return;
         if (highlighter != null && !SqlCardPass.isFresh(editor, highlighter)) highlighter = null;
         if (highlighter == shown) return;
+        if (highlighter != null && shown != null && !shown.isValid() && popup != null && !popup.isDisposed() && pinned) {
+            rebind(highlighter);
+            return;
+        }
         hidePopup();
         if (highlighter == null) return;
         shown = highlighter;
         highlighter.putUserData(SqlCardPass.HOVERED, Boolean.TRUE);
         repaint(highlighter);
         if (!GraphicsEnvironment.isHeadless()) openPopup(highlighter);
+    }
+
+    /** The toolbar that was showing for a card that has been replaced shows for its replacement. */
+    private void rebind(RangeHighlighter next) {
+        RangeHighlighter previous = shown;
+        shown = next;
+        if (previous != null) previous.putUserData(SqlCardPass.HOVERED, null);
+        next.putUserData(SqlCardPass.HOVERED, Boolean.TRUE);
+        repaint(next);
+        if (panel instanceof CardToolbarPanel card) card.highlighter(next);
+        reposition();
+        updateActions();
+    }
+
+    /** Puts the popup above the card it is shown for, as the card is now. */
+    private void reposition() {
+        JBPopup opened = popup;
+        JPanel content = panel;
+        if (opened == null || content == null) return;
+        ApplicationManager.getApplication().invokeLater(() -> {
+            RangeHighlighter card = shown;
+            if (opened != popup || opened.isDisposed() || !opened.isVisible() || card == null || !card.isValid()) return;
+            opened.setLocation(new RelativePoint(editor.getContentComponent(), placement(content, card)).getScreenPoint());
+        });
     }
 
     private void openPopup(RangeHighlighter highlighter) {
@@ -231,7 +301,8 @@ final class SqlCardHoverController implements Disposable {
         // Laid out at its full width: an auto-layout toolbar sized before its first update folds every button into "more".
         toolbar.setLayoutStrategy(ToolbarLayoutStrategy.NOWRAP_STRATEGY);
         toolbar.setReservePlaceAutoPopupIcon(false);
-        JPanel content = new CardToolbarPanel(project, card);
+        actionToolbar = toolbar;
+        JPanel content = new CardToolbarPanel(project, highlighter);
         toolbar.setTargetComponent(content);
         content.add(toolbar.getComponent(), BorderLayout.CENTER);
         content.addMouseListener(new MouseAdapter() {
@@ -246,8 +317,8 @@ final class SqlCardHoverController implements Disposable {
         // The toolbar fills itself in the background, inside a popup already sized for an empty toolbar; fit the popup
         // to the toolbar each time its buttons change.
         toolbar.getComponent().addContainerListener(new ContainerAdapter() {
-            @Override public void componentAdded(ContainerEvent event) { refit(opened, content, highlighter); }
-            @Override public void componentRemoved(ContainerEvent event) { refit(opened, content, highlighter); }
+            @Override public void componentAdded(ContainerEvent event) { refit(opened, content); }
+            @Override public void componentRemoved(ContainerEvent event) { refit(opened, content); }
         });
         toolbar.updateActionsAsync();
         opened.show(new RelativePoint(editor.getContentComponent(), placement(content, highlighter)));
@@ -268,9 +339,10 @@ final class SqlCardHoverController implements Disposable {
                 editor.getScrollingModel().getVisibleArea());
     }
 
-    private void refit(JBPopup opened, JPanel content, RangeHighlighter highlighter) {
+    private void refit(JBPopup opened, JPanel content) {
         ApplicationManager.getApplication().invokeLater(() -> {
-            if (opened != popup || opened.isDisposed() || !opened.isVisible() || !highlighter.isValid()) return;
+            RangeHighlighter highlighter = shown;
+            if (opened != popup || opened.isDisposed() || !opened.isVisible() || highlighter == null || !highlighter.isValid()) return;
             opened.pack(true, true);
             opened.setLocation(new RelativePoint(editor.getContentComponent(), placement(content, highlighter)).getScreenPoint());
         });
@@ -280,6 +352,7 @@ final class SqlCardHoverController implements Disposable {
     private void popupClosed() {
         popup = null;
         panel = null;
+        actionToolbar = null;
         timer.cancel();
         tick.stop();
         clearShown();
@@ -289,6 +362,7 @@ final class SqlCardHoverController implements Disposable {
         JBPopup closing = popup;
         popup = null;
         panel = null;
+        actionToolbar = null;
         if (closing != null) closing.cancel();
         clearShown();
     }
@@ -350,19 +424,36 @@ final class SqlCardHoverController implements Disposable {
 
     @TestOnly @Nullable SqlCard shownCard() { return shown == null ? null : shown.getUserData(SqlCardPass.CARD); }
 
+    /** What the toolbar's actions would be given: the shown card, unless its text has changed since it was read. */
+    @TestOnly @Nullable SqlCard actionsCard() {
+        RangeHighlighter current = shown;
+        return current != null && SqlCardPass.isFresh(editor, current) ? current.getUserData(SqlCardPass.CARD) : null;
+    }
+
+    @TestOnly boolean pinnedForTests() { return pinned; }
+
     /** The toolbar's data: the card, and the editor and file it belongs to, as the run actions expect. */
     private final class CardToolbarPanel extends JPanel implements UiDataProvider {
         private final Project project;
-        private final SqlCard card;
+        private volatile RangeHighlighter highlighter;
 
-        CardToolbarPanel(Project project, SqlCard card) {
+        CardToolbarPanel(Project project, RangeHighlighter highlighter) {
             super(new BorderLayout());
             this.project = project;
-            this.card = card;
+            this.highlighter = highlighter;
+        }
+
+        void highlighter(RangeHighlighter next) { highlighter = next; }
+
+        /** The card the actions work on: the card as last read, unless the text has changed since. */
+        @Nullable SqlCard card() {
+            RangeHighlighter current = highlighter;
+            return current != null && SqlCardPass.isFresh(editor, current) ? current.getUserData(SqlCardPass.CARD) : null;
         }
 
         @Override public void uiDataSnapshot(@NotNull DataSink sink) {
-            sink.set(SqlCardDataKeys.SQL_CARD, card);
+            SqlCard card = card();
+            if (card != null) sink.set(SqlCardDataKeys.SQL_CARD, card);
             sink.set(CommonDataKeys.PROJECT, project);
             sink.set(CommonDataKeys.EDITOR, editor);
             sink.set(CommonDataKeys.VIRTUAL_FILE, FileDocumentManager.getInstance().getFile(editor.getDocument()));

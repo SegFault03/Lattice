@@ -28,7 +28,7 @@ public final class NoConnectionChipAction extends AnAction implements CustomComp
     @Override public void update(@NotNull AnActionEvent event) {
         Project project = event.getProject();
         VirtualFile file = hostFile(project, event.getData(CommonDataKeys.PSI_FILE));
-        boolean unbound = event.getData(SqlCardDataKeys.SQL_CARD) != null && project != null && file != null
+        boolean unbound = project != null && file != null
                 && SqlDialectResolver.connection(project, file) == null;
         event.getPresentation().setEnabledAndVisible(unbound);
     }

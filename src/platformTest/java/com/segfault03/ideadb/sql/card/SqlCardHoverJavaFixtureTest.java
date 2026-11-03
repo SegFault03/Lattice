@@ -154,26 +154,67 @@ public class SqlCardHoverJavaFixtureTest extends H2SqlFixtureTestCase {
         assertNull(controller.shownCard());
     }
 
-    public void testTypingInTheCardHidesTheToolbarAndItReturnsOnceTheCardIsRead() {
+    public void testTypingInTheCardKeepsThePinnedToolbarAndMovesItToTheCardReadFromTheNewText() {
         List<RangeHighlighter> cards = cards();
         SqlCardHoverController controller = focusedController();
         caretIn(cards.get(0));
-        assertNotNull(controller.shownCard());
+        SqlCard before = controller.shownCard();
+        assertNotNull(before);
+        assertTrue(controller.pinnedForTests());
         myFixture.type(" ");
-        assertNull("it would sit over the text being typed, with actions on SQL that has changed", controller.shownCard());
+        assertNotNull("the toolbar stays while the caret is in the card", controller.shownCard());
+        assertNull("its actions are not given SQL that has changed", controller.actionsCard());
         myFixture.doHighlighting();
-        assertNotNull("the card has been read again and the caret is still in it", controller.shownCard());
+        SqlCard after = controller.shownCard();
+        assertNotNull(after);
+        assertNotSame("it is now the card read from the new text", before, after);
+        assertTrue(after.sql().contains("select  1") || !after.sql().equals(before.sql()));
+        assertSame("the actions have the new card", after, controller.actionsCard());
     }
 
-    public void testScrollingHidesTheToolbarAndItReturnsWhenTheEditorIsStill() {
+    public void testKeepsTypingAndTheToolbarStaysThroughSeveralEdits() {
+        List<RangeHighlighter> cards = cards();
+        SqlCardHoverController controller = focusedController();
+        caretIn(cards.get(0));
+        for (int i = 0; i < 3; i++) {
+            myFixture.type("x");
+            assertNotNull("edit " + i, controller.shownCard());
+            myFixture.doHighlighting();
+            assertNotNull("read again after edit " + i, controller.actionsCard());
+        }
+    }
+
+    public void testTypingHidesAToolbarThatIsOnlyThereForTheMouse() {
+        List<RangeHighlighter> cards = cards();
+        SqlCardHoverController controller = focusedController();
+        myFixture.getEditor().getCaretModel().moveToOffset(0);
+        controller.hoverForTests(cards.get(0));
+        assertNotNull(controller.shownCard());
+        assertFalse(controller.pinnedForTests());
+        myFixture.type(" ");
+        assertNull(controller.shownCard());
+    }
+
+    public void testScrollingKeepsAPinnedToolbar() {
         List<RangeHighlighter> cards = cards();
         SqlCardHoverController controller = focusedController();
         caretIn(cards.get(0));
         assertNotNull(controller.shownCard());
         controller.scrolledForTests();
+        assertSame(cards.get(0).getUserData(SqlCardPass.CARD), controller.shownCard());
+        assertTrue(controller.pinnedForTests());
+    }
+
+    public void testScrollingHidesAToolbarThatIsOnlyThereForTheMouse() {
+        List<RangeHighlighter> cards = cards();
+        SqlCardHoverController controller = focusedController();
+        myFixture.getEditor().getCaretModel().moveToOffset(0);
+        controller.hoverForTests(cards.get(0));
+        assertNotNull(controller.shownCard());
+        controller.scrolledForTests();
         assertNull(controller.shownCard());
         controller.quietElapsedForTests();
-        assertNotNull(controller.shownCard());
+        assertNull("the mouse has to rest on the card again", controller.shownCard());
     }
 
     public void testAfterAnActionTheToolbarStaysClosedWhileTheCaretStaysInTheCard() {
