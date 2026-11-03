@@ -22,9 +22,9 @@ import static com.intellij.openapi.editor.colors.TextAttributesKey.createTextAtt
  */
 public final class SqlSemanticColors {
     public enum Role {
-        TABLE("Table", "LATTICE_SQL_TABLE", 0xA8D45C, 0x5C7D00, Font.BOLD),
-        VIEW("View", "LATTICE_SQL_VIEW", 0xC6D45C, 0x7A7A00, Font.BOLD | Font.ITALIC),
-        ALIAS("Table alias", "LATTICE_SQL_ALIAS", 0xC2E08A, 0x7A9A2E, Font.PLAIN),
+        TABLE("Table", "LATTICE_SQL_TABLE", 0xF47C7C, 0xC62828, Font.BOLD),
+        VIEW("View", "LATTICE_SQL_VIEW", 0xF29B8F, 0xB5483A, Font.BOLD | Font.ITALIC),
+        ALIAS("Table alias", "LATTICE_SQL_ALIAS", 0xF7B0B0, 0xCC4A4A, Font.PLAIN),
         PRIMARY_KEY("Primary key column", "LATTICE_SQL_COLUMN_PRIMARY_KEY", 0xE5B567, 0x996600, Font.BOLD),
         FOREIGN_KEY("Foreign key column", "LATTICE_SQL_COLUMN_FOREIGN_KEY", 0xB794F4, 0x6F42C1, Font.BOLD),
         NUMERIC("Numeric column", "LATTICE_SQL_COLUMN_NUMERIC", 0x6CA6DD, 0x0B5CAD, Font.PLAIN),

@@ -49,9 +49,9 @@ Once the file's connection has its schema cached, names the schema knows are col
 
 | Name | Color |
 |---|---|
-| Table | lime, bold |
-| View | yellow-green, bold italic |
-| Table alias, and the alias in `o.id` | light lime |
+| Table | coral, bold |
+| View | salmon, bold italic |
+| Table alias, and the alias in `o.id` | light coral |
 | Primary key column | gold, bold |
 | Foreign key column | purple, bold |
 | Any other column | by the kind of value it holds: numbers blue, text green, dates and times orange, booleans teal, binary pink, JSON, enums and the like tan |

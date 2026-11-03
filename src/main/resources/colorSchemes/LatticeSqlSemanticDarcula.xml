@@ -1,19 +1,19 @@
 <list>
   <option name="LATTICE_SQL_TABLE">
     <value>
-      <option name="FOREGROUND" value="A8D45C"/>
+      <option name="FOREGROUND" value="F47C7C"/>
       <option name="FONT_TYPE" value="1"/>
     </value>
   </option>
   <option name="LATTICE_SQL_VIEW">
     <value>
-      <option name="FOREGROUND" value="C6D45C"/>
+      <option name="FOREGROUND" value="F29B8F"/>
       <option name="FONT_TYPE" value="3"/>
     </value>
   </option>
   <option name="LATTICE_SQL_ALIAS">
     <value>
-      <option name="FOREGROUND" value="C2E08A"/>
+      <option name="FOREGROUND" value="F7B0B0"/>
     </value>
   </option>
   <option name="LATTICE_SQL_COLUMN_PRIMARY_KEY">
