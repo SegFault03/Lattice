@@ -17,7 +17,7 @@ public final class ExplorerPreview {
                     DatabaseExplorerSearchBar bar = (DatabaseExplorerSearchBar) panel.getClientProperty("lattice.preview.explorer.search");
                     bar.setVisible(!bar.isVisible());
                     panel.revalidate();
-                }, () -> {});
+                }, () -> {}, () -> {});
         panel.putClientProperty("lattice.preview.explorer.actions", toolbar);
         DatabaseExplorerSearchBar bar = new DatabaseExplorerSearchBar(query -> updateSearch(panel, query), () -> {}, () -> {}, () -> {});
         panel.putClientProperty("lattice.preview.explorer.search", bar);

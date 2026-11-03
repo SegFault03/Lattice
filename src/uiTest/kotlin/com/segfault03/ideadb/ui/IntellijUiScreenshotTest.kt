@@ -2663,7 +2663,7 @@ class IntellijUiScreenshotTest {
         captureScreen(directory.resolve("explorer-narrow.png"))
         val toolbar = openToolbarOverflow(root, "Explorer actions")
         captureScreen(directory.resolve("explorer-narrow-toolbar-expanded.png"))
-        for (name in listOf("Add connection…", "Edit connection…", "Remove connection settings", "Refresh", "Open SQL Console", "Welcome to Lattice")) {
+        for (name in listOf("Add connection…", "Edit connection…", "Remove connection settings", "Refresh", "Open SQL Console", "Welcome to Lattice", "Lattice settings…")) {
             val button = toolbar.x { byAccessibleName(name) }.waitFound()
             val live = toolbar.driver.cast(button.component, LiveSwingComponent::class)
             check(live.getVisibleRect() == Rectangle(0, 0, button.component.width, button.component.height)) {

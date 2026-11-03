@@ -18,6 +18,7 @@ final class DatabaseExplorerToolbar extends JPanel {
     private final JButton viewOnly;
     private final JButton search;
     private final JButton help;
+    private final JButton settings;
     private boolean hasConnections;
     private boolean busy;
     private TreeNodeData selection;
@@ -25,12 +26,13 @@ final class DatabaseExplorerToolbar extends JPanel {
 
     DatabaseExplorerToolbar(Consumer<Component> addConnection, Runnable editConnection,
                             Runnable removeConnection, Runnable refreshConnection,
-                            Runnable openConsole, Consumer<Component> selectSources, Runnable toggleSearch, Runnable showHelp) {
+                            Runnable openConsole, Consumer<Component> selectSources, Runnable toggleSearch, Runnable showHelp,
+                            Runnable openSettings) {
         setLayout(new BoxLayout(this, BoxLayout.X_AXIS));
         setBorder(JBUI.Borders.empty(6, 12));
         add = button(AllIcons.General.Add, "Add connection…", null, true);
         add.addActionListener(e -> addConnection.accept((Component)e.getSource()));
-        edit = button(AllIcons.General.Settings, "Edit connection…", editConnection);
+        edit = button(AllIcons.Actions.Edit, "Edit connection…", editConnection);
         remove = button(AllIcons.General.Remove, "Remove connection settings", removeConnection);
         separator();
         refresh = button(AllIcons.Actions.Refresh, "Refresh", refreshConnection);
@@ -40,6 +42,7 @@ final class DatabaseExplorerToolbar extends JPanel {
         search = button(AllIcons.Actions.Search, "Search explorer", toggleSearch);
         separator();
         help = button(AllIcons.General.ContextHelp, "Welcome to Lattice", showHelp);
+        settings = button(AllIcons.General.Settings, "Lattice settings…", openSettings);
         setHasConnections(false);
     }
 
@@ -47,7 +50,7 @@ final class DatabaseExplorerToolbar extends JPanel {
     JComponent createComponent(JComponent target) {
         removeAll(); // Transfer the existing production controls and their listeners.
         JComponent toolbar = DatabaseActionToolbar.create(target, "Explorer actions",
-                add, edit, remove, null, refresh, console, viewOnly, search, null, help);
+                add, edit, remove, null, refresh, console, viewOnly, search, null, help, settings);
         return toolbar;
     }
 

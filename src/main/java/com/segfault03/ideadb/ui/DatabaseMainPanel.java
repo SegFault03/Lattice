@@ -96,7 +96,8 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 this::refreshSelectedNode, this::openConsoleForSelected,
                 this::showSourceFilter,
                 this::toggleSearch,
-                () -> DatabaseEditorManager.getInstance(project).openWelcome());
+                () -> DatabaseEditorManager.getInstance(project).openWelcome(),
+                () -> com.segfault03.ideadb.sql.SqlEditorSupport.openSettings(project));
         searchBar = new DatabaseExplorerSearchBar(query -> {
             if (searchController != null) searchController.changed(query);
         }, () -> setSearchVisible(false), () -> searchController.navigate(-1), () -> searchController.navigate(1));

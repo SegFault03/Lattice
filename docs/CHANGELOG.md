@@ -26,6 +26,7 @@ Patch notes are selected by the exact release version, including prerelease suff
 
 ### Data sources and explorer
 
+- Show editing a connection with a pencil in the explorer toolbar, and add a settings button at the end of the toolbar that opens Lattice's settings (Settings | Tools | Lattice SQL Editor).
 - List PostgreSQL partitioned tables, materialized views and foreign tables in the explorer and the SQL editor. Materialized views are read-only like views; foreign tables are dropped with `DROP FOREIGN TABLE` and have no Alter or Truncate.
 - Connect MySQL with TLS when the server offers it, and stop MySQL connects to unreachable hosts after 10 seconds. A slow connect no longer blocks the explorer or the IDE.
 - Check the connection form on Save as well as on Test, and mask passwords in the JDBC URL shown and copied by the connection dialog. Driver origins read Bundled, Downloaded or Local Maven.

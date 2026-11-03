@@ -19,14 +19,14 @@ class DatabaseExplorerToolbarTest {
             AtomicInteger calls = new AtomicInteger();
             Runnable action = calls::incrementAndGet;
             DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(
-                    component -> action.run(), action, action, action, action, component -> action.run(), action, action);
+                    component -> action.run(), action, action, action, action, component -> action.run(), action, action, action);
             assertInstanceOf(javax.swing.border.EmptyBorder.class, toolbar.getBorder(),
                     "The explorer must leave the section boundary to the IDE tool-window header");
             List<JButton> buttons = new ArrayList<>();
             for (Component child : toolbar.getComponents()) {
                 if (child instanceof JButton button) buttons.add(button);
             }
-            assertEquals(8, buttons.size());
+            assertEquals(9, buttons.size());
             for (int i = 1; i <= 5; i++) {
                 assertTrue(buttons.get(i).isVisible());
                 assertFalse(buttons.get(i).isEnabled());
@@ -36,6 +36,7 @@ class DatabaseExplorerToolbarTest {
             assertTrue(buttons.get(0).isEnabled());
             assertTrue(buttons.get(6).isEnabled());
             assertTrue(buttons.get(7).isEnabled());
+            assertTrue(buttons.get(8).isEnabled(), "Lattice settings do not need a connection");
             toolbar.setHasConnections(true);
             ConnectionConfig config = new ConnectionConfig();
             toolbar.setSelection(TreeNodeData.connection(config, false));
@@ -67,7 +68,7 @@ class DatabaseExplorerToolbarTest {
     void actionAvailabilityFollowsTheSelectedNodeAndClearsAfterRemovingConnections() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             Runnable noop = () -> {};
-            DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(component -> {}, noop, noop, noop, noop, component -> {}, noop, noop);
+            DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(component -> {}, noop, noop, noop, noop, component -> {}, noop, noop, noop);
             List<JButton> buttons = buttons(toolbar);
             toolbar.setHasConnections(true);
             assertFalse(buttons.get(1).isEnabled());
@@ -96,7 +97,7 @@ class DatabaseExplorerToolbarTest {
     @Test void disconnectedSelectionsDimTheConsoleInTheToolbarAndItsOverflowAndReconnectRestoresIt() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             Runnable noop = () -> {};
-            var toolbar = new DatabaseExplorerToolbar(component -> {}, noop, noop, noop, noop, component -> {}, noop, noop);
+            var toolbar = new DatabaseExplorerToolbar(component -> {}, noop, noop, noop, noop, component -> {}, noop, noop, noop);
             toolbar.setHasConnections(true);
             var buttons = buttons(toolbar);
             var console = buttons.get(4);
@@ -139,7 +140,7 @@ class DatabaseExplorerToolbarTest {
     @Test void filterIndicatorAndOverflowStayActiveUntilAllSourcesAreRestored() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             Runnable noop = () -> {};
-            DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(component -> {}, noop, noop, noop, noop, component -> {}, noop, noop);
+            DatabaseExplorerToolbar toolbar = new DatabaseExplorerToolbar(component -> {}, noop, noop, noop, noop, component -> {}, noop, noop, noop);
             toolbar.setHasConnections(true);
             JButton eye = buttons(toolbar).stream()
                     .filter(button -> "View only…".equals(button.getAccessibleContext().getAccessibleName()))
@@ -162,6 +163,30 @@ class DatabaseExplorerToolbarTest {
                 assertFalse(overflow.isSelected());
                 assertEquals("View only: All data sources", overflow.getToolTipText());
             } finally { overflow.removeNotify(); }
+        });
+    }
+
+    @Test
+    void editConnectionIsAPencilAndTheLastButtonOpensLatticeSettingsWhateverTheState() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            AtomicInteger settings = new AtomicInteger();
+            Runnable noop = () -> {};
+            var toolbar = new DatabaseExplorerToolbar(component -> {}, noop, noop, noop, noop, component -> {}, noop, noop, settings::incrementAndGet);
+            List<JButton> buttons = buttons(toolbar);
+            assertEquals("Edit connection…", buttons.get(1).getToolTipText());
+            assertSame(com.intellij.icons.AllIcons.Actions.Edit, buttons.get(1).getIcon(), "editing a connection is a pencil, not a gear");
+            JButton last = buttons.get(buttons.size() - 1);
+            assertEquals("Lattice settings…", last.getToolTipText());
+            assertSame(com.intellij.icons.AllIcons.General.Settings, last.getIcon());
+            assertEquals("Welcome to Lattice", buttons.get(buttons.size() - 2).getToolTipText(), "the settings button follows the help button");
+            for (boolean connections : new boolean[] {false, true}) {
+                toolbar.setHasConnections(connections);
+                toolbar.setBusy(!connections);
+                assertTrue(last.isEnabled());
+            }
+            last.doClick(0);
+            assertEquals(1, settings.get());
+            for (JButton button : buttons) if (button != buttons.get(1)) assertNotSame(com.intellij.icons.AllIcons.Actions.Edit, button.getIcon());
         });
     }
 
