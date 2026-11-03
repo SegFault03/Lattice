@@ -565,17 +565,16 @@ public final class UiPreview {
             throw new AssertionError("Ordinary cell selection must keep a closed inspector closed");
         invoke(editor, "toggleInspector", new Class<?>[0]);
         JLayeredPane overlay = (JLayeredPane)field(editor, "gridOverlay");
-        JScrollPane dataScroll = (JScrollPane)field(editor, "dataScroll");
-        Rectangle gridBounds = dataScroll.getBounds();
+        JComponent workspace = (JComponent)field(editor, "tableWorkspace");
         int columnsWidth = grid.getColumnModel().getTotalColumnWidth();
         invoke(editor, "toggleInspector", new Class<?>[0]);
         invoke(editor, "toggleInspector", new Class<?>[0]);
         for (int pass = 0; pass < 4; pass++) layout(editor);
-        if (!gridBounds.equals(dataScroll.getBounds()) || columnsWidth != grid.getColumnModel().getTotalColumnWidth())
-            throw new AssertionError("Opening the overlay must preserve grid bounds and column widths");
-        if (overlay.getLayer(details) <= overlay.getLayer(dataScroll) || details.getX() <= 0
-                || details.getX() + details.getWidth() != overlay.getWidth())
-            throw new AssertionError("The inspector must overlay the right edge of the grid");
+        if (columnsWidth != grid.getColumnModel().getTotalColumnWidth())
+            throw new AssertionError("Opening the inspector must preserve column widths");
+        if (details.getX() <= 0 || details.getX() + details.getWidth() != overlay.getWidth()
+                || details.getY() != 0 || details.getHeight() != overlay.getHeight() || workspace.getWidth() != details.getX())
+            throw new AssertionError("The inspector must dock to the right edge for the editor's full height");
         JComponent widthHandle = (JComponent)field(editor, "inspectorResizeHandle");
         int initialWidth = details.getWidth();
         widthHandle.dispatchEvent(new java.awt.event.MouseEvent(widthHandle, java.awt.event.MouseEvent.MOUSE_PRESSED,
@@ -586,9 +585,9 @@ public final class UiPreview {
                 0, 0, -93, 20, 1, false, java.awt.event.MouseEvent.BUTTON1));
         render(editor, theme + "-inspector-width-resized-1440", 1440, 900);
         int resizedWidth = details.getWidth();
-        if (resizedWidth != initialWidth + 96 || !gridBounds.equals(dataScroll.getBounds())
+        if (resizedWidth != initialWidth + 96 || workspace.getWidth() != details.getX()
                 || columnsWidth != grid.getColumnModel().getTotalColumnWidth())
-            throw new AssertionError("Dragging the sidebar must change only its overlay width");
+            throw new AssertionError("Dragging the sidebar must trade only the workspace width for its own");
         invoke(editor, "toggleInspector", new Class<?>[0]); invoke(editor, "toggleInspector", new Class<?>[0]);
         for (int pass = 0; pass < 4; pass++) layout(editor);
         if (details.getWidth() != resizedWidth) throw new AssertionError("Reopening must retain the chosen sidebar width");
@@ -963,7 +962,7 @@ public final class UiPreview {
         if (run.isEnabled() || clear.isEnabled()) throw new AssertionError("Clear must update both action states");
         panel.setSqlText("SELECT 1; SELECT 2;");
         editor.select(10, 19);
-        editor.getActionMap().get("runSql").actionPerformed(new java.awt.event.ActionEvent(editor, 0, "runSql"));
+        invoke(panel, "executeCurrentSql", new Class<?>[0]); // what the Ctrl+Enter shortcut runs
         if (((JButton)field(panel, "runBtn")).isEnabled() || !((JButton)field(panel, "cancelBtn")).isEnabled()
                 || ((JComboBox<?>)field(panel, "databaseCombo")).isEnabled() || ((JComboBox<?>)field(panel, "resultLimit")).isEnabled())
             throw new AssertionError("Executing controls must reflect the active query");

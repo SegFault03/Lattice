@@ -16,8 +16,27 @@ import java.awt.event.ActionEvent;
 public final class DatabaseUi {
     public static final Color POSITIVE_ACTION_COLOR = new JBColor(new Color(0x2E7D32), new Color(0x238636));
     public static final Color DESTRUCTIVE_ACTION_COLOR = new JBColor(new Color(0xC62828), new Color(0xC43D3D));
+    // The new UI's toggled tool button fill; a theme's pressed color can be its light default under a dark theme.
+    private static final Color TOGGLED_ACTION_BACKGROUND = new JBColor(new Color(0xDFE1E5), new Color(0x43454A));
 
     private DatabaseUi() {}
+
+    /**
+     * The editor's code font at {@code size}, for SQL, URLs and values shown outside an editor. The logical
+     * monospaced font is a fallback only (it is Courier on Windows) for runs without an application.
+     */
+    public static Font codeFont(float size) {
+        Font font = null;
+        if (com.intellij.openapi.application.ApplicationManager.getApplication() != null) {
+            try {
+                font = com.intellij.openapi.editor.colors.EditorColorsManager.getInstance().getGlobalScheme()
+                        .getFont(com.intellij.openapi.editor.colors.EditorFontType.PLAIN);
+            } catch (RuntimeException unavailable) {
+                font = null;
+            }
+        }
+        return (font == null ? new Font(Font.MONOSPACED, Font.PLAIN, 1) : font).deriveFont(Font.PLAIN, size);
+    }
 
     /** Native IDEA popup painting, palette, borders and window handling in every theme. */
     public static JPopupMenu popupMenu() { return configurePopup(new com.intellij.openapi.ui.JBPopupMenu()); }
@@ -253,10 +272,22 @@ public final class DatabaseUi {
         private Icon disabledSource;
         private Color disabledColor;
         private final PropertyChangeListener sourceChanges = event -> copySourceState();
+        // Kept off the button model: look-and-feels paint a selected JButton with their own,
+        // sometimes light, toggle fill that hides the text in dark themes.
+        private boolean toggled;
 
         private ActionButton(String text, Icon icon) {
             super(text, icon);
             defaultIcon = icon;
+        }
+
+        @Override public boolean isSelected() { return toggled; }
+
+        @Override public void setSelected(boolean selected) {
+            if (toggled == selected) return;
+            toggled = selected;
+            firePropertyChange("lattice.action.toggled", !selected, selected);
+            repaint();
         }
 
         @Override public Icon getDisabledIcon() {
@@ -347,7 +378,7 @@ public final class DatabaseUi {
         @Override protected void paintComponent(Graphics graphics) {
             ButtonModel model = getModel();
             boolean emphasized = isEnabled() && emphasisColor != null;
-            boolean interactive = isEnabled() && (model.isSelected() || model.isRollover() || model.isPressed() && model.isArmed());
+            boolean interactive = isEnabled() && (toggled || model.isRollover() || model.isPressed() && model.isArmed());
             boolean focusVisible = hasFocus() && isFocusVisible(this);
             if (emphasized || interactive || isEnabled() && focusVisible) {
                 Graphics2D g = (Graphics2D) graphics.create();
@@ -358,6 +389,7 @@ public final class DatabaseUi {
                                 ? emphasisColor
                                 : model.isPressed() && model.isArmed()
                                         ? JBUI.CurrentTheme.ActionButton.pressedBackground()
+                                        : toggled ? TOGGLED_ACTION_BACKGROUND
                                         : JBUI.CurrentTheme.ActionButton.hoverBackground());
                         g.fillRoundRect(0, 0, getWidth(), getHeight(), JBUI.scale(10), JBUI.scale(10));
                     }

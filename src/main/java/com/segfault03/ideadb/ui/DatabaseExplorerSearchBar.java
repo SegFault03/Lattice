@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
 /** A search drawer with an exclusive All choice and combinable name filters. */
 final class DatabaseExplorerSearchBar extends JPanel {
     private final SearchTextField input = new SearchTextField();
-    private final JButton filters = new JButton("All ▾");
+    private final JButton filters = new JButton("All", com.intellij.icons.AllIcons.General.ChevronDown);
     private final JLabel results = new JBLabel("Type to search");
     private final JButton previous, next, close;
     private final Set<DatabaseExplorerSearch.Category> selected = EnumSet.noneOf(DatabaseExplorerSearch.Category.class);
@@ -38,6 +38,7 @@ final class DatabaseExplorerSearchBar extends JPanel {
         input.getTextEditor().putClientProperty("JTextField.placeholderText", "Search names…");
         input.getTextEditor().setToolTipText("Search connected data sources in the current view");
         filters.setFocusable(true);
+        filters.setHorizontalTextPosition(SwingConstants.LEADING);
         filters.setToolTipText("Choose which object names to search");
         filters.getAccessibleContext().setAccessibleName("Search name filters");
         filters.addActionListener(event -> JBPopupFactory.getInstance()
@@ -93,12 +94,12 @@ final class DatabaseExplorerSearchBar extends JPanel {
     }
 
     private void notifyChange() {
-        filters.setText(selected.isEmpty() ? "All ▾" : selected.size() == 1 ? switch (selected.iterator().next()) {
-            case DATA_SOURCE -> "Sources ▾";
-            case KEY -> "Keys ▾";
-            default -> selected.iterator().next().label + " ▾";
+        filters.setText(selected.isEmpty() ? "All" : selected.size() == 1 ? switch (selected.iterator().next()) {
+            case DATA_SOURCE -> "Sources";
+            case KEY -> "Keys";
+            default -> selected.iterator().next().label;
         }
-                : selected.size() + " filters ▾");
+                : selected.size() + " filters");
         filters.setToolTipText(selected.isEmpty() ? "Search all names" : selected.stream().map(category -> category.label)
                 .collect(Collectors.joining(", ")));
         revalidate();

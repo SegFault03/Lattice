@@ -109,10 +109,18 @@ public final class SqlSwingHighlighter {
         return style;
     }
 
+    /**
+     * The editor scheme, when it is as dark as the IDE theme. A pane sits on the dialog's own background, so a light
+     * editor scheme under a dark theme (or the reverse) would paint its colors on a background they were not made for;
+     * the stand-in colors for the theme read better there.
+     */
     private static @Nullable EditorColorsScheme scheme() {
         if (ApplicationManager.getApplication() == null) return null;
         try {
-            return EditorColorsManager.getInstance().getGlobalScheme();
+            EditorColorsScheme scheme = EditorColorsManager.getInstance().getGlobalScheme();
+            Color background = scheme.getDefaultBackground();
+            if (background != null && com.intellij.ui.ColorUtil.isDark(background) == JBColor.isBright()) return null;
+            return scheme;
         } catch (RuntimeException unavailable) {
             return null;
         }

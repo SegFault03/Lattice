@@ -844,7 +844,7 @@ final class CellDetailsPanel extends JPanel {
             eyebrow.setFont(labelFont); identity.setFont(labelFont); summary.setFont(labelFont);
             valueHeading.setFont(labelFont.deriveFont(Font.BOLD, labelFont.getSize2D() + JBUI.scale(1f)));
             tableNoteLabel.setFont(labelFont); footerLabel.setFont(labelFont); validation.setFont(labelFont);
-            valueArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 1).deriveFont(labelFont.getSize2D()));
+            valueArea.setFont(DatabaseUi.codeFont(labelFont.getSize2D()));
         }
         if (buttonFont != null) for (AbstractButton button : new AbstractButton[]{formattedTab, rawTab, wrap, edit, copy, setNull, useDefault, revert, apply, cancel, editTable}) {
             button.setOpaque(false); button.setForeground(JBColor.foreground());

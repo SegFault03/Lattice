@@ -378,7 +378,7 @@ public final class AlterTablePanel extends JPanel {
         title.add(caption, BorderLayout.CENTER);
         preview.add(title, BorderLayout.NORTH);
         sql.setEditable(false); sql.setOpaque(false); sql.setBorder(JBUI.Borders.empty());
-        sql.setFont(new Font(Font.MONOSPACED, Font.PLAIN, Math.round(TableDialogChrome.font(Font.PLAIN,-1).getSize2D()))); sql.getAccessibleContext().setAccessibleName("Alter table SQL preview");
+        sql.setFont(DatabaseUi.codeFont(TableDialogChrome.font(Font.PLAIN,-1).getSize2D())); sql.getAccessibleContext().setAccessibleName("Alter table SQL preview");
         JBScrollPane scroll = new JBScrollPane(sql); scroll.setBorder(JBUI.Borders.empty());
         scroll.setViewportBorder(JBUI.Borders.empty());
         scroll.setOpaque(false); scroll.getViewport().setOpaque(false);

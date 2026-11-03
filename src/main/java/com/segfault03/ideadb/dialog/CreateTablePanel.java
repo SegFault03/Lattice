@@ -144,7 +144,7 @@ public final class CreateTablePanel extends JPanel {
         JPanel preview = new RoundedPanel(); preview.setLayout(new BorderLayout(0, JBUI.scale(10))); preview.setBorder(JBUI.Borders.empty(12, 14));
         JPanel title = panel(new BorderLayout()); JLabel label = muted("SQL preview"); label.getAccessibleContext().setAccessibleName("Table SQL preview title"); label.setFont(label.getFont().deriveFont(Font.BOLD)); label.setIcon(Icons.CONSOLE); label.setIconTextGap(JBUI.scale(7));
         title.add(label, BorderLayout.CENTER); title.add(muted(config.getType().getDisplayName()), BorderLayout.EAST); preview.add(title, BorderLayout.NORTH);
-        sql.setEditable(false); sql.setOpaque(false); sql.setBorder(JBUI.Borders.empty()); sql.setFont(new Font(Font.MONOSPACED, Font.PLAIN, Math.round(TableDialogChrome.font(Font.PLAIN,-1).getSize2D())));
+        sql.setEditable(false); sql.setOpaque(false); sql.setBorder(JBUI.Borders.empty()); sql.setFont(DatabaseUi.codeFont(TableDialogChrome.font(Font.PLAIN,-1).getSize2D()));
         sql.getAccessibleContext().setAccessibleName("Create table SQL preview"); JBScrollPane scroll = new JBScrollPane(sql); scroll.setBorder(JBUI.Borders.empty()); scroll.setOpaque(false); scroll.getViewport().setOpaque(false);
         scroll.setViewportBorder(JBUI.Borders.empty());
         preview.add(scroll, BorderLayout.CENTER); return TableDialogLayout.preview(preview,title,sql,180);

@@ -60,7 +60,7 @@ public class ConnectionDialog extends DialogWrapper {
     private java.util.concurrent.Future<?> discoveryTask;
     private JPanel rootPanel;
     private JPanel driverDetails;
-    private final ActionLink driverToggle = new ActionLink("Driver options ▸");
+    private final ActionLink driverToggle = new ActionLink("Driver options");
     private final JBLabel driverSummary = new JBLabel();
     private boolean uiInitialized;
     private JComboBox<DriverSource> driverSourceCombo;
@@ -205,7 +205,7 @@ public class ConnectionDialog extends DialogWrapper {
             urlSection.add(DatabaseUi.section("JDBC URL"), BorderLayout.NORTH);
             JPanel previewPanel = new JPanel(new BorderLayout(JBUI.scale(8), 0));
             urlPreviewLabel = new JBLabel();
-            urlPreviewLabel.setFont(new Font(Font.MONOSPACED, Font.PLAIN, urlPreviewLabel.getFont().getSize()));
+            urlPreviewLabel.setFont(DatabaseUi.codeFont(urlPreviewLabel.getFont().getSize2D() - 1));
             urlPreviewLabel.setPreferredSize(JBUI.size(320, 28));
             JButton copyUrl = DatabaseUi.action("", AllIcons.Actions.Copy, "Copy JDBC URL");
             copyUrl.addActionListener(e -> {
@@ -227,6 +227,7 @@ public class ConnectionDialog extends DialogWrapper {
         summaryRow.add(driverSummary, BorderLayout.CENTER);
         summaryRow.add(driverToggle, BorderLayout.EAST);
         driverBody.add(summaryRow, BorderLayout.NORTH);
+        driverToggle.setIcon(AllIcons.General.ChevronRight); driverToggle.setHorizontalTextPosition(SwingConstants.LEADING);
         driverToggle.addActionListener(e -> setDriverExpanded(!driverDetails.isVisible()));
         ConnectionFormPanel driverForm = new ConnectionFormPanel();
         driverSourceCombo = ConnectionFormPanel.width(DatabaseInputs.comboBox(DriverSource.values()), 220);
@@ -344,7 +345,7 @@ public class ConnectionDialog extends DialogWrapper {
 
     private void setDriverExpanded(boolean expanded) {
         driverDetails.setVisible(expanded);
-        driverToggle.setText(expanded ? "Driver options ▾" : "Driver options ▸");
+        driverToggle.setIcon(expanded ? AllIcons.General.ChevronDown : AllIcons.General.ChevronRight);
         refreshFormSize();
         if (expanded) SwingUtilities.invokeLater(() -> {
             if (!isDisposed() && driverDetails.isVisible())
