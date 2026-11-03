@@ -128,9 +128,12 @@ public final class SqlSemanticColors {
 
     private static Color defaultColor(EditorColorsScheme scheme, Role role, ColorFamily family) {
         if (family != ColorFamily.NEUTRAL || !role.byFamily()) return role.defaultColor(isDark(scheme), family);
-        Color text = scheme.getDefaultForeground();
-        // Names are the text color, bold; aliases are the same color faded toward the background.
-        return role == Role.ALIAS ? ColorUtil.mix(text, scheme.getDefaultBackground(), 0.42) : text;
+        return neutralColor(role, scheme.getDefaultForeground(), scheme.getDefaultBackground());
+    }
+
+    /** The neutral family's color for a role over a text color and background: names are the text color, aliases it faded toward the background. */
+    public static @NotNull Color neutralColor(@NotNull Role role, @NotNull Color text, @NotNull Color background) {
+        return role == Role.ALIAS ? ColorUtil.mix(text, background, 0.42) : text;
     }
 
     /** The role's color in the user's family as "#RRGGBB", for HTML. */

@@ -1,12 +1,6 @@
 package com.segfault03.ideadb.sql.settings;
 
-import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.editor.colors.EditorColorsManager;
-import com.intellij.openapi.editor.colors.EditorColorsScheme;
-import com.intellij.openapi.editor.colors.EditorFontType;
-import com.intellij.openapi.editor.markup.TextAttributes;
 import com.intellij.util.ui.JBUI;
-import com.segfault03.ideadb.sql.lang.LatticeSqlSyntaxHighlighter;
 import com.segfault03.ideadb.sql.lang.SqlSemanticColors;
 import com.segfault03.ideadb.sql.lang.SqlSemanticColors.Role;
 import com.segfault03.ideadb.sql.settings.SqlEditorSettings.ColorFamily;
@@ -23,12 +17,19 @@ import java.awt.Font;
 import java.util.List;
 
 /**
- * A few lines of SQL colored the way a family colors them, on the editor's own background and in its colors, for the
- * settings screen to show what each choice looks like. It uses the color scheme the user has now (so it follows the
- * theme and any colors they set for the family) and fixed light colors without an IDE.
+ * A few lines of SQL colored the way a family colors them, on a light or a dark editor background, for the settings screen to
+ * show what each choice looks like in both kinds of theme at once. The backgrounds and the syntax colors are those of
+ * IntelliJ's own light and dark schemes, the name colors are the family's defaults for that brightness; a color the user has
+ * set in their color scheme is not shown.
  */
 public final class SqlColorFamilyPreview {
     private SqlColorFamilyPreview() {}
+
+    /** The editor colors of a light or a dark scheme, enough to show a few lines of SQL. */
+    private record Palette(Color background, Color text, Color keyword) {}
+
+    private static final Palette LIGHT = new Palette(new Color(0xFFFFFF), new Color(0x080808), new Color(0x0033B3));
+    private static final Palette DARK = new Palette(new Color(0x2B2D30), new Color(0xBCBEC4), new Color(0xCF8E6D));
 
     /** A piece of the sample: a role's color, the keyword color, or none. */
     private record Part(@NotNull String text, @Nullable Role role, boolean keyword) {}
@@ -53,52 +54,48 @@ public final class SqlColorFamilyPreview {
         return text.toString();
     }
 
-    public static @NotNull JTextPane create(@NotNull ColorFamily family) {
-        EditorColorsScheme scheme = scheme();
+    /** The background of the sample on a light or a dark editor. */
+    public static @NotNull Color background(boolean dark) { return (dark ? DARK : LIGHT).background; }
+
+    /** The color a role has in the sample for a family on a light or a dark editor. */
+    public static @NotNull Color colorOf(@NotNull Role role, @NotNull ColorFamily family, boolean dark) {
+        Palette palette = dark ? DARK : LIGHT;
+        return family == ColorFamily.NEUTRAL && role.byFamily() ? SqlSemanticColors.neutralColor(role, palette.text, palette.background) : role.defaultColor(dark, family);
+    }
+
+    public static @NotNull JTextPane create(@NotNull ColorFamily family, boolean dark) {
+        Palette palette = dark ? DARK : LIGHT;
         JTextPane pane = new JTextPane();
         pane.setEditable(false);
         pane.setFocusable(false);
         pane.setOpaque(true);
         pane.setBorder(JBUI.Borders.empty(6, 10));
-        pane.setBackground(scheme == null ? Color.WHITE : scheme.getDefaultBackground());
-        pane.setForeground(scheme == null ? Color.BLACK : scheme.getDefaultForeground());
-        pane.setFont(scheme == null ? new Font(Font.MONOSPACED, Font.PLAIN, 12) : scheme.getFont(EditorFontType.PLAIN));
-        pane.getAccessibleContext().setAccessibleName("Preview of " + family + " schema name colors");
+        pane.setBackground(palette.background);
+        pane.setForeground(palette.text);
+        pane.setFont(new Font(Font.MONOSPACED, Font.PLAIN, JBUI.scale(12)));
+        pane.getAccessibleContext().setAccessibleName("Preview of " + family + " schema name colors on a " + (dark ? "dark" : "light") + " editor");
         StyledDocument document = pane.getStyledDocument();
         try {
-            for (Part part : SAMPLE) document.insertString(document.getLength(), part.text, style(part, pane.getForeground(), scheme, family));
+            for (Part part : SAMPLE) document.insertString(document.getLength(), part.text, style(part, palette, family, dark));
         } catch (BadLocationException unexpected) {
             throw new IllegalStateException(unexpected);
         }
         return pane;
     }
 
-    private static SimpleAttributeSet style(Part part, Color text, @Nullable EditorColorsScheme scheme, ColorFamily family) {
+    private static SimpleAttributeSet style(Part part, Palette palette, ColorFamily family, boolean dark) {
         SimpleAttributeSet style = new SimpleAttributeSet();
-        Color color = text;
+        Color color = palette.text;
         int fontType = Font.PLAIN;
         if (part.role != null) {
-            TextAttributes attributes = scheme != null ? SqlSemanticColors.attributes(scheme, part.role, family)
-                    : new TextAttributes(part.role.defaultColor(false, family), null, null, null, part.role.defaultFontType(family));
-            color = attributes.getForegroundColor();
-            fontType = attributes.getFontType();
+            color = colorOf(part.role, family, dark);
+            fontType = part.role.defaultFontType(family);
         } else if (part.keyword) {
-            TextAttributes keyword = scheme == null ? null : scheme.getAttributes(LatticeSqlSyntaxHighlighter.KEYWORD);
-            color = keyword != null && keyword.getForegroundColor() != null ? keyword.getForegroundColor() : new Color(0x0033B3);
-            fontType = keyword == null ? Font.PLAIN : keyword.getFontType();
+            color = palette.keyword;
         }
         StyleConstants.setForeground(style, color);
         StyleConstants.setBold(style, (fontType & Font.BOLD) != 0);
         StyleConstants.setItalic(style, (fontType & Font.ITALIC) != 0);
         return style;
-    }
-
-    private static @Nullable EditorColorsScheme scheme() {
-        if (ApplicationManager.getApplication() == null) return null;
-        try {
-            return EditorColorsManager.getInstance().getGlobalScheme();
-        } catch (RuntimeException unavailable) {
-            return null;
-        }
     }
 }
