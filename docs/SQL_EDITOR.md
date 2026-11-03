@@ -98,7 +98,7 @@ The actions work on the selection if there is one, otherwise on the statement ar
 
 ### SQL cards
 
-Each statement of a `.sql` file, and the SQL of each Java or Kotlin string, sits on a card: a rounded background that hugs the SQL text. A string built by concatenation or templates is one card. Rest the mouse on a card and a toolbar appears above its top-right corner:
+Each statement of a `.sql` file, and the SQL of each Java or Kotlin string, sits on a card: a rounded background that hugs the SQL text. A string built by concatenation or templates is one card. Rest the mouse on a card, or put the caret in it, and a toolbar appears above its top-right corner:
 
 | Button | What it does |
 |---|---|
@@ -109,7 +109,7 @@ Each statement of a `.sql` file, and the SQL of each Java or Kotlin string, sits
 | **Copy SQL** | Copies the SQL as plain text: quotes, escapes and concatenation removed, `?` for the parts built at run time |
 | **More** | **Explain Statement** and **SQL Connection for This File...** |
 
-The toolbar acts on the card under the mouse, not on the caret. A query card (`SELECT`, or a `WITH` that only reads) shows **Run**; every other card shows **Run and Roll Back** in its place. A button that does not suit the card stays visible but disabled, and its tooltip says why: Run and Roll Back on DDL, Explain on DDL, either on a string holding more than one statement ("Select a single statement"), and every action except Copy SQL while the file has no connection.
+The toolbar acts on the card it is shown above, not on the statement at the caret. It stays while the caret is in the card, so clicking inside the card keeps it (it follows the caret to the next card, and a card under the mouse takes it from the caret's card while the mouse rests there). It goes away when the caret leaves the card and the mouse is not on one, when the editor loses focus, and while you type or scroll; it returns when the card has been read again or the editor has been still for a moment, if the caret is still in the card. After you use a button it closes and stays closed until the caret leaves the card and comes back, the editor regains focus, or the mouse rests on the card again. A query card (`SELECT`, or a `WITH` that only reads) shows **Run**; every other card shows **Run and Roll Back** in its place. A button that does not suit the card stays visible but disabled, and its tooltip says why: Run and Roll Back on DDL, Explain on DDL, either on a string holding more than one statement ("Select a single statement"), and every action except Copy SQL while the file has no connection.
 
 Cards are not shown in Lattice's own SQL editors, in viewers and diffs, or in files too large to analyse. A card is drawn over the IDE's injected-language background and the caret-row highlight, and the selection is drawn over the card.
 

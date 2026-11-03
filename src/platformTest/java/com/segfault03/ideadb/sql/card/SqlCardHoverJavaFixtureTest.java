@@ -115,6 +115,113 @@ public class SqlCardHoverJavaFixtureTest extends H2SqlFixtureTestCase {
         assertNotNull(controller.shownCard());
     }
 
+    /** The caret placed inside the card, as a click or the arrow keys would. */
+    private void caretIn(RangeHighlighter card) {
+        myFixture.getEditor().getCaretModel().moveToOffset(card.getStartOffset() + 5);
+    }
+
+    private SqlCardHoverController focusedController() {
+        SqlCardHoverController controller = SqlCardHoverController.of(myFixture.getEditor());
+        controller.focusedForTests(true);
+        return controller;
+    }
+
+    private static void actionPerformedInTheToolbar() {
+        var action = com.intellij.openapi.actionSystem.ActionManager.getInstance().getAction("com.segfault03.lattice.sql.card.copy");
+        var event = com.intellij.openapi.actionSystem.AnActionEvent.createEvent(action, com.intellij.openapi.actionSystem.DataContext.EMPTY_CONTEXT,
+                new com.intellij.openapi.actionSystem.Presentation(), SqlCardHoverController.PLACE, com.intellij.openapi.actionSystem.ActionUiKind.TOOLBAR, null);
+        com.intellij.openapi.application.ApplicationManager.getApplication().getMessageBus()
+                .syncPublisher(com.intellij.openapi.actionSystem.ex.AnActionListener.TOPIC)
+                .afterActionPerformed(action, event, com.intellij.openapi.actionSystem.AnActionResult.PERFORMED);
+    }
+
+    public void testTheToolbarShowsWhileTheCaretIsInACardAndLeavesWithIt() {
+        List<RangeHighlighter> cards = cards();
+        SqlCardHoverController controller = focusedController();
+        caretIn(cards.get(0));
+        assertSame(cards.get(0).getUserData(SqlCardPass.CARD), controller.shownCard());
+        caretIn(cards.get(1));
+        assertSame("the toolbar follows the caret to the next card", cards.get(1).getUserData(SqlCardPass.CARD), controller.shownCard());
+        myFixture.getEditor().getCaretModel().moveToOffset(0);
+        assertNull("the caret is in no card", controller.shownCard());
+    }
+
+    public void testAnEditorWithoutTheFocusShowsNoToolbarForItsCaret() {
+        List<RangeHighlighter> cards = cards();
+        SqlCardHoverController controller = SqlCardHoverController.of(myFixture.getEditor());
+        controller.focusedForTests(false);
+        caretIn(cards.get(0));
+        assertNull(controller.shownCard());
+    }
+
+    public void testTypingInTheCardHidesTheToolbarAndItReturnsOnceTheCardIsRead() {
+        List<RangeHighlighter> cards = cards();
+        SqlCardHoverController controller = focusedController();
+        caretIn(cards.get(0));
+        assertNotNull(controller.shownCard());
+        myFixture.type(" ");
+        assertNull("it would sit over the text being typed, with actions on SQL that has changed", controller.shownCard());
+        myFixture.doHighlighting();
+        assertNotNull("the card has been read again and the caret is still in it", controller.shownCard());
+    }
+
+    public void testScrollingHidesTheToolbarAndItReturnsWhenTheEditorIsStill() {
+        List<RangeHighlighter> cards = cards();
+        SqlCardHoverController controller = focusedController();
+        caretIn(cards.get(0));
+        assertNotNull(controller.shownCard());
+        controller.scrolledForTests();
+        assertNull(controller.shownCard());
+        controller.quietElapsedForTests();
+        assertNotNull(controller.shownCard());
+    }
+
+    public void testAfterAnActionTheToolbarStaysClosedWhileTheCaretStaysInTheCard() {
+        List<RangeHighlighter> cards = cards();
+        SqlCardHoverController controller = focusedController();
+        caretIn(cards.get(0));
+        assertNotNull(controller.shownCard());
+        actionPerformedInTheToolbar();
+        assertNull(controller.shownCard());
+        myFixture.getEditor().getCaretModel().moveToOffset(cards.get(0).getStartOffset() + 8);
+        assertNull("still in the card the action closed", controller.shownCard());
+        myFixture.getEditor().getCaretModel().moveToOffset(0);
+        caretIn(cards.get(0));
+        assertNotNull("back in the card after leaving it", controller.shownCard());
+    }
+
+    public void testTheCardUnderTheMouseWinsOverTheCardTheCaretIsIn() {
+        List<RangeHighlighter> cards = cards();
+        SqlCardHoverController controller = focusedController();
+        caretIn(cards.get(1));
+        assertSame(cards.get(1).getUserData(SqlCardPass.CARD), controller.shownCard());
+        controller.hoverForTests(cards.get(0));
+        assertSame(cards.get(0).getUserData(SqlCardPass.CARD), controller.shownCard());
+        controller.unhoverForTests();
+        assertSame("the mouse is gone, the caret's card is back", cards.get(1).getUserData(SqlCardPass.CARD), controller.shownCard());
+    }
+
+    public void testHoveringACardStillShowsItsToolbarWithTheCaretElsewhere() {
+        List<RangeHighlighter> cards = cards();
+        SqlCardHoverController controller = focusedController();
+        myFixture.getEditor().getCaretModel().moveToOffset(0);
+        controller.hoverForTests(cards.get(0));
+        assertSame(cards.get(0).getUserData(SqlCardPass.CARD), controller.shownCard());
+        controller.unhoverForTests();
+        assertNull(controller.shownCard());
+    }
+
+    /** A click in the editor is a click outside the popup; the controller, not the platform, closes it. */
+    public void testAClickInTheEditorDoesNotCloseThePopup() {
+        var popup = SqlCardHoverController.newPopup(new javax.swing.JPanel());
+        try {
+            assertFalse(((com.intellij.ui.popup.AbstractPopup) popup).isCancelOnClickOutside());
+            assertFalse("it never takes the focus from the editor", popup.isFocused());
+        } finally {
+            popup.dispose();
+        }
+    }
+
     public void testControllerNotInstalledForViewer() {
         myFixture.configureByText("A.java", TWO_ON_ONE_LINE);
         Editor viewer = EditorFactory.getInstance().createViewer(myFixture.getEditor().getDocument(), getProject());

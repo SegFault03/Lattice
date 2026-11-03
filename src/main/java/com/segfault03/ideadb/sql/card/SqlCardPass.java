@@ -75,6 +75,9 @@ final class SqlCardPass extends TextEditorHighlightingPass {
         }
         old.forEach(SqlCardPass::dispose);
         editor.putUserData(HIGHLIGHTERS, current.isEmpty() ? null : current);
+        // The toolbar of the card the caret is in was waiting for its card to be read again.
+        SqlCardHoverController controller = SqlCardHoverController.of(editor);
+        if (controller != null) controller.cardsChanged();
     }
 
     private static void dispose(RangeHighlighter highlighter) {
