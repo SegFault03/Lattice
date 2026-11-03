@@ -22,35 +22,36 @@ class CreateTablePanelTest {
     }
     @Test void invalidDraftsSurviveNavigationAndFilteringAndBlockTheEntireDefinition() throws Exception {
         SwingUtilities.invokeAndWait(()->{
-            var p=panel();p.columnList().setSelectedIndex(1);input(p,"Length / precision").setText("oops");assertNull(p.prepared());
-            input(p,"Filter columns").setText("created");assertEquals(1,p.columnList().getModel().getSize());assertEquals("oops",input(p,"Length / precision").getText());
-            p.columnList().setSelectedIndex(0);assertEquals("created_at",input(p,"Column name").getText());assertNull(p.prepared());
+            var p=panel();button(p,"Add column").doClick(0);input(p,"Column name").setText("name");input(p,"Length / precision").setText("oops");assertNull(p.prepared());
+            input(p,"Filter columns").setText("nam");assertEquals(1,p.columnList().getModel().getSize());assertEquals("oops",input(p,"Length / precision").getText());
+            p.columnList().setSelectedIndex(0);assertEquals("name",input(p,"Column name").getText());assertNull(p.prepared());
             input(p,"Filter columns").setText("");p.columnList().setSelectedIndex(1);assertEquals("oops",input(p,"Length / precision").getText());
             input(p,"Length / precision").setText("120");assertNotNull(p.prepared());assertTrue(p.dirty());
         });
     }
     @Test void additionRemovalAndReorderingPreserveEveryOtherDefinitionAndUseActualColumnOrder() throws Exception {
         SwingUtilities.invokeAndWait(()->{
-            var p=panel();button(p,"Add column").doClick(0);input(p,"Column name").setText("email");input(p,"Length / precision").setText("180");
-            button(p,"Move column up").doClick(0);assertEquals(List.of("id","name","email","created_at"),names(p));
-            input(p,"Filter columns").setText("email");button(p,"Move column up").doClick(0);assertEquals(List.of("id","email","name","created_at"),names(p));
-            input(p,"Filter columns").setText("");p.columnList().setSelectedIndex(1);assertEquals("180",input(p,"Length / precision").getText());
-            button(p,"Remove column").doClick(0);assertEquals(List.of("id","name","created_at"),names(p));assertFalse(p.dirty());
-            assertTrue(p.prepared().sql().indexOf("\"name\"")<p.prepared().sql().indexOf("\"created_at\""));
+            var p=panel();button(p,"Add column").doClick(0);input(p,"Column name").setText("name");
+            button(p,"Add column").doClick(0);input(p,"Column name").setText("email");input(p,"Length / precision").setText("180");
+            button(p,"Move column up").doClick(0);assertEquals(List.of("id","email","name"),names(p));
+            input(p,"Filter columns").setText("email");button(p,"Move column up").doClick(0);assertEquals(List.of("email","id","name"),names(p));
+            input(p,"Filter columns").setText("");p.columnList().setSelectedIndex(0);assertEquals("180",input(p,"Length / precision").getText());
+            button(p,"Remove column").doClick(0);assertEquals(List.of("id","name"),names(p));assertTrue(p.dirty());
+            assertTrue(p.prepared().sql().indexOf("\"id\"")<p.prepared().sql().indexOf("\"name\""));
         });
     }
     @Test void duplicateNamesAndNoColumnsDisableCreateAndCanBeCorrectedWithoutResetting() throws Exception {
         SwingUtilities.invokeAndWait(()->{
-            var p=panel();p.columnList().setSelectedIndex(1);input(p,"Column name").setText("ID");assertNull(p.prepared());assertFalse(p.createButton().isEnabled());
+            var p=panel();button(p,"Add column").doClick(0);input(p,"Column name").setText("ID");assertNull(p.prepared());assertFalse(p.createButton().isEnabled());
             input(p,"Column name").setText("name");assertNotNull(p.prepared());
-            for(int i=0;i<3;i++)button(p,"Remove column").doClick(0);assertNull(p.prepared());assertTrue(p.problem().contains("at least one"));
+            for(int i=0;i<2;i++)button(p,"Remove column").doClick(0);assertNull(p.prepared());assertTrue(p.problem().contains("at least one"));
             button(p,"Add column").doClick(0);assertNotNull(p.prepared());assertTrue(p.createButton().isEnabled());
         });
     }
     @Test void keysIdentityAndBusyStateEnforceConstraintsWithoutErasingDefaults() throws Exception {
         SwingUtilities.invokeAndWait(()->{
             var p=panel();assertFalse(input(p,"Default value").isEnabled());assertFalse(box(p,"Allow NULL values").isEnabled());
-            p.columnList().setSelectedIndex(1);input(p,"Default value").setText("TEXT:kept");box(p,"Primary key").doClick(0);
+            button(p,"Add column").doClick(0);input(p,"Default value").setText("TEXT:kept");box(p,"Primary key").doClick(0);
             assertFalse(box(p,"Allow NULL values").isSelected());assertFalse(box(p,"Allow NULL values").isEnabled());
             assertEquals(2,p.prepared().definition().columns().stream().filter(TableCreation.Column::primaryKey).count());
             p.setBusy(true);assertFalse(p.createButton().isEnabled());assertFalse(p.cancelButton().isEnabled());assertFalse(p.columnList().isEnabled());

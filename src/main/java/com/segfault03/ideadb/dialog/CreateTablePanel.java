@@ -93,9 +93,7 @@ public final class CreateTablePanel extends JPanel {
         remove.addActionListener(e -> removeColumn()); up.addActionListener(e -> move(-1)); down.addActionListener(e -> move(1));
         String integer = config.getType() == DatabaseType.POSTGRESQL ? "INTEGER" : "INT";
         loadDefinition(new TableCreation("new_table", List.of(
-                TableCreation.Column.parse("id", integer, "", false, true, true, ""),
-                TableCreation.Column.parse("name", "VARCHAR", "255", false, false, false, ""),
-                TableCreation.Column.parse("created_at", "TIMESTAMP", "", true, false, false, ""))));
+                TableCreation.Column.parse("id", integer, "", false, true, true, ""))));
     }
     private JComponent header() { return TableDialogChrome.header(config,namespace,"Create table"); }
     private JComponent tableIdentity() {

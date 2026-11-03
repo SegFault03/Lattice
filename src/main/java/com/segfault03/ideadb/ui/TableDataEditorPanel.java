@@ -378,20 +378,23 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         });
         cellDetails.setBorder(JBUI.Borders.customLineLeft(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR));
         gridOverlay = new JLayeredPane() {
+            // The inspector is docked to the right edge for the full height of the editor (toolbar to
+            // status bar); the table workspace gives up that width while it is shown.
             @Override public void doLayout() {
-                dataScroll.setBounds(0, 0, getWidth(), getHeight());
                 int width = Math.min(getWidth(), Math.max(JBUI.scale(360),
                         Math.min(JBUI.scale(520), Math.round(getWidth() * 0.28f))));
                 if (inspectorWidth >= 0) width = Math.min(getWidth(), Math.max(JBUI.scale(320),
                         Math.min(Math.max(JBUI.scale(320), getWidth() - JBUI.scale(160)), inspectorWidth)));
+                int docked = inspectorVisible ? width : 0;
+                tableWorkspace.setBounds(0, 0, getWidth() - docked, getHeight());
                 cellDetails.setBounds(getWidth() - width, 0, width, getHeight());
                 if (inspectorResizeHandle != null) inspectorResizeHandle.setBounds(
                         getWidth() - width - JBUI.scale(3), 0, JBUI.scale(6), getHeight());
             }
-            @Override public Dimension getPreferredSize() { return dataScroll.getPreferredSize(); }
-            @Override public Dimension getMinimumSize() { return dataScroll.getMinimumSize(); }
+            @Override public Dimension getPreferredSize() { return tableWorkspace.getPreferredSize(); }
+            @Override public Dimension getMinimumSize() { return tableWorkspace.getMinimumSize(); }
         };
-        gridOverlay.add(dataScroll, JLayeredPane.DEFAULT_LAYER);
+        gridOverlay.add(tableWorkspace, JLayeredPane.DEFAULT_LAYER);
         gridOverlay.add(cellDetails, JLayeredPane.PALETTE_LAYER);
         inspectorResizeHandle = new ResizeHandle("Resize inspector horizontally", true, -1,
                 () -> inspectorWidth < 0 ? cellDetails.getWidth() : Math.min(inspectorWidth,
@@ -404,8 +407,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         gridOverlay.add(inspectorResizeHandle, JLayeredPane.MODAL_LAYER);
         inspectorResizeHandle.setVisible(false);
         cellDetails.setVisible(false);
-        tableWorkspace.add(gridOverlay, BorderLayout.CENTER);
-        add(tableWorkspace, BorderLayout.CENTER);
+        tableWorkspace.add(dataScroll, BorderLayout.CENTER);
+        add(gridOverlay, BorderLayout.CENTER);
         dataTable.addMouseListener(new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent event) {
                 if (!SwingUtilities.isLeftMouseButton(event)) return;
