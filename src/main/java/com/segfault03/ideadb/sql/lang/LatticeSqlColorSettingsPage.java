@@ -7,6 +7,7 @@ import com.intellij.openapi.options.colors.ColorDescriptor;
 import com.intellij.openapi.options.colors.ColorSettingsPage;
 import com.segfault03.ideadb.sql.card.SqlCardColors;
 import com.segfault03.ideadb.sql.dialect.SqlDialects;
+import com.segfault03.ideadb.sql.settings.SqlEditorSettings;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -37,14 +38,18 @@ public final class LatticeSqlColorSettingsPage implements ColorSettingsPage {
     private static AttributesDescriptor[] descriptors() {
         List<AttributesDescriptor> all = new ArrayList<>(BASE);
         for (SqlSemanticColors.Role role : SqlSemanticColors.Role.values()) {
-            all.add(new AttributesDescriptor("Schema names//" + role.label(), role.key()));
+            if (!role.byFamily()) {
+                all.add(new AttributesDescriptor("Schema names//Columns//" + role.label(), role.key()));
+                continue;
+            }
+            for (SqlEditorSettings.ColorFamily family : SqlEditorSettings.ColorFamily.values()) {
+                all.add(new AttributesDescriptor("Schema names//" + family + " names//" + role.label(), role.key(family)));
+            }
         }
         return all.toArray(new AttributesDescriptor[0]);
     }
 
-    /** Tags in the demo text, one per role, so the preview shows what a resolved name looks like. */
-    private static final Map<String, TextAttributesKey> TAGS = tags();
-
+    /** Tags in the demo text, one per role, so the preview shows what a resolved name looks like in the chosen family. */
     private static Map<String, TextAttributesKey> tags() {
         Map<String, TextAttributesKey> tags = new LinkedHashMap<>();
         for (SqlSemanticColors.Role role : SqlSemanticColors.Role.values()) tags.put(role.name().toLowerCase(Locale.ROOT), role.key());
@@ -72,5 +77,5 @@ public final class LatticeSqlColorSettingsPage implements ColorSettingsPage {
     @Override public ColorDescriptor @NotNull [] getColorDescriptors() { return ColorDescriptor.EMPTY_ARRAY; }
     @Override public @NotNull SyntaxHighlighter getHighlighter() { return new LatticeSqlSyntaxHighlighter(SqlDialects.MYSQL, true); }
     @Override public @NotNull String getDemoText() { return DEMO; }
-    @Override public @Nullable Map<String, TextAttributesKey> getAdditionalHighlightingTagToDescriptorMap() { return TAGS; }
+    @Override public @Nullable Map<String, TextAttributesKey> getAdditionalHighlightingTagToDescriptorMap() { return tags(); }
 }

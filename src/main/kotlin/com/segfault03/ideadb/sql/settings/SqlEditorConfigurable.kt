@@ -13,6 +13,7 @@ import com.intellij.ui.components.JBList
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.Cell
 import com.intellij.ui.dsl.builder.bindItem
+import com.intellij.ui.dsl.builder.bind
 import com.intellij.ui.dsl.builder.bindSelected
 import com.intellij.ui.dsl.builder.panel
 import com.intellij.ui.layout.and
@@ -83,6 +84,17 @@ class SqlEditorConfigurable : BoundConfigurable("Lattice SQL Editor"), Searchabl
                         comboBox(SqlEditorSettings.KeywordCase.values().toList())
                             .bindItem({ settings.keywordCase() }, { settings.keywordCase(it ?: SqlEditorSettings.KeywordCase.AS_TYPED) })
                     }.enabledIf(completion.component.selected)
+                }
+                buttonsGroup("Schema name colors:") {
+                    for (family in SqlEditorSettings.ColorFamily.values()) {
+                        row {
+                            radioButton(family.toString(), family)
+                            cell(SqlColorFamilyPreview.create(family))
+                        }
+                    }
+                }.bind({ settings.schemaColorFamily() }, { settings.schemaColorFamily(it) })
+                row {
+                    comment("Tables, views and table aliases, once the file's connection has its schema cached. Columns keep their colors in every family. Each color can be changed under Settings | Editor | Color Scheme | Lattice SQL.")
                 }
                 row {
                     checkBox("Hover documentation")

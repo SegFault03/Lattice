@@ -3,6 +3,7 @@ package com.segfault03.ideadb.sql.lang;
 import com.segfault03.ideadb.model.ColumnMetadata;
 import com.segfault03.ideadb.model.ColumnReference;
 import com.segfault03.ideadb.sql.lang.SqlSemanticColors.Role;
+import com.segfault03.ideadb.sql.settings.SqlEditorSettings.ColorFamily;
 import org.junit.jupiter.api.Test;
 
 import java.sql.Types;
@@ -42,15 +43,47 @@ class SqlSemanticColorsTest {
         assertEquals(Role.OTHER, SqlSemanticColors.roleOf(column("ENUM", Types.VARCHAR, false, null)));
     }
 
-    @Test void everyRoleHasItsOwnKeyAndDistinctDefaultsForEachBrightness() {
+    @Test void everyKeyIsOneRolesAndEveryFamilyLooksDifferentInDarkAndLightSchemes() {
         var keys = new HashSet<String>();
         for (Role role : Role.values()) {
-            assertTrue(keys.add(role.key().getExternalName()), role.name());
-            assertNotEquals(role.defaultColor(true), role.defaultColor(false), role + ": a dark and a light scheme need different colors");
+            for (var key : role.keys()) assertTrue(keys.add(key.getExternalName()), role.name() + " shares a key");
         }
-        for (boolean dark : new boolean[] {true, false}) {
+        for (ColorFamily family : ColorFamily.values()) {
+            for (boolean dark : new boolean[] {true, false}) {
+                var looks = new HashSet<String>();
+                for (Role role : Role.values()) {
+                    assertTrue(looks.add(role.defaultColor(dark, family).getRGB() + "/" + role.defaultFontType(family)), role + " repeats another role's look in " + family);
+                }
+            }
+            for (Role role : Role.values()) {
+                assertNotEquals(role.defaultColor(true, family), role.defaultColor(false, family), role + " in " + family + ": a dark and a light scheme need different colors");
+            }
+        }
+    }
+
+    @Test void tablesViewsAndAliasesHaveKeysPerFamilyAndColumnsOneForAll() {
+        assertEquals("LATTICE_SQL_TABLE", Role.TABLE.key(ColorFamily.CORAL).getExternalName(), "coral keeps the plain names");
+        assertEquals("LATTICE_SQL_TABLE_PERIWINKLE", Role.TABLE.key(ColorFamily.PERIWINKLE).getExternalName());
+        assertEquals("LATTICE_SQL_VIEW_LIME", Role.VIEW.key(ColorFamily.LIME).getExternalName());
+        assertEquals("LATTICE_SQL_ALIAS_NEUTRAL", Role.ALIAS.key(ColorFamily.NEUTRAL).getExternalName());
+        assertEquals(4, Role.TABLE.keys().size());
+        for (Role column : new Role[] {Role.PRIMARY_KEY, Role.FOREIGN_KEY, Role.NUMERIC, Role.TEXT, Role.OTHER}) {
+            assertFalse(column.byFamily(), column.name());
+            assertEquals(1, column.keys().size());
+            for (ColorFamily family : ColorFamily.values()) assertEquals(column.defaultColor(true, ColorFamily.CORAL), column.defaultColor(true, family));
+        }
+    }
+
+    @Test void theFamiliesDifferOnlyInTablesViewsAndAliases() {
+        for (Role role : new Role[] {Role.TABLE, Role.VIEW, Role.ALIAS}) {
             var colors = new HashSet<java.awt.Color>();
-            for (Role role : Role.values()) assertTrue(colors.add(role.defaultColor(dark)), role + " repeats another role's color");
+            for (ColorFamily family : ColorFamily.values()) colors.add(role.defaultColor(false, family));
+            assertEquals(4, colors.size(), role + " looks the same in two families");
         }
+    }
+
+    @Test void withoutAnIdeTheCoralFamilyApplies() {
+        assertEquals(ColorFamily.CORAL, SqlSemanticColors.family());
+        assertEquals(Role.TABLE.key(ColorFamily.CORAL), Role.TABLE.key());
     }
 }

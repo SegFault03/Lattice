@@ -32,7 +32,7 @@ class LatticeSqlColorSettingsPageTest {
         var page = new LatticeSqlColorSettingsPage();
         var listed = java.util.Arrays.stream(page.getAttributeDescriptors()).map(d -> d.getKey()).toList();
         for (SqlSemanticColors.Role role : SqlSemanticColors.Role.values()) {
-            assertTrue(listed.contains(role.key()), role + " is not listed");
+            for (var key : role.keys()) assertTrue(listed.contains(key), role + " " + key.getExternalName() + " is not listed");
             String tag = role.name().toLowerCase(java.util.Locale.ROOT);
             assertSame(role.key(), page.getAdditionalHighlightingTagToDescriptorMap().get(tag), tag);
             assertTrue(page.getDemoText().contains("<" + tag + ">"), role + " is not shown in the demo");

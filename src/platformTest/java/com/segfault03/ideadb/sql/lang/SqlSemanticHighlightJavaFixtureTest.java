@@ -85,6 +85,50 @@ public class SqlSemanticHighlightJavaFixtureTest extends H2SqlFixtureTestCase {
         assertEquals(List.of("title:TEXT", "books:TABLE", "id:PRIMARY_KEY"), roles());
     }
 
+    /** The color the highlight on the first occurrence of the word carries, or null when it has none. */
+    private Color forcedColorOf(String word) {
+        String text = myFixture.getEditor().getDocument().getText();
+        int at = text.indexOf(word);
+        for (HighlightInfo info : myFixture.doHighlighting()) {
+            if (info.startOffset == at && info.forcedTextAttributes != null) return info.forcedTextAttributes.getForegroundColor();
+        }
+        return null;
+    }
+
+    public void testTheChosenFamilyColorsTablesViewsAndAliases() {
+        loadSchema();
+        myFixture.configureByText("query.sql", "select title from recent r join books b on b.id = r.id");
+        var settings = com.segfault03.ideadb.sql.settings.SqlEditorSettings.getInstance();
+        var seen = new java.util.HashSet<Color>();
+        for (var family : com.segfault03.ideadb.sql.settings.SqlEditorSettings.ColorFamily.values()) {
+            settings.schemaColorFamily(family);
+            com.intellij.codeInsight.daemon.DaemonCodeAnalyzer.getInstance(getProject()).restart();
+            assertEquals(family + " view", SqlSemanticColors.attributes(scheme(), Role.VIEW, family).getForegroundColor(), forcedColorOf("recent"));
+            assertEquals(family + " table", SqlSemanticColors.attributes(scheme(), Role.TABLE, family).getForegroundColor(), forcedColorOf("books"));
+            assertEquals(family + " alias", SqlSemanticColors.attributes(scheme(), Role.ALIAS, family).getForegroundColor(), forcedColorOf("r join"));
+            assertTrue(family + " looks like another family", seen.add(forcedColorOf("books")));
+            assertEquals("columns do not change with the family", SqlSemanticColors.attributes(scheme(), Role.TEXT, family).getForegroundColor(), forcedColorOf("title"));
+        }
+    }
+
+    public void testTheNeutralFamilyUsesTheSchemesTextColor() {
+        EditorColorsScheme scheme = scheme();
+        var neutral = com.segfault03.ideadb.sql.settings.SqlEditorSettings.ColorFamily.NEUTRAL;
+        assertEquals(scheme.getDefaultForeground(), SqlSemanticColors.attributes(scheme, Role.TABLE, neutral).getForegroundColor());
+        assertEquals(java.awt.Font.BOLD, SqlSemanticColors.attributes(scheme, Role.TABLE, neutral).getFontType());
+        assertFalse("aliases are dimmer than the text", scheme.getDefaultForeground().equals(SqlSemanticColors.attributes(scheme, Role.ALIAS, neutral).getForegroundColor()));
+    }
+
+    public void testTheFamilyIsKeptInTheSettings() {
+        var settings = com.segfault03.ideadb.sql.settings.SqlEditorSettings.getInstance();
+        assertEquals(com.segfault03.ideadb.sql.settings.SqlEditorSettings.ColorFamily.CORAL, settings.schemaColorFamily());
+        settings.schemaColorFamily(com.segfault03.ideadb.sql.settings.SqlEditorSettings.ColorFamily.PERIWINKLE);
+        var restored = new com.segfault03.ideadb.sql.settings.SqlEditorSettings.State();
+        restored.schemaColorFamily = "not a family";
+        settings.loadState(restored);
+        assertEquals("an unknown value falls back to coral", com.segfault03.ideadb.sql.settings.SqlEditorSettings.ColorFamily.CORAL, settings.schemaColorFamily());
+    }
+
     public void testASchemeWithoutTheColorsGetsDefaultsThatSuitItsBrightness() {
         EditorColorsScheme scheme = scheme();
         var before = scheme.getAttributes(Role.TABLE.key());

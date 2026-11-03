@@ -16,6 +16,50 @@
       <option name="FOREGROUND" value="CC4A4A"/>
     </value>
   </option>
+  <option name="LATTICE_SQL_TABLE_PERIWINKLE">
+    <value>
+      <option name="FOREGROUND" value="3949AB"/>
+      <option name="FONT_TYPE" value="1"/>
+    </value>
+  </option>
+  <option name="LATTICE_SQL_VIEW_PERIWINKLE">
+    <value>
+      <option name="FOREGROUND" value="4A56C0"/>
+      <option name="FONT_TYPE" value="3"/>
+    </value>
+  </option>
+  <option name="LATTICE_SQL_ALIAS_PERIWINKLE">
+    <value>
+      <option name="FOREGROUND" value="6272D4"/>
+    </value>
+  </option>
+  <option name="LATTICE_SQL_TABLE_LIME">
+    <value>
+      <option name="FOREGROUND" value="5C7D00"/>
+      <option name="FONT_TYPE" value="1"/>
+    </value>
+  </option>
+  <option name="LATTICE_SQL_VIEW_LIME">
+    <value>
+      <option name="FOREGROUND" value="7A7A00"/>
+      <option name="FONT_TYPE" value="3"/>
+    </value>
+  </option>
+  <option name="LATTICE_SQL_ALIAS_LIME">
+    <value>
+      <option name="FOREGROUND" value="7A9A2E"/>
+    </value>
+  </option>
+  <option name="LATTICE_SQL_TABLE_NEUTRAL">
+    <value>
+      <option name="FONT_TYPE" value="1"/>
+    </value>
+  </option>
+  <option name="LATTICE_SQL_VIEW_NEUTRAL">
+    <value>
+      <option name="FONT_TYPE" value="3"/>
+    </value>
+  </option>
   <option name="LATTICE_SQL_COLUMN_PRIMARY_KEY">
     <value>
       <option name="FOREGROUND" value="996600"/>

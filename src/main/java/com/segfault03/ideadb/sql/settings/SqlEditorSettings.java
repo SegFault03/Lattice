@@ -32,6 +32,8 @@ public final class SqlEditorSettings implements PersistentStateComponent<SqlEdit
         public boolean validation = true;
         /** How keywords are cased when inserted: AS_TYPED follows the text around, UPPER and LOWER force it. */
         public String keywordCase = KeywordCase.AS_TYPED.name();
+        /** The colors of table, view and alias names: one of {@link ColorFamily}. */
+        public String schemaColorFamily = ColorFamily.CORAL.name();
         /** SQL inside Java and Kotlin strings: all of it, then each way a string can be recognized. */
         public boolean injection = true;
         public boolean injectExplicit = true;
@@ -50,6 +52,14 @@ public final class SqlEditorSettings implements PersistentStateComponent<SqlEdit
         AS_TYPED("As typed"), UPPER("UPPER CASE"), LOWER("lower case");
         private final String label;
         KeywordCase(String label) { this.label = label; }
+        @Override public String toString() { return label; }
+    }
+
+    /** The look of table, view and alias names; columns keep the same colors in every family. */
+    public enum ColorFamily {
+        CORAL("Coral"), PERIWINKLE("Periwinkle"), LIME("Lime"), NEUTRAL("Neutral");
+        private final String label;
+        ColorFamily(String label) { this.label = label; }
         @Override public String toString() { return label; }
     }
 
@@ -89,6 +99,14 @@ public final class SqlEditorSettings implements PersistentStateComponent<SqlEdit
         try { return KeywordCase.valueOf(state.keywordCase); } catch (RuntimeException unknown) { return KeywordCase.AS_TYPED; }
     }
     public synchronized void keywordCase(@NotNull KeywordCase value) { state.keywordCase = value.name(); }
+
+    public synchronized @NotNull ColorFamily schemaColorFamily() {
+        try { return ColorFamily.valueOf(state.schemaColorFamily); } catch (RuntimeException unknown) { return ColorFamily.CORAL; }
+    }
+    public synchronized void schemaColorFamily(@NotNull ColorFamily value) {
+        state.schemaColorFamily = value.name();
+        modifications.incrementAndGet();
+    }
 
     public synchronized boolean isHover() { return state.hover; }
     public synchronized void setHover(boolean value) { state.hover = value; }

@@ -1,6 +1,7 @@
 package com.segfault03.ideadb.sql.lang;
 
 import com.segfault03.ideadb.sql.lang.SqlSemanticColors.Role;
+import com.segfault03.ideadb.sql.settings.SqlEditorSettings.ColorFamily;
 import org.junit.jupiter.api.Test;
 import org.w3c.dom.Element;
 
@@ -24,7 +25,7 @@ class SqlColorConsistencyTest {
     private static final Path MAIN = Path.of("src/main/java");
 
     /** The classes that paint SQL, each of which gets its role colors from {@link SqlSemanticColoring} and {@link SqlSemanticColors}. */
-    private static final Set<String> PAINTERS = Set.of("SqlSemanticAnnotator", "SqlEmbeddedValidation", "SqlSwingHighlighter", "SqlDocPalette");
+    private static final Set<String> PAINTERS = Set.of("SqlSemanticAnnotator", "SqlEmbeddedValidation", "SqlSwingHighlighter", "SqlDocPalette", "SqlColorFamilyPreview");
     /** The classes that show SQL in a Swing pane, through {@code SqlSwingHighlighter} with the connection's schema. */
     private static final Set<String> PANES = Set.of("GeneratedSqlDialog", "CreateTablePanel", "AlterTablePanel", "SqlParameterPanel");
 
@@ -44,8 +45,8 @@ class SqlColorConsistencyTest {
             if (name(path).equals("SqlSemanticColors") || !rendersSql(path)) continue;
             String text = Files.readString(path).toUpperCase(java.util.Locale.ROOT);
             for (Role role : Role.values()) {
-                for (boolean dark : new boolean[] {true, false}) {
-                    String value = hex(role.defaultColor(dark));
+                for (ColorFamily family : ColorFamily.values()) for (boolean dark : new boolean[] {true, false}) {
+                    String value = hex(role.defaultColor(dark, family));
                     assertFalse(text.contains("0X" + value) || text.contains("\"#" + value + "\""),
                             name(path) + " defines the color of " + role + " (" + value + "); take it from SqlSemanticColors");
                 }
@@ -58,24 +59,36 @@ class SqlColorConsistencyTest {
             Path file = Path.of("src/main/resources/colorSchemes", dark ? "LatticeSqlSemanticDarcula.xml" : "LatticeSqlSemanticDefault.xml");
             var document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(file.toFile());
             var options = document.getDocumentElement().getChildNodes();
-            int seen = 0;
+            java.util.Map<String, String> foregrounds = new java.util.HashMap<>();
+            java.util.Map<String, Integer> fonts = new java.util.HashMap<>();
             for (int i = 0; i < options.getLength(); i++) {
                 if (!(options.item(i) instanceof Element option) || !option.getTagName().equals("option")) continue;
-                Role role = java.util.Arrays.stream(Role.values()).filter(r -> r.key().getExternalName().equals(option.getAttribute("name"))).findFirst().orElse(null);
-                assertNotNull(role, file + ": " + option.getAttribute("name") + " is not a role");
-                String foreground = null;
-                int font = 0;
+                String key = option.getAttribute("name");
+                assertNull(fonts.put(key, 0), file + ": " + key + " is listed twice");
                 var values = option.getElementsByTagName("option");
                 for (int j = 0; j < values.getLength(); j++) {
                     Element value = (Element) values.item(j);
-                    if (value.getAttribute("name").equals("FOREGROUND")) foreground = value.getAttribute("value");
-                    if (value.getAttribute("name").equals("FONT_TYPE")) font = Integer.parseInt(value.getAttribute("value"));
+                    if (value.getAttribute("name").equals("FOREGROUND")) foregrounds.put(key, value.getAttribute("value").toUpperCase(java.util.Locale.ROOT));
+                    if (value.getAttribute("name").equals("FONT_TYPE")) fonts.put(key, Integer.parseInt(value.getAttribute("value")));
                 }
-                assertEquals(hex(role.defaultColor(dark)), foreground == null ? null : foreground.toUpperCase(java.util.Locale.ROOT), file + ": " + role);
-                assertEquals(role.defaultFontType(), font, file + ": " + role + " font style");
-                seen++;
             }
-            assertEquals(Role.values().length, seen, file + " lists every role once");
+            Set<String> known = new java.util.HashSet<>();
+            for (Role role : Role.values()) {
+                for (ColorFamily family : ColorFamily.values()) {
+                    String key = role.key(family).getExternalName();
+                    if (!known.add(key)) continue;
+                    boolean derived = family == ColorFamily.NEUTRAL && role.byFamily();
+                    if (derived && role == Role.ALIAS) {
+                        assertFalse(fonts.containsKey(key), file + ": " + key + " is derived from the scheme's text color and has nothing to set");
+                        continue;
+                    }
+                    assertTrue(fonts.containsKey(key), file + " is missing " + key);
+                    assertEquals(role.defaultFontType(family), fonts.get(key), file + ": " + key + " font style");
+                    if (derived) assertFalse(foregrounds.containsKey(key), file + ": " + key + " takes the scheme's text color");
+                    else assertEquals(hex(role.defaultColor(dark, family)), foregrounds.get(key), file + ": " + key);
+                }
+            }
+            assertEquals(known.stream().filter(fonts::containsKey).collect(Collectors.toSet()), fonts.keySet(), file + " has a key that is no role's");
         }
     }
 
