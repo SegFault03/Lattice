@@ -131,6 +131,7 @@
         <highlightingPassFactory implementation="com.segfault03.ideadb.sql.card.SqlCardPassFactory"/>
         <editorFactoryListener implementation="com.segfault03.ideadb.sql.card.SqlCardEditorListener"/>
         <editorNotificationProvider implementation="com.segfault03.ideadb.sql.binding.SqlConnectionBanner"/>
+        <iw.actionProvider implementation="com.segfault03.ideadb.sql.status.LatticeStatusActionProvider"/>
         <statusBarWidgetFactory id="com.segfault03.lattice.sql.connection"
                                 implementation="com.segfault03.ideadb.sql.binding.SqlConnectionWidgetFactory"/>
         <postStartupActivity implementation="com.segfault03.ideadb.sql.SqlEditorStartupActivity"/>

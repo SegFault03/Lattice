@@ -27,7 +27,7 @@ class SqlColorConsistencyTest {
     /** The classes that paint SQL, each of which gets its role colors from {@link SqlSemanticColoring} and {@link SqlSemanticColors}. */
     private static final Set<String> PAINTERS = Set.of("SqlSemanticAnnotator", "SqlEmbeddedValidation", "SqlSwingHighlighter", "SqlDocPalette", "SqlColorFamilyPreview");
     /** The classes that show SQL in a Swing pane, through {@code SqlSwingHighlighter} with the connection's schema. */
-    private static final Set<String> PANES = Set.of("GeneratedSqlDialog", "CreateTablePanel", "AlterTablePanel", "SqlParameterPanel");
+    private static final Set<String> PANES = Set.of("GeneratedSqlDialog", "CreateTablePanel", "AlterTablePanel", "SqlParameterForm");
 
     private static List<Path> sources() throws IOException {
         try (Stream<Path> files = Files.walk(MAIN)) { return files.filter(path -> path.toString().endsWith(".java")).toList(); }
@@ -105,7 +105,7 @@ class SqlColorConsistencyTest {
             if (!PANES.contains(name(path))) continue;
             String text = Files.readString(path);
             assertTrue(text.contains("SqlSwingHighlighter.apply(") && (text.contains("apply(sql, config, namespace)") || text.contains("apply(text, config, namespace)")
-                    || text.contains("apply(preview, connection, null)")), name(path) + " colors by syntax alone");
+                    || text.contains("apply(preview, connection, null)") || text.contains("apply(colored, connection, null)")), name(path) + " colors by syntax alone");
         }
     }
 

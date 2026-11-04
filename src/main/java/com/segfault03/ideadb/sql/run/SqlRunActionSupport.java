@@ -13,6 +13,12 @@ import com.intellij.psi.PsiFile;
 import com.segfault03.ideadb.sql.binding.SqlBindingsState;
 import com.segfault03.ideadb.sql.binding.SqlDialectResolver;
 import com.segfault03.ideadb.sql.card.SqlCard;
+import com.segfault03.ideadb.sql.card.SqlCardAnchor;
+import com.segfault03.ideadb.model.DatabaseType;
+import com.segfault03.ideadb.sql.schema.SqlSchema;
+import com.segfault03.ideadb.sql.schema.SqlSchemaService;
+import com.intellij.openapi.editor.ScrollType;
+import com.intellij.psi.impl.source.tree.injected.InjectedLanguageUtil;
 import com.segfault03.ideadb.sql.card.SqlCardDataKeys;
 import com.segfault03.ideadb.editor.DatabaseEditorManager;
 import com.intellij.openapi.actionSystem.AnActionEvent;
@@ -26,6 +32,7 @@ import org.jetbrains.annotations.TestOnly;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 
 /** What the "Lattice SQL" editor actions share: availability, the target statement and the parameter values. */
 final class SqlRunActionSupport {
@@ -151,19 +158,40 @@ final class SqlRunActionSupport {
         return target;
     }
 
-    /** The value of each parameter; empty without asking when there are none, null when the user cancels. */
-    static @Nullable Map<String, SqlParameterValue> askValues(@NotNull Project project, @NotNull SqlRunTarget target) {
-        if (target.parameters().keys().isEmpty()) return Map.of();
+    /**
+     * Asks for the value of each parameter in the statement's card, lifted over the editor (see {@link SqlParameterPopup}),
+     * and hands them to {@code then}; at once and with no values when there are none, and never when the user cancels.
+     * Values start from those last entered for the file, else from the type each parameter's hint suggests.
+     */
+    static void askValues(@NotNull Project project, @NotNull Editor editor, @NotNull SqlRunTarget target, @Nullable SqlCard card,
+                          @NotNull String actionText, @NotNull Consumer<Map<String, SqlParameterValue>> then) {
+        if (target.parameters().keys().isEmpty()) {
+            then.accept(Map.of());
+            return;
+        }
         SqlRunState remembered = SqlRunState.getInstance(project);
         String fileUrl = target.file().getUrl();
         Map<String, SqlParameterValue> initial = new LinkedHashMap<>(remembered.values(fileUrl));
         initial.keySet().retainAll(target.parameters().keys());
+        Consumer<Map<String, SqlParameterValue>> remembering = values -> {
+            remembered.remember(fileUrl, values);
+            then.accept(values);
+        };
         var provider = valuesProvider;
-        Map<String, SqlParameterValue> values = provider != null
-                ? provider.apply(target, initial)
-                : new SqlParameterDialog(project, target, initial).showAndGetValues();
-        if (values != null) remembered.remember(fileUrl, values);
-        return values;
+        if (provider != null) {
+            Map<String, SqlParameterValue> values = provider.apply(target, initial);
+            if (values != null) remembering.accept(values);
+            return;
+        }
+        ConnectionConfig connection = target.connection();
+        SqlSchema schema = connection == null ? null : SqlSchemaService.getInstance().schema(connection);
+        Map<String, SqlParameterHints.Hint> hints = SqlParameterHints.of(target.sql(), target.profile(), target.parameters(), schema);
+        var form = new SqlParameterForm(target.sql(), target.parameters(),
+                connection != null ? connection.getType() : DatabaseType.MYSQL, connection, hints, initial, actionText);
+        Editor host = InjectedLanguageUtil.getTopLevelEditor(editor);
+        // A card's toolbar is only shown for a card in view; without a card the form goes on the caret's line.
+        if (card == null) host.getScrollingModel().scrollToCaret(ScrollType.MAKE_VISIBLE);
+        SqlParameterPopup.show(host, SqlCardAnchor.of(host, card), form, remembering);
     }
 
     static void openConsole(@NotNull Project project, @NotNull ConnectionConfig config, @NotNull String sql) {

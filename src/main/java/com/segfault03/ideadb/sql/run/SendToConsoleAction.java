@@ -13,8 +13,6 @@ import com.segfault03.ideadb.sql.card.SqlCardDataKeys;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Map;
-
 /** Editor menu action: write the statement at the caret into the connection's console without running it. */
 public final class SendToConsoleAction extends AnAction implements DumbAware {
     @Override public @NotNull ActionUpdateThread getActionUpdateThread() { return ActionUpdateThread.BGT; }
@@ -34,9 +32,9 @@ public final class SendToConsoleAction extends AnAction implements DumbAware {
     static void sendToConsole(@NotNull Project project, @NotNull Editor editor, @NotNull PsiFile file, @Nullable SqlCard card) {
         SqlRunTarget target = SqlRunActionSupport.targetOrShowProblem(project, editor, file, card, SqlRunActionSupport.CardUse.CONSOLE);
         if (target == null || target.connection() == null) return;
-        Map<String, SqlParameterValue> values = SqlRunActionSupport.askValues(project, target);
-        if (values == null) return;
-        String sql = SqlLiteralRenderer.render(target.sql(), target.parameters(), values, target.connection().getType());
-        SqlRunActionSupport.openConsole(project, target.connection(), sql);
+        SqlRunActionSupport.askValues(project, editor, target, card, "Send to Console", values -> {
+            String sql = SqlLiteralRenderer.render(target.sql(), target.parameters(), values, target.connection().getType());
+            SqlRunActionSupport.openConsole(project, target.connection(), sql);
+        });
     }
 }

@@ -57,10 +57,10 @@ final class DryRunRunner {
             Messages.showErrorDialog(project, ALREADY_RUNNING, TITLE);
             return;
         }
-        Map<String, SqlParameterValue> values = SqlRunActionSupport.askValues(project, target);
-        if (values == null) return;
-        if (mode == Mode.ROLL_BACK && !RollbackConfirmation.confirm(project, config, kind)) return;
-        launch(project, target, kind, mode, values);
+        SqlRunActionSupport.askValues(project, editor, target, card, mode == Mode.EXPLAIN ? "Explain" : "Run and Roll Back", values -> {
+            if (mode == Mode.ROLL_BACK && !RollbackConfirmation.confirm(project, config, kind)) return;
+            launch(project, target, kind, mode, values);
+        });
     }
 
     /** The same statement with the same values, as Re-run does it; the confirmation still applies. */

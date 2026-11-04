@@ -12,6 +12,7 @@ import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.PsiFile;
+import com.segfault03.ideadb.sql.status.LatticeActivity;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -44,7 +45,10 @@ final class SqlCardPass extends TextEditorHighlightingPass {
 
     @Override public void doCollectInformation(@NotNull ProgressIndicator progress) {
         stamp = editor.getDocument().getModificationStamp();
-        if (enabled) cards = SqlCardLocator.cards(myProject, file);
+        if (!enabled) return;
+        try (var ignored = LatticeActivity.begin(file.getVirtualFile(), LatticeActivity.Stage.READING)) {
+            cards = SqlCardLocator.cards(myProject, file);
+        }
     }
 
     @Override public void doApplyInformationToEditor() {

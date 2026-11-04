@@ -9,6 +9,7 @@ import com.intellij.psi.util.CachedValue;
 import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.openapi.util.Key;
+import com.segfault03.ideadb.sql.status.LatticeActivity;
 import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.sql.binding.SqlBindingsState;
 import com.segfault03.ideadb.sql.binding.SqlDialectResolver;
@@ -41,6 +42,14 @@ public final class SqlValidation {
     }
 
     private static CachedValueProvider.Result<List<SqlDiagnostic>> compute(PsiFile file) {
+        // Reported against the file being edited, so the editor's status icon shows the work.
+        try (var ignored = LatticeActivity.begin(InjectedLanguageManager.getInstance(file.getProject()).getTopLevelFile(file).getVirtualFile(),
+                LatticeActivity.Stage.CHECKING)) {
+            return computeChecked(file);
+        }
+    }
+
+    private static CachedValueProvider.Result<List<SqlDiagnostic>> computeChecked(PsiFile file) {
         VirtualFile virtual = file.getOriginalFile().getVirtualFile();
         SqlDialectProfile profile = SqlDialectResolver.resolve(file.getProject(), virtual);
         ConnectionConfig connection = SqlDialectResolver.connection(file.getProject(), virtual);

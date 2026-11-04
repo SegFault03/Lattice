@@ -56,7 +56,7 @@ Once the file's connection has its schema cached, names the schema knows are col
 | Foreign key column | purple, bold |
 | Any other column | by the kind of value it holds: numbers blue, text green, dates and times orange, booleans teal, binary pink, JSON, enums and the like tan |
 
-Tables, views and aliases come in four families, chosen under **Settings | Tools | Lattice SQL Editor | Schema name colors**, with the families listed on the left and the same SQL shown on a light and on a dark editor on the right (the defaults of the family; colors you have set in the color scheme are not shown): **Coral** (the default), **Periwinkle**, **Lime**, and **Neutral**, which uses the editor's text color (bold for tables and views, faded for aliases) and so follows any theme. Columns look the same in every family. A column that is both a primary key and a foreign key shows as a primary key. Names the schema does not know (a typo, an expression alias, a derived table) and files with no connection keep the syntax colors. The colors are the same everywhere SQL is shown: `.sql` files, SQL in Java and Kotlin strings and its cards, the SQL console and the WHERE and ORDER BY fields, the Generated SQL, Create table and Alter table previews, the SQL parameter preview, and the hover cards. They are read from the cached schema only (a dialog opened before the schema is cached shows the syntax colors alone), and follow the editor color scheme: each family's colors are keys under **Settings | Editor | Color Scheme | Lattice SQL | Schema names**, with defaults that are lighter on a dark scheme and deeper on a light one. The hover cards use the same colors. They turn off with **Syntax highlighting** in the SQL editor settings, and files over 300,000 characters keep the syntax colors only.
+Tables, views and aliases come in four families, chosen under **Settings | Tools | Lattice SQL Editor | Schema name colors**, with the families listed on the left and the same SQL shown on a light and on a dark editor on the right (the defaults of the family; colors you have set in the color scheme are not shown): **Coral** (the default), **Periwinkle**, **Lime**, and **Neutral**, which uses the editor's text color (bold for tables and views, faded for aliases) and so follows any theme. Columns look the same in every family. A column that is both a primary key and a foreign key shows as a primary key. Names the schema does not know (a typo, an expression alias, a derived table) and files with no connection keep the syntax colors. The colors are the same everywhere SQL is shown: `.sql` files, SQL in Java and Kotlin strings and its cards, the SQL console and the WHERE and ORDER BY fields, the Generated SQL, Create table and Alter table previews, the parameter card, and the hover cards. They are read from the cached schema only (a dialog opened before the schema is cached shows the syntax colors alone), and follow the editor color scheme: each family's colors are keys under **Settings | Editor | Color Scheme | Lattice SQL | Schema names**, with defaults that are lighter on a dark scheme and deeper on a light one. The hover cards use the same colors. They turn off with **Syntax highlighting** in the SQL editor settings, and files over 300,000 characters keep the syntax colors only.
 
 ## Hover details
 
@@ -79,7 +79,7 @@ The SQL that Lattice itself shows follows the same support as a `.sql` file, for
 |---|---|
 | **SQL console** | Highlighting, completion, hover and the checks of [Validation](#validation), against the connection and the database chosen in the console's picker; the findings are underlined as in a file and shown on hover. `Ctrl+Enter` still runs the selection or the whole text |
 | **WHERE and ORDER BY fields** of the table editor | Highlighting and completion. The field holds the end of `select * from <table> where ...` (or `order by ...`), so it completes the table's columns, functions and keywords; `Enter` applies the filter unless the completion popup is open |
-| **Create and Alter table preview**, **Generated SQL**, **parameter preview** | Highlighting only, as these are generated and read-only. A parameter preview that shows an error instead of SQL is not colored |
+| **Create and Alter table preview**, **Generated SQL**, **parameter card** | Highlighting only, as these are generated and read-only |
 
 The console and the filter fields are IDE editors only inside a project and while **Enable Lattice SQL editor support** is on; otherwise they are plain text fields as before. Their findings come from the same cached schema as a file's and are not inspections, so they cannot be silenced with `-- noinspection`; **Validation** in the settings turns them off with the rest. Console history and templates are not colored.
 
@@ -117,7 +117,13 @@ Cards are not shown in Lattice's own SQL editors, in viewers and diffs, or in fi
 
 `?`, `:name` and `$1` are parameters. MySQL `@name` is a session variable and is left alone. In a `.sql` file for PostgreSQL, `?`, `?|` and `?&` are jsonb operators; in a Java or Kotlin string `?` is a JDBC parameter for every database. The parts of a string that are only known at run time (`"... where id = " + id`) become positional parameters. A statement that mixes positional and named parameters is refused.
 
-Before a statement with parameters is sent or run, a dialog asks for each value with a type (text, number, boolean, date `yyyy-MM-dd`, timestamp `yyyy-MM-dd HH:mm:ss[.fffffffff]`) or NULL, and shows the resulting SQL below. A repeated `:name` asks once. Values are remembered per file and parameter in the project's workspace file (`.idea/workspace.xml`), never in shared project files, and fill the dialog the next time.
+Before a statement with parameters is run, sent or explained, its card lifts into a focused card of its own over the editor, with the SQL where the card's SQL was and a field in the place of each parameter. Code around the card does not move. A statement without a card (cards turned off) gets the same card over its first line. Each field shows what it expects:
+
+- **Placeholder:** the format of its type (`42`, `yyyy-MM-dd`, `yyyy-MM-dd HH:mm:ss`, `true`), or the parameter's or column's name for text.
+- **Status line:** under the SQL, for the focused field: the column it is compared with or assigned to and the column's type from the cached schema (`orders.placed_at · DATETIME`), "row count" for `LIMIT`, `OFFSET` and `FETCH FIRST`, or "LIKE pattern" for `LIKE`. Without a cached schema only the column's name is shown.
+- **Type chip:** beside each field (text, number, bool, date, timestamp, NULL). It starts at the type the column suggests and can be changed by clicking it.
+
+Columns are found from `col = ?`, `? < col`, `col IN (?, ?)`, `col BETWEEN ? AND ?`, `col LIKE ?`, `SET col = ?` and `INSERT INTO t (a, b) VALUES (?, ?)` (or the table's columns in order when there is no column list). Hints only advise. A value that does not read as its chosen type (`abc` as a number, `2026-13-01` as a date) is marked and blocks the run, since it is written into the SQL as a literal of that type. Every occurrence of a repeated `:name` is the same value. **Enter** runs once every value fits; **Esc** or a click elsewhere cancels. Values are remembered per file and parameter in the project's workspace file (`.idea/workspace.xml`), never in shared project files, and fill the fields the next time.
 
 Send to Console writes values into the SQL as literals for the dialect. Explain and Run and Roll Back bind them as JDBC parameters instead.
 
@@ -224,6 +230,19 @@ It is built to be quiet when unsure:
 - **Unfinished statements.** The last statement of a script file with no `;` after it may still be being typed, so a missing final piece is not reported as incomplete. SQL in a code string is complete by itself and is checked as such.
 - **Large files.** A script over 200,000 characters is not validated.
 - **Names** match ignoring case and quoting, so a difference only in case is never reported.
+
+## Status icon
+
+Each editor with Lattice SQL (`.sql` files, and Java or Kotlin files with SQL in strings) shows Lattice's state for the file at its top right, beside the error and warning counts:
+
+| Icon | State |
+|---|---|
+| Spinner | Reading the schema of the file's connection, checking the file's SQL, or finding the SQL in it (for cards) |
+| Unplugged | No connection; SQL is checked for syntax only |
+| Warning | The schema could not be read; table and column names are not checked. Retried after 30 seconds |
+| Lattice | Ready, or the schema is not read yet or may be out of date (the tooltip says which) |
+
+Clicking it shows the file, connection, schema (table count or state) and number of cards, with **Reload Schema**, which reads the schema again now, and **Choose Connection...** or **Change Connection...**.
 
 ## Connections found in the project
 

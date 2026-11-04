@@ -13,6 +13,7 @@ import com.segfault03.ideadb.state.DatabaseSettingsListener;
 import com.segfault03.ideadb.state.DatabaseSettingsState;
 import com.segfault03.ideadb.state.MetadataCacheState;
 import com.intellij.util.Alarm;
+import com.segfault03.ideadb.sql.status.LatticeActivity;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -137,6 +138,20 @@ public final class SqlSchemaService implements Disposable {
         return running != null && !running.isDone();
     }
 
+    /** Whether the last read for this connection failed and the next one waits out the retry interval. */
+    public boolean hasFailed(@NotNull String connectionId) { return backoff.blocked(connectionId); }
+
+    /** Reads the default namespace again now, whatever the cache says, even right after a failure. */
+    public void reload(@NotNull ConnectionConfig config) {
+        if (disposed) return;
+        String id = config.getId();
+        backoff.forget(id);
+        failedTables.remove(id);
+        markStale(id);
+        ensureLoaded(config);
+        SqlSchemaListener.publish(id);
+    }
+
     private boolean isReady(String connectionId, @Nullable SqlSchema schema) {
         if (schema == null || schema.defaultNamespace() == null) return false;
         var namespace = schema.namespace(null);
@@ -176,6 +191,7 @@ public final class SqlSchemaService implements Disposable {
             if (running != null && !running.isDone()) return running;
             return DatabaseTaskService.getInstance().submit(() -> run(connectionId, key, work));
         });
+        LatticeActivity.changed();
     }
 
     private void run(String connectionId, String key, Work work) {
@@ -194,6 +210,7 @@ public final class SqlSchemaService implements Disposable {
         } finally {
             loading.remove(key);
             if (!disposed) SqlSchemaListener.publish(connectionId);
+            LatticeActivity.changed();
         }
     }
 

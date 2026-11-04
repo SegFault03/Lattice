@@ -12,8 +12,6 @@ import com.intellij.psi.PsiFile;
 import com.segfault03.ideadb.sql.card.SqlCardDataKeys;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.Map;
-
 /** Run a query in the connection's console at once, with parameter values written in; a card's query, or the caret's. */
 public final class RunQueryAction extends AnAction implements DumbAware {
     @Override public @NotNull ActionUpdateThread getActionUpdateThread() { return ActionUpdateThread.BGT; }
@@ -32,9 +30,9 @@ public final class RunQueryAction extends AnAction implements DumbAware {
             Messages.showErrorDialog(project, SqlRunActionSupport.RUN_REFUSAL, DryRunRunner.TITLE);
             return;
         }
-        Map<String, SqlParameterValue> values = SqlRunActionSupport.askValues(project, target);
-        if (values == null) return;
-        String sql = SqlLiteralRenderer.render(target.sql(), target.parameters(), values, target.connection().getType());
-        SqlRunActionSupport.runInConsole(project, target.connection(), sql);
+        SqlRunActionSupport.askValues(project, editor, target, event.getData(SqlCardDataKeys.SQL_CARD), "Run", values -> {
+            String sql = SqlLiteralRenderer.render(target.sql(), target.parameters(), values, target.connection().getType());
+            SqlRunActionSupport.runInConsole(project, target.connection(), sql);
+        });
     }
 }
