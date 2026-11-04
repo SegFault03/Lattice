@@ -44,6 +44,12 @@ beforeProject {
     buildscript.repositories.prependMirror()
     repositories.prependMirror()
 }
+
+// The build script declares Central after beforeProject has run, so drop it again once the project is evaluated.
+afterProject {
+    buildscript.repositories.removeAll { it is org.gradle.api.artifacts.repositories.MavenArtifactRepository && it.url.host in setOf("repo.maven.apache.org", "repo1.maven.org") }
+    repositories.removeAll { it is org.gradle.api.artifacts.repositories.MavenArtifactRepository && it.url.host in setOf("repo.maven.apache.org", "repo1.maven.org") }
+}
 EOF
 
 # 3. UI fixture JDBC jars, fetched from the mirror (same paths as scripts/linux/review-intellij-ui.sh).

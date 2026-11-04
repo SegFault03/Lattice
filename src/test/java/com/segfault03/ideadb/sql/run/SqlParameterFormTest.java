@@ -35,6 +35,20 @@ class SqlParameterFormTest {
         assertEquals("select * from orders where customer_id =   and placed_at >=  ", form.paneTextForTests());
     }
 
+    @Test void sharedIndentationAndSurroundingBlankLinesAreLeftOut() {
+        String sql = "\n        UPDATE ORDERS\n           SET STATUS = 'x'\n\n         WHERE ID = ?\n        ";
+        var form = form(sql, Map.of());
+        // The field stands in the text as one character.
+        assertEquals("UPDATE ORDERS\n   SET STATUS = 'x'\n\n WHERE ID =  ", form.paneTextForTests());
+        assertEquals("\n        UPDATE ORDERS\n           SET STATUS = 'x'\n\n         WHERE ID = 5\n        ",
+                new SqlParameterForm(sql, SqlParameters.of(sql, SqlDialects.MYSQL, false), DatabaseType.MYSQL, null, Map.of(),
+                        Map.of("1", new SqlParameterValue(SqlParameterValue.Type.NUMBER, "5")), "Run").renderedSql());
+    }
+
+    @Test void sqlWithoutIndentationIsShownAsItIs() {
+        assertTrue(SqlParameterForm.hiddenRanges("select 1\nfrom t").isEmpty());
+    }
+
     @Test void renderedSqlFollowsTheFields() {
         var form = form(SQL, Map.of(
                 ":customer", new SqlParameterValue(SqlParameterValue.Type.NUMBER, "42"),

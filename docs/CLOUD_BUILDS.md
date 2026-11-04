@@ -78,6 +78,12 @@ beforeProject {
     buildscript.repositories.prependMirror()
     repositories.prependMirror()
 }
+
+// The build script declares Central after beforeProject has run, so drop it again once the project is evaluated.
+afterProject {
+    buildscript.repositories.removeAll { it is org.gradle.api.artifacts.repositories.MavenArtifactRepository && it.url.host in setOf("repo.maven.apache.org", "repo1.maven.org") }
+    repositories.removeAll { it is org.gradle.api.artifacts.repositories.MavenArtifactRepository && it.url.host in setOf("repo.maven.apache.org", "repo1.maven.org") }
+}
 ```
 
 Notes:
@@ -93,7 +99,7 @@ If the build still returns 429 after the mirror is in place, wait several minute
 
 Platform test tasks (`javaPlatformTest`, `kotlinPlatformTest`) resolve dynamic versions such as `test-framework:{strictly [251, 251.23774.435]}`. Gradle asks every repository for the metadata, and a 429 from Central fails the build even when a mirror answers first.
 
-Fix: the init script above removes the Central repositories (`repo.maven.apache.org`, `repo1.maven.org`) after prepending the mirrors, and adds the Huawei mirror behind the Google one. The IntelliJ release repository serves the `com.jetbrains.intellij.*` platform artifacts. Check a coordinate by hand with `curl -sL -o /dev/null -w '%{http_code}\n' <mirror>/<group path>/maven-metadata.xml`.
+Fix: the init script above removes the Central repositories (`repo.maven.apache.org`, `repo1.maven.org`) after prepending the mirrors, and adds the Huawei mirror behind the Google one. `build.gradle.kts` declares `mavenCentral()` itself, after `beforeProject` has run, so the `afterProject` block removes Central again once the project is evaluated. Without it, `uiScreenshotTest` fails resolving the version range of `org.bouncycastle:bcutil-jdk18on` (required by `ide-starter-squashed`) with a 429 from `repo.maven.apache.org`. The IntelliJ release repository serves the `com.jetbrains.intellij.*` platform artifacts. Check a coordinate by hand with `curl -sL -o /dev/null -w '%{http_code}\n' <mirror>/<group path>/maven-metadata.xml`.
 
 ## Failure: `ide-starter`, `ide-performance-testing-commands` or `ide-util-common` not resolved
 

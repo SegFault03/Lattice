@@ -323,10 +323,11 @@ public final class SqlParameterForm extends JPanel {
         else SqlSwingHighlighter.apply(colored, SqlDialects.of(type));
         StyledDocument source = colored.getStyledDocument();
         StyledDocument target = pane.getStyledDocument();
+        List<int[]> hidden = hiddenRanges(sql);
         int at = 0;
         try {
             for (SqlParameters.Occurrence occurrence : parameters.occurrences()) {
-                copy(source, target, at, occurrence.start());
+                copy(source, target, at, occurrence.start(), hidden);
                 Value value = values.get(occurrence.key());
                 if (value.label == null) {
                     String written = sql.subSequence(occurrence.start(), occurrence.end()).toString();
@@ -340,26 +341,72 @@ public final class SqlParameterForm extends JPanel {
                 target.insertString(target.getLength(), " ", holder);
                 at = occurrence.end();
             }
-            copy(source, target, at, sql.length());
+            copy(source, target, at, sql.length(), hidden);
         } catch (BadLocationException impossible) {
             throw new IllegalStateException(impossible);
         }
-        // A line with a field is as tall as the field; spacing every line the same keeps the SQL's shape.
-        if (!slots.isEmpty()) {
+        // A line with a field is as tall as the field; spacing the lines the same keeps the SQL's shape. The space goes
+        // below a line, so the last one gets none and the form ends with the SQL.
+        Element root = target.getDefaultRootElement();
+        if (!slots.isEmpty() && root.getElementCount() > 1) {
             int text = pane.getFontMetrics(font).getHeight();
             int field = slots.get(0).getPreferredSize().height;
             SimpleAttributeSet spacing = new SimpleAttributeSet();
             StyleConstants.setLineSpacing(spacing, Math.max(0f, (float) (field - text) / text));
-            target.setParagraphAttributes(0, target.getLength(), spacing, false);
+            int lastStart = root.getElement(root.getElementCount() - 1).getStartOffset();
+            target.setParagraphAttributes(0, Math.max(0, lastStart - 1), spacing, false);
         }
     }
 
-    /** Appends {@code source[from, to)} to {@code target}, run by run with its attributes. */
-    private static void copy(StyledDocument source, StyledDocument target, int from, int to) throws BadLocationException {
+    /**
+     * What the form leaves out of the SQL: blank lines before and after it, and the indentation every line shares, as
+     * SQL in a text block or a concatenation carries its code's indentation. Ascending, non-overlapping {start, end}.
+     */
+    static @NotNull List<int[]> hiddenRanges(@NotNull CharSequence sql) {
+        List<int[]> hidden = new ArrayList<>();
+        int length = sql.length();
+        int last = length;
+        while (last > 0 && Character.isWhitespace(sql.charAt(last - 1))) last--;
+        if (last == 0) return hidden;
+        int first = 0;
+        for (int i = 0; i < last && Character.isWhitespace(sql.charAt(i)); i++) if (sql.charAt(i) == '\n') first = i + 1;
+        if (first > 0) hidden.add(new int[] {0, first});
+        int indent = Integer.MAX_VALUE;
+        for (int line = first; line < last; ) {
+            int i = line;
+            while (i < last && (sql.charAt(i) == ' ' || sql.charAt(i) == '\t')) i++;
+            if (i < last && sql.charAt(i) != '\n' && sql.charAt(i) != '\r') indent = Math.min(indent, i - line);
+            int next = i;
+            while (next < last && sql.charAt(next) != '\n') next++;
+            line = next + 1;
+        }
+        for (int line = first; indent > 0 && indent != Integer.MAX_VALUE && line < last; ) {
+            int i = line;
+            while (i < last && i - line < indent && (sql.charAt(i) == ' ' || sql.charAt(i) == '\t')) i++;
+            if (i > line) hidden.add(new int[] {line, i});
+            int next = i;
+            while (next < last && sql.charAt(next) != '\n') next++;
+            line = next + 1;
+        }
+        if (last < length) hidden.add(new int[] {last, length});
+        return hidden;
+    }
+
+    /** Appends {@code source[from, to)} without the hidden ranges to {@code target}, run by run with its attributes. */
+    private static void copy(StyledDocument source, StyledDocument target, int from, int to, List<int[]> hidden) throws BadLocationException {
         int at = from;
         while (at < to) {
+            int stop = to;
+            boolean skip = false;
+            for (int[] range : hidden) {
+                if (range[1] <= at) continue;
+                if (range[0] <= at) { stop = Math.min(range[1], to); skip = true; }
+                else stop = Math.min(range[0], to);
+                break;
+            }
+            if (skip) { at = stop; continue; }
             Element run = source.getCharacterElement(at);
-            int end = Math.min(run.getEndOffset(), to);
+            int end = Math.min(run.getEndOffset(), stop);
             AttributeSet attributes = run.getAttributes().copyAttributes();
             target.insertString(target.getLength(), source.getText(at, end - at), attributes);
             at = end;
