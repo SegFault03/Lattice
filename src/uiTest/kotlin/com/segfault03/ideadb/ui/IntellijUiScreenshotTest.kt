@@ -2263,7 +2263,7 @@ class IntellijUiScreenshotTest {
                 frame.xx { and(contains(byAccessibleName("Lattice: ")), contains(byAccessibleName("\u2026"))) }.list().none { it.component.isShowing() }
         }
         status.click()
-        frame.x { byVisibleText("Reload Schema") }.waitFound()
+        frame.x { or(byVisibleText("Reload Schema"), byVisibleText("Read Schema")) }.waitFound()
         captureScreen(directory.resolve("sql-editor-status.png"))
         pressEscape()
 

@@ -242,7 +242,7 @@ Each editor with Lattice SQL (`.sql` files, and Java or Kotlin files with SQL in
 | Warning | The schema could not be read; table and column names are not checked. Retried after 30 seconds |
 | Lattice | Ready, or the schema is not read yet or may be out of date (the tooltip says which) |
 
-Clicking it shows the file, connection, schema (table count or state) and number of cards, with **Reload Schema**, which reads the schema again now, and **Choose Connection...** or **Change Connection...**.
+Clicking it shows the file, connection, schema (table count or state) and number of cards, with **Reload Schema** (**Read Schema** before the first read), which reads the schema now, and **Choose Connection...** or **Change Connection...**.
 
 ## Connections found in the project
 
