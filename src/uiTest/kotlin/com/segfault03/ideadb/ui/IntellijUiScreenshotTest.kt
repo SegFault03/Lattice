@@ -304,11 +304,11 @@ class IntellijUiScreenshotTest {
                 screenshotsDirectory.resolve("runtime-evidence.txt").writeText("""
                     Running IDE: ${actualTheme.getName()} ($themeId)
                     Lattice SQL editor actions in the installed plugin, on a project .sql file bound to an owned HSQLDB server fixture.
-                    Send to Console filled :status and :customer through the values dialog and appended literal SQL to the console without running it.
+                    The status icon in the inspection widget reported the SQL as checked against the fixture connection, and its details offered Reload Schema. Send to Console lifted the card with fields in place of :status and :customer, on their own lines, and appended literal SQL to the console without running it; Explain filled the fields with the remembered values.
                     Explain Statement opened the Dry Run tab with HSQLDB's plan (values written in, as HSQLDB rejects bound EXPLAIN parameters).
                     Run and Roll Back asked for confirmation, reported one row and Rolled back; JDBC confirmed ORDERS was unchanged.
                     CREATE TABLE was refused before any connection.
-                    SQL cards were painted behind both SQL strings of a Java file. Hovering the UPDATE card showed Run and Roll Back, enabled; hovering the SELECT card showed Run instead, and Run ran the query in the console. Captures are actual desktop pixels.
+                    SQL cards were painted behind both SQL strings of a Java file. Hovering the UPDATE card showed Run and Roll Back, enabled, which lifted the text block card with a field in place of its ?; hovering the SELECT card showed Run instead, and Run ran the query in the console. Captures are actual desktop pixels.
                 """.trimIndent())
                 return@useDriverAndCloseIde
             }
@@ -2237,6 +2237,7 @@ class IntellijUiScreenshotTest {
         // Asynchronous, against the editor: the actions open modal dialogs.
         fun run(actionId: String) = invokeAction("com.segfault03.lattice.sql.run.$actionId", false, editor.component)
         fun dialog(title: String) = frame.x(DialogUiComponent::class.java) { byTitle(title) }.waitFound()
+        fun valueField(name: String) = frame.x(JTextFieldUI::class.java) { byAccessibleName("Value of $name") }.waitFound(15.seconds)
         fun textOf(component: UiComponent): String = cast(component.component, JTextComponent::class).getText()
         fun orderStatus(): String = java.sql.DriverManager.getConnection(fixture.jdbcUrl, "SA", "").use { conn ->
             conn.createStatement().use { it.executeQuery("SELECT STATUS FROM ORDERS WHERE ID = 1").use { rows -> rows.next(); rows.getString(1) } }
@@ -2254,21 +2255,43 @@ class IntellijUiScreenshotTest {
         captureScreen(directory.resolve("sql-editor-context-menu.png"))
         pressEscape(); pressEscape()
 
-        // Send to Console: the values dialog, then literal SQL in the console, not run.
+        // Lattice's status icon in the inspection widget, and its details.
+        val status = frame.x { contains(byAccessibleName("Lattice: ")) }.waitFound(30.seconds)
+        // Settled: no longer reading the schema or checking (those states end in an ellipsis).
+        waitUntil("Lattice status settled", 60_000) {
+            frame.xx { contains(byAccessibleName("Lattice: ")) }.list().any { it.component.isShowing() } &&
+                frame.xx { and(contains(byAccessibleName("Lattice: ")), contains(byAccessibleName("\u2026"))) }.list().none { it.component.isShowing() }
+        }
+        status.click()
+        frame.x { byVisibleText("Reload Schema") }.waitFound()
+        captureScreen(directory.resolve("sql-editor-status.png"))
+        pressEscape()
+
+        // Send to Console: the card lifts with a field in place of each parameter, then literal SQL in the console, not run.
         caretAt("SELECT ID")
         run("sendToConsole")
-        dialog("SQL Parameters").also { values ->
-            val fields = values.xx(JTextFieldUI::class.java) { byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField") }.list()
-            val types = values.xx(JComboBoxUiComponent::class.java) { byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox") }.list()
-            check(fields.size == 2 && types.size == 2) { "Expected rows for :status and :customer" }
-            fields[0].text = "new"
-            types[1].selectItem("NUMBER")
-            fields[1].text = "42"
-            val preview = values.x { byAccessibleName("SQL preview") }.waitFound()
-            waitUntil("parameter preview shows literals") { textOf(preview).let { it.contains("STATUS = 'new'") && it.contains("CUSTOMER_ID = 42") } }
-            captureScreen(directory.resolve("sql-editor-parameters.png"))
-            values.pressButton("OK")
+        val statusField = valueField(":status")
+        val customerField = valueField(":customer")
+        // In place: each field sits on the line of the parameter it stands for.
+        for ((field, name) in listOf(statusField to ":status", customerField to ":customer")) {
+            val line = withContext(OnDispatcher.EDT) {
+                requireNotNull(service(FileEditorManager::class, singleProject()).getSelectedTextEditor()).offsetToXY(SQL_EDITOR_TEXT.indexOf(name)).y
+            }
+            val fieldY = field.component.getLocationOnScreen().y - editor.component.getLocationOnScreen().y
+            check(kotlin.math.abs(fieldY - line) < 40) { "Field for $name at y=$fieldY, its parameter's line at y=$line" }
         }
+        statusField.text = "new"
+        customerField.text = "42"
+        // CUSTOMER_ID is an INT column: the chip starts at number once the schema is cached; choose it otherwise.
+        val customerChip = frame.x(JLabelUiComponent::class.java) { byAccessibleName("Type of :customer") }.waitFound()
+        if (!customerChip.getText().startsWith("number")) {
+            customerChip.click()
+            frame.x { byVisibleText("Number") }.waitFound().click()
+            waitUntil("customer typed as a number") { customerChip.getText().startsWith("number") }
+        }
+        customerField.click()
+        captureScreen(directory.resolve("sql-editor-parameters.png"))
+        pressEnter()
         val console = frame.x { byJavaClass("com.segfault03.ideadb.ui.SqlQueryConsolePanel") }.waitFound()
         // The console's input is the embedded SQL editor in a real IDE, a plain text area only where that is unavailable.
         val consoleText = console.x {
@@ -2287,11 +2310,10 @@ class IntellijUiScreenshotTest {
         openFile(SQL_EDITOR_FILE)
         caretAt("SELECT ID")
         run("explain")
-        dialog("SQL Parameters").also { values ->
-            val fields = values.xx(JTextFieldUI::class.java) { byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField") }.list()
-            check(fields.map { it.text } == listOf("new", "42")) { "Remembered values must fill the dialog: ${fields.map { it.text }}" }
-            values.pressButton("OK")
-        }
+        val remembered = listOf(valueField(":status").text, valueField(":customer").text)
+        check(remembered == listOf("new", "42")) { "Remembered values must fill the fields: $remembered" }
+        valueField(":customer").click()
+        pressEnter()
         val dryRun = frame.x { byJavaClass("com.segfault03.ideadb.sql.run.DryRunPanel") }.waitFound()
         waitUntil("plan in the Dry Run tab", 60_000) { dryRun.xx { byVisibleText("Copy") }.list().isNotEmpty() &&
             dryRun.xx { byJavaClass("com.intellij.ui.components.JBTextArea") }.list().any { textOf(it).contains("ORDERS", ignoreCase = true) } }
@@ -2377,6 +2399,15 @@ class IntellijUiScreenshotTest {
             }
         }
         captureScreen(directory.resolve("sql-cards-hover.png"))
+
+        // Run and Roll Back from the toolbar: the text block card lifts with a field in place of its ?.
+        updateRollback.click()
+        val idField = frame.x(JTextFieldUI::class.java) { byAccessibleName("Value of ?1") }.waitFound(15.seconds)
+        idField.text = "2"
+        idField.click()
+        captureScreen(directory.resolve("sql-cards-parameters.png"))
+        pressEscape()
+        waitUntil("the parameter card closed") { frame.xx { byAccessibleName("Value of ?1") }.list().none { it.component.isShowing() } }
 
         val selectCopy = hover("SELECT ID")
         Thread.sleep(500)
@@ -2786,6 +2817,13 @@ class IntellijUiScreenshotTest {
             combo.driver.cast(combo.component, LiveComboSelection::class).getSelectedIndex() == index
         }
         println("Keyboard combo transition verified: $label")
+    }
+
+    private fun pressEnter() {
+        val robot = Robot()
+        robot.keyPress(KeyEvent.VK_ENTER)
+        robot.keyRelease(KeyEvent.VK_ENTER)
+        robot.waitForIdle()
     }
 
     private fun pressEscape() {

@@ -356,9 +356,10 @@ drives the installed plugin's actions from the editor:
 | Screenshot | Checked |
 |---|---|
 | `sql-editor-context-menu.png` | The editor popup's **Lattice SQL** group with its three actions |
-| `sql-editor-parameters.png` | The values dialog for `:status` and `:customer`, with the preview showing literals |
+| `sql-editor-status.png` | Lattice's status icon in the editor's inspection widget, with its details popup (connection, schema, Reload Schema) |
+| `sql-editor-parameters.png` | The statement's card lifted over the editor, with fields in place of `:status` and `:customer` and their type chips |
 | `sql-editor-send-to-console.png` | The console holds the literal SQL; nothing ran |
-| `sql-editor-explain.png` | Remembered values fill the dialog; the Dry Run tab shows HSQLDB's plan |
+| `sql-editor-explain.png` | Remembered values fill the fields; the Dry Run tab shows HSQLDB's plan |
 | `sql-editor-rollback-confirm.png` | The confirmation lists the three caveats |
 | `sql-editor-rolled-back.png` | **Rolled back** with one row; JDBC confirms the table is unchanged |
 | `sql-editor-rollback-refused.png` | `CREATE TABLE` is refused before connecting |
