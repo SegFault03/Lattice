@@ -89,8 +89,8 @@ Right-click in a `.sql` file or in a SQL string of Java or Kotlin code and open 
 
 | Action | What it does |
 |---|---|
-| **Run** | Runs a query (`SELECT`, or a `WITH` that only reads) in the Lattice console of the file's connection and schema, with parameter values written in, and shows its results there. Other statements are refused |
-| **Send to Console** | Appends the statement, as written, to the Lattice console of the file's connection and schema. Parameters are left as they are and no values are asked for. It does not run it |
+| **Run** | Runs a query (`SELECT`, or a `WITH` that only reads) in the Lattice console of the file's connection and schema, with parameter values written in, and shows its results there. The console's text is replaced by the query. Other statements are refused |
+| **Send to Console** | Puts the statement, as written, in the Lattice console of the file's connection and schema, replacing the console's text. Parameters are left as they are and no values are asked for. It does not run it |
 | **Explain Statement** | Shows the database's execution plan in a **Dry Run** tab. The statement is not executed |
 | **Run and Roll Back** | Runs an `INSERT`, `UPDATE`, `DELETE` or `MERGE` (and MySQL `REPLACE`) in a transaction, reports the rows it affects, and always rolls it back |
 

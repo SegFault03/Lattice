@@ -296,9 +296,9 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         input.select(start, start + sql.length());
     }
 
-    /** Inserts {@code sql} as {@link #insertSqlText} does and runs it, once databases have loaded and no query is running. */
+    /** Replaces the console's text with {@code sql} and runs it, once databases have loaded and no query is running. */
     public void runSqlText(String sql) {
-        insertSqlText(sql);
+        setSqlText(sql);
         runWhenReady = true;
         runPendingIfReady();
     }

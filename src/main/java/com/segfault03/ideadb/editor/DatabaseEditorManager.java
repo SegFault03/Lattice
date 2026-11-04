@@ -70,7 +70,7 @@ public class DatabaseEditorManager implements com.intellij.openapi.Disposable {
                 FileEditorManager.getInstance(project).openFile(vf, true);
                 if (initialSql != null && console.getPanel() != null) {
                     if (run) console.getPanel().runSqlText(initialSql);
-                    else console.getPanel().insertSqlText(initialSql);
+                    else console.getPanel().setSqlText(initialSql);
                 }
                 return;
             }
