@@ -166,7 +166,12 @@ public final class EmbeddedSqlInput implements SqlInput {
         pendingStart = start;
         pendingEnd = end;
         Editor editor = editor();
-        if (editor != null) editor.getSelectionModel().setSelection(start, end);
+        if (editor != null) {
+            // SQL appended below what is visible would otherwise be selected out of sight.
+            editor.getCaretModel().moveToOffset(Math.min(end, document.getTextLength()));
+            editor.getScrollingModel().scrollToCaret(com.intellij.openapi.editor.ScrollType.MAKE_VISIBLE);
+            editor.getSelectionModel().setSelection(start, end);
+        }
     }
 
     @Override public void insertAtCaret(@NotNull String value) {
