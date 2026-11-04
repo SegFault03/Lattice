@@ -31,7 +31,7 @@ class SqlColorFamilyPreviewTest {
                 for (ColorFamily family : ColorFamily.values()) {
                     JTextPane pane = SqlColorFamilyPreview.create(family, dark);
                     String where = family + (dark ? " on dark" : " on light");
-                    assertEquals(TEXT, pane.getText(), where);
+                    assertEquals(TEXT, pane.getText().replace("\r\n", "\n"), where);
                     assertFalse(pane.isEditable(), where);
                     assertEquals(SqlColorFamilyPreview.background(dark), pane.getBackground(), where);
                     assertEquals(SqlColorFamilyPreview.colorOf(Role.TABLE, family, dark), colorAt(pane, "orders"), where + " table");

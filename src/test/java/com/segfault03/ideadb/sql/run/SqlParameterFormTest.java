@@ -37,7 +37,7 @@ class SqlParameterFormTest {
         String sql = "\n        UPDATE ORDERS\n           SET STATUS = 'x'\n\n         WHERE ID = ?\n        ";
         var form = form(sql, Map.of());
         // The field stands in the text as one character.
-        assertEquals("UPDATE ORDERS\n   SET STATUS = 'x'\n\n WHERE ID =  ", form.paneTextForTests());
+        assertEquals("UPDATE ORDERS\n   SET STATUS = 'x'\n\n WHERE ID =  ", form.paneTextForTests().replace("\r\n", "\n"));
         assertEquals("\n        UPDATE ORDERS\n           SET STATUS = 'x'\n\n         WHERE ID = '5'\n        ",
                 form(sql, Map.of("1", text("5"))).renderedSql());
     }
