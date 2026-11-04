@@ -135,6 +135,8 @@ class DeploymentTests(unittest.TestCase):
         self.assertFalse(deploy.is_idea_process(deploy.Process(3, java, ("java", f"-Didea.home.path={ide.home}", "org.jetbrains.jps.cmdline.Launcher")), ide))
         self.assertFalse(deploy.is_idea_process(deploy.Process(4, java, ("java", f"-Didea.home.path={ide.home}-other", "com.intellij.idea.Main")), ide))
         self.assertFalse(deploy.is_idea_process(deploy.Process(5, ide.launcher, (str(ide.launcher), "installPlugins", "plugin-id")), ide))
+        # An AI agent's MCP helper runs from the same launcher but is not the IDE.
+        self.assertFalse(deploy.is_idea_process(deploy.Process(6, ide.launcher, (str(ide.launcher), "stdioMcpServer")), ide))
 
     @unittest.skipUnless(os.name == "nt", "Windows native argument parser")
     def test_windows_command_line_preserves_paths_with_spaces(self):
@@ -315,6 +317,20 @@ class DeploymentTests(unittest.TestCase):
                  redirect_stdout(io.StringIO()):
                 self.assertEqual(1 if fails else 0, deploy.main(self.cli_args(ide)))
             self.assertEqual(["stop", "deploy", "start"], events)
+
+    def test_helpers_left_by_the_closed_ide_are_ended_but_the_ide_never_is(self):
+        ide = self.ide()
+        helper = deploy.Process(777, ide.launcher, (str(ide.launcher), "stdioMcpServer"))
+        other = deploy.Process(888, self.root / "other" / "idea64.exe", ("other", "stdioMcpServer"))
+        with patch.object(deploy, "scan_processes", return_value=[helper, other]), \
+             patch.object(deploy.os, "kill") as kill:
+            deploy.stop_helpers(ide, self.quiet_progress())
+        kill.assert_called_once_with(777, deploy.signal.SIGTERM)
+
+    def test_helper_alone_does_not_count_as_a_running_ide(self):
+        ide = self.ide()
+        helper = deploy.Process(777, ide.launcher, (str(ide.launcher), "stdioMcpServer"))
+        self.assertEqual([], deploy.matching_processes(ide, [helper]))
 
     def test_shutdown_timeout_aborts_without_force_kill(self):
         ide = self.ide()
