@@ -118,7 +118,7 @@ final class LatticeStatusAction extends DumbAwareAction {
         JPanel links = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         links.setOpaque(false);
         if (connection != null) {
-            links.add(new ActionLink("Reload Schema", event -> {
+            links.add(new ActionLink(status.state() == LatticeFileStatus.State.SCHEMA_MISSING ? "Read Schema" : "Reload Schema", event -> {
                 close.run();
                 SqlSchemaService.getInstance().reload(connection);
             }));
@@ -128,6 +128,7 @@ final class LatticeStatusAction extends DumbAwareAction {
             close.run();
             SqlConnectionChooser.chooseForFile(project, SqlBindingsState.hostOf(file), editor);
         }));
+        constraints.gridy++;
         constraints.gridx = 0;
         constraints.gridwidth = 2;
         constraints.insets = JBUI.insetsTop(10);

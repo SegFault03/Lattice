@@ -23,7 +23,7 @@ final class SqlParameterPopup {
     private SqlParameterPopup() {}
 
     /** Shows the form over {@code anchor} (content component coordinates); {@code then} gets the values once submitted. */
-    static void show(@NotNull Editor editor, @NotNull Rectangle anchor, @NotNull SqlParameterForm form,
+    static @NotNull JBPopup show(@NotNull Editor editor, @NotNull Rectangle anchor, @NotNull SqlParameterForm form,
                      @NotNull Consumer<Map<String, SqlParameterValue>> then) {
         Rectangle visible = editor.getScrollingModel().getVisibleArea();
         int left = Math.max(anchor.x, visible.x);
@@ -50,6 +50,7 @@ final class SqlParameterPopup {
             popup.pack(true, true);
         });
         popup.show(new RelativePoint(editor.getContentComponent(), location(anchor, form.sqlOrigin(), preferred.height, visible)));
+        return popup;
     }
 
     /**

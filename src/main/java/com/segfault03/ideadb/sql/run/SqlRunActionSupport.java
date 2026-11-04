@@ -17,6 +17,9 @@ import com.segfault03.ideadb.sql.card.SqlCardAnchor;
 import com.segfault03.ideadb.model.DatabaseType;
 import com.segfault03.ideadb.sql.schema.SqlSchema;
 import com.segfault03.ideadb.sql.schema.SqlSchemaService;
+import com.segfault03.ideadb.sql.schema.SqlSchemaListener;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.ui.popup.JBPopup;
 import com.intellij.openapi.editor.ScrollType;
 import com.intellij.psi.impl.source.tree.injected.InjectedLanguageUtil;
 import com.segfault03.ideadb.sql.card.SqlCardDataKeys;
@@ -184,14 +187,23 @@ final class SqlRunActionSupport {
             return;
         }
         ConnectionConfig connection = target.connection();
-        SqlSchema schema = connection == null ? null : SqlSchemaService.getInstance().schema(connection);
+        SqlSchemaService schemas = SqlSchemaService.getInstance();
+        // Running a statement uses the database, so its schema is read now if it is not cached; the hints follow once it is.
+        if (connection != null) schemas.ensureLoaded(connection);
+        SqlSchema schema = connection == null ? null : schemas.schema(connection);
         Map<String, SqlParameterHints.Hint> hints = SqlParameterHints.of(target.sql(), target.profile(), target.parameters(), schema);
         var form = new SqlParameterForm(target.sql(), target.parameters(),
                 connection != null ? connection.getType() : DatabaseType.MYSQL, connection, hints, initial, actionText);
         Editor host = InjectedLanguageUtil.getTopLevelEditor(editor);
         // A card's toolbar is only shown for a card in view; without a card the form goes on the caret's line.
         if (card == null) host.getScrollingModel().scrollToCaret(ScrollType.MAKE_VISIBLE);
-        SqlParameterPopup.show(host, SqlCardAnchor.of(host, card), form, remembering);
+        JBPopup popup = SqlParameterPopup.show(host, SqlCardAnchor.of(host, card), form, remembering);
+        if (connection != null) {
+            ApplicationManager.getApplication().getMessageBus().connect(popup).subscribe(SqlSchemaListener.TOPIC, (SqlSchemaListener) id -> {
+                SqlSchema read = id.equals(connection.getId()) ? schemas.schema(connection) : null;
+                if (read != null && !popup.isDisposed()) form.updateHints(SqlParameterHints.of(target.sql(), target.profile(), target.parameters(), read));
+            });
+        }
     }
 
     static void openConsole(@NotNull Project project, @NotNull ConnectionConfig config, @NotNull String sql) {

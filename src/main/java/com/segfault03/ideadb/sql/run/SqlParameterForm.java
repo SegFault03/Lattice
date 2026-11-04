@@ -95,17 +95,20 @@ public final class SqlParameterForm extends JPanel {
     /** One parameter key: its hint, its type and the text its fields share. */
     private final class Value {
         final String key;
-        final SqlParameterHints.Hint hint;
+        SqlParameterHints.Hint hint;
+        /** Whether the type is the user's own or remembered, so a hint that arrives later leaves it alone. */
+        boolean typeChosen;
         final PlainDocument document = new PlainDocument();
         final List<Slot> slots = new ArrayList<>();
         SqlParameterValue.Type type;
         /** The type before NULL was picked, to return to. */
         SqlParameterValue.Type lastType;
 
-        Value(String key, SqlParameterHints.Hint hint, SqlParameterValue initial) {
+        Value(String key, SqlParameterHints.Hint hint, SqlParameterValue initial, boolean chosen) {
             this.key = key;
             this.hint = hint;
             this.type = initial.type();
+            this.typeChosen = chosen;
             this.lastType = initial.type() == SqlParameterValue.Type.NULL ? SqlParameterValue.Type.TEXT : initial.type();
             try {
                 document.insertString(0, initial.text(), null);
@@ -211,7 +214,8 @@ public final class SqlParameterForm extends JPanel {
             int width = Math.max(metrics.stringWidth(shown), metrics.charWidth('m') * MIN_CHARS);
             width = Math.min(width, metrics.charWidth('m') * MAX_CHARS);
             Insets insets = field.getInsets();
-            field.setPreferredSize(new Dimension(width + insets.left + insets.right + JBUI.scale(4), field.getUI().getPreferredSize(field).height));
+            // A character to spare, so the caret after the last one never scrolls the text.
+            field.setPreferredSize(new Dimension(width + insets.left + insets.right + metrics.charWidth('m'), field.getUI().getPreferredSize(field).height));
             return super.getPreferredSize();
         }
 
@@ -250,8 +254,9 @@ public final class SqlParameterForm extends JPanel {
         for (String key : parameters.keys()) {
             SqlParameterHints.Hint hint = hints.getOrDefault(key, SqlParameterHints.Hint.NONE);
             SqlParameterValue start = initial.get(key);
+            boolean remembered = start != null;
             if (start == null) start = new SqlParameterValue(hint.suggested() != null ? hint.suggested() : SqlParameterValue.Type.TEXT, "");
-            values.put(key, new Value(key, hint, start));
+            values.put(key, new Value(key, hint, start, remembered));
         }
 
         submit = new JButton(actionText);
@@ -283,20 +288,23 @@ public final class SqlParameterForm extends JPanel {
     }
 
     private JPanel footer() {
-        JPanel row = new JPanel();
-        row.setLayout(new BoxLayout(row, BoxLayout.X_AXIS));
+        JPanel row = new JPanel(new BorderLayout(JBUI.scale(12), 0));
         row.setOpaque(false);
         status.setFont(JBUI.Fonts.smallFont());
-        status.setAllowAutoWrapping(true);
-        row.add(status);
-        row.add(Box.createHorizontalGlue());
-        row.add(Box.createHorizontalStrut(JBUI.scale(12)));
+        // The status line takes the room the buttons leave; it never widens the form, which would squeeze the buttons.
+        status.setMinimumSize(new Dimension(0, 0));
+        status.setPreferredSize(new Dimension(0, status.getPreferredSize().height));
+        row.add(status, BorderLayout.CENTER);
+        JPanel buttons = new JPanel();
+        buttons.setLayout(new BoxLayout(buttons, BoxLayout.X_AXIS));
+        buttons.setOpaque(false);
         JButton cancel = new JButton("Cancel");
         cancel.addActionListener(event -> { if (onCancel != null) onCancel.run(); });
-        row.add(cancel);
-        row.add(Box.createHorizontalStrut(JBUI.scale(4)));
+        buttons.add(cancel);
+        buttons.add(Box.createHorizontalStrut(JBUI.scale(4)));
         submit.putClientProperty("JButton.buttonType", "default");
-        row.add(submit);
+        buttons.add(submit);
+        row.add(buttons, BorderLayout.EAST);
         return row;
     }
 
@@ -363,6 +371,7 @@ public final class SqlParameterForm extends JPanel {
         var step = new BaseListPopupStep<>("Value Type", TYPES) {
             @Override public @NotNull String getTextFor(SqlParameterValue.Type item) { return typeName(item); }
             @Override public @Nullable PopupStep<?> onChosen(SqlParameterValue.Type chosen, boolean finalChoice) {
+                value.typeChosen = true;
                 value.type(chosen);
                 if (chosen != SqlParameterValue.Type.NULL) slot.field.requestFocusInWindow();
                 return FINAL_CHOICE;
@@ -382,6 +391,11 @@ public final class SqlParameterForm extends JPanel {
 
     /** The first value that does not fit its type, else what the focused parameter expects. */
     private void updateStatus() {
+        updateStatusText();
+        status.setToolTipText(status.getText().isBlank() ? null : status.getText());
+    }
+
+    private void updateStatusText() {
         Value invalid = firstInvalid(showAllErrors);
         Value shown = invalid != null ? invalid : focused;
         if (parameters.error() != null) {
@@ -439,6 +453,23 @@ public final class SqlParameterForm extends JPanel {
         if (width == natural.width) return;
         pane.setSize(width, Short.MAX_VALUE);
         pane.setPreferredSize(new Dimension(width, pane.getPreferredSize().height));
+    }
+
+    /**
+     * Hints worked out again, once the schema has been read: each parameter shows its new hint, and one whose type the
+     * user has not chosen (nor had remembered) takes the type the new hint suggests.
+     */
+    public void updateHints(@NotNull Map<String, SqlParameterHints.Hint> hints) {
+        for (Value value : values.values()) {
+            SqlParameterHints.Hint hint = hints.get(value.key);
+            if (hint == null) continue;
+            value.hint = hint;
+            if (!value.typeChosen && hint.suggested() != null && value.type != SqlParameterValue.Type.NULL) {
+                value.type = hint.suggested();
+                value.lastType = hint.suggested();
+            }
+        }
+        changed();
     }
 
     public void onSubmit(@NotNull Runnable handler) { onSubmit = handler; }

@@ -2282,12 +2282,11 @@ class IntellijUiScreenshotTest {
         }
         statusField.text = "new"
         customerField.text = "42"
-        // CUSTOMER_ID is an INT column: the chip starts at number once the schema is cached; choose it otherwise.
+        // CUSTOMER_ID is an INT column: opening the form reads the schema, and the chip follows the hint to number.
         val customerChip = frame.x(JLabelUiComponent::class.java) { byAccessibleName("Type of :customer") }.waitFound()
-        if (!customerChip.getText().startsWith("number")) {
-            customerChip.click()
-            frame.x { byVisibleText("Number") }.waitFound().click()
-            waitUntil("customer typed as a number") { customerChip.getText().startsWith("number") }
+        waitUntil("customer typed as a number from the schema", 60_000) { customerChip.getText().startsWith("number") }
+        check(frame.x(JLabelUiComponent::class.java) { byAccessibleName("Type of :status") }.waitFound().getText().startsWith("text")) {
+            "STATUS is a VARCHAR column"
         }
         customerField.click()
         captureScreen(directory.resolve("sql-editor-parameters.png"))
