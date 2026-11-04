@@ -172,6 +172,8 @@ public final class SqlParameterForm extends JPanel {
             setOpaque(false);
             field.setDocument(value.document);
             field.setFont(font);
+            // Compact, so a line with a field is barely taller than the SQL around it.
+            field.putClientProperty("JComponent.compactHeight", Boolean.TRUE);
             field.addActionListener(event -> trySubmit());
             field.getAccessibleContext().setAccessibleName("Value of " + value.label());
             field.addFocusListener(new FocusAdapter() {
@@ -215,8 +217,14 @@ public final class SqlParameterForm extends JPanel {
             width = Math.min(width, metrics.charWidth('m') * MAX_CHARS);
             Insets insets = field.getInsets();
             // A character to spare, so the caret after the last one never scrolls the text.
-            field.setPreferredSize(new Dimension(width + insets.left + insets.right + metrics.charWidth('m'), field.getUI().getPreferredSize(field).height));
+            field.setPreferredSize(new Dimension(width + insets.left + insets.right + metrics.charWidth('m'), fieldHeight()));
             return super.getPreferredSize();
+        }
+
+        /** The text's line height and a little room for the field's border, never more than the field asks for. */
+        private int fieldHeight() {
+            int natural = field.getUI().getPreferredSize(field).height;
+            return Math.min(natural, field.getFontMetrics(font).getHeight() + JBUI.scale(6));
         }
 
         @Override public Dimension getMaximumSize() { return getPreferredSize(); }
@@ -344,17 +352,6 @@ public final class SqlParameterForm extends JPanel {
             copy(source, target, at, sql.length(), hidden);
         } catch (BadLocationException impossible) {
             throw new IllegalStateException(impossible);
-        }
-        // A line with a field is as tall as the field; spacing the lines the same keeps the SQL's shape. The space goes
-        // below a line, so the last one gets none and the form ends with the SQL.
-        Element root = target.getDefaultRootElement();
-        if (!slots.isEmpty() && root.getElementCount() > 1) {
-            int text = pane.getFontMetrics(font).getHeight();
-            int field = slots.get(0).getPreferredSize().height;
-            SimpleAttributeSet spacing = new SimpleAttributeSet();
-            StyleConstants.setLineSpacing(spacing, Math.max(0f, (float) (field - text) / text));
-            int lastStart = root.getElement(root.getElementCount() - 1).getStartOffset();
-            target.setParagraphAttributes(0, Math.max(0, lastStart - 1), spacing, false);
         }
     }
 
