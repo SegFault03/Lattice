@@ -517,7 +517,7 @@ class IntellijUiScreenshotTest {
                 openConnectionMenu(pluginRoot, frame, "HSQLDB…")
                 frame.x(DialogUiComponent::class.java) { byTitle("New connection") }.waitFound().also { dialog ->
                     inspectorInput(dialog, "Name:").text = "Lattice UI demo"
-                    dialog.x { byVisibleText("Driver options ▸") }.waitFound().click()
+                    dialog.x { byVisibleText("Driver options") }.waitFound().click()
                     dialog.x(JComboBoxUiComponent::class.java) {
                         and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"), byAccessibleName("Available driver"))
                     }.waitFound().selectItem("2.7.4 · Bundled")
@@ -546,7 +546,7 @@ class IntellijUiScreenshotTest {
                     captureScreen(screenshotsDirectory.resolve("mysql-jdbc-url.png"))
                     mysqlDialog.x { byVisibleText("Standard") }.waitFound().click()
                 }
-                mysqlDialog.x { byVisibleText("Driver options ▸") }.waitFound().click()
+                mysqlDialog.x { byVisibleText("Driver options") }.waitFound().click()
                 val mysqlAvailableDriverCombo = mysqlDialog.x(JComboBoxUiComponent::class.java) {
                     and(
                         byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"),
@@ -725,7 +725,7 @@ class IntellijUiScreenshotTest {
                 }.waitFound().text = "SA"
                 captureScreen(screenshotsDirectory.resolve("connection-dialog.png"))
 
-                connectionDialog.x { byVisibleText("Driver options ▸") }.waitFound().click()
+                connectionDialog.x { byVisibleText("Driver options") }.waitFound().click()
                 val availableDriverCombo = connectionDialog.x(JComboBoxUiComponent::class.java) {
                     and(
                         byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"),
@@ -2208,7 +2208,7 @@ class IntellijUiScreenshotTest {
         openConnectionMenu(root, frame, "HSQLDB…")
         frame.x(DialogUiComponent::class.java) { byTitle("New connection") }.waitFound().also { dialog ->
             inspectorInput(dialog, "Name:").text = "Orders fixture"
-            dialog.x { byVisibleText("Driver options ▸") }.waitFound().click()
+            dialog.x { byVisibleText("Driver options") }.waitFound().click()
             dialog.x(JComboBoxUiComponent::class.java) {
                 and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"), byAccessibleName("Available driver"))
             }.waitFound().selectItem("2.7.4 · Bundled")
