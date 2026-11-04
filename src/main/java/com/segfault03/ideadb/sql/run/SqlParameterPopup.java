@@ -45,6 +45,8 @@ final class SqlParameterPopup {
         form.addChangeListener(() -> {
             if (popup.isDisposed() || !popup.isVisible()) return;
             form.setPreferredSize(null);
+            // A field that grew can change where the SQL wraps, so its height is worked out again.
+            form.fitWidth(form.fitMax);
             Dimension size = form.getPreferredSize();
             form.setPreferredSize(new Dimension(Math.max(size.width, width), size.height));
             popup.pack(true, true);

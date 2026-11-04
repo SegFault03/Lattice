@@ -57,40 +57,12 @@ public class SendToConsoleFixtureTest extends H2SqlFixtureTestCase {
         assertFalse(DatabaseConnectionManager.getInstance().isConnected(h2.getId()));
     }
 
-    public void testSendsRenderedLiteralsFromProvidedValues() {
-        provide(Map.of("1", new SqlParameterValue(SqlParameterValue.Type.NUMBER, "42"),
-                "2", new SqlParameterValue(SqlParameterValue.Type.TEXT, "o'hara")));
+    public void testSendsParametersAsWrittenWithoutAskingForValues() {
+        provide(Map.of("1", new SqlParameterValue(SqlParameterValue.Type.TEXT, "42")));
         myFixture.configureByText("q.sql", "select * from t where a = <caret>? and b = ?");
         send();
-        assertEquals(List.of("select * from t where a = 42 and b = 'o''hara'"), opened);
-        assertEquals(1, asked.size());
-    }
-
-    public void testNoParametersSkipsDialog() {
-        provide(Map.of());
-        myFixture.configureByText("q.sql", "select <caret>1");
-        send();
+        assertEquals(List.of("select * from t where a = ? and b = ?"), opened);
         assertTrue(asked.isEmpty());
-        assertEquals(List.of("select 1"), opened);
-    }
-
-    public void testCancelledDialogSendsNothing() {
-        SqlRunActionSupport.setValuesProviderForTests((target, initial) -> {
-            asked.add(target);
-            return null;
-        }, getTestRootDisposable());
-        myFixture.configureByText("q.sql", "select <caret>?");
-        send();
-        assertEquals(1, asked.size());
-        assertTrue(opened.isEmpty());
-    }
-
-    public void testMixedParameterStylesAreAProblemWithoutDialog() {
-        provide(Map.of());
-        myFixture.configureByText("q.sql", "select <caret>? , :name");
-        send();
-        assertTrue(asked.isEmpty());
-        assertTrue(opened.isEmpty());
     }
 
     /** All three run actions share SqlRunActionSupport.update; check each action and intention once here. */
@@ -131,21 +103,5 @@ public class SendToConsoleFixtureTest extends H2SqlFixtureTestCase {
         assertEquals("Lattice SQL", intention.getFamilyName());
         myFixture.launchAction(intention);
         assertEquals(List.of("select 1"), opened);
-    }
-
-    public void testDialogPrefilledFromRememberedValues() {
-        Map<String, SqlParameterValue> first = Map.of("1", new SqlParameterValue(SqlParameterValue.Type.NUMBER, "42"),
-                "2", new SqlParameterValue(SqlParameterValue.Type.TEXT, "abc"));
-        List<Map<String, SqlParameterValue>> initials = new ArrayList<>();
-        SqlRunActionSupport.setValuesProviderForTests((target, initial) -> {
-            initials.add(initial);
-            return first;
-        }, getTestRootDisposable());
-        myFixture.configureByText("q.sql", "select * from t where a = <caret>? and b = ?");
-        send();
-        send();
-        assertEquals(2, initials.size());
-        assertTrue(initials.get(0).isEmpty());
-        assertEquals(first, initials.get(1));
     }
 }

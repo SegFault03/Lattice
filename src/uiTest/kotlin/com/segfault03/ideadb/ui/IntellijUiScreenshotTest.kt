@@ -304,7 +304,7 @@ class IntellijUiScreenshotTest {
                 screenshotsDirectory.resolve("runtime-evidence.txt").writeText("""
                     Running IDE: ${actualTheme.getName()} ($themeId)
                     Lattice SQL editor actions in the installed plugin, on a project .sql file bound to an owned HSQLDB server fixture.
-                    The status icon in the inspection widget reported the SQL as checked against the fixture connection, and its details offered Reload Schema. Send to Console lifted the card with fields in place of :status and :customer, on their own lines, and appended literal SQL to the console without running it; Explain filled the fields with the remembered values.
+                    The status icon in the inspection widget reported the SQL as checked against the fixture connection, and its details offered Reload Schema. Send to Console appended the SQL as written to the console without running it; Explain lifted the card with fields in place of :status and :customer, on their own lines.
                     Explain Statement opened the Dry Run tab with HSQLDB's plan (values written in, as HSQLDB rejects bound EXPLAIN parameters).
                     Run and Roll Back asked for confirmation, reported one row and Rolled back; JDBC confirmed ORDERS was unchanged.
                     CREATE TABLE was refused before any connection.
@@ -2267,9 +2267,27 @@ class IntellijUiScreenshotTest {
         captureScreen(directory.resolve("sql-editor-status.png"))
         pressEscape()
 
-        // Send to Console: the card lifts with a field in place of each parameter, then literal SQL in the console, not run.
+        // Send to Console: the statement lands in the console as written, parameters and all, and is not run.
         caretAt("SELECT ID")
         run("sendToConsole")
+        val console = frame.x { byJavaClass("com.segfault03.ideadb.ui.SqlQueryConsolePanel") }.waitFound()
+        // The console's input is the embedded SQL editor in a real IDE, a plain text area only where that is unavailable.
+        val consoleText = console.x {
+            or(byJavaClass("com.intellij.openapi.editor.impl.EditorComponentImpl"), byJavaClass("com.intellij.ui.components.JBTextArea"))
+        }.waitFound()
+        waitUntil("statement sent to the console") { textOf(consoleText).contains(":customer") }
+        check(textOf(consoleText).contains(":status")) { "The console must receive the SQL as written" }
+        // A URL connection names no database; the console must start on the connection's own schema.
+        waitUntil("console on the connection's default schema") {
+            console.xx(JComboBoxUiComponent::class.java) { byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox") }.list()
+                .firstOrNull { "INFORMATION_SCHEMA" in it.listValues() }?.getSelectedItem() == "PUBLIC"
+        }
+        captureScreen(directory.resolve("sql-editor-send-to-console.png"))
+
+        // Explain: the card lifts with a field in place of each parameter, then HSQLDB's plan appears in the Dry Run tab.
+        openFile(SQL_EDITOR_FILE)
+        caretAt("SELECT ID")
+        run("explain")
         val statusField = valueField(":status")
         val customerField = valueField(":customer")
         // In place: each field sits on the line of the parameter it stands for.
@@ -2282,36 +2300,8 @@ class IntellijUiScreenshotTest {
         }
         statusField.text = "new"
         customerField.text = "42"
-        // CUSTOMER_ID is an INT column: opening the form reads the schema, and the chip follows the hint to number.
-        val customerChip = frame.x(JLabelUiComponent::class.java) { byAccessibleName("Type of :customer") }.waitFound()
-        waitUntil("customer typed as a number from the schema", 60_000) { customerChip.getText().startsWith("number") }
-        check(frame.x(JLabelUiComponent::class.java) { byAccessibleName("Type of :status") }.waitFound().getText().startsWith("text")) {
-            "STATUS is a VARCHAR column"
-        }
         customerField.click()
         captureScreen(directory.resolve("sql-editor-parameters.png"))
-        pressEnter()
-        val console = frame.x { byJavaClass("com.segfault03.ideadb.ui.SqlQueryConsolePanel") }.waitFound()
-        // The console's input is the embedded SQL editor in a real IDE, a plain text area only where that is unavailable.
-        val consoleText = console.x {
-            or(byJavaClass("com.intellij.openapi.editor.impl.EditorComponentImpl"), byJavaClass("com.intellij.ui.components.JBTextArea"))
-        }.waitFound()
-        waitUntil("statement sent to the console") { textOf(consoleText).contains("CUSTOMER_ID = 42") }
-        check(!textOf(consoleText).contains(":status")) { "The console must receive literal SQL" }
-        // A URL connection names no database; the console must start on the connection's own schema.
-        waitUntil("console on the connection's default schema") {
-            console.xx(JComboBoxUiComponent::class.java) { byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox") }.list()
-                .firstOrNull { "INFORMATION_SCHEMA" in it.listValues() }?.getSelectedItem() == "PUBLIC"
-        }
-        captureScreen(directory.resolve("sql-editor-send-to-console.png"))
-
-        // Explain: values are remembered, HSQLDB's plan appears in the Dry Run tab.
-        openFile(SQL_EDITOR_FILE)
-        caretAt("SELECT ID")
-        run("explain")
-        val remembered = listOf(valueField(":status").text, valueField(":customer").text)
-        check(remembered == listOf("new", "42")) { "Remembered values must fill the fields: $remembered" }
-        valueField(":customer").click()
         pressEnter()
         val dryRun = frame.x { byJavaClass("com.segfault03.ideadb.sql.run.DryRunPanel") }.waitFound()
         waitUntil("plan in the Dry Run tab", 60_000) { dryRun.xx { byVisibleText("Copy") }.list().isNotEmpty() &&

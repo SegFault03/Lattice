@@ -90,7 +90,7 @@ Right-click in a `.sql` file or in a SQL string of Java or Kotlin code and open 
 | Action | What it does |
 |---|---|
 | **Run** | Runs a query (`SELECT`, or a `WITH` that only reads) in the Lattice console of the file's connection and schema, with parameter values written in, and shows its results there. Other statements are refused |
-| **Send to Console** | Appends the statement to the Lattice console of the file's connection and schema, with parameter values written in. It does not run it |
+| **Send to Console** | Appends the statement, as written, to the Lattice console of the file's connection and schema. Parameters are left as they are and no values are asked for. It does not run it |
 | **Explain Statement** | Shows the database's execution plan in a **Dry Run** tab. The statement is not executed |
 | **Run and Roll Back** | Runs an `INSERT`, `UPDATE`, `DELETE` or `MERGE` (and MySQL `REPLACE`) in a transaction, reports the rows it affects, and always rolls it back |
 
@@ -117,15 +117,9 @@ Cards are not shown in Lattice's own SQL editors, in viewers and diffs, or in fi
 
 `?`, `:name` and `$1` are parameters. MySQL `@name` is a session variable and is left alone. In a `.sql` file for PostgreSQL, `?`, `?|` and `?&` are jsonb operators; in a Java or Kotlin string `?` is a JDBC parameter for every database. The parts of a string that are only known at run time (`"... where id = " + id`) become positional parameters. A statement that mixes positional and named parameters is refused.
 
-Before a statement with parameters is run, sent or explained, its card lifts into a focused card of its own over the editor, with the SQL where the card's SQL was and a field in the place of each parameter. Code around the card does not move. A statement without a card (cards turned off) gets the same card over its first line. Each field shows what it expects:
+Before a statement with parameters is run or explained, its card lifts into a focused card of its own over the editor, with the SQL where the card's SQL was and a field in the place of each parameter. Code around the card does not move. A statement without a card (cards turned off) gets the same card over its first line. Every value is text; no type is guessed or chosen, and nothing is said about what a field expects. A field has a fixed width while it is empty or short and grows with its value. The buttons are under the SQL, at the left. Every occurrence of a repeated `:name` is the same value. **Enter** runs; **Esc**, a click elsewhere or switching to another editor tab cancels. Values are remembered per file and parameter in the project's workspace file (`.idea/workspace.xml`), never in shared project files, and fill the fields the next time.
 
-- **Placeholder:** the format of its type (`42`, `yyyy-MM-dd`, `yyyy-MM-dd HH:mm:ss`, `true`), or the parameter's or column's name for text.
-- **Status line:** under the SQL, for the focused field: the column it is compared with or assigned to and the column's type from the cached schema (`orders.placed_at · DATETIME`), "row count" for `LIMIT`, `OFFSET` and `FETCH FIRST`, or "LIKE pattern" for `LIKE`. Without a cached schema only the column's name is shown.
-- **Type chip:** beside each field (text, number, bool, date, timestamp, NULL). It starts at the type the column suggests and can be changed by clicking it.
-
-Columns are found from `col = ?`, `? < col`, `col IN (?, ?)`, `col BETWEEN ? AND ?`, `col LIKE ?`, `SET col = ?` and `INSERT INTO t (a, b) VALUES (?, ?)` (or the table's columns in order when there is no column list). Hints only advise. A value that does not read as its chosen type (`abc` as a number, `2026-13-01` as a date) is marked and blocks the run, since it is written into the SQL as a literal of that type. Every occurrence of a repeated `:name` is the same value. **Enter** runs once every value fits; **Esc** or a click elsewhere cancels. Values are remembered per file and parameter in the project's workspace file (`.idea/workspace.xml`), never in shared project files, and fill the fields the next time.
-
-Send to Console writes values into the SQL as literals for the dialect. Explain and Run and Roll Back bind them as JDBC parameters instead.
+Run, Explain and Run and Roll Back bind the values as JDBC parameters.
 
 ### Dry Run tab
 

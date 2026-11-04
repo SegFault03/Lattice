@@ -19,6 +19,7 @@ import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.sql.binding.SqlBindingsState;
+import com.segfault03.ideadb.sql.binding.SqlEmbeddedBinding;
 import com.segfault03.ideadb.sql.binding.SqlConnectionChooser;
 import com.segfault03.ideadb.sql.binding.SqlDialectResolver;
 import com.segfault03.ideadb.sql.card.SqlCardAnchor;
@@ -81,6 +82,8 @@ final class LatticeStatusAction extends DumbAwareAction {
         Project project = editor.getProject();
         VirtualFile file = file();
         if (project == null || project.isDisposed() || file == null || editor.isDisposed() || !SqlEditorSettings.getInstance().isEnabled()) return null;
+        // The SQL console's input (and the other embedded inputs) is not a file Lattice checks, so it has no status to show.
+        if (SqlEmbeddedBinding.of(file) != null) return null;
         int cards = SqlCardAnchor.count(editor);
         if (cards == 0 && !LatticeActivity.hasSql(file) && !isLatticeSql(project)) return null;
         ConnectionConfig connection = SqlDialectResolver.connection(project, SqlBindingsState.hostOf(file));

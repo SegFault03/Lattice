@@ -3,12 +3,8 @@ package com.segfault03.ideadb.sql.run;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.editor.colors.EditorColorsManager;
 import com.intellij.openapi.editor.colors.EditorFontType;
-import com.intellij.openapi.ui.popup.JBPopupFactory;
-import com.intellij.openapi.ui.popup.PopupStep;
-import com.intellij.openapi.ui.popup.util.BaseListPopupStep;
 import com.intellij.ui.DocumentAdapter;
 import com.intellij.ui.JBColor;
-import com.intellij.ui.awt.RelativePoint;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBTextField;
 import com.intellij.util.ui.JBUI;
@@ -25,7 +21,6 @@ import org.jetbrains.annotations.TestOnly;
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
-import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JPanel;
@@ -41,7 +36,6 @@ import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
 import java.awt.BorderLayout;
 import java.awt.Color;
-import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -51,28 +45,22 @@ import java.awt.Point;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.KeyEvent;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * The statement as the card shows it, with a field in the place of each parameter. A field says what it expects (its
- * placeholder and the line under the SQL, from {@link SqlParameterHints}), and a chip beside it holds the value's type,
- * which starts at the type the hint suggests and can be changed, NULL included. Every occurrence of a named parameter is
- * the same value: its fields share one document. Enter submits once every value fits its type; until then the first one
- * that does not is shown.
+ * The statement as the card shows it, with a field in the place of each parameter. Every value is text; the form makes no
+ * guess at a type. A field starts at a fixed width and grows with its value. Every occurrence of a named parameter is the
+ * same value: its fields share one document. Enter submits.
  */
 public final class SqlParameterForm extends JPanel {
-    private static final SqlParameterValue.Type[] TYPES = {
-            SqlParameterValue.Type.TEXT, SqlParameterValue.Type.NUMBER, SqlParameterValue.Type.BOOLEAN,
-            SqlParameterValue.Type.DATE, SqlParameterValue.Type.TIMESTAMP, SqlParameterValue.Type.NULL};
     /** Space around the content; also where the SQL starts, so the form can be laid over the card's own text. */
     static final int OUTER = 8;
     private static final int GAP = 6;
-    private static final int MIN_CHARS = 4, MAX_CHARS = 36;
+    /** A field is this wide while it is empty or short, and grows with its text up to the maximum. */
+    private static final int MIN_CHARS = 8, MAX_CHARS = 48;
 
     private final CharSequence sql;
     private final SqlParameters.Result parameters;
@@ -82,36 +70,26 @@ public final class SqlParameterForm extends JPanel {
     private final List<Slot> slots = new ArrayList<>();
     private final List<Runnable> listeners = new ArrayList<>();
     private final JTextPane pane = new JTextPane();
-    private final JBLabel status = new JBLabel();
     private final JButton submit;
+    /** The width last given to {@link #fitWidth}, to lay the SQL out again when a field grows. */
+    int fitMax = Integer.MAX_VALUE;
     private final JPanel header;
     private final Font font;
     private @Nullable Runnable onSubmit;
     private @Nullable Runnable onCancel;
-    private @Nullable Value focused;
-    /** Set once the user has tried to submit: from then on every value that does not fit is marked, empty ones too. */
-    private boolean showAllErrors;
 
-    /** One parameter key: its hint, its type and the text its fields share. */
+    /** One parameter key and the text its fields share. */
     private final class Value {
         final String key;
-        SqlParameterHints.Hint hint;
-        /** Whether the type is the user's own or remembered, so a hint that arrives later leaves it alone. */
-        boolean typeChosen;
         final PlainDocument document = new PlainDocument();
         final List<Slot> slots = new ArrayList<>();
-        SqlParameterValue.Type type;
-        /** The type before NULL was picked, to return to. */
-        SqlParameterValue.Type lastType;
+        /** How the parameter is named in an accessible name: as written (":name", "$2"), or "?2" for the second "?". */
+        String label;
 
-        Value(String key, SqlParameterHints.Hint hint, SqlParameterValue initial, boolean chosen) {
+        Value(String key, String initial) {
             this.key = key;
-            this.hint = hint;
-            this.type = initial.type();
-            this.typeChosen = chosen;
-            this.lastType = initial.type() == SqlParameterValue.Type.NULL ? SqlParameterValue.Type.TEXT : initial.type();
             try {
-                document.insertString(0, initial.text(), null);
+                document.insertString(0, initial, null);
             } catch (BadLocationException impossible) {
                 throw new IllegalStateException(impossible);
             }
@@ -128,43 +106,18 @@ public final class SqlParameterForm extends JPanel {
             }
         }
 
-        SqlParameterValue current() { return new SqlParameterValue(type, text()); }
-
-        void type(SqlParameterValue.Type next) {
-            if (next != SqlParameterValue.Type.NULL) lastType = next;
-            type = next;
-            changed();
-        }
-
-        /** What a field shows while it is empty: the value's format, else the name of the parameter or its column. */
-        String placeholder() {
-            String name = key.startsWith(":") ? key : hint.column() != null ? shortName(hint.column()) : hint.note() != null && hint.note().equals("row count") ? "count" : null;
-            return switch (type) {
-                case DATE -> "yyyy-MM-dd";
-                case TIMESTAMP -> "yyyy-MM-dd HH:mm:ss";
-                case NULL -> "NULL";
-                case NUMBER -> name != null ? name : "number";
-                case BOOLEAN -> name != null ? name : "true/false";
-                case TEXT -> name != null ? name : "text";
-            };
-        }
-
-        /** How the status line names the parameter: as written (":name", "$2"), or "?2" for the second "?". */
-        String label;
+        SqlParameterValue current() { return new SqlParameterValue(SqlParameterValue.Type.TEXT, text()); }
 
         String label() { return label != null ? label : key; }
 
-        @Nullable String error() {
-            if (type != SqlParameterValue.Type.NULL && type != SqlParameterValue.Type.TEXT && text().isBlank()) return "Enter a value";
-            return current().validationError();
-        }
+        /** What a field shows while it is empty: the parameter's name when it has one. */
+        @Nullable String placeholder() { return key.startsWith(":") ? key.substring(1) : null; }
     }
 
-    /** One occurrence of a parameter in the SQL: a field and the type chip. */
+    /** One occurrence of a parameter in the SQL: a field. */
     private final class Slot extends JPanel {
         final Value value;
         final JBTextField field = new JBTextField();
-        final JBLabel chip = new JBLabel();
 
         Slot(Value value) {
             super(new FlowLayout(FlowLayout.LEFT, 0, 0));
@@ -177,43 +130,18 @@ public final class SqlParameterForm extends JPanel {
             field.addActionListener(event -> trySubmit());
             field.getAccessibleContext().setAccessibleName("Value of " + value.label());
             field.addFocusListener(new FocusAdapter() {
-                @Override public void focusGained(FocusEvent event) {
-                    focused = value;
-                    field.selectAll();
-                    updateStatus();
-                }
+                @Override public void focusGained(FocusEvent event) { field.selectAll(); }
             });
-            chip.setFont(JBUI.Fonts.smallFont());
-            chip.setForeground(UIUtil.getContextHelpForeground());
-            chip.setBorder(JBUI.Borders.empty(0, 3, 0, 1));
-            chip.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            chip.getAccessibleContext().setAccessibleName("Type of " + value.label());
-            chip.addMouseListener(new MouseAdapter() {
-                @Override public void mouseClicked(MouseEvent event) { chooseType(Slot.this); }
-            });
+            String placeholder = value.placeholder();
+            if (placeholder != null) field.getEmptyText().setText(placeholder);
+            field.setToolTipText(value.label());
             add(field);
-            add(chip);
-            refresh();
         }
 
-        void refresh() {
-            boolean isNull = value.type == SqlParameterValue.Type.NULL;
-            field.setEnabled(!isNull);
-            field.getEmptyText().setText(value.placeholder());
-            chip.setText(chipText(value.type) + " ▾");
-            String hint = value.hint.describe();
-            field.setToolTipText(hint.isEmpty() ? value.label() : value.label() + " · " + hint);
-            chip.setToolTipText("Type of " + value.label() + ": click to change");
-            boolean marked = (showAllErrors || !value.text().isEmpty()) && value.error() != null;
-            field.putClientProperty("JComponent.outline", marked ? "error" : null);
-            field.repaint();
-        }
-
-        /** As wide as its text or placeholder, within bounds, so the SQL around it keeps its shape. */
+        /** A fixed width until the text is longer than that, then as wide as the text, up to a limit. */
         @Override public Dimension getPreferredSize() {
             FontMetrics metrics = field.getFontMetrics(font);
-            String shown = value.text().isEmpty() ? value.placeholder() : value.text();
-            int width = Math.max(metrics.stringWidth(shown), metrics.charWidth('m') * MIN_CHARS);
+            int width = Math.max(metrics.stringWidth(value.text()), metrics.charWidth('m') * MIN_CHARS);
             width = Math.min(width, metrics.charWidth('m') * MAX_CHARS);
             Insets insets = field.getInsets();
             // A character to spare, so the caret after the last one never scrolls the text.
@@ -240,13 +168,12 @@ public final class SqlParameterForm extends JPanel {
     }
 
     /**
-     * @param hints      what each key expects, by key; keys without one get none
-     * @param initial    values to start from; a key without one starts empty, with the type its hint suggests
-     * @param actionText the name of what submitting does, for the button ("Run", "Run and Roll Back", "Send to Console")
+     * @param initial    values to start from; a key without one starts empty
+     * @param actionText the name of what submitting does, for the button ("Run", "Run and Roll Back", "Explain")
      */
     public SqlParameterForm(@NotNull CharSequence sql, @NotNull SqlParameters.Result parameters, @NotNull DatabaseType type,
-                            @Nullable ConnectionConfig connection, @NotNull Map<String, SqlParameterHints.Hint> hints,
-                            @NotNull Map<String, SqlParameterValue> initial, @NotNull String actionText) {
+                            @Nullable ConnectionConfig connection, @NotNull Map<String, SqlParameterValue> initial,
+                            @NotNull String actionText) {
         super(new BorderLayout(0, GAP));
         this.sql = sql;
         this.parameters = parameters;
@@ -260,11 +187,8 @@ public final class SqlParameterForm extends JPanel {
         setBorder(JBUI.Borders.empty(OUTER));
 
         for (String key : parameters.keys()) {
-            SqlParameterHints.Hint hint = hints.getOrDefault(key, SqlParameterHints.Hint.NONE);
             SqlParameterValue start = initial.get(key);
-            boolean remembered = start != null;
-            if (start == null) start = new SqlParameterValue(hint.suggested() != null ? hint.suggested() : SqlParameterValue.Type.TEXT, "");
-            values.put(key, new Value(key, hint, start, remembered));
+            values.put(key, new Value(key, start == null ? "" : start.text()));
         }
 
         submit = new JButton(actionText);
@@ -274,12 +198,12 @@ public final class SqlParameterForm extends JPanel {
         buildPane(connection);
         add(pane, BorderLayout.CENTER);
         add(footer(), BorderLayout.SOUTH);
+        submit.setEnabled(parameters.error() == null);
 
         getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "lattice.submit");
         getActionMap().put("lattice.submit", new AbstractAction() {
             @Override public void actionPerformed(java.awt.event.ActionEvent event) { trySubmit(); }
         });
-        updateStatus();
     }
 
     private JPanel header(String actionText, @Nullable ConnectionConfig connection) {
@@ -296,24 +220,15 @@ public final class SqlParameterForm extends JPanel {
     }
 
     private JPanel footer() {
-        JPanel row = new JPanel(new BorderLayout(JBUI.scale(12), 0));
-        row.setOpaque(false);
-        status.setFont(JBUI.Fonts.smallFont());
-        // The status line takes the room the buttons leave; it never widens the form, which would squeeze the buttons.
-        status.setMinimumSize(new Dimension(0, 0));
-        status.setPreferredSize(new Dimension(0, status.getPreferredSize().height));
-        row.add(status, BorderLayout.CENTER);
-        JPanel buttons = new JPanel();
-        buttons.setLayout(new BoxLayout(buttons, BoxLayout.X_AXIS));
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         buttons.setOpaque(false);
         JButton cancel = new JButton("Cancel");
         cancel.addActionListener(event -> { if (onCancel != null) onCancel.run(); });
-        buttons.add(cancel);
-        buttons.add(Box.createHorizontalStrut(JBUI.scale(4)));
         submit.putClientProperty("JButton.buttonType", "default");
         buttons.add(submit);
-        row.add(buttons, BorderLayout.EAST);
-        return row;
+        buttons.add(Box.createHorizontalStrut(JBUI.scale(4)));
+        buttons.add(cancel);
+        return buttons;
     }
 
     /** The SQL, colored as the editor colors it, with a slot in place of each parameter occurrence. */
@@ -410,70 +325,14 @@ public final class SqlParameterForm extends JPanel {
         }
     }
 
-    private void chooseType(Slot slot) {
-        Value value = slot.value;
-        var step = new BaseListPopupStep<>("Value Type", TYPES) {
-            @Override public @NotNull String getTextFor(SqlParameterValue.Type item) { return typeName(item); }
-            @Override public @Nullable PopupStep<?> onChosen(SqlParameterValue.Type chosen, boolean finalChoice) {
-                value.typeChosen = true;
-                value.type(chosen);
-                if (chosen != SqlParameterValue.Type.NULL) slot.field.requestFocusInWindow();
-                return FINAL_CHOICE;
-            }
-        };
-        step.setDefaultOptionIndex(java.util.Arrays.asList(TYPES).indexOf(value.type));
-        JBPopupFactory.getInstance().createListPopup(step).show(new RelativePoint(slot.chip, new Point(0, slot.chip.getHeight())));
-    }
-
     private void changed() {
-        for (Value value : values.values()) for (Slot slot : value.slots) slot.refresh();
         pane.revalidate();
         pane.repaint();
-        updateStatus();
         listeners.forEach(Runnable::run);
     }
 
-    /** The first value that does not fit its type, else what the focused parameter expects. */
-    private void updateStatus() {
-        updateStatusText();
-        status.setToolTipText(status.getText().isBlank() ? null : status.getText());
-    }
-
-    private void updateStatusText() {
-        Value invalid = firstInvalid(showAllErrors);
-        Value shown = invalid != null ? invalid : focused;
-        if (parameters.error() != null) {
-            status.setForeground(JBColor.RED);
-            status.setText(parameters.error());
-        } else if (invalid != null) {
-            status.setForeground(JBColor.namedColor("Label.errorForeground", JBColor.RED));
-            status.setText(invalid.label() + ": " + invalid.error());
-        } else if (shown != null) {
-            status.setForeground(UIUtil.getContextHelpForeground());
-            String hint = shown.hint.describe();
-            status.setText(hint.isEmpty() ? shown.label() + " · " + typeName(shown.type) : shown.label() + " · " + hint);
-        } else {
-            status.setText(" ");
-        }
-        submit.setEnabled(parameters.error() == null);
-    }
-
-    private @Nullable Value firstInvalid(boolean includeEmpty) {
-        for (Value value : values.values()) {
-            if (value.error() == null) continue;
-            if (includeEmpty || !value.text().isEmpty()) return value;
-        }
-        return null;
-    }
-
     private void trySubmit() {
-        if (!valuesValid()) {
-            showAllErrors = true;
-            changed();
-            Value invalid = firstInvalid(true);
-            if (invalid != null && !invalid.slots.isEmpty()) invalid.slots.get(0).field.requestFocusInWindow();
-            return;
-        }
+        if (!valuesValid()) return;
         if (onSubmit != null) onSubmit.run();
     }
 
@@ -491,29 +350,15 @@ public final class SqlParameterForm extends JPanel {
 
     /** Lays the SQL out no wider than {@code maxWidth} pixels, wrapping long lines. */
     void fitWidth(int maxWidth) {
+        fitMax = maxWidth;
         pane.setPreferredSize(null);
+        // Measured unwrapped, so a height worked out for an earlier width does not linger.
+        pane.setSize(Short.MAX_VALUE, Short.MAX_VALUE);
         Dimension natural = pane.getPreferredSize();
         int width = Math.min(natural.width, Math.max(JBUI.scale(240), maxWidth));
         if (width == natural.width) return;
         pane.setSize(width, Short.MAX_VALUE);
         pane.setPreferredSize(new Dimension(width, pane.getPreferredSize().height));
-    }
-
-    /**
-     * Hints worked out again, once the schema has been read: each parameter shows its new hint, and one whose type the
-     * user has not chosen (nor had remembered) takes the type the new hint suggests.
-     */
-    public void updateHints(@NotNull Map<String, SqlParameterHints.Hint> hints) {
-        for (Value value : values.values()) {
-            SqlParameterHints.Hint hint = hints.get(value.key);
-            if (hint == null) continue;
-            value.hint = hint;
-            if (!value.typeChosen && hint.suggested() != null && value.type != SqlParameterValue.Type.NULL) {
-                value.type = hint.suggested();
-                value.lastType = hint.suggested();
-            }
-        }
-        changed();
     }
 
     public void onSubmit(@NotNull Runnable handler) { onSubmit = handler; }
@@ -531,7 +376,7 @@ public final class SqlParameterForm extends JPanel {
 
     /** Whether submitting would go ahead. Named so it does not override {@link java.awt.Component#isValid()}. */
     public boolean valuesValid() {
-        return parameters.error() == null && values.values().stream().allMatch(value -> value.error() == null);
+        return parameters.error() == null;
     }
 
     /** The SQL with the values written in, or null while one does not fit its type. */
@@ -540,44 +385,11 @@ public final class SqlParameterForm extends JPanel {
         return SqlLiteralRenderer.render(sql, parameters, values(), type);
     }
 
-    @TestOnly @NotNull String statusText() { return status.getText(); }
-
     @TestOnly @NotNull List<JBTextField> fieldsForTests() {
         return slots.stream().map(slot -> slot.field).toList();
     }
 
-    @TestOnly void typeForTests(@NotNull String key, @NotNull SqlParameterValue.Type next) { values.get(key).type(next); }
-
-    @TestOnly @NotNull String chipForTests(@NotNull String key) { return values.get(key).slots.get(0).chip.getText(); }
-
     @TestOnly @NotNull String paneTextForTests() { return pane.getText(); }
 
     @TestOnly void submitForTests() { trySubmit(); }
-
-    private static String chipText(SqlParameterValue.Type type) {
-        return switch (type) {
-            case TEXT -> "text";
-            case NUMBER -> "number";
-            case BOOLEAN -> "bool";
-            case DATE -> "date";
-            case TIMESTAMP -> "timestamp";
-            case NULL -> "NULL";
-        };
-    }
-
-    private static String typeName(SqlParameterValue.Type type) {
-        return switch (type) {
-            case TEXT -> "Text";
-            case NUMBER -> "Number";
-            case BOOLEAN -> "Boolean";
-            case DATE -> "Date";
-            case TIMESTAMP -> "Timestamp";
-            case NULL -> "NULL";
-        };
-    }
-
-    private static String shortName(String column) {
-        int dot = column.lastIndexOf('.');
-        return dot < 0 ? column : column.substring(dot + 1);
-    }
 }

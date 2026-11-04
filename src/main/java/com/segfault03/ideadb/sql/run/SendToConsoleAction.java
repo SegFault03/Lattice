@@ -32,9 +32,7 @@ public final class SendToConsoleAction extends AnAction implements DumbAware {
     static void sendToConsole(@NotNull Project project, @NotNull Editor editor, @NotNull PsiFile file, @Nullable SqlCard card) {
         SqlRunTarget target = SqlRunActionSupport.targetOrShowProblem(project, editor, file, card, SqlRunActionSupport.CardUse.CONSOLE);
         if (target == null || target.connection() == null) return;
-        SqlRunActionSupport.askValues(project, editor, target, card, "Send to Console", values -> {
-            String sql = SqlLiteralRenderer.render(target.sql(), target.parameters(), values, target.connection().getType());
-            SqlRunActionSupport.openConsole(project, target.connection(), sql);
-        });
+        // As written, parameters and all: values are asked for when the statement is run, not when it is sent.
+        SqlRunActionSupport.openConsole(project, target.connection(), target.sql());
     }
 }

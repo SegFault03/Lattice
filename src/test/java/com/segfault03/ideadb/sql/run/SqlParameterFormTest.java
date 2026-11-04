@@ -21,12 +21,10 @@ class SqlParameterFormTest {
     private static final String SQL = "select * from orders where customer_id = :customer and placed_at >= :since";
 
     private static SqlParameterForm form(String sql, Map<String, SqlParameterValue> initial) {
-        return form(sql, Map.of(), initial);
+        return new SqlParameterForm(sql, SqlParameters.of(sql, SqlDialects.MYSQL, false), DatabaseType.MYSQL, null, initial, "Run");
     }
 
-    private static SqlParameterForm form(String sql, Map<String, SqlParameterHints.Hint> hints, Map<String, SqlParameterValue> initial) {
-        return new SqlParameterForm(sql, SqlParameters.of(sql, SqlDialects.MYSQL, false), DatabaseType.MYSQL, null, hints, initial, "Run");
-    }
+    private static SqlParameterValue text(String value) { return new SqlParameterValue(SqlParameterValue.Type.TEXT, value); }
 
     @Test void theSqlKeepsItsTextWithAFieldInPlaceOfEachParameter() {
         var form = form(SQL, Map.of());
@@ -40,9 +38,8 @@ class SqlParameterFormTest {
         var form = form(sql, Map.of());
         // The field stands in the text as one character.
         assertEquals("UPDATE ORDERS\n   SET STATUS = 'x'\n\n WHERE ID =  ", form.paneTextForTests());
-        assertEquals("\n        UPDATE ORDERS\n           SET STATUS = 'x'\n\n         WHERE ID = 5\n        ",
-                new SqlParameterForm(sql, SqlParameters.of(sql, SqlDialects.MYSQL, false), DatabaseType.MYSQL, null, Map.of(),
-                        Map.of("1", new SqlParameterValue(SqlParameterValue.Type.NUMBER, "5")), "Run").renderedSql());
+        assertEquals("\n        UPDATE ORDERS\n           SET STATUS = 'x'\n\n         WHERE ID = '5'\n        ",
+                form(sql, Map.of("1", text("5"))).renderedSql());
     }
 
     @Test void sqlWithoutIndentationIsShownAsItIs() {
@@ -50,12 +47,10 @@ class SqlParameterFormTest {
     }
 
     @Test void renderedSqlFollowsTheFields() {
-        var form = form(SQL, Map.of(
-                ":customer", new SqlParameterValue(SqlParameterValue.Type.NUMBER, "42"),
-                ":since", new SqlParameterValue(SqlParameterValue.Type.DATE, "2026-01-01")));
-        assertEquals("select * from orders where customer_id = 42 and placed_at >= DATE '2026-01-01'", form.renderedSql());
+        var form = form(SQL, Map.of(":customer", text("42"), ":since", text("2026-01-01")));
+        assertEquals("select * from orders where customer_id = '42' and placed_at >= '2026-01-01'", form.renderedSql());
         form.fieldsForTests().get(0).setText("7");
-        assertEquals("select * from orders where customer_id = 7 and placed_at >= DATE '2026-01-01'", form.renderedSql());
+        assertEquals("select * from orders where customer_id = '7' and placed_at >= '2026-01-01'", form.renderedSql());
     }
 
     @Test void aRepeatedNamedParameterSharesOneValue() {
@@ -67,54 +62,31 @@ class SqlParameterFormTest {
         assertEquals(1, form.values().size());
     }
 
-    @Test void theHintSetsTheStartingTypeAndTheRememberedValueWins() {
-        var hint = new SqlParameterHints.Hint("orders.customer_id", "INT", SqlParameterValue.Type.NUMBER, null, false);
-        var fresh = form(SQL, Map.of(":customer", hint), Map.of());
-        assertEquals(SqlParameterValue.Type.NUMBER, fresh.values().get(":customer").type());
-        assertTrue(fresh.chipForTests(":customer").startsWith("number"));
-        var remembered = form(SQL, Map.of(":customer", hint), Map.of(":customer", new SqlParameterValue(SqlParameterValue.Type.TEXT, "x")));
-        assertEquals(SqlParameterValue.Type.TEXT, remembered.values().get(":customer").type());
+    @Test void everyValueIsText() {
+        var form = form(SQL, Map.of(":customer", new SqlParameterValue(SqlParameterValue.Type.NUMBER, "42")));
+        assertEquals(SqlParameterValue.Type.TEXT, form.values().get(":customer").type());
+        assertEquals("42", form.values().get(":customer").text());
     }
 
-    @Test void theStatusLineDescribesTheFirstValueThatDoesNotFit() {
-        var form = form(SQL, Map.of(
-                ":customer", new SqlParameterValue(SqlParameterValue.Type.NUMBER, "abc"),
-                ":since", new SqlParameterValue(SqlParameterValue.Type.DATE, "nope")));
-        assertEquals(":customer: Enter a number such as 12 or 3.5", form.statusText());
-        assertNull(form.renderedSql());
-        form.fieldsForTests().get(0).setText("1");
-        assertEquals(":since: Enter a date as yyyy-MM-dd", form.statusText());
-    }
-
-    @Test void anEmptyTypedValueOnlyCountsOnceSubmitIsTried() {
+    @Test void anEmptyFieldStillSubmits() {
         var submitted = new AtomicInteger();
-        var form = form("select * from t where n = ?", Map.of("1", new SqlParameterValue(SqlParameterValue.Type.NUMBER, "")));
+        var form = form("select * from t where n = ?", Map.of());
         form.onSubmit(submitted::incrementAndGet);
-        assertFalse(form.valuesValid());
-        assertFalse(form.statusText().contains("Enter a value"));
-        form.submitForTests();
-        assertEquals(0, submitted.get());
-        assertEquals("?1: Enter a value", form.statusText());
-        form.fieldsForTests().get(0).setText("3");
         form.submitForTests();
         assertEquals(1, submitted.get());
     }
 
-    @Test void nullDisablesTheFieldAndWritesNull() {
-        var form = form(SQL, Map.of(":customer", new SqlParameterValue(SqlParameterValue.Type.NUMBER, "abc"),
-                ":since", new SqlParameterValue(SqlParameterValue.Type.TEXT, "x")));
-        form.typeForTests(":customer", SqlParameterValue.Type.NULL);
-        assertFalse(form.fieldsForTests().get(0).isEnabled());
-        assertTrue(form.valuesValid());
-        assertTrue(String.valueOf(form.renderedSql()).contains("customer_id = NULL"), form.renderedSql());
-        form.typeForTests(":customer", SqlParameterValue.Type.NUMBER);
-        assertTrue(form.fieldsForTests().get(0).isEnabled());
+    @Test void aFieldHasTheSameWidthEmptyOrFilledUntilTheTextOutgrowsIt() {
+        var form = form(SQL, Map.of(":since", text("JP")));
+        var fields = form.fieldsForTests();
+        assertEquals(fields.get(0).getParent().getPreferredSize().width, fields.get(1).getParent().getPreferredSize().width);
+        fields.get(1).setText("x".repeat(60));
+        assertTrue(fields.get(1).getParent().getPreferredSize().width > fields.get(0).getParent().getPreferredSize().width);
     }
 
     @Test void mixedStylesBlockSubmitting() {
         var form = form("select ?, :a", Map.of());
         assertFalse(form.valuesValid());
-        assertEquals(SqlParameters.MIXED_STYLES, form.statusText());
     }
 
     @Test void changesAreAnnounced() {
