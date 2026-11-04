@@ -77,8 +77,9 @@ final class DryRunRunner {
 
     private static void launch(Project project, SqlRunTarget target, SqlStatementKind kind, Mode mode, Map<String, SqlParameterValue> values) {
         ConnectionConfig config = target.connection();
-        SqlLiteralRenderer.JdbcStatement statement = SqlLiteralRenderer.toJdbc(target.sql(), target.parameters(), values);
+        // The values are part of the SQL as entered, so there is nothing to bind.
         String literalSql = SqlLiteralRenderer.render(target.sql(), target.parameters(), values, config.getType());
+        SqlLiteralRenderer.JdbcStatement statement = new SqlLiteralRenderer.JdbcStatement(literalSql, List.of());
         List<SqlStatementKind.QualifiedName> tables = mode == Mode.ROLL_BACK ? SqlStatementKind.targetTableNames(target.sql(), target.profile()) : List.of();
         List<String> functions = mode == Mode.ROLL_BACK ? SqlStatementKind.userFunctionCalls(target.sql(), target.profile()) : List.of();
 

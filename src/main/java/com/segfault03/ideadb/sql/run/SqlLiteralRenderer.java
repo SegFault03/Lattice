@@ -68,6 +68,7 @@ public final class SqlLiteralRenderer {
             case DATE -> "DATE '" + value.text() + "'";
             case TIMESTAMP -> "TIMESTAMP '" + value.text() + "'";
             case NULL -> "NULL";
+            case RAW -> value.text();
         };
     }
 

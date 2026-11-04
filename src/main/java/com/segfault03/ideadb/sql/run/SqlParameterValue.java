@@ -11,9 +11,10 @@ import java.time.format.DateTimeParseException;
 import java.time.format.ResolverStyle;
 import java.util.regex.Pattern;
 
-/** A typed value entered for one SQL parameter. */
+/** A value entered for one SQL parameter. */
 public record SqlParameterValue(@NotNull Type type, @NotNull String text) {
-    public enum Type { TEXT, NUMBER, BOOLEAN, DATE, TIMESTAMP, NULL }
+    /** {@code RAW} is written into the SQL exactly as entered: no quoting, escaping or conversion. */
+    public enum Type { TEXT, NUMBER, BOOLEAN, DATE, TIMESTAMP, NULL, RAW }
 
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("uuuu-MM-dd").withResolverStyle(ResolverStyle.STRICT);
     private static final DateTimeFormatter SECONDS = DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm:ss").withResolverStyle(ResolverStyle.STRICT);
@@ -40,7 +41,7 @@ public record SqlParameterValue(@NotNull Type type, @NotNull String text) {
                     if (!matcher.matches()) return "Enter a timestamp as yyyy-MM-dd HH:mm:ss[.fffffffff]";
                     LocalDateTime.parse(matcher.group(1), SECONDS);
                 }
-                case TEXT, NULL -> { }
+                case TEXT, NULL, RAW -> { }
             }
         } catch (NumberFormatException e) {
             return "Enter a number such as 12 or 3.5";
@@ -53,7 +54,7 @@ public record SqlParameterValue(@NotNull Type type, @NotNull String text) {
     /** The value as a JDBC binding; call only when {@link #validationError()} is null. */
     public @Nullable Object jdbcValue() {
         return switch (type) {
-            case TEXT -> text;
+            case TEXT, RAW -> text;
             case NUMBER -> new BigDecimal(text.trim());
             case BOOLEAN -> Boolean.valueOf(text.equalsIgnoreCase("true"));
             case DATE -> java.sql.Date.valueOf(text);

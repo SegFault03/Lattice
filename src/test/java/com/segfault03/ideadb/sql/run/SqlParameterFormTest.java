@@ -38,7 +38,7 @@ class SqlParameterFormTest {
         var form = form(sql, Map.of());
         // The field stands in the text as one character.
         assertEquals("UPDATE ORDERS\n   SET STATUS = 'x'\n\n WHERE ID =  ", form.paneTextForTests().replace("\r\n", "\n"));
-        assertEquals("\n        UPDATE ORDERS\n           SET STATUS = 'x'\n\n         WHERE ID = '5'\n        ",
+        assertEquals("\n        UPDATE ORDERS\n           SET STATUS = 'x'\n\n         WHERE ID = 5\n        ",
                 form(sql, Map.of("1", text("5"))).renderedSql());
     }
 
@@ -48,9 +48,9 @@ class SqlParameterFormTest {
 
     @Test void renderedSqlFollowsTheFields() {
         var form = form(SQL, Map.of(":customer", text("42"), ":since", text("2026-01-01")));
-        assertEquals("select * from orders where customer_id = '42' and placed_at >= '2026-01-01'", form.renderedSql());
+        assertEquals("select * from orders where customer_id = 42 and placed_at >= 2026-01-01", form.renderedSql());
         form.fieldsForTests().get(0).setText("7");
-        assertEquals("select * from orders where customer_id = '7' and placed_at >= '2026-01-01'", form.renderedSql());
+        assertEquals("select * from orders where customer_id = 7 and placed_at >= 2026-01-01", form.renderedSql());
     }
 
     @Test void aRepeatedNamedParameterSharesOneValue() {
@@ -62,10 +62,14 @@ class SqlParameterFormTest {
         assertEquals(1, form.values().size());
     }
 
-    @Test void everyValueIsText() {
-        var form = form(SQL, Map.of(":customer", new SqlParameterValue(SqlParameterValue.Type.NUMBER, "42")));
-        assertEquals(SqlParameterValue.Type.TEXT, form.values().get(":customer").type());
-        assertEquals("42", form.values().get(":customer").text());
+    @Test void valuesAreWrittenIntoTheSqlExactlyAsTyped() {
+        var form = form("select * from t where a like ? and b = ?", Map.of());
+        form.fieldsForTests().get(0).setText("'Ace%'");
+        form.fieldsForTests().get(1).setText("o'hara");
+        assertEquals(SqlParameterValue.Type.RAW, form.values().get("1").type());
+        assertEquals("select * from t where a like 'Ace%' and b = o'hara", form.renderedSql());
+        form.fieldsForTests().get(0).setText("Ace");
+        assertEquals("select * from t where a like Ace and b = o'hara", form.renderedSql());
     }
 
     @Test void anEmptyFieldStillSubmits() {

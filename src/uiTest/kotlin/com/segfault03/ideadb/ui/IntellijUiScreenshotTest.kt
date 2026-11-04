@@ -2298,7 +2298,8 @@ class IntellijUiScreenshotTest {
             val fieldY = field.component.getLocationOnScreen().y - editor.component.getLocationOnScreen().y
             check(kotlin.math.abs(fieldY - line) < 40) { "Field for $name at y=$fieldY, its parameter's line at y=$line" }
         }
-        statusField.text = "new"
+        // Values are written into the SQL as typed, so a text value carries its quotes.
+        statusField.text = "'new'"
         customerField.text = "42"
         customerField.click()
         captureScreen(directory.resolve("sql-editor-parameters.png"))

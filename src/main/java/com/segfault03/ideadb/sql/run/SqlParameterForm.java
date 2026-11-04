@@ -51,8 +51,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The statement as the card shows it, with a field in the place of each parameter. Every value is text; the form makes no
- * guess at a type. A field starts at a fixed width and grows with its value. Every occurrence of a named parameter is the
+ * The statement as the card shows it, with a field in the place of each parameter. Every value is written into the SQL exactly as
+ * typed: the form quotes, escapes and converts nothing. A field starts at a fixed width and grows with its value. Every occurrence of a named parameter is the
  * same value: its fields share one document. Enter submits.
  */
 public final class SqlParameterForm extends JPanel {
@@ -106,7 +106,7 @@ public final class SqlParameterForm extends JPanel {
             }
         }
 
-        SqlParameterValue current() { return new SqlParameterValue(SqlParameterValue.Type.TEXT, text()); }
+        SqlParameterValue current() { return new SqlParameterValue(SqlParameterValue.Type.RAW, text()); }
 
         String label() { return label != null ? label : key; }
 
