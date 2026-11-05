@@ -43,6 +43,31 @@ class DatabaseUiTest {
         });
     }
 
+    @Test void openingAMenuWithAnUnchangedPaletteDoesNotReinstallItsUi() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            String key = "MenuItem.foreground";
+            Object previous = UIManager.get(key);
+            JPopupMenu menu = DatabaseUi.popupMenu();
+            try {
+                JMenuItem item = new JMenuItem("Count rows"); menu.add(item);
+                var itemUi = item.getUI();
+                var popupUi = menu.getUI();
+                for (int open = 0; open < 3; open++)
+                    for (var listener : menu.getPopupMenuListeners())
+                        listener.popupMenuWillBecomeVisible(new javax.swing.event.PopupMenuEvent(menu));
+                assertSame(itemUi, item.getUI(), "A repeat open repaints over the first paint, so it must not reinstall the UI");
+                assertSame(popupUi, menu.getUI());
+                UIManager.put(key, new javax.swing.plaf.ColorUIResource(Color.MAGENTA));
+                for (var listener : menu.getPopupMenuListeners())
+                    listener.popupMenuWillBecomeVisible(new javax.swing.event.PopupMenuEvent(menu));
+                assertNotSame(itemUi, item.getUI(), "A palette change must still refresh the cached menu");
+            } finally {
+                closePopup(menu);
+                UIManager.put(key, previous);
+            }
+        });
+    }
+
     private static void closePopup(JPopupMenu popup) {
         for (var listener : popup.getPopupMenuListeners()) listener.popupMenuWillBecomeInvisible(new javax.swing.event.PopupMenuEvent(popup));
     }

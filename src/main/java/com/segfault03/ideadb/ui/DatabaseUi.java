@@ -48,10 +48,17 @@ public final class DatabaseUi {
         popup.setLightWeightPopupEnabled(false);
         if (!Boolean.TRUE.equals(popup.getClientProperty("lattice.popupThemeRefresh"))) {
             popup.putClientProperty("lattice.popupThemeRefresh", Boolean.TRUE);
+            java.util.concurrent.atomic.AtomicReference<java.util.List<Integer>> applied =
+                    new java.util.concurrent.atomic.AtomicReference<>(popupPalette());
             popup.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
                 @Override public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent event) {
                     // Cached popup menus live outside the editor's component tree, so IDE
                     // theme switches do not necessarily update their UI or child items.
+                    // Refreshing only on a palette change keeps a fresh menu's first paint
+                    // single: a mid-show UI reinstall leaves stale pixels in the translucent
+                    // popup window that the hover repaint then draws over.
+                    java.util.List<Integer> palette = popupPalette();
+                    if (palette.equals(applied.getAndSet(palette))) return;
                     SwingUtilities.updateComponentTreeUI(popup);
                     popup.setOpaque(false); popup.setLightWeightPopupEnabled(false);
                 }
@@ -60,6 +67,18 @@ public final class DatabaseUi {
             });
         }
         return popup;
+    }
+
+    /** Look-and-feel identity and the resolved colors a popup menu paints with, for detecting a theme change. */
+    private static java.util.List<Integer> popupPalette() {
+        java.util.List<Integer> palette = new java.util.ArrayList<>();
+        palette.add(System.identityHashCode(UIManager.getLookAndFeel()));
+        for (String key : new String[]{"PopupMenu.background", "MenuItem.background", "MenuItem.foreground",
+                "MenuItem.selectionBackground", "MenuItem.selectionForeground"}) {
+            Color color = UIManager.getColor(key);
+            palette.add(color == null ? null : color.getRGB());
+        }
+        return palette;
     }
 
     /** Match JBPopupMenu's surface/window settings for Swing's internally owned submenus. */
