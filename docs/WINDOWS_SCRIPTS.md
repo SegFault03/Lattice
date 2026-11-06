@@ -234,7 +234,7 @@ Render the production Swing UI without opening an IDE; refresh the seven tracked
 .\scripts\windows\ui-preview.ps1 --all-previews @deps
 ```
 
-`--all-previews` renders a light/dark gallery. `--output` defaults to build/ui-preview/; `--compare-with` points to an earlier gallery for comparisons. Gallery HTML/ZIP files are ignored. Every successful run refreshes the seven images under screenshots/; review their Git diff. JUnit 4.13.2, Hamcrest Core 1.3 and FlatLaf 3.7.2 can be supplied individually.
+To refresh the images you commit, render on the [UI baseline](UI_PREVIEW.md#baseline-for-tracked-images) with `--ide-home` and `--java-home`. `--all-previews` renders a light/dark gallery. `--output` defaults to build/ui-preview/; `--compare-with` points to an earlier gallery for comparisons. Gallery HTML/ZIP files are ignored. Every successful run refreshes the seven images under screenshots/; review their Git diff. JUnit 4.13.2, Hamcrest Core 1.3 and FlatLaf 3.7.2 can be supplied individually.
 
 Complete options (forwarded unchanged to Python):
 

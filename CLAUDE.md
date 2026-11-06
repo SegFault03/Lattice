@@ -15,6 +15,8 @@ python -m unittest discover -s scripts/tests -v   # tooling regression tests
 python scripts/ui-preview.py        # headless Swing screenshots (light, seven README images)
 ```
 
+Tracked images are rendered headlessly on IntelliJ 2026.2.3 in Islands Light with the default Periwinkle schema colors; see `docs/UI_PREVIEW.md#baseline-for-tracked-images`.
+
 Real-IDE UI screenshots need Xvfb, `xdpyinfo` and a window manager (`openbox` works):
 
 ```sh

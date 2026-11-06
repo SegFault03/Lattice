@@ -4,8 +4,8 @@
 
 Open **Tools → What's New in Lattice**, search for that action with
 **Ctrl+Shift+A**, or use the link on Lattice's welcome screen. The native editor
-tab contains three short feature guides, bundled screenshots that can be enlarged,
-and an expandable list of changes from the packaged changelog. It works offline.
+tab contains short feature guides, bundled images that can be enlarged, and an
+expandable list of changes from the packaged changelog. It works offline.
 
 After opening a project, an informational **Lattice updates** notification offers
 **View what's new**. Each version is announced once per IDE installation across
@@ -18,6 +18,33 @@ For a local installation, build the plugin ZIP, use **Settings → Plugins → g
 Install Plugin from Disk**, select the ZIP, restart if requested, and invoke the
 action above. The native page follows the current IDE theme; screenshots retain
 the theme of their captured sample UI. This feature does not require JCEF.
+
+### Baseline for tracked images
+
+Render every tracked image, the seven README screenshots and the What's New guide
+images, headlessly on IntelliJ IDEA 2026.2.3 in the Islands Light theme, with the
+default Periwinkle schema colors. Neither render opens a window or uses the desktop.
+The IDE version here is separate from the plugin's compile baseline, IntelliJ 2025.1.
+
+### What's New guide images
+
+The guide images under `src/main/resources/release-notes/images/` are rendered
+by `WhatsNewRendersJavaFixtureTest`. It paints the real editor, schema, highlighting,
+cards and panels. Popups cannot open without a display, so they are composed around
+the editor from what the features return. The scenes simulate the Database plugin
+being disabled, because cards and dry runs need that.
+
+Supply an extracted IDEA 2026.2.3 directory, and use JDK 21 to run Gradle. In PowerShell:
+
+```powershell
+$env:LATTICE_WHATS_NEW_OUTPUT = "$PWD\src\main\resources\release-notes\images"
+.\gradlew.bat javaPlatformTest --tests "*WhatsNewRendersJavaFixtureTest" --rerun -I scripts/gradle/whats-new-renders.init.gradle "-Plattice.ide.home=C:/path/to/idea-2026.2.3"
+Remove-Item Env:LATTICE_WHATS_NEW_OUTPUT
+```
+
+On Linux or macOS, set the same variable and use `./gradlew`. Review the images
+before committing them. Without the variable, ordinary `javaPlatformTest` runs
+render the scenes on the compile baseline to keep them working, and write nothing.
 
 ## Welcome screen
 
@@ -132,6 +159,16 @@ Run the preview helper from the repository root on Windows, Linux or macOS:
 ```sh
 python scripts/ui-preview.py
 ```
+
+That renders on the IntelliJ 2025.1 compile baseline, where FlatLaf approximates the IDE themes. It is enough for checking a layout. To refresh the images you commit, use the [baseline](#baseline-for-tracked-images):
+
+```sh
+python scripts/ui-preview.py --ide-home /path/to/idea-2026.2.3 --java-home /path/to/jdk-25
+```
+
+On an IDE that has the Islands themes the helper installs the real theme, its editor scheme and the Inter UI font. The JDK must be at least as new as the IDE's own runtime, which is Java 25 for 2026.2.3; the plugin code still targets Java 21. Run the [What's New render](#whats-new-guide-images) first, because the helper reuses the platform test framework that Gradle caches for that IDE. If the helper's Gradle step runs out of memory in the Kotlin daemon, run `./gradlew compileKotlin -Pkotlin.daemon.jvmargs=-Xmx4g` once and try again.
+
+Without a project the SQL console falls back to a plain text area, so the featured image shows its text in a pane colored by `SqlSwingHighlighter` over a sample schema.
 
 It paints the plugin's production Swing screens with fixture data and a headless IntelliJ test application for platform services such as the Action System. It does not open an IDE window or recreate the screens in separate UI code. The default run uses a light look and feel and refreshes these seven tracked README images:
 

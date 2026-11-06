@@ -111,11 +111,26 @@ public final class UiPreview {
         Graphics2D graphics = image.createGraphics();
         graphics.scale(scale, scale);
         graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        // Layout measures text at 100%; without this, scaled glyphs outgrow their labels and lose their last letter.
+        graphics.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_ON);
+        widenLabels(component, new java.awt.font.FontRenderContext(java.awt.geom.AffineTransform.getScaleInstance(scale, scale), true, true));
         component.printAll(graphics);
         graphics.dispose();
         ImageIO.write(image, "png", output.resolve(name + ".png").toFile());
         snapshots.add(name + ".png");
         System.out.println(name + ": " + image.getWidth() + " x " + image.getHeight());
+    }
+    /** Hinted text measured at 100% can be narrower than the same text painted at a higher density, above all in bold. */
+    private static void widenLabels(Component component, java.awt.font.FontRenderContext context) {
+        if (component instanceof JLabel label && label.getText() != null && !label.getText().isEmpty() && !label.getText().startsWith("<html") && label.getFont() != null) {
+            int text = (int) Math.ceil(label.getFont().getStringBounds(label.getText(), context).getWidth());
+            Icon icon = label.getIcon();
+            Insets insets = label.getInsets();
+            int needed = text + insets.left + insets.right + (icon == null ? 0 : icon.getIconWidth() + label.getIconTextGap());
+            if (needed > label.getWidth() && needed - label.getWidth() <= 12) label.setSize(needed, label.getHeight());
+        }
+        if (component instanceof Container container)
+            for (Component child : container.getComponents()) widenLabels(child, context);
     }
     private static void desktopTextHints(Component component) {
         if (component instanceof JComponent swing) {
@@ -462,11 +477,11 @@ public final class UiPreview {
     }
     static void renderSqlParameters(String theme) throws Exception {
         String sql = "select * from orders where customer_id = :customer and placed_at >= :since";
-        var panel = new com.segfault03.ideadb.sql.run.SqlParameterPanel(sql,
+        var panel = new com.segfault03.ideadb.sql.run.SqlParameterForm(sql,
                 com.segfault03.ideadb.sql.run.SqlParameters.of(sql, com.segfault03.ideadb.sql.dialect.SqlDialects.MYSQL, false),
-                DatabaseType.MYSQL, Map.of(
+                DatabaseType.MYSQL, null, Map.of(
                         ":customer", new com.segfault03.ideadb.sql.run.SqlParameterValue(com.segfault03.ideadb.sql.run.SqlParameterValue.Type.NUMBER, "42"),
-                        ":since", new com.segfault03.ideadb.sql.run.SqlParameterValue(com.segfault03.ideadb.sql.run.SqlParameterValue.Type.DATE, "2026-01-01")));
+                        ":since", new com.segfault03.ideadb.sql.run.SqlParameterValue(com.segfault03.ideadb.sql.run.SqlParameterValue.Type.TEXT, "'2026-01-01'")), "Run");
         panel.setBorder(javax.swing.BorderFactory.createEmptyBorder(12, 12, 12, 12));
         render(panel, theme + "-sql-parameters-640", 640, 300);
     }
@@ -1150,13 +1165,45 @@ public final class UiPreview {
         render(menuPreview, name, width, height);
     }
 
+    /**
+     * In a project the console's input is an IDE editor with schema colors. Without one it falls back to a plain text area,
+     * so the featured image shows the text in a pane colored by the same production code, over the fixture's schema.
+     */
+    static SqlQueryConsolePanel withSchemaColors(SqlQueryConsolePanel panel) throws Exception {
+        JTextArea area = (JTextArea) field(panel, "editorArea");
+        JTextPane pane = new JTextPane();
+        pane.setFont(area.getFont());
+        pane.setBackground(area.getBackground());
+        pane.setBorder(BorderFactory.createEmptyBorder());
+        pane.setText(area.getText());
+        List<ColumnMetadata> columns = List.of(
+                new ColumnMetadata("id", "BIGINT", java.sql.Types.BIGINT, 19, 0, false, true, true, null),
+                new ColumnMetadata("name", "VARCHAR", java.sql.Types.VARCHAR, 120, 0, false, false, false, null),
+                new ColumnMetadata("email", "VARCHAR", java.sql.Types.VARCHAR, 180, 0, true, false, false, null),
+                new ColumnMetadata("balance", "DECIMAL", java.sql.Types.DECIMAL, 10, 2, false, false, false, null),
+                new ColumnMetadata("status", "VARCHAR", java.sql.Types.VARCHAR, 20, 0, false, false, false, null));
+        var table = new TableMetadata(null, "shop", "customers", "TABLE");
+        table.setColumns(columns);
+        var snapshot = new com.segfault03.ideadb.service.ExplorerMetadataSnapshot(List.of(new com.segfault03.ideadb.service.ExplorerMetadataSnapshot.Namespace("shop",
+                List.of(new com.segfault03.ideadb.service.ExplorerMetadataSnapshot.Table(table, columns, true)), true)), List.of(), 3);
+        var schema = com.segfault03.ideadb.sql.schema.SqlSchema.of(config(DatabaseType.MYSQL), snapshot, "shop", 1);
+        var apply = com.segfault03.ideadb.sql.view.SqlSwingHighlighter.class.getDeclaredMethod("apply", JTextPane.class,
+                com.segfault03.ideadb.sql.dialect.SqlDialectProfile.class, com.segfault03.ideadb.sql.schema.SqlSchema.class);
+        apply.setAccessible(true);
+        apply.invoke(null, pane, com.segfault03.ideadb.sql.dialect.SqlDialects.MYSQL, schema);
+        // Over the text area rather than in its place: the line numbers read that area.
+        area.setLayout(new BorderLayout());
+        area.add(pane, BorderLayout.CENTER);
+        return panel;
+    }
+
     static void renderFeatured(String theme) throws Exception {
         render(welcome(false), theme + "-welcome-900", 900, 680);
         render(valueWorkspacePreview(), theme + "-cell-details-1440", 1440, 900);
         AlterTableDialog alter = alterTableDialog();
         render(alter.previewPanel(), theme + "-schema-alter-table-800", 800, alter.previewPanel().getPreferredSize().height);
         connection(theme, "mysql", 740);
-        render(console(), theme + "-sql-console-1100", 1100, 620);
+        render(withSchemaColors(console()), theme + "-sql-console-1100", 1100, 620);
         TableDataEditorPanel editor = table(false);
         render(editor, theme + "-table-1100", 1100, 620);
         Object model = field(editor, "tableModel");
@@ -1245,6 +1292,35 @@ public final class UiPreview {
         if (filled < 10) throw new AssertionError("Missing solid bottom-left source badge: " + type);
     }
 
+    /**
+     * The IDE's own Islands theme, UI font and editor scheme where it has them, installed the way the IDE does it: the test
+     * application's LafManager has no themes. An older IDE answers false, and FlatLaf approximates its themes instead.
+     */
+    private static boolean installIslandsTheme(boolean dark) throws Exception {
+        String id = dark ? "Islands Dark" : "Islands Light";
+        var theme = com.intellij.ide.ui.laf.UiThemeProviderListManager.Companion.getInstance().findThemeById(id);
+        if (theme == null) return false;
+        UIManager.setLookAndFeel(dark ? new com.intellij.ide.ui.laf.darcula.DarculaLaf() : new com.intellij.ide.ui.laf.IntelliJLaf());
+        UIDefaults defaults = UIManager.getLookAndFeelDefaults();
+        theme.installTheme(defaults);
+        Font inter = new Font("Inter", Font.PLAIN, 13);
+        for (Object key : new ArrayList<>(defaults.keySet())) {
+            if (key instanceof String name && name.endsWith(".font") && defaults.get(key) instanceof Font font) {
+                defaults.put(key, new javax.swing.plaf.FontUIResource(inter.deriveFont(font.getStyle())));
+            }
+        }
+        var colors = com.intellij.openapi.editor.colors.EditorColorsManager.getInstance();
+        var scheme = new com.intellij.openapi.editor.colors.impl.EditorColorsSchemeImpl(colors.getGlobalScheme());
+        String schemeFile = dark ? "themes/islands/IslandSchemeDark.xml" : "themes/expUI/expUI_lightScheme.xml";
+        try (var input = com.intellij.ide.ui.laf.UiThemeProviderListManager.class.getClassLoader().getResourceAsStream(schemeFile)) {
+            if (input == null) throw new AssertionError(id + " has no editor scheme at " + schemeFile);
+            scheme.readExternal(com.intellij.openapi.util.JDOMUtil.load(input));
+        }
+        colors.setGlobalScheme(scheme);
+        System.out.println("Rendering in " + theme.getName() + " on " + com.intellij.openapi.application.ApplicationInfo.getInstance().getBuild().asString());
+        return true;
+    }
+
     private static void initializePreviewApplication() throws Exception {
         com.intellij.testFramework.common.TestApplicationKt.loadApp();
         com.intellij.openapi.extensions.PluginDescriptor descriptor = (com.intellij.openapi.extensions.PluginDescriptor)
@@ -1291,13 +1367,15 @@ public final class UiPreview {
             boolean tabIconsOnly = args.length >= 3 && args[2].equals("tab-icons");
             boolean cellDetailsOnly = args.length >= 3 && args[2].equals("cell-details");
             featuredOnly = !sourceFilterOnly && !searchOnly && !tabIconsOnly && !cellDetailsOnly && (args.length < 3 || !args[2].equals("all"));
-            UIManager.setLookAndFeel(theme.equals("dark") ? new FlatDarculaLaf() : new FlatIntelliJLaf());
-            Font font = new javax.swing.plaf.FontUIResource(previewFont());
-            UIManager.put("defaultFont", font);
-            for (String key : List.of("Label.font", "Button.font", "ToggleButton.font", "CheckBox.font",
-                    "RadioButton.font", "ComboBox.font", "TextField.font", "PasswordField.font", "TextArea.font",
-                    "Table.font", "TableHeader.font", "Menu.font", "MenuItem.font", "TabbedPane.font",
-                    "TitledBorder.font")) UIManager.put(key, font);
+            if (!installIslandsTheme(theme.equals("dark"))) {
+                UIManager.setLookAndFeel(theme.equals("dark") ? new FlatDarculaLaf() : new FlatIntelliJLaf());
+                Font font = new javax.swing.plaf.FontUIResource(previewFont());
+                UIManager.put("defaultFont", font);
+                for (String key : List.of("Label.font", "Button.font", "ToggleButton.font", "CheckBox.font",
+                        "RadioButton.font", "ComboBox.font", "TextField.font", "PasswordField.font", "TextArea.font",
+                        "Table.font", "TableHeader.font", "Menu.font", "MenuItem.font", "TabbedPane.font",
+                        "TitledBorder.font")) UIManager.put(key, font);
+            }
             JBColor.setDark(theme.equals("dark"));
             com.intellij.ui.IconManager.Companion.activate(new com.intellij.ui.icons.CoreIconManager());
             IconLoader.activate();

@@ -9,7 +9,9 @@ Refreshes the seven featured screenshots/ PNGs and a local gallery under ignored
 import argparse
 import hashlib
 import html
+import json
 import os
+import re
 import shutil
 import zipfile
 from pathlib import Path
@@ -66,6 +68,23 @@ def cached_test_runtime_jars(gradle_cache):
     return result
 
 
+def ide_java_major(sdk):
+    # A newer IDE's classes need a compiler at least as new as its runtime; the plugin itself still targets Java 21.
+    release = sdk / 'jbr/release'
+    version = re.search(r'JAVA_VERSION="(\d+)', release.read_text(encoding='utf-8')) if release.is_file() else None
+    return max(21, int(version.group(1))) if version else 21
+
+
+def cached_platform_test_jars(sdk, gradle_cache):
+    # Newer IDE distributions leave out the platform test framework; Gradle caches the matching build's when it resolves that IDE.
+    if (sdk / 'lib/testFramework.jar').is_file():
+        return []
+    build = json.loads((sdk / 'product-info.json').read_text(encoding='utf-8'))['buildNumber']
+    cache = gradle_cache / 'caches/modules-2/files-2.1/com.jetbrains.intellij.platform'
+    return sorted(jar for module in cache.glob('test-framework*') for jar in (module / build).glob('*/*.jar')
+                  if not jar.name.endswith('-sources.jar'))
+
+
 def run():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--ide-home', type=Path, help='IntelliJ SDK installation directory')
@@ -95,16 +114,17 @@ def run():
 
 
 def render(args, deps, parser):
-    java = executable(deps.java(args.java_home), 'java').resolve()
-    javac = java.with_name('javac.exe' if os.name == 'nt' else 'javac')
-    if not javac.is_file():
-        parser.error('Select a full JDK 21 with --java-home or JAVA_HOME; javac was not found.')
     sdk = deps.ide(args.ide_home) if args.ide_home or args.binaries_dir else None
     gradle_cache = Path(args.gradle_user_home or os.environ.get('GRADLE_USER_HOME', Path.home() / '.gradle')).expanduser().resolve()
     if sdk is None:
         sdk = cached_sdk(gradle_cache)
         if sdk is None:
             sdk = deps.ide()
+    major = ide_java_major(sdk)
+    java = executable(deps.java(args.java_home, major=major), 'java').resolve()
+    javac = java.with_name('javac.exe' if os.name == 'nt' else 'javac')
+    if not javac.is_file():
+        parser.error(f'Select a full JDK {major} with --java-home or JAVA_HOME; javac was not found.')
     test_jars = cached_test_runtime_jars(gradle_cache)
     if test_jars is None:
         test_jars = []
@@ -112,8 +132,12 @@ def render(args, deps, parser):
         test_jars = [deps.file('tools/junit/junit-4.13.2.jar', 'https://repo.maven.apache.org/maven2/junit/junit/4.13.2/junit-4.13.2.jar', '8e495b634469d64fb8acfa3495a065cbacc8a0fff55ce1e31007be4c16dc57d3', args.junit_jar),
                      deps.file('tools/junit/hamcrest-core-1.3.jar', 'https://repo.maven.apache.org/maven2/org/hamcrest/hamcrest-core/1.3/hamcrest-core-1.3.jar', '66fdef91e9739348df7a096aa384a5685f4e875584cce89386a7a47251c4d8e9', args.hamcrest_jar)]
     jars = sorted((sdk / 'lib').glob('*.jar')) + sorted((sdk / 'lib/modules').glob('*.jar'))
-    if not (sdk / 'lib/app-client.jar').is_file():
-        parser.error('--ide-home must point to an IntelliJ SDK with lib/app-client.jar')
+    if not (sdk / 'lib/app-client.jar').is_file() and not (sdk / 'product-info.json').is_file():
+        parser.error('--ide-home must point to an IntelliJ SDK with lib/app-client.jar or product-info.json')
+    platform_test_jars = cached_platform_test_jars(sdk, gradle_cache)
+    if not (sdk / 'lib/testFramework.jar').is_file() and not platform_test_jars:
+        parser.error('This IDE does not bundle the platform test framework; run the What\'s New render once so Gradle caches it. See docs/UI_PREVIEW.md.')
+    test_jars = list(test_jars) + platform_test_jars
     output = args.output.resolve()
     screenshots = ROOT / 'screenshots'
     if output == screenshots or screenshots in output.parents:
@@ -127,8 +151,10 @@ def render(args, deps, parser):
     output.mkdir(parents=True, exist_ok=True)
     production = output / 'production-classes'
     preview = output / 'preview-classes'
-    production.mkdir(exist_ok=True)
-    preview.mkdir(exist_ok=True)
+    # Start empty: classes left by an earlier run would hide a reference to one that no longer exists.
+    for classes in (production, preview):
+        shutil.rmtree(classes, ignore_errors=True)
+        classes.mkdir()
     drivers = {kind: deps.jdbc(kind) for kind in ('mysql', 'hsqldb')}
     # Kotlin settings classes come from Gradle; the Java/Kotlin PSI injectors need language plugins
     # that the headless platform lacks and are not used by any rendered screen.
@@ -173,6 +199,8 @@ def render(args, deps, parser):
                          '--add-opens=java.desktop/sun.java2d=ALL-UNNAMED',
                          '--add-opens=java.desktop/sun.swing=ALL-UNNAMED',
                          '-Djava.awt.headless=true', '-Didea.is.unit.test=true', '-Didea.platform.prefix=Idea',
+                         # A newer IDE only gives a plugin on the class path a loader of its own if it has a jar.
+                         '-Didea.force.use.core.classloader=true',
                          f'-Didea.home.path={sdk}', f'-Didea.config.path={config_path}',
                          f'-Didea.system.path={system_path}', '-cp', runtime, 'UiPreview',
                          str(output), theme, mode], output / f'{theme}.args')
