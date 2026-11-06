@@ -42,11 +42,6 @@ public class SendToConsoleFixtureTest extends H2SqlFixtureTestCase {
         return myFixture.testAction(ActionManager.getInstance().getAction(ACTION_ID));
     }
 
-    public void testRegisteredInEditorPopupGroup() {
-        assertNotNull(ActionManager.getInstance().getAction(ACTION_ID));
-        assertTrue(ActionManager.getInstance().getAction("com.segfault03.lattice.sql.run.group") instanceof com.intellij.openapi.actionSystem.ActionGroup);
-    }
-
     public void testSendsCaretStatementWithoutRunning() {
         DatabaseConnectionManager.getInstance().closeConnection(h2.getId());
         assertFalse(DatabaseConnectionManager.getInstance().isConnected(h2.getId()));

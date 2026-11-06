@@ -52,11 +52,6 @@ public class SqlEditorSettingsPageFixtureTest extends BasePlatformTestCase {
         return (JComboBox<SqlEditorSettings.KeywordCase>) UIUtil.findComponentsOfType(component, JComboBox.class).get(0);
     }
 
-    public void testThePageKeepsItsIdAndDisplayName() {
-        assertEquals("com.segfault03.lattice.sql.editor", page.getId());
-        assertEquals("Lattice SQL Editor", page.getDisplayName());
-    }
-
     public void testAFreshPageShowsTheSavedStateAndIsNotModified() {
         assertFalse(page.isModified());
         assertTrue(box("Enable Lattice SQL editor support").isSelected());

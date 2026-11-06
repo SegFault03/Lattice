@@ -66,22 +66,15 @@ public class SqlCardActionsJavaFixtureTest extends H2SqlFixtureTestCase {
         assertTrue(update("com.segfault03.lattice.sql.chooseFileConnection", card).isEnabledAndVisible());
     }
 
-    public void testRunAndRollBackHasTheGreenRunIconOnACard() {
-        SqlCard card = card("String q = \"update orders set status = 'x' where id = ?\";");
-        assertSame(com.intellij.icons.AllIcons.Actions.Execute, update("com.segfault03.lattice.sql.run.rollback", card).getIcon());
-    }
-
-    public void testRunHasTheGreenRunIcon() {
-        SqlCard card = card("String q = \"select id from orders where id = ?\";");
-        assertSame(com.intellij.icons.AllIcons.Actions.Execute, update("com.segfault03.lattice.sql.run.run", card).getIcon());
-    }
-
     public void testRunActionsHaveIconsOnACard() {
         SqlCard card = card("String q = \"update orders set status = 'x' where id = ?\";");
         for (String id : List.of("com.segfault03.lattice.sql.run.rollback", "com.segfault03.lattice.sql.run.sendToConsole", "com.segfault03.lattice.sql.run.explain")) {
             assertNotNull(id, update(id, card).getIcon());
             assertNull("the editor menu keeps its icon-less entries: " + id, ActionManager.getInstance().getAction(id).getTemplatePresentation().getIcon());
         }
+        assertSame(com.intellij.icons.AllIcons.Actions.Execute, update("com.segfault03.lattice.sql.run.rollback", card).getIcon());
+        SqlCard query = card("String q = \"select id from orders where id = ?\";");
+        assertSame(com.intellij.icons.AllIcons.Actions.Execute, update("com.segfault03.lattice.sql.run.run", query).getIcon());
     }
 
     public void testToolbarGroupOrder() {

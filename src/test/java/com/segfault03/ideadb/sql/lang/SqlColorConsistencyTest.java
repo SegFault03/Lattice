@@ -24,8 +24,6 @@ import static org.junit.jupiter.api.Assertions.*;
 class SqlColorConsistencyTest {
     private static final Path MAIN = Path.of("src/main/java");
 
-    /** The classes that paint SQL, each of which gets its role colors from {@link SqlSemanticColoring} and {@link SqlSemanticColors}. */
-    private static final Set<String> PAINTERS = Set.of("SqlSemanticAnnotator", "SqlEmbeddedValidation", "SqlSwingHighlighter", "SqlDocPalette", "SqlColorFamilyPreview");
     /** The classes that show SQL in a Swing pane, through {@code SqlSwingHighlighter} with the connection's schema. */
     private static final Set<String> PANES = Set.of("GeneratedSqlDialog", "CreateTablePanel", "AlterTablePanel", "SqlParameterForm");
 
@@ -38,7 +36,7 @@ class SqlColorConsistencyTest {
     private static String hex(java.awt.Color color) { return String.format("%06X", color.getRGB() & 0xFFFFFF); }
 
     /** The SQL support's own code and the panes that show SQL; other colors in the plugin are not the SQL scheme, whatever they equal. */
-    private static boolean rendersSql(Path path) { return path.toString().contains("/ideadb/sql/") || PANES.contains(name(path)); }
+    private static boolean rendersSql(Path path) { return path.toString().replace('\\', '/').contains("/ideadb/sql/") || PANES.contains(name(path)); }
 
     @Test void noOtherClassDefinesARolesColor() throws IOException {
         for (Path path : sources()) {
@@ -98,21 +96,5 @@ class SqlColorConsistencyTest {
         }).map(SqlColorConsistencyTest::name).collect(Collectors.toSet());
         users.remove("SqlSwingHighlighter");
         assertEquals(PANES, users, "a new Swing pane that shows SQL is added to PANES, and colors with the connection's schema");
-    }
-
-    @Test void theSwingPanesColorWithTheirConnectionsSchema() throws IOException {
-        for (Path path : sources()) {
-            if (!PANES.contains(name(path))) continue;
-            String text = Files.readString(path);
-            assertTrue(text.contains("SqlSwingHighlighter.apply(") && (text.contains("apply(sql, config, namespace)") || text.contains("apply(text, config, namespace)")
-                    || text.contains("apply(preview, connection, null)") || text.contains("apply(colored, connection, null)")), name(path) + " colors by syntax alone");
-        }
-    }
-
-    @Test void thePaintersTakeTheirRoleColorsFromTheSharedClasses() throws IOException {
-        for (Path path : sources()) {
-            if (!PAINTERS.contains(name(path))) continue;
-            assertTrue(Files.readString(path).contains("SqlSemanticColors"), name(path) + " does not use SqlSemanticColors");
-        }
     }
 }

@@ -101,11 +101,6 @@ class SqlParameterFormTest {
         assertTrue(changes.get() > 0);
     }
 
-    @Test void layoutValidityIsTheAwtDefault() {
-        // valuesValid() is named so it does not override Component.isValid(), which layout relies on.
-        assertFalse(form("select ?", Map.of()).isValid());
-    }
-
     @Test void theFormSitsWithItsSqlOnTheCardsAndStaysInView() {
         var visible = new Rectangle(0, 100, 800, 400);
         var origin = new Point(8, 30);

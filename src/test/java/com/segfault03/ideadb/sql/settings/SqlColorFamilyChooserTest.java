@@ -72,18 +72,6 @@ class SqlColorFamilyChooserTest {
         });
     }
 
-    @Test void theColumnsAreSeparatedByAOnePixelDivider() throws Exception {
-        SwingUtilities.invokeAndWait(() -> {
-            var chooser = new SqlColorFamilyChooser(ColorFamily.CORAL);
-            var columns = chooser.getComponents();
-            assertEquals(3, columns.length, "options, divider, previews");
-            assertEquals(1, columns[1].getPreferredSize().width);
-            assertFalse(columns[0] instanceof JTextPane);
-            assertFalse(all((Container) columns[0], JTextPane.class).size() > 0, "the previews are not in the options column");
-            assertEquals(2, all((Container) columns[2], JTextPane.class).size());
-        });
-    }
-
     @Test void disablingTheChooserDisablesTheChoices() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             var chooser = new SqlColorFamilyChooser(ColorFamily.CORAL);

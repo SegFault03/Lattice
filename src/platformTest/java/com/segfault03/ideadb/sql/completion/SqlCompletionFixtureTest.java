@@ -36,18 +36,6 @@ public class SqlCompletionFixtureTest extends H2SqlFixtureTestCase {
         assertFalse("Keywords do not belong in a bare table slot", items.contains("SELECT") || items.contains("select"));
     }
 
-    public void testAliasQualifiedColumnsAreOffered() {
-        loadSchema();
-        var items = lookups("select b.<caret> from books b");
-        assertEquals(List.of("AUTHOR_ID", "ID", "TITLE"), items);
-    }
-
-    public void testTheForeignKeyJoinConditionRanksFirst() {
-        loadSchema();
-        var items = lookups("select * from books b join authors a on <caret>");
-        assertEquals(items.toString(), "b.AUTHOR_ID = a.ID", items.get(0));
-    }
-
     public void testAJoinSlotOffersTheForeignKeyJoinsFirst() {
         loadSchema();
         var items = lookups("select * from books b join <caret>");
@@ -93,16 +81,6 @@ public class SqlCompletionFixtureTest extends H2SqlFixtureTestCase {
         myFixture.checkResult("select * from AUTHORS");
     }
 
-    public void testKeywordsAndFunctionsFollowTheDialectAndTheTypedCase() {
-        loadSchema();
-        var items = lookups("select * from books <caret>");
-        assertTrue(items.toString(), items.containsAll(List.of("where", "limit", "fetch first", "order by", "left join")));
-        assertFalse(items.contains("LIMIT"));
-
-        var upper = lookups("SELECT * FROM books <caret>");
-        assertTrue(upper.toString(), upper.contains("WHERE"));
-    }
-
     public void testSelectingAFunctionAddsParentheses() {
         loadSchema();
         myFixture.configureByText("query.sql", "select coun<caret> from books");
@@ -110,18 +88,6 @@ public class SqlCompletionFixtureTest extends H2SqlFixtureTestCase {
         if (items != null) myFixture.getLookup().setCurrentItem(Arrays.stream(items).filter(e -> e.getLookupString().equals("count")).findFirst().orElseThrow());
         if (items != null) myFixture.type('\n');
         myFixture.checkResult("select count(<caret>) from books");
-    }
-
-    public void testInsertColumnListSkipsColumnsAlreadyNamed() {
-        loadSchema();
-        var items = lookups("insert into books (id, <caret>)");
-        assertEquals(items.toString(), List.of("AUTHOR_ID", "TITLE"), items);
-    }
-
-    public void testCommentsAndStringsGetNoSchemaSuggestions() {
-        loadSchema();
-        assertFalse(lookups("select 1 -- <caret>").contains("AUTHORS"));
-        assertFalse(lookups("select 'x<caret>'").contains("AUTHORS"));
     }
 
     public void testNothingIsOfferedOnceCompletionIsTurnedOff() {

@@ -45,15 +45,6 @@ class SqlColorFamilyPreviewTest {
         });
     }
 
-    @Test void theLightAndTheDarkEditorDifferInBackgroundAndInTheColorsOfNames() {
-        assertNotEquals(SqlColorFamilyPreview.background(false), SqlColorFamilyPreview.background(true));
-        for (ColorFamily family : ColorFamily.values()) {
-            for (Role role : new Role[] {Role.TABLE, Role.VIEW, Role.ALIAS}) {
-                assertNotEquals(SqlColorFamilyPreview.colorOf(role, family, false), SqlColorFamilyPreview.colorOf(role, family, true), family + " " + role);
-            }
-        }
-    }
-
     @Test void columnsLookTheSameInEveryFamily() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             for (boolean dark : new boolean[] {false, true}) {

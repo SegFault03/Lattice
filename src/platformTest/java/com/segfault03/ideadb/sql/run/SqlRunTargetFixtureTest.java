@@ -27,24 +27,16 @@ public class SqlRunTargetFixtureTest extends H2SqlFixtureTestCase {
         assertEquals(java.util.List.of("1"), target.parameters().keys());
     }
 
-    public void testSqlFileCaretInLeadingWhitespaceIsAProblem() {
-        myFixture.configureByText("q.sql", "  <caret>\nselect 1");
-        assertEquals(new SqlRunTarget.Problem("Select a single statement"), resolve());
-    }
-
     public void testSqlFileSelectionOfOneStatement() {
         myFixture.configureByText("q.sql", "select 1;\n<selection>  select 2  </selection>;\nselect 3;");
         assertEquals("select 2", found().sql());
     }
 
-    public void testSqlFileSelectionOfTwoGivesProblem() {
-        myFixture.configureByText("q.sql", "<selection>select 1;\nselect 2;</selection>\nselect 3;");
-        assertEquals(new SqlRunTarget.Problem("Select a single statement"), resolve());
-    }
-
-    public void testSqlFileSelectionOfOnlyACommentGivesProblem() {
-        myFixture.configureByText("q.sql", "<selection>-- nothing</selection>\nselect 3;");
-        assertEquals(new SqlRunTarget.Problem("Select a single statement"), resolve());
+    public void testWhatIsNotOneStatementIsAProblem() {
+        for (String text : java.util.List.of("  <caret>\nselect 1", "<selection>select 1;\nselect 2;</selection>\nselect 3;", "<selection>-- nothing</selection>\nselect 3;")) {
+            myFixture.configureByText("q.sql", text);
+            assertEquals(text, new SqlRunTarget.Problem("Select a single statement"), resolve());
+        }
     }
 
     public void testUnboundFileHasNullConnection() {

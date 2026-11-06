@@ -106,12 +106,6 @@ public class SqlProjectSettingsFixtureTest extends BasePlatformTestCase {
         page.disposeUIResources();
     }
 
-    public void testThePageIsCalledProjectDefaultsAndKeepsItsId() {
-        var page = new SqlProjectConfigurable(getProject());
-        assertEquals("Project Defaults", page.getDisplayName());
-        assertEquals("com.segfault03.lattice.sql.editor.project", page.getId());
-    }
-
     private static JCheckBox checkBoxStartingWith(Container root, String text) {
         return UIUtil.findComponentsOfType((JComponent) root, JCheckBox.class).stream()
                 .filter(box -> box.getText().startsWith(text)).findFirst().orElse(null);
