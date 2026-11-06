@@ -1,4 +1,4 @@
-# Column Inspector · implemented design
+# Column Inspector · native captures
 
 These are desktop captures of the production Swing dialog running in IntelliJ
 IDEA Community 2025.1 with the installed Lattice plugin. The dialog images are

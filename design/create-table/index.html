@@ -48,13 +48,12 @@
     <img id="render" class="render" width="2240" height="1640" alt="">
     <div class="tradeoff"><div><strong>Best for</strong><p id="best"></p></div><div><strong>Trade-off</strong><p id="tradeoff"></p></div></div>
   </section>
-  <p><strong>Suggested direction: 01.</strong> It gives create and alter a consistent column editor. Choose 02 for dense schema work, or 03 to keep the complete SQL definition in view.</p>
   <details><summary>Compare with the current production dialog</summary><img data-image="00-current-dialog" alt="Current CreateTableDialog painted with fixture data"></details>
   <footer>Actual Swing painting at 2× density · IntelliJ 2025.1 test application · FlatLaf theme approximation · Shared Lattice inputs, grid, toolbars and SVGs. <a href="README.md">Source and render instructions</a></footer>
 </main>
 <script>
 const concepts = [
-  {file:'01-column-composer', title:'01 · Column Composer', description:'The column navigator and property editor mirror the chosen alter-table design. Table naming is prominent; column order, primary keys, identity and defaults have a dedicated place. SQL sits below the selected column.', best:'A consistent create-and-alter experience with clear, spacious forms.', tradeoff:'Comparing several columns requires moving between them.'},
+  {file:'01-column-composer', title:'01 · Column Composer', description:'The column navigator and property editor mirror the alter-table dialog. Table naming is prominent; column order, primary keys, identity and defaults have a dedicated place. SQL sits below the selected column.', best:'A consistent create-and-alter experience with clear, spacious forms.', tradeoff:'Comparing several columns requires moving between them.'},
   {file:'02-schema-canvas', title:'02 · Schema Canvas', description:'A large schema grid makes types, lengths, keys and defaults easy to compare. The selected row has a compact editor beneath it, next to the complete CREATE statement.', best:'Defining many columns quickly and checking the whole structure.', tradeoff:'The grid and detail editor repeat some information.'},
   {file:'03-blueprint', title:'03 · Blueprint', description:'Column definitions form an ordered outline. The selected card expands in place while the SQL sheet stays visible on the right, alongside key and column counts.', best:'Reviewing how individual definitions contribute to the complete table.', tradeoff:'Expanded cards use more vertical space as the schema grows.'}
 ];

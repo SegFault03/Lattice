@@ -1,8 +1,8 @@
-# Column Composer · implemented design
+# Column Composer · native captures
 
-The create-table dialog now uses concept 01. These are actual desktop captures
-of the production Swing dialog in IntelliJ IDEA Community 2025.1, with the
-installed Lattice plugin. Dialog images are crops of the live modal window.
+These are actual desktop captures of the production Swing dialog in IntelliJ
+IDEA Community 2025.1, with the installed Lattice plugin. Dialog images are crops
+of the live modal window.
 
 | Theme | Dialog | IntelliJ context |
 | --- | --- | --- |
@@ -22,5 +22,5 @@ whole definition for correction and retry. Success closes the dialog and
 refreshes the explorer. Closing a changed definition requires a discard decision.
 
 See [native review instructions](../../../docs/UI_PREVIEW.md#column-composer)
-for the current interaction model and repeatable review steps. The original
-concepts remain in the [comparison gallery](../index.html).
+for the current interaction model and repeatable review steps. Layout concepts
+are in the [comparison gallery](../index.html).

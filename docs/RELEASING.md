@@ -35,13 +35,12 @@ git push origin v0.1.0-alpha
 
 These are release commands for the maintainer; no tag is created by the preparation scripts. Tags use `vX.Y.Z` or a SemVer prerelease such as `vX.Y.Z-alpha` / `vX.Y.Z-rc.1`, without numeric leading zeroes. Build metadata suffixes are not supported. Release builds derive the plugin/ZIP version from the tag, overriding the default property. Prerelease suffixes set GitHub's prerelease flag and disable latest designation. Do not reuse a published tag.
 
-The next release is **0.1.0-alpha**, a minor alpha release following
-**0.0.2-alpha**. Keep `gradle.properties`, the source plugin descriptor, the
-changelog heading and the illustrated guide's `edition` aligned. Its `since`
-remains `0.0.2-alpha`, the previous release, and its `version=${version}` is
-resolved by Gradle. Do not advance to a later development version before this
-release is tagged. A staging push or main PR does not publish the plugin;
-create the tag only after the main PR is merged and release is approved.
+Keep `gradle.properties`, the source plugin descriptor, the changelog heading
+and the illustrated guide's `edition` aligned. Its `since` names the previous
+release, and its `version=${version}` is resolved by Gradle. Do not advance to a
+later development version before the release is tagged. A staging push or main
+PR does not publish the plugin; create the tag only after the main PR is merged
+and release is approved.
 
 ## Automatic pipeline
 

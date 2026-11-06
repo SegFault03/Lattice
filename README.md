@@ -143,7 +143,7 @@ python scripts/test.py --build
 python -m unittest discover -s scripts/tests -v
 ```
 
-Use `python3` if that is your system's Python command. All optional development/release helpers live in `scripts/`; see the [script reference](docs/SCRIPTS.md). Only the conventional Gradle launchers remain in the repository root.
+Use `python3` if that is your system's Python command. All optional development/release helpers live in `scripts/`; see the [script reference](docs/SCRIPTS.md).
 
 ### Quick local UI testing
 
@@ -190,14 +190,14 @@ focused commands, prerequisites and report paths.
 |---|---|
 | `src/` | Plugin source, resources and Java tests |
 | [docs/](docs/README.md) | Development, release, support and compatibility guides |
-| `design/` | Create/alter table concept galleries and presentation prototypes |
+| [design/](design/README.md) | Design study instructions, plus create/alter table concept galleries and presentation prototypes |
 | `scripts/` | Portable development and release helpers; tooling tests in `scripts/tests/` |
 | `.github/` | GitHub issue forms, pull request template and workflows |
 | `assets/`, `licenses/` | Branding and dependency license texts |
 | `build/` | Ignored build output, distribution ZIPs and validation reports |
 | `screenshots/` | The seven tracked README preview images |
 
-The seven README screenshots are the featured product previews. Concept renders under `design/` are retained design references; validation output and other generated files belong under ignored `build/`.
+The seven README screenshots are the featured product previews. Concept renders under `design/` are tracked with their design studies; validation output and other generated files belong under ignored `build/`.
 
 ## Releases and support
 

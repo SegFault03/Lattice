@@ -2,7 +2,7 @@
 
 ## Requirements
 
-Use JDK 21, Git and the committed Gradle wrapper. Python 3.11+ supports the optional helper scripts; Python 3.12+ is recommended for SDK extraction. Linux/macOS MySQL fixtures require Docker; Windows defaults to portable native MySQL. No maintainer-specific folders or installed IDEs are required.
+Use JDK 21, Git and the committed Gradle wrapper. Python 3.11+ supports the optional helper scripts; Python 3.12+ is recommended for SDK extraction. Linux/macOS MySQL fixtures require Docker; Windows defaults to portable native MySQL. No particular folder layout or installed IDE is required.
 
 ```text
 python scripts/test.py --build

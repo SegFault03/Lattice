@@ -40,6 +40,7 @@ Thumbs.db
 .intellijPlatform/
 
 # Local credentials, test data and Python outputs
+CLAUDE.local.md
 .env
 .env.*
 !.env.example

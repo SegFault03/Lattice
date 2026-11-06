@@ -11,9 +11,7 @@ After opening a project, an informational **Lattice updates** notification offer
 **View what's new**. Each version is announced once per IDE installation across
 projects. **Don't show again** disables future notices; the page stays available.
 The announcement state is stored separately from the welcome-screen preference,
-does not roam through Settings Sync, and survives restarts. The first rollout
-shows the 0.1.0-alpha recap since 0.0.2-alpha because previous builds did not
-record which release notes a user had seen.
+does not roam through Settings Sync, and survives restarts.
 The page's **Notify me about new Lattice releases** checkbox can re-enable notices.
 
 For a local installation, build the plugin ZIP, use **Settings → Plugins → gear →
@@ -151,7 +149,7 @@ It also writes `build/ui-preview/index.html` and a ZIP of the generated preview 
 
 Explorer previews use the production native action toolbar. The helper waits for action expansion before painting and fails if a toolbar has no visible actions.
 
-Use JDK 21 and run `./gradlew test` on Linux/macOS or `.\gradlew.bat test` on Windows once to cache the IntelliJ SDK and UI-test runtime dependencies. Missing inputs and checksum-verified FlatLaf are downloaded into the selected `--download-dir` (the OS development cache by default). In this headless Linux environment the preview selects an installed regular sans-serif font to avoid the host's italic logical-font fallback.
+Use JDK 21 and run `./gradlew test` on Linux/macOS or `.\gradlew.bat test` on Windows once to cache the IntelliJ SDK and UI-test runtime dependencies. Missing inputs and checksum-verified FlatLaf are downloaded into the selected `--download-dir` (the OS development cache by default). On headless Linux the preview selects an installed regular sans-serif font to avoid an italic logical-font fallback.
 
 On Windows, pass the local Java 21 and IntelliJ SDK paths if they are not already discoverable. The renderer uses Java argument files so SDK and workspace paths with spaces work:
 
@@ -171,11 +169,11 @@ python scripts/ui-preview.py --java-home /path/to/jdk-21 --ide-home /path/to/int
 
 These previews show component layout and Swing painting with fixture data. For IDE chrome, live plugin loading, tool-window behavior and database-backed flows, Linux users can use [`capture-intellij-ui.sh`](../scripts/linux/capture-intellij-ui.sh) or [`review-intellij-ui.sh`](../scripts/linux/review-intellij-ui.sh). Windows users can use [`capture-intellij-ui.ps1`](../scripts/windows/capture-intellij-ui.ps1) or [`review-intellij-ui.ps1`](../scripts/windows/review-intellij-ui.ps1) from an interactive desktop session; captures use the primary display, which must be at least 1440×800. Windows capture automatically restores the newly launched `lattice-ui-test` IDE when another application takes the foreground, preserving focus in IDE dialogs and popups. Allow the capture script to use the desktop while it runs; a locked desktop still prevents capture. Their setup and output paths are documented in the [script reference](SCRIPTS.md).
 
-Windows PowerShell examples:
-
 The test applies 100% scaling directly to the IDE VM options as well as the Driver JVM, so Windows display scaling does not offset automated clicks. The fixture Maven project imports offline from its prepared JDBC repository.
 
 For a focused palette review, pass `-StyleOnly -GradleArgs @('-Plattice.ui.lightThemes=true')` to Windows capture. It switches the running IDE through the bundled light themes (including Islands Light when available) and checks the SQL export submenu against the table palette, saving table and console captures for each theme.
+
+Windows PowerShell examples:
 
 ```powershell
 .\scripts\windows\capture-intellij-ui.ps1 -JavaHome 'C:/path/to/jdk-21' -IdeHome 'C:/path/to/IntelliJ IDEA 2025.1' -InputsOnly
@@ -200,13 +198,12 @@ Main PR CI uses this mode instead of the full light/dark gallery.
 
 The native inspector case runs once at 125%, switches through both themes, and
 checks selection following, explicit editing and unconfirmed draft recovery.
-The standalone 100% duplicate and styling-only CI case have been removed. H2 and
-search each run once in dark mode. Create/alter and partial-DDL recovery retain
+H2 and search each run once in dark mode. Create/alter and partial-DDL recovery retain
 separate cases because they exercise different destructive-operation paths.
 
 ### Column Composer
 
-The create-table dialog uses the selected Column Composer design: a persistent
+The create-table dialog is the Column Composer: a persistent
 column navigator, table name, properties and a complete SQL preview. Add/remove
 and move controls update the same definition, including composite primary keys,
 identity columns, nullability, defaults and decimal precision/scale. Filtering
@@ -308,7 +305,7 @@ renderer and widget unit tests also run in the standard test task on every OS.
 
 The live IDE reviews verify source switching and provider-specific default
 ports. Composite key and alias metadata contracts are covered by backend/JDBC
-tests; native badge colors and exact icon dimensions are no longer release gates.
+tests; native badge colors and exact icon dimensions are not release gates.
 
 Busy-state checks hold a real JDBC response at the fixture gate, require visible
 operation feedback and verify that grid mutation controls are disabled until the

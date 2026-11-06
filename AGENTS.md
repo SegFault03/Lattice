@@ -36,6 +36,15 @@ run, an isolated YAML comment or a helper's default command.
   the same change. Follow the validation procedure in `docs/CI_TESTING.md` before
   committing; report what ran and any remaining limits.
 
+## Local test assets
+
+- Reuse an existing local asset collection instead of downloading tools first.
+  Pass it with `--binaries-dir`, or `-BinariesDir` for the native Windows UI
+  scripts; see `docs/SCRIPTS.md#binary-paths-downloads-and-cleanup`.
+- A collection's location is specific to one machine. Read it from an ignored
+  `CLAUDE.local.md` at the repository root when present, and keep it out of
+  tracked files. Without one, the scripts download what they need.
+
 ## Documentation maintenance
 
 - Before every release and after each task, update docs to reflect the current

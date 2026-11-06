@@ -47,7 +47,7 @@ Replace the example checkout and asset paths with your own locations. Use `$env:
 
 Temporary Python, shell, Gradle, Java, verifier and fixture command trees are owned by Windows jobs. They are stopped on completion, failure, timeout or interruption, including if the PowerShell parent is killed. File retention with `--no-cleanup` does not retain processes. The IDEA instance deliberately reopened by `dev-deploy` stays open for use.
 
-The reusable asset tree contains ides/<version>/, mysql/<version>/, runtimes/java-8/, runtimes/vc2010/, runtimes/vc2013/, jdbc/mysql/, jdbc/hsqldb/, tools/junit/, tools/flatlaf/, tools/7zip/, tools/verifier/ and sources/. MySQL homes can contain a nested extracted server. Java homes are extracted runtimes/JDKs; IDE homes contain product-info.json. The Java 21 JDK in ides/2025.1/jbr is suitable for compilation; ides/2026.2.3 has a newer JBR and is for additional UI reviews.
+An optional reusable asset tree can contain ides/<version>/, mysql/<version>/, runtimes/java-8/, runtimes/vc2010/, runtimes/vc2013/, jdbc/mysql/, jdbc/hsqldb/, tools/junit/, tools/flatlaf/, tools/7zip/, tools/verifier/ and sources/. MySQL homes can contain a nested extracted server. Java homes are extracted runtimes/JDKs; IDE homes contain product-info.json. The Java 21 JDK in ides/2025.1/jbr is suitable for compilation; newer IDEs can be added for additional UI reviews.
 
 ## test.ps1
 
@@ -596,7 +596,7 @@ Run real IDE capture/review flows for each selected bundled theme, prepare the J
     -DownloadDir "$assets\downloads" -GradleUserHome "$env:USERPROFILE\.gradle" `
     -Themes @('ExperimentalDark', 'ExperimentalLight') -StyleOnly -Cleanup
 
-# Review the additional supplied IDEA while compiling against the baseline:
+# Review a newer IDEA while compiling against the baseline:
 .\scripts\windows\review-intellij-ui.ps1 -BinariesDir $assets `
     -IdeHome "$assets\ides\2026.2.3" -BuildIdeHome "$assets\ides\2025.1" `
     -Themes @('Islands Light', 'Islands Dark') -StyleOnly -Cleanup
@@ -614,19 +614,19 @@ Run real IDE capture/review flows for each selected bundled theme, prepare the J
 | `-Cleanup` / `-NoCleanup` | Delete/retain owned dependencies; retention is default. Choose one. |
 | `-Python PATH` | Python interpreter; default python. |
 
-Default themes: ExperimentalDark, ExperimentalLight, ExperimentalLightWithLightHeader, JetBrainsHighContrastTheme, Darcula, IntelliJ, JetBrainsLightTheme. Islands Dark, Islands Light and Islands Darcula require an IDEA version that supplies them, such as the supplied 2026.2.3. `-DependenciesReady` is internal. Review does not accept capture's -Theme, -Output, -Review or -GradleArgs options.
+Default themes: ExperimentalDark, ExperimentalLight, ExperimentalLightWithLightHeader, JetBrainsHighContrastTheme, Darcula, IntelliJ, JetBrainsLightTheme. Islands Dark, Islands Light and Islands Darcula require an IDEA version that supplies them, such as 2026.2.3. `-DependenciesReady` is internal. Review does not accept capture's -Theme, -Output, -Review or -GradleArgs options.
 
 ## Internal files and generated outputs
 
-`windows-common.ps1`, `windows-script-dependencies.py` and `native_mysql.py` are internal helpers, not additional public commands. The first serializes native PowerShell arguments; the second prepares the JDK/SDK/JDBC inputs, launches the UI script and owns cleanup; the third initializes and stops portable MySQL fixtures. There are no workstation-specific paths in public scripts.
+`windows-common.ps1`, `windows-script-dependencies.py` and `native_mysql.py` are internal helpers, not additional public commands. The first serializes native PowerShell arguments; the second prepares the JDK/SDK/JDBC inputs, launches the UI script and owns cleanup; the third initializes and stops portable MySQL fixtures.
 
-The five README PNGs under `screenshots/` are the tracked product previews; design-concept renders under `design/` are retained references. Other screenshots, archives, JDBC/server/IDE binaries and validation reports belong under ignored `build/`. Authored branding/plugin icons and the committed Gradle wrapper JAR remain source infrastructure. The fallback-driver test stages Maven-resolved JDBC drivers under build/fallback-drivers/; a checked-in lib/ directory is unnecessary.
+The seven README PNGs under `screenshots/` are the tracked product previews; design-concept renders under `design/` are retained references. Other screenshots, archives, JDBC/server/IDE binaries and validation reports belong under ignored `build/`. Authored branding/plugin icons and the committed Gradle wrapper JAR remain source infrastructure. The fallback-driver test stages Maven-resolved JDBC drivers under build/fallback-drivers/; a checked-in lib/ directory is unnecessary.
 
 ## H2 functional and compatibility checks
 
 ```powershell
-.\scripts\windows\h2-test.ps1 --skip-ui --java-home C:\tools\jdk21
-.\scripts\windows\h2-compatibility.ps1 --java-home C:\tools\jdk21 --java8-home C:\tools\java8
+.\scripts\windows\h2-test.ps1 --skip-ui --java-home C:\path\to\jdk-21
+.\scripts\windows\h2-compatibility.ps1 --java-home C:\path\to\jdk-21 --java8-home C:\path\to\java-8
 ```
 
 The H2 backend flow owns its file/TCP/TLS fixtures and needs no Docker. The full
