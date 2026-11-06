@@ -44,7 +44,7 @@ public final class DatabaseUi {
     public static JPopupMenu popupMenu() { return configurePopup(new com.intellij.openapi.ui.JBPopupMenu()); }
 
     private static JPopupMenu configurePopup(JPopupMenu popup) {
-        popup.setOpaque(false);
+        paintSurface(popup);
         popup.setLightWeightPopupEnabled(false);
         if (!Boolean.TRUE.equals(popup.getClientProperty("lattice.popupThemeRefresh"))) {
             popup.putClientProperty("lattice.popupThemeRefresh", Boolean.TRUE);
@@ -52,7 +52,7 @@ public final class DatabaseUi {
                     new java.util.concurrent.atomic.AtomicReference<>(popupPalette());
             popup.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
                 @Override public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent event) {
-                    opaqueItems(popup);
+                    paintSurface(popup);
                     // Cached popup menus live outside the editor's component tree, so IDE
                     // theme switches do not necessarily update their UI or child items.
                     // Refreshing only on a palette change keeps a fresh menu's first paint
@@ -61,7 +61,7 @@ public final class DatabaseUi {
                     java.util.List<Integer> palette = popupPalette();
                     if (palette.equals(applied.getAndSet(palette))) return;
                     SwingUtilities.updateComponentTreeUI(popup);
-                    popup.setOpaque(false); popup.setLightWeightPopupEnabled(false);
+                    paintSurface(popup); popup.setLightWeightPopupEnabled(false);
                 }
                 @Override public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent event) {}
                 @Override public void popupMenuCanceled(javax.swing.event.PopupMenuEvent event) {}
@@ -71,14 +71,16 @@ public final class DatabaseUi {
     }
 
     /**
-     * Outside macOS nothing in IDEA's heavyweight popup window is opaque, so a hover repaint of a
-     * transparent item draws into Swing's shared back buffer without clearing it and keeps whatever
-     * another row left there (seen at 100% scale on Windows). An opaque item fills its own bounds with
-     * the theme's menu item background first.
+     * The popup is the opaque surface and its items are transparent. Outside macOS nothing else in IDEA's heavyweight
+     * popup window is opaque, so a hover repaint starts at the first opaque component and draws over whatever Swing's
+     * back buffer holds there. An opaque item would be that start, but Swing's menu item UI fills a hovered item with
+     * the selection color alone, and a translucent one (Armada Light's is 20% blue) leaves another row's pixels showing.
+     * Starting at the popup, its UI fills the theme background first and the selection is drawn over it.
      */
-    private static void opaqueItems(JPopupMenu popup) {
+    private static void paintSurface(JPopupMenu popup) {
+        popup.setOpaque(true);
         for (Component child : popup.getComponents())
-            if (child instanceof JMenuItem item) item.setOpaque(true);
+            if (child instanceof JMenuItem item) item.setOpaque(false);
     }
 
     /** Look-and-feel identity and the resolved colors a popup menu paints with, for detecting a theme change. */
@@ -98,8 +100,7 @@ public final class DatabaseUi {
         return new JMenu(text) {
             @Override public JPopupMenu getPopupMenu() {
                 JPopupMenu popup = super.getPopupMenu();
-                // IDEA's popup UI paints the theme surface; Swing's opaque fill can
-                // cover it with a black rectangle in native light themes.
+                // Swing creates this popup itself; give it the same surface and window settings.
                 return configurePopup(popup);
             }
         };
