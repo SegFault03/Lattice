@@ -85,7 +85,8 @@ public final class SqlStatementAnalyzer {
         int caretIdx = 0;
         for (int i = first; i < last; i++) {
             SqlToken token = all.get(i);
-            if (token == word) continue;
+            // a comment before or inside the statement is not one of its words
+            if (token == word || token.type() == LatticeSqlTokens.LINE_COMMENT || token.type() == LatticeSqlTokens.BLOCK_COMMENT) continue;
             if (token.end() <= wordStart) caretIdx++;
             stmt.add(token);
         }
@@ -410,7 +411,8 @@ public final class SqlStatementAnalyzer {
                         prior = new ArrayList<>();
                         for (TableRef ref : refs) if (ref.block() == block && ref.startIndex() < clauseAt) prior.add(ref);
                     }
-                    return new Found(slot ? Position.TABLE_NAME : Position.AFTER_TABLE, target, null, prior, Set.of());
+                    Set<String> selected = slot && clause.equals("FROM") ? selectedNames(block, clauseAt) : Set.of();
+                    return new Found(slot ? Position.TABLE_NAME : Position.AFTER_TABLE, target, null, prior, selected);
                 }
                 case "ON": {
                     TableRef join = null;
@@ -473,6 +475,21 @@ public final class SqlStatementAnalyzer {
         @Nullable TableRef refAfter(int introducerIndex) {
             for (TableRef ref : refs) if (ref.introducerIndex() == introducerIndex) return ref;
             return null;
+        }
+
+        /**
+         * The names the select list before this FROM uses as columns, upper-cased, so the table slot can rank the tables
+         * that hold them. Function names, qualifiers ("o" in o.id) and AS aliases are not columns.
+         */
+        Set<String> selectedNames(int block, int fromAt) {
+            int selectAt = nearestClause(block, fromAt);
+            if (selectAt < 0 || !isKeyword(selectAt, "SELECT")) return Set.of();
+            Set<String> names = new HashSet<>();
+            for (int i = selectAt + 1; i < fromAt; i++) {
+                if (!nameToken(i, true) || is(i + 1, '(') || is(i + 1, '.') || isKeyword(i - 1, "AS")) continue;
+                names.add(unquote(i).toUpperCase(Locale.ROOT));
+            }
+            return names;
         }
 
         Set<String> wordsIn(int block) {

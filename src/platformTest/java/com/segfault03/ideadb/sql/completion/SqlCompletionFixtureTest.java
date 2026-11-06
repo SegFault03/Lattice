@@ -144,9 +144,19 @@ public class SqlCompletionFixtureTest extends H2SqlFixtureTestCase {
         var handler = new LatticeSqlTypedHandler();
         myFixture.configureByText("query.sql", "select * from books b where b.<caret>");
         assertEquals(TypedHandlerDelegate.Result.STOP, handler.checkAutoPopup('.', getProject(), myFixture.getEditor(), myFixture.getFile()));
-        myFixture.configureByText("query.sql", "select * from <caret>");
+        // The platform asks before the typed character is in the document, so the caret is still right after the word.
+        myFixture.configureByText("query.sql", "select * from<caret>");
         assertEquals(TypedHandlerDelegate.Result.STOP, handler.checkAutoPopup(' ', getProject(), myFixture.getEditor(), myFixture.getFile()));
-        myFixture.configureByText("query.sql", "select * from books <caret>");
+        myFixture.configureByText("query.sql", "-- a note\nselect * from books b join authors a on<caret>");
+        assertEquals(TypedHandlerDelegate.Result.STOP, handler.checkAutoPopup(' ', getProject(), myFixture.getEditor(), myFixture.getFile()));
+        myFixture.configureByText("query.sql", "insert into books (title<caret>");
+        assertEquals(TypedHandlerDelegate.Result.STOP, handler.checkAutoPopup(',', getProject(), myFixture.getEditor(), myFixture.getFile()));
+        myFixture.configureByText("query.sql", "insert into books<caret>");
+        assertEquals(TypedHandlerDelegate.Result.STOP, handler.checkAutoPopup('(', getProject(), myFixture.getEditor(), myFixture.getFile()));
+        myFixture.configureByText("query.sql", "select * from books where id in (1<caret>");
+        assertEquals("A comma in a value list does not open a popup", TypedHandlerDelegate.Result.CONTINUE,
+                handler.checkAutoPopup(',', getProject(), myFixture.getEditor(), myFixture.getFile()));
+        myFixture.configureByText("query.sql", "select * from books<caret>");
         assertEquals("A space after a table does not open a popup of keywords", TypedHandlerDelegate.Result.CONTINUE,
                 handler.checkAutoPopup(' ', getProject(), myFixture.getEditor(), myFixture.getFile()));
         assertNull(LookupManager.getActiveLookup(myFixture.getEditor()));

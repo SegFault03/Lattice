@@ -49,6 +49,7 @@ class SqlEditorConfigurable : BoundConfigurable("Lattice SQL Editor"), Searchabl
         val methodPanel = decorator.createPanel()
 
         // The panel shows the saved state as soon as it exists, whether or not the caller resets it.
+        val colors = SqlColorFamilyChooser(settings.schemaColorFamily())
         val dialog = panel {
             lateinit var master: Cell<JBCheckBox>
             lateinit var completion: Cell<JBCheckBox>
@@ -59,7 +60,7 @@ class SqlEditorConfigurable : BoundConfigurable("Lattice SQL Editor"), Searchabl
                 master = checkBox("Enable Lattice SQL editor support")
                     .bindSelected({ settings.isEnabled() }, { if (it != settings.isEnabled()) settings.setEnabled(it) })
                 if (UltimateDatabasePlugin.isActive()) {
-                    master.comment("The IDE's Database plugin is enabled and provides SQL support, so this is off unless you turn it on.")
+                    master.comment("The IDE's Database plugin is enabled and provides SQL support, so this is off unless you turn it on")
                 }
             }
 
@@ -69,8 +70,12 @@ class SqlEditorConfigurable : BoundConfigurable("Lattice SQL Editor"), Searchabl
                         .comment("Replaces the IDE's highlighting-only SQL file type")
                         .bindSelected({ settings.isHandleSqlFiles() }, { settings.setHandleSqlFiles(it) })
                 }
+            }.enabledIf(master.component.selected)
+
+            group("Editor features") {
                 row {
-                    checkBox("Syntax highlighting for the file's dialect")
+                    checkBox("Syntax highlighting")
+                        .comment("Colors keywords, functions, types and literals for the file's dialect")
                         .bindSelected({ settings.isHighlighting() }, { settings.setHighlighting(it) })
                 }
                 row {
@@ -98,6 +103,23 @@ class SqlEditorConfigurable : BoundConfigurable("Lattice SQL Editor"), Searchabl
                     row {
                         link("Configure inspections…") { InspectionsPage.open(it.source as? Component) }
                     }
+                }
+                row {
+                    checkBox("Show SQL cards")
+                        .comment("A card and hover toolbar on SQL in strings and .sql files")
+                        .bindSelected({ settings.isSqlCards() }, { settings.setSqlCards(it) })
+                }
+            }.enabledIf(master.component.selected)
+
+            group("Schema name colors") {
+                row {
+                    cell(colors)
+                        .align(AlignX.FILL)
+                        .comment("Tables, views and table aliases, once the file's connection has its schema cached. Columns keep the same colors in every family. " +
+                            "The previews show the default colors; change any of them under Settings | Editor | Color Scheme | Lattice SQL | Schema names.")
+                        .onIsModified { colors.selected() != settings.schemaColorFamily() }
+                        .onApply { settings.schemaColorFamily(colors.selected()) }
+                        .onReset { colors.select(settings.schemaColorFamily()) }
                 }
             }.enabledIf(master.component.selected)
 

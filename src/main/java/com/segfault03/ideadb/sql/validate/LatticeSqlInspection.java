@@ -4,6 +4,7 @@ import com.intellij.codeInspection.*;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.PsiFile;
+import com.segfault03.ideadb.sql.binding.SqlEmbeddedBinding;
 import com.segfault03.ideadb.sql.lang.LatticeSqlLanguage;
 import com.segfault03.ideadb.sql.validate.SqlDiagnostic.Kind;
 import org.jetbrains.annotations.NotNull;
@@ -24,6 +25,8 @@ abstract class LatticeSqlInspection extends LocalInspectionTool {
     @Override
     public ProblemDescriptor @Nullable [] checkFile(@NotNull PsiFile file, @NotNull InspectionManager manager, boolean isOnTheFly) {
         if (!file.getLanguage().isKindOf(LatticeSqlLanguage.INSTANCE)) return null;
+        // An editor embedded in the plugin's own UI shows its findings through SqlEmbeddedValidation.
+        if (SqlEmbeddedBinding.of(file.getOriginalFile().getVirtualFile()) != null) return null;
         List<ProblemDescriptor> problems = new ArrayList<>();
         int length = file.getTextLength();
         SqlSuppressions suppressions = LatticeSqlInspectionSuppressor.of(file);

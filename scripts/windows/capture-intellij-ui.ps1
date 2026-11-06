@@ -133,6 +133,7 @@ try {
     if ($env:LATTICE_UI_ALTER_TABLE_ONLY -eq 'true') { $gradleArguments += '-Plattice.ui.alterTableOnly=true' }
     if ($env:LATTICE_UI_CREATE_TABLE_ONLY -eq 'true') { $gradleArguments += '-Plattice.ui.createTableOnly=true' }
     if ($env:LATTICE_UI_CELL_DETAILS_ONLY -eq 'true') { $gradleArguments += '-Plattice.ui.cellDetailsOnly=true' }
+    if ($env:LATTICE_UI_SQL_EDITOR_ONLY -eq 'true') { $gradleArguments += '-Plattice.ui.sqlEditorOnly=true' }
     if ($env:LATTICE_UI_SCALE) { $gradleArguments += "-Plattice.ui.scale=$env:LATTICE_UI_SCALE" }
     if ($Output) {
         $outputPath = [IO.Path]::GetFullPath($Output)

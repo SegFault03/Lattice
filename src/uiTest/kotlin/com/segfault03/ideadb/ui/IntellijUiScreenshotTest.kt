@@ -2,7 +2,11 @@ package com.segfault03.ideadb.ui
 
 import com.intellij.driver.sdk.invokeAction
 import com.intellij.driver.sdk.ui.ui
+import com.intellij.driver.client.Driver
 import com.intellij.driver.client.Remote
+import com.intellij.driver.sdk.FileEditorManager
+import com.intellij.driver.sdk.openFile
+import com.intellij.driver.sdk.singleProject
 import com.intellij.driver.model.OnDispatcher
 import com.intellij.driver.sdk.ui.components.UiComponent.Companion.waitFound
 import com.intellij.driver.sdk.ui.components.UiComponent
@@ -29,6 +33,7 @@ import com.intellij.ide.starter.runner.CurrentTestMethod
 import com.intellij.ide.starter.runner.Starter
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import com.intellij.driver.sdk.ui.components.elements.JLabelUiComponent
 import java.awt.event.InputEvent
 import java.awt.event.KeyEvent
 import java.awt.Rectangle
@@ -42,6 +47,7 @@ import java.nio.file.Path
 import javax.imageio.ImageIO
 import kotlin.io.path.writeText
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 class IntellijUiScreenshotTest {
     private var repaintIdeBeforeCapture: (() -> Unit)? = null
@@ -72,6 +78,7 @@ class IntellijUiScreenshotTest {
         val alterTableOnly = System.getProperty("ui.alterTable.only").toBoolean()
         val createTableOnly = System.getProperty("ui.createTable.only").toBoolean()
         val cellDetailsOnly = System.getProperty("ui.cellDetails.only").toBoolean()
+        val sqlEditorOnly = System.getProperty("ui.sqlEditor.only").toBoolean()
         val postgresPort = Integer.getInteger("ui.postgres.port", 0)
         val postgres = postgresPort > 0
         val h2 = System.getProperty("ui.h2.enabled", "false").toBoolean()
@@ -133,7 +140,7 @@ class IntellijUiScreenshotTest {
         // IDEA's own ProxySelector supersedes JVM proxy flags. Configure the real
         // HTTP Proxy settings in this isolated profile, preserving cloud routing.
         val proxyAddress = System.getenv("HTTPS_PROXY") ?: System.getenv("HTTP_PROXY")
-        val downloadFixture = if (!sourceFilterOnly && !explorerSearchOnly && !alterTableOnly && !createTableOnly && !postgres && !System.getProperty("ui.skip.remote.downloads", "false").toBoolean())
+        val downloadFixture = if (!sourceFilterOnly && !explorerSearchOnly && !alterTableOnly && !createTableOnly && !sqlEditorOnly && !postgres && !System.getProperty("ui.skip.remote.downloads", "false").toBoolean())
             DriverDownloadUiFixture(proxyAddress) else null
         try {
         val configuredProxy = downloadFixture?.let { "http://127.0.0.1:${it.port}" } ?: proxyAddress
@@ -178,6 +185,19 @@ class IntellijUiScreenshotTest {
                     statement.execute("INSERT INTO \"customers\"(\"name\",\"email\") VALUES('Ada Lovelace','ada@example.com')")
                 }
             }
+        }
+        if (sqlEditorOnly) {
+            check(jdbcFixture != null && !postgres && !h2) { "The focused SQL editor scenario owns its HSQLDB fixture; enable ui.review.enabled" }
+            java.sql.DriverManager.getConnection(jdbcFixture.jdbcUrl,"SA","").use { conn ->
+                conn.createStatement().use { statement ->
+                    statement.execute("CREATE TABLE ORDERS (ID INT PRIMARY KEY, STATUS VARCHAR(20), CUSTOMER_ID INT)")
+                    statement.execute("INSERT INTO ORDERS VALUES (1, 'new', 42), (2, 'new', 7)")
+                }
+            }
+            projectDirectory.resolve(SQL_EDITOR_FILE).writeText(SQL_EDITOR_TEXT)
+            // In a source root: the IDE runs no highlighting passes, cards included, on Java files outside one.
+            Files.createDirectories(projectDirectory.resolve(SQL_CARDS_FILE).parent)
+            projectDirectory.resolve(SQL_CARDS_FILE).writeText(SQL_CARDS_TEXT)
         }
         try {
         testContext.apply {
@@ -275,6 +295,20 @@ class IntellijUiScreenshotTest {
                     Owned HSQLDB fixture; CREATE SQL, column order, identity, primary key, precision, defaults and inserted data verified using JDBC.
                     Checked hidden invalid drafts, filtering, duplicate names, add/remove/reorder, discard handling, busy animation and database failure with retry.
                     Captures are actual desktop pixels; create-composer-dialog.png is a crop of the live modal.
+                """.trimIndent())
+                return@useDriverAndCloseIde
+            }
+            if (sqlEditorOnly) {
+                verifySqlEditorRunActions(frame, pluginRoot, requireNotNull(jdbcFixture), screenshotsDirectory)
+                verifySqlCards(frame, screenshotsDirectory)
+                screenshotsDirectory.resolve("runtime-evidence.txt").writeText("""
+                    Running IDE: ${actualTheme.getName()} ($themeId)
+                    Lattice SQL editor actions in the installed plugin, on a project .sql file bound to an owned HSQLDB server fixture.
+                    The status icon in the inspection widget reported the SQL as checked against the fixture connection, and its details offered Reload Schema. Send to Console appended the SQL as written to the console without running it; Explain lifted the card with fields in place of :status and :customer, on their own lines.
+                    Explain Statement opened the Dry Run tab with HSQLDB's plan (values written in, as HSQLDB rejects bound EXPLAIN parameters).
+                    Run and Roll Back asked for confirmation, reported one row and Rolled back; JDBC confirmed ORDERS was unchanged.
+                    CREATE TABLE was refused before any connection.
+                    SQL cards were painted behind both SQL strings of a Java file. Hovering the UPDATE card showed Run and Roll Back, enabled, which lifted the text block card with a field in place of its ?; hovering the SELECT card showed Run instead, and Run ran the query in the console. Captures are actual desktop pixels.
                 """.trimIndent())
                 return@useDriverAndCloseIde
             }
@@ -483,7 +517,7 @@ class IntellijUiScreenshotTest {
                 openConnectionMenu(pluginRoot, frame, "HSQLDB…")
                 frame.x(DialogUiComponent::class.java) { byTitle("New connection") }.waitFound().also { dialog ->
                     inspectorInput(dialog, "Name:").text = "Lattice UI demo"
-                    dialog.x { byVisibleText("Driver options ▸") }.waitFound().click()
+                    dialog.x { byVisibleText("Driver options") }.waitFound().click()
                     dialog.x(JComboBoxUiComponent::class.java) {
                         and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"), byAccessibleName("Available driver"))
                     }.waitFound().selectItem("2.7.4 · Bundled")
@@ -512,7 +546,7 @@ class IntellijUiScreenshotTest {
                     captureScreen(screenshotsDirectory.resolve("mysql-jdbc-url.png"))
                     mysqlDialog.x { byVisibleText("Standard") }.waitFound().click()
                 }
-                mysqlDialog.x { byVisibleText("Driver options ▸") }.waitFound().click()
+                mysqlDialog.x { byVisibleText("Driver options") }.waitFound().click()
                 val mysqlAvailableDriverCombo = mysqlDialog.x(JComboBoxUiComponent::class.java) {
                     and(
                         byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"),
@@ -691,7 +725,7 @@ class IntellijUiScreenshotTest {
                 }.waitFound().text = "SA"
                 captureScreen(screenshotsDirectory.resolve("connection-dialog.png"))
 
-                connectionDialog.x { byVisibleText("Driver options ▸") }.waitFound().click()
+                connectionDialog.x { byVisibleText("Driver options") }.waitFound().click()
                 val availableDriverCombo = connectionDialog.x(JComboBoxUiComponent::class.java) {
                     and(
                         byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"),
@@ -2169,6 +2203,218 @@ class IntellijUiScreenshotTest {
         println("Column Composer: real creation, order, keys, identity, precision, defaults, hidden drafts, validation, cancellation, busy animation and retry verified in the running IDE")
     }
 
+    /** Send to Console, Explain Statement and Run and Roll Back on a project .sql file bound to the HSQLDB fixture. */
+    private fun Driver.verifySqlEditorRunActions(frame: IdeaFrameUI, root: UiComponent, fixture: JdbcUiFixture, directory: Path) {
+        openConnectionMenu(root, frame, "HSQLDB…")
+        frame.x(DialogUiComponent::class.java) { byTitle("New connection") }.waitFound().also { dialog ->
+            inspectorInput(dialog, "Name:").text = "Orders fixture"
+            dialog.x { byVisibleText("Driver options") }.waitFound().click()
+            dialog.x(JComboBoxUiComponent::class.java) {
+                and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"), byAccessibleName("Available driver"))
+            }.waitFound().selectItem("2.7.4 · Bundled")
+            dialog.x { byVisibleText("JDBC URL") }.waitFound().click()
+            inspectorInput(dialog, "JDBC URL:").text = fixture.jdbcUrl
+            inspectorInput(dialog, "User:").text = "SA"
+            waitUntil("SQL editor fixture connection ready") { dialog.x { byVisibleText("Add connection") }.waitFound().component.isEnabled() }
+            dialog.pressButton("Add connection")
+        }
+        frame.waitForNoOpenedDialogs()
+        ideFrame { invokeAction("HideAllWindows") }
+
+        // The only saved connection applies to the project's SQL files, so the file is HSQLDB SQL.
+        openFile(SQL_EDITOR_FILE)
+        val editor = frame.x { byJavaClass("com.intellij.openapi.editor.impl.EditorComponentImpl") }.waitFound()
+        // A bound file shows no banner; the status bar names its dialect and connection.
+        waitUntil("SQL file bound to the fixture connection") { frame.xx { byVisibleText("SQL: HSQLDB · Orders fixture") }.list().isNotEmpty() }
+        fun caretAt(text: String): Int {
+            editor.click()
+            val offset = SQL_EDITOR_TEXT.indexOf(text).also { check(it >= 0) { "Missing $text in the fixture file" } } + 1
+            withContext(OnDispatcher.EDT) {
+                requireNotNull(service(FileEditorManager::class, singleProject()).getSelectedTextEditor()).getCaretModel().moveToOffset(offset)
+            }
+            return offset
+        }
+        // Asynchronous, against the editor: the actions open modal dialogs.
+        fun run(actionId: String) = invokeAction("com.segfault03.lattice.sql.run.$actionId", false, editor.component)
+        fun dialog(title: String) = frame.x(DialogUiComponent::class.java) { byTitle(title) }.waitFound()
+        fun valueField(name: String) = frame.x(JTextFieldUI::class.java) { byAccessibleName("Value of $name") }.waitFound(15.seconds)
+        fun textOf(component: UiComponent): String = cast(component.component, JTextComponent::class).getText()
+        fun orderStatus(): String = java.sql.DriverManager.getConnection(fixture.jdbcUrl, "SA", "").use { conn ->
+            conn.createStatement().use { it.executeQuery("SELECT STATUS FROM ORDERS WHERE ID = 1").use { rows -> rows.next(); rows.getString(1) } }
+        }
+
+        // Editor popup menu with the Lattice SQL group open.
+        val menuOffset = caretAt("SELECT ID")
+        // Right-click where the caret is, so the menu acts on that statement.
+        val caretPoint = withContext(OnDispatcher.EDT) {
+            requireNotNull(service(FileEditorManager::class, singleProject()).getSelectedTextEditor()).offsetToXY(menuOffset)
+        }
+        editor.rightClick(Point(caretPoint.x + 2, caretPoint.y + 6))
+        frame.x { byVisibleText("Lattice SQL") }.waitFound().moveMouse()
+        waitUntil("Lattice SQL submenu open") { frame.xx { byVisibleText("Run and Roll Back") }.list().isNotEmpty() }
+        captureScreen(directory.resolve("sql-editor-context-menu.png"))
+        pressEscape(); pressEscape()
+
+        // Lattice's status icon in the inspection widget, and its details.
+        val status = frame.x { contains(byAccessibleName("Lattice: ")) }.waitFound(30.seconds)
+        // Settled: no longer reading the schema or checking (those states end in an ellipsis).
+        waitUntil("Lattice status settled", 60_000) {
+            frame.xx { contains(byAccessibleName("Lattice: ")) }.list().any { it.component.isShowing() } &&
+                frame.xx { and(contains(byAccessibleName("Lattice: ")), contains(byAccessibleName("\u2026"))) }.list().none { it.component.isShowing() }
+        }
+        status.click()
+        frame.x { or(byVisibleText("Reload Schema"), byVisibleText("Read Schema")) }.waitFound()
+        captureScreen(directory.resolve("sql-editor-status.png"))
+        pressEscape()
+
+        // Send to Console: the statement lands in the console as written, parameters and all, and is not run.
+        caretAt("SELECT ID")
+        run("sendToConsole")
+        val console = frame.x { byJavaClass("com.segfault03.ideadb.ui.SqlQueryConsolePanel") }.waitFound()
+        // The console's input is the embedded SQL editor in a real IDE, a plain text area only where that is unavailable.
+        val consoleText = console.x {
+            or(byJavaClass("com.intellij.openapi.editor.impl.EditorComponentImpl"), byJavaClass("com.intellij.ui.components.JBTextArea"))
+        }.waitFound()
+        waitUntil("statement sent to the console") { textOf(consoleText).contains(":customer") }
+        check(textOf(consoleText).contains(":status")) { "The console must receive the SQL as written" }
+        // A URL connection names no database; the console must start on the connection's own schema.
+        waitUntil("console on the connection's default schema") {
+            console.xx(JComboBoxUiComponent::class.java) { byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox") }.list()
+                .firstOrNull { "INFORMATION_SCHEMA" in it.listValues() }?.getSelectedItem() == "PUBLIC"
+        }
+        captureScreen(directory.resolve("sql-editor-send-to-console.png"))
+
+        // Explain: the card lifts with a field in place of each parameter, then HSQLDB's plan appears in the Dry Run tab.
+        openFile(SQL_EDITOR_FILE)
+        caretAt("SELECT ID")
+        run("explain")
+        val statusField = valueField(":status")
+        val customerField = valueField(":customer")
+        // In place: each field sits on the line of the parameter it stands for.
+        for ((field, name) in listOf(statusField to ":status", customerField to ":customer")) {
+            val line = withContext(OnDispatcher.EDT) {
+                requireNotNull(service(FileEditorManager::class, singleProject()).getSelectedTextEditor()).offsetToXY(SQL_EDITOR_TEXT.indexOf(name)).y
+            }
+            val fieldY = field.component.getLocationOnScreen().y - editor.component.getLocationOnScreen().y
+            check(kotlin.math.abs(fieldY - line) < 40) { "Field for $name at y=$fieldY, its parameter's line at y=$line" }
+        }
+        // Values are written into the SQL as typed, so a text value carries its quotes.
+        statusField.text = "'new'"
+        customerField.text = "42"
+        customerField.click()
+        captureScreen(directory.resolve("sql-editor-parameters.png"))
+        pressEnter()
+        val dryRun = frame.x { byJavaClass("com.segfault03.ideadb.sql.run.DryRunPanel") }.waitFound()
+        waitUntil("plan in the Dry Run tab", 60_000) { dryRun.xx { byVisibleText("Copy") }.list().isNotEmpty() &&
+            dryRun.xx { byJavaClass("com.intellij.ui.components.JBTextArea") }.list().any { textOf(it).contains("ORDERS", ignoreCase = true) } }
+        captureScreen(directory.resolve("sql-editor-explain.png"))
+
+        // Run and Roll Back: confirmation, one row, rolled back, data unchanged.
+        openFile(SQL_EDITOR_FILE)
+        caretAt("UPDATE ORDERS")
+        run("rollback")
+        dialog("Run and Roll Back").also { confirm ->
+            confirm.x { byVisibleText("Don't ask again for this project") }.waitFound()
+            captureScreen(directory.resolve("sql-editor-rollback-confirm.png"))
+            confirm.pressButton("Run and Roll Back")
+        }
+        waitUntil("Rolled back badge", 60_000) { dryRun.xx { byVisibleText("Rolled back") }.list().isNotEmpty() }
+        check(orderStatus() == "new") { "Run and Roll Back must leave ORDERS unchanged" }
+        captureScreen(directory.resolve("sql-editor-rolled-back.png"))
+
+        // Refused before connecting: DDL.
+        openFile(SQL_EDITOR_FILE)
+        caretAt("CREATE TABLE")
+        run("rollback")
+        dialog("Lattice SQL").also { refusal ->
+            captureScreen(directory.resolve("sql-editor-rollback-refused.png"))
+            refusal.pressButton("OK")
+        }
+        frame.waitForNoOpenedDialogs()
+        val created = java.sql.DriverManager.getConnection(fixture.jdbcUrl, "SA", "").use { conn ->
+            conn.metaData.getTables(null, "PUBLIC", "AUDIT_LOG", null).use { it.next() }
+        }
+        check(!created) { "A refused statement must never reach the database" }
+    }
+
+    /** SQL cards in a Java file: painted behind both strings, and a hover toolbar whose Run and Roll Back follows the statement kind. */
+    private fun Driver.verifySqlCards(frame: IdeaFrameUI, directory: Path) {
+        openFile(SQL_CARDS_FILE)
+        val editor = frame.x { byJavaClass("com.intellij.openapi.editor.impl.EditorComponentImpl") }.waitFound()
+        fun pointAt(text: String): Point {
+            val offset = SQL_CARDS_TEXT.indexOf(text).also { check(it >= 0) { "Missing $text in the cards fixture" } } + 2
+            val xy = withContext(OnDispatcher.EDT) {
+                requireNotNull(service(FileEditorManager::class, singleProject()).getSelectedTextEditor()).offsetToXY(offset)
+            }
+            return Point(xy.x + 4, xy.y + 6)
+        }
+        // Empty space below the code: resting on code would open the IDE's own quick documentation over the cards.
+        fun park() = Point(editor.component.width - 20, editor.component.height - 20)
+        /** Hovers the card and returns its Copy SQL button, which every card's toolbar has. */
+        fun hover(text: String): UiComponent {
+            editor.moveMouse(park())
+            Thread.sleep(500)
+            editor.moveMouse(pointAt(text))
+            return frame.x { byAccessibleName("Copy SQL") }.waitFound(15.seconds)
+        }
+        // The console has its own Run button; a card's buttons are the showing ones on the Copy SQL button's row.
+        fun cardButtons(name: String, copy: UiComponent): List<UiComponent> {
+            val row = copy.component.getLocationOnScreen().y
+            return frame.xx { byAccessibleName(name) }.list().filter { it.component.isShowing() && it.component.getLocationOnScreen().y == row }
+        }
+        // Highlighting has run once the editor settles; the cards are painted by then.
+        Thread.sleep(3_000)
+        editor.moveMouse(park())
+        captureScreen(directory.resolve("sql-cards.png"))
+
+        val copy = hover("UPDATE ORDERS")
+        val updateRollback = cardButtons("Run and Roll Back", copy).single()
+        check(updateRollback.component.isEnabled()) { "Run and Roll Back must be enabled on the UPDATE card" }
+        check(cardButtons("Run", copy).isEmpty()) { "A DML card offers Run and Roll Back, not Run" }
+        // The toolbar fills itself after the popup opens; once it has, the popup must sit inside the editor's visible area.
+        Thread.sleep(500)
+        val editorOrigin = editor.component.getLocationOnScreen()
+        val visible = Rectangle(editorOrigin.x, editorOrigin.y, editor.component.width, editor.component.height)
+        val sendToConsole = cardButtons("Send to Console", copy).single()
+        for (button in listOf(updateRollback, sendToConsole, copy)) {
+            val at = button.component.getLocationOnScreen()
+            val bounds = Rectangle(at.x, at.y, button.component.width, button.component.height)
+            check(visible.contains(bounds)) { "Card toolbar button at $bounds outside the editor's visible area $visible" }
+            // Inside the popup's own window too: a popup sized before its toolbar filled clips the buttons after the first.
+            var window = button.component
+            while (window.getParent() != null) window = window.getParent()!!
+            val windowAt = window.getLocationOnScreen()
+            check(Rectangle(windowAt.x, windowAt.y, window.width, window.height).contains(bounds)) {
+                "Card toolbar button at $bounds clipped by its popup at $windowAt ${window.width}x${window.height}"
+            }
+        }
+        captureScreen(directory.resolve("sql-cards-hover.png"))
+
+        // Run and Roll Back from the toolbar: the text block card lifts with a field in place of its ?.
+        updateRollback.click()
+        val idField = frame.x(JTextFieldUI::class.java) { byAccessibleName("Value of ?1") }.waitFound(15.seconds)
+        idField.text = "2"
+        idField.click()
+        captureScreen(directory.resolve("sql-cards-parameters.png"))
+        pressEscape()
+        waitUntil("the parameter card closed") { frame.xx { byAccessibleName("Value of ?1") }.list().none { it.component.isShowing() } }
+
+        val selectCopy = hover("SELECT ID")
+        Thread.sleep(500)
+        check(cardButtons("Run and Roll Back", selectCopy).isEmpty()) { "A query card offers Run, not Run and Roll Back" }
+        val run = cardButtons("Run", selectCopy).single()
+        check(run.component.isEnabled()) { "Run must be enabled on the SELECT card" }
+        captureScreen(directory.resolve("sql-cards-hover-select.png"))
+
+        // Run: the console opens with the query and runs it at once.
+        run.click()
+        val console = frame.x { byJavaClass("com.segfault03.ideadb.ui.SqlQueryConsolePanel") }.waitFound()
+        val status = console.x(JLabelUiComponent::class.java) { byAccessibleName("SQL query status") }.waitFound()
+        waitUntil("the query ran in the console", 60_000) { status.getText().startsWith("1 row") }
+        waitUntil("the card toolbar closed after Run") { frame.xx { byAccessibleName("Copy SQL") }.list().none { it.component.isShowing() } }
+        captureScreen(directory.resolve("sql-cards-run.png"))
+    }
+
     private fun verifyMutationRefresh(frame: IdeaFrameUI, tree: JTreeUiComponent, schema: Array<String>, directory: Path) {
         val tablePath = schema + arrayOf("Tables (2)", "customers")
         val explorerStatus = frame.driver.cast(frame.x { byAccessibleName("Database explorer status") }.waitFound().component, LiveLabel::class)
@@ -2438,7 +2684,7 @@ class IntellijUiScreenshotTest {
         captureScreen(directory.resolve("explorer-narrow.png"))
         val toolbar = openToolbarOverflow(root, "Explorer actions")
         captureScreen(directory.resolve("explorer-narrow-toolbar-expanded.png"))
-        for (name in listOf("Add connection…", "Edit connection…", "Remove connection settings", "Refresh", "Open SQL Console", "Welcome to Lattice")) {
+        for (name in listOf("Add connection…", "Edit connection…", "Remove connection settings", "Refresh", "Open SQL Console", "Welcome to Lattice", "Lattice settings…")) {
             val button = toolbar.x { byAccessibleName(name) }.waitFound()
             val live = toolbar.driver.cast(button.component, LiveSwingComponent::class)
             check(live.getVisibleRect() == Rectangle(0, 0, button.component.width, button.component.height)) {
@@ -2563,6 +2809,13 @@ class IntellijUiScreenshotTest {
         println("Keyboard combo transition verified: $label")
     }
 
+    private fun pressEnter() {
+        val robot = Robot()
+        robot.keyPress(KeyEvent.VK_ENTER)
+        robot.keyRelease(KeyEvent.VK_ENTER)
+        robot.waitForIdle()
+    }
+
     private fun pressEscape() {
         val robot = Robot()
         robot.keyPress(KeyEvent.VK_ESCAPE)
@@ -2612,6 +2865,32 @@ class IntellijUiScreenshotTest {
         assertTrue(condition(), "Timed out waiting for $description")
     }
 }
+
+private const val SQL_EDITOR_FILE = "orders.sql"
+private val SQL_EDITOR_TEXT = """
+    -- Orders awaiting shipment
+    SELECT ID, STATUS FROM ORDERS
+    WHERE STATUS = :status AND CUSTOMER_ID = :customer;
+
+    UPDATE ORDERS SET STATUS = 'shipped' WHERE ID = 1;
+
+    CREATE TABLE AUDIT_LOG (ID INT);
+""".trimIndent() + "\n"
+
+private const val SQL_CARDS_FILE = "src/main/java/Orders.java"
+private val SQL_CARDS_TEXT = """
+    class Orders {
+        void ship(java.sql.Connection c) throws Exception {
+            c.prepareStatement("SELECT ID, STATUS FROM ORDERS WHERE ID = 2");
+            String sql = ${'"'}""
+                UPDATE ORDERS
+                   SET STATUS = 'shipped'
+                 WHERE ID = ?
+                ${'"'}"";
+            c.prepareStatement(sql);
+        }
+    }
+""".trimIndent() + "\n"
 
 @Remote("javax.swing.JFrame")
 interface LiveFrame {

@@ -34,6 +34,17 @@ class SqlStatementAnalyzerTest {
         assertEquals(Position.STATEMENT_START, at("select 1;\nupd^").position());
     }
 
+    @Test void commentsBeforeOrInsideAStatementAreNotItsWords() {
+        assertEquals(Position.STATEMENT_START, at("-- a note\nsel^").position());
+        assertEquals(Position.STATEMENT_START, at("/* a note */ sel^").position());
+        assertEquals(Position.STATEMENT_START, at("select 1;\n-- a note\n\nsel^").position());
+        SqlContext on = at("select * from order_items oi\n-- a note\njoin products p on ^");
+        assertEquals(Position.CONDITION, on.position());
+        assertEquals(List.of("order_items oi", "products p"), names(on));
+        assertEquals(Position.AFTER_TABLE, at("select * from order_items oi\n-- a note\njoin products p o^").position());
+        assertEquals(Position.INSERT_COLUMNS, at("-- a note\ninsert into reviews (product_id, ^ rating) values (1, 2)").position());
+    }
+
     @Test void theSelectListSeesTablesNamedAfterTheCaret() {
         SqlContext context = at("select ^ from orders o join customers c on c.id = o.customer_id");
         assertEquals(Position.SELECT_LIST, context.position());
@@ -239,5 +250,12 @@ class SqlStatementAnalyzerTest {
         assertFalse(at("SELECT * FROM orders ^").lowercaseKeywords());
         assertFalse(at("^").lowercaseKeywords(), "nothing to follow: upper case");
         assertTrue(at("select 1;\n^").lowercaseKeywords(), "an empty statement follows the file's first keyword");
+    }
+
+    @Test void aFromSlotKnowsTheNamesItsSelectListUses() {
+        assertEquals(java.util.Set.of("ID", "NAME", "TOTAL"), at("select id, c.name, upper(total) as shout from ^").usedNames());
+        assertEquals(java.util.Set.of("B"), at("select a from t where a in (select b from ^)").usedNames(), "only the caret's own query");
+        assertEquals(java.util.Set.of(), at("select * from orders o join ^").usedNames(), "a join slot has its own ranking");
+        assertEquals(java.util.Set.of(), at("delete from ^").usedNames());
     }
 }

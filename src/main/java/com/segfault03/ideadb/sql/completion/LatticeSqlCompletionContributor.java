@@ -15,6 +15,7 @@ import com.intellij.patterns.PlatformPatterns;
 import com.intellij.util.ProcessingContext;
 import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.sql.binding.SqlDialectResolver;
+import com.segfault03.ideadb.sql.binding.SqlEmbeddedBinding;
 import com.segfault03.ideadb.sql.dialect.SqlDialectProfile;
 import com.segfault03.ideadb.sql.lang.LatticeSqlLanguage;
 import com.segfault03.ideadb.sql.schema.SqlSchema;
@@ -51,6 +52,13 @@ public final class LatticeSqlCompletionContributor extends CompletionContributor
         SqlDialectProfile profile = SqlDialectResolver.resolve(project, virtual);
         CharSequence text = file.getViewProvider().getContents();
         int offset = parameters.getOffset();
+        // A field that holds a fragment ("a > 1" after WHERE) is analyzed as the end of the statement it belongs to.
+        var embedded = SqlEmbeddedBinding.of(virtual);
+        String leadIn = embedded == null ? "" : embedded.leadIn();
+        if (!leadIn.isEmpty()) {
+            text = leadIn + text;
+            offset += leadIn.length();
+        }
         SqlContext context = SqlStatementAnalyzer.analyze(text, offset, profile);
         if (context.position() == SqlContext.Position.NONE) return;
         var keywordCase = SqlEditorSettings.getInstance().keywordCase();
@@ -60,7 +68,7 @@ public final class LatticeSqlCompletionContributor extends CompletionContributor
         SqlSchema schema = null;
         if (connection != null) {
             SqlSchemaService service = SqlSchemaService.getInstance();
-            schema = service.schema(connection);
+            schema = SqlDialectResolver.schema(connection, virtual);
             service.ensureLoaded(connection);
         }
         boolean closed = context.openQuote() != 0 && offset < text.length() && text.charAt(offset) == context.openQuote();

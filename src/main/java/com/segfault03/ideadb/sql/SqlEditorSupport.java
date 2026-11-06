@@ -132,7 +132,8 @@ public final class SqlEditorSupport {
         return NotificationGroupManager.getInstance().getNotificationGroup(NOTIFICATION_GROUP);
     }
 
-    private static void openSettings(Project project) {
+    /** Opens Settings | Tools | Lattice SQL Editor, the page of Lattice's settings. */
+    public static void openSettings(Project project) {
         ShowSettingsUtil.getInstance().showSettingsDialog(project, SqlEditorConfigurable.class);
     }
 }

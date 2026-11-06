@@ -22,6 +22,9 @@ class UiReviewTests(unittest.TestCase):
         self.check_mode('LATTICE_UI_CELL_DETAILS_ONLY', '-Plattice.ui.cellDetailsOnly=true', 'cell-inspector-scaled',
                         {'LATTICE_UI_SCALE': '1.25'}, ('-Plattice.ui.scale=1.25',))
 
+    def test_sql_editor_mode_routes_both_themes_and_preserves_each_report(self):
+        self.check_mode('LATTICE_UI_SQL_EDITOR_ONLY', '-Plattice.ui.sqlEditorOnly=true', 'sql-editor')
+
     def test_composer_mode_routes_both_themes_and_preserves_each_report(self):
         self.check_mode('LATTICE_UI_CREATE_TABLE_ONLY', '-Plattice.ui.createTableOnly=true', 'create-table',
                         {'LATTICE_UI_DIALOG_AUDIT': 'true', 'LATTICE_UI_SCALE': '1.25'},

@@ -77,6 +77,7 @@
         <lang.parserDefinition language="LatticeSQL" implementationClass="com.segfault03.ideadb.sql.lang.LatticeSqlParserDefinition"/>
         <lang.syntaxHighlighterFactory language="LatticeSQL" implementationClass="com.segfault03.ideadb.sql.lang.LatticeSqlSyntaxHighlighterFactory"/>
         <lang.commenter language="LatticeSQL" implementationClass="com.segfault03.ideadb.sql.lang.LatticeSqlCommenter"/>
+        <annotator language="LatticeSQL" implementationClass="com.segfault03.ideadb.sql.lang.SqlSemanticAnnotator"/>
         <completion.contributor language="LatticeSQL" implementationClass="com.segfault03.ideadb.sql.completion.LatticeSqlCompletionContributor"/>
         <intentionAction>
             <className>com.segfault03.ideadb.sql.inject.SqlStringIntentions$NotSql</className>
@@ -86,12 +87,29 @@
             <className>com.segfault03.ideadb.sql.inject.SqlStringIntentions$AsSql</className>
             <category>Lattice SQL</category>
         </intentionAction>
+        <intentionAction>
+            <className>com.segfault03.ideadb.sql.run.SqlRunIntentions$SendToConsole</className>
+            <category>Lattice SQL</category>
+        </intentionAction>
+        <intentionAction>
+            <className>com.segfault03.ideadb.sql.run.SqlRunIntentions$Explain</className>
+            <category>Lattice SQL</category>
+        </intentionAction>
+        <intentionAction>
+            <className>com.segfault03.ideadb.sql.run.SqlRunIntentions$RunAndRollBack</className>
+            <category>Lattice SQL</category>
+        </intentionAction>
         <typedHandler implementation="com.segfault03.ideadb.sql.completion.LatticeSqlTypedHandler"/>
         <platform.backend.documentation.targetProvider implementation="com.segfault03.ideadb.sql.doc.LatticeSqlDocumentationTargetProvider"/>
         <platform.backend.documentation.linkHandler implementation="com.segfault03.ideadb.sql.doc.LatticeSqlDocumentationLinkHandler"/>
         <colorSettingsPage implementation="com.segfault03.ideadb.sql.lang.LatticeSqlColorSettingsPage"/>
+        <additionalTextAttributes scheme="Default" file="colorSchemes/LatticeSqlCardDefault.xml"/>
+        <additionalTextAttributes scheme="Darcula" file="colorSchemes/LatticeSqlCardDarcula.xml"/>
+        <additionalTextAttributes scheme="Default" file="colorSchemes/LatticeSqlSemanticDefault.xml"/>
+        <additionalTextAttributes scheme="Darcula" file="colorSchemes/LatticeSqlSemanticDarcula.xml"/>
         <applicationService serviceImplementation="com.segfault03.ideadb.sql.settings.SqlEditorSettings"/>
         <projectService serviceImplementation="com.segfault03.ideadb.sql.binding.SqlBindingsState"/>
+        <projectService serviceImplementation="com.segfault03.ideadb.sql.run.SqlRunState"/>
         <projectService serviceImplementation="com.segfault03.ideadb.sql.discovery.JdbcDiscovery"/>
         <applicationService serviceImplementation="com.segfault03.ideadb.sql.schema.SqlSchemaService"/>
         <applicationConfigurable parentId="tools" id="com.segfault03.lattice.sql.editor"
@@ -110,7 +128,10 @@
         <localInspection language="LatticeSQL" shortName="LatticeSqlAlias" displayName="Table alias problem" groupName="Lattice SQL"
                          enabledByDefault="true" level="WARNING" implementationClass="com.segfault03.ideadb.sql.validate.LatticeSqlAliasInspection"/>
         <lang.inspectionSuppressor language="LatticeSQL" implementationClass="com.segfault03.ideadb.sql.validate.LatticeSqlInspectionSuppressor"/>
+        <highlightingPassFactory implementation="com.segfault03.ideadb.sql.card.SqlCardPassFactory"/>
+        <editorFactoryListener implementation="com.segfault03.ideadb.sql.card.SqlCardEditorListener"/>
         <editorNotificationProvider implementation="com.segfault03.ideadb.sql.binding.SqlConnectionBanner"/>
+        <iw.actionProvider implementation="com.segfault03.ideadb.sql.status.LatticeStatusActionProvider"/>
         <statusBarWidgetFactory id="com.segfault03.lattice.sql.connection"
                                 implementation="com.segfault03.ideadb.sql.binding.SqlConnectionWidgetFactory"/>
         <postStartupActivity implementation="com.segfault03.ideadb.sql.SqlEditorStartupActivity"/>
@@ -128,12 +149,52 @@
     </extensions>
 
     <actions>
+        <group id="com.segfault03.lattice.sql.run.group" text="Lattice SQL" popup="true">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <action id="com.segfault03.lattice.sql.run.run"
+                    class="com.segfault03.ideadb.sql.run.RunQueryAction"
+                    text="Run"
+                    description="Run the query in the connection's console and show its results"/>
+            <action id="com.segfault03.lattice.sql.run.sendToConsole"
+                    class="com.segfault03.ideadb.sql.run.SendToConsoleAction"
+                    text="Send to Console"
+                    description="Append the SQL statement at the caret to the connection's console without running it"/>
+            <action id="com.segfault03.lattice.sql.run.explain"
+                    class="com.segfault03.ideadb.sql.run.ExplainStatementAction"
+                    text="Explain Statement"
+                    description="Show the execution plan of the SQL statement at the caret without running it"/>
+            <action id="com.segfault03.lattice.sql.run.rollback"
+                    class="com.segfault03.ideadb.sql.run.RunAndRollBackAction"
+                    text="Run and Roll Back"
+                    description="Run the INSERT, UPDATE or DELETE at the caret in a transaction that is always rolled back"/>
+        </group>
         <action id="com.segfault03.lattice.sql.chooseFileConnection"
                 class="com.segfault03.ideadb.sql.binding.ChooseSqlConnectionAction"
                 text="Lattice: SQL Connection for This File..."
                 description="Choose the connection whose dialect applies to this SQL file">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
+        <!-- The hover toolbar of a SQL card; in no menu. -->
+        <group id="com.segfault03.lattice.sql.card.toolbar">
+            <action id="com.segfault03.lattice.sql.card.noConnection"
+                    class="com.segfault03.ideadb.sql.card.NoConnectionChipAction"
+                    text="No connection"
+                    description="Choose the connection for this file"
+                    icon="AllIcons.General.Warning"/>
+            <reference ref="com.segfault03.lattice.sql.run.run"/>
+            <reference ref="com.segfault03.lattice.sql.run.rollback"/>
+            <reference ref="com.segfault03.lattice.sql.run.sendToConsole"/>
+            <action id="com.segfault03.lattice.sql.card.copy"
+                    class="com.segfault03.ideadb.sql.card.CopySqlAction"
+                    text="Copy SQL"
+                    description="Copy the SQL as plain text, with ? for the parts built at run time"
+                    icon="AllIcons.Actions.Copy"/>
+            <separator/>
+            <group id="com.segfault03.lattice.sql.card.more" text="More" popup="true" icon="AllIcons.Actions.More">
+                <reference ref="com.segfault03.lattice.sql.run.explain"/>
+                <reference ref="com.segfault03.lattice.sql.chooseFileConnection"/>
+            </group>
+        </group>
         <action id="com.segfault03.lattice.sql.chooseProjectConnection"
                 class="com.segfault03.ideadb.sql.binding.ChooseProjectSqlConnectionAction"
                 text="Lattice: SQL Connection for Project..."

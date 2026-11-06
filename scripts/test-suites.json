@@ -80,6 +80,13 @@
       "requires": ["java21", "ide", "desktop", "ui-fixtures"]
     },
     {
+      "id": "ui-sql-editor", "group": "ui-tests", "phase": "ui", "kind": "ui", "theme": "ExperimentalLight",
+      "env": {"LATTICE_UI_SQL_EDITOR_ONLY": "true"},
+      "platforms": ["linux", "windows"], "ci_hosts": ["linux"],
+      "unsupported": {"macos": "No native macOS real-IDE UI launcher is maintained."},
+      "requires": ["java21", "ide", "desktop", "ui-fixtures"]
+    },
+    {
       "id": "ui-search", "group": "ui-tests", "phase": "ui", "kind": "ui", "theme": "ExperimentalDark",
       "env": {"LATTICE_UI_EXPLORER_SEARCH_ONLY": "true"},
       "platforms": ["linux", "windows"], "ci_hosts": ["linux"],

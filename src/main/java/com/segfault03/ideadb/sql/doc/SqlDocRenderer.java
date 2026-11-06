@@ -10,7 +10,10 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 /**
  * The documentation card for a table, column, alias or schema, as HTML. Everything comes from the cached schema, so a
@@ -24,27 +27,31 @@ public final class SqlDocRenderer {
 
     /** The card for one target. Where it came from is the popup's location bar, so the card does not repeat it. */
     public static @Nullable String render(@NotNull SqlTarget target, @NotNull SqlSchema schema) {
+        return render(target, schema, SqlDocPalette.current());
+    }
+
+    static @Nullable String render(@NotNull SqlTarget target, @NotNull SqlSchema schema, @NotNull SqlDocPalette palette) {
         String connectionId = schema.connectionId();
         StringBuilder html = new StringBuilder();
         boolean found = switch (target) {
-            case SqlTarget.Table table -> table(html, table, schema, connectionId);
-            case SqlTarget.Column column -> column(html, column, schema, connectionId);
-            case SqlTarget.Alias alias -> alias(html, alias, schema, connectionId);
-            case SqlTarget.Schema namespace -> namespace(html, namespace, schema, connectionId);
+            case SqlTarget.Table table -> table(html, table, schema, connectionId, palette);
+            case SqlTarget.Column column -> column(html, column, schema, connectionId, palette);
+            case SqlTarget.Alias alias -> alias(html, alias, schema, connectionId, palette);
+            case SqlTarget.Schema namespace -> namespace(html, namespace, schema, connectionId, palette);
         };
         return found ? html.toString() : null;
     }
 
     // ---- table -----------------------------------------------------------------------------------------------------
 
-    private static boolean table(StringBuilder html, SqlTarget.Table target, SqlSchema schema, String connection) {
+    private static boolean table(StringBuilder html, SqlTarget.Table target, SqlSchema schema, String connection, SqlDocPalette palette) {
         var table = schema.table(target.namespace(), target.table());
         if (table == null) return false;
         var metadata = table.metadata();
-        html.append(DocumentationMarkup.DEFINITION_START).append("<b>").append(esc(target.namespace())).append('.')
-                .append(esc(metadata.getName())).append("</b> ").append(DocumentationMarkup.GRAYED_START)
-                .append(metadata.isView() ? "view" : "table").append(DocumentationMarkup.GRAYED_END).append(DocumentationMarkup.DEFINITION_END);
-        tableBody(html, table, target.namespace(), target.table(), schema, connection);
+        html.append(DocumentationMarkup.DEFINITION_START).append(SqlDocPalette.paint(palette.muted(), esc(target.namespace()) + "."))
+                .append("<b>").append(esc(metadata.getName())).append("</b> ")
+                .append(SqlDocPalette.paint(palette.accent(), metadata.isView() ? "view" : "table")).append(DocumentationMarkup.DEFINITION_END);
+        tableBody(html, table, target.namespace(), target.table(), schema, connection, palette);
         return true;
     }
 
@@ -52,20 +59,20 @@ public final class SqlDocRenderer {
 
     /** Comment, columns, keys and the link to the editor: the card of a table, and of an alias for it. */
     private static void tableBody(StringBuilder html, ExplorerMetadataSnapshot.Table table, String namespace, String tableName,
-                                  SqlSchema schema, String connection) {
+                                  SqlSchema schema, String connection, SqlDocPalette palette) {
         var metadata = table.metadata();
         comment(html, metadata.getComment());
         html.append(DocumentationMarkup.SECTIONS_START);
-        section(html, "Columns", columns(table));
-        section(html, "Foreign keys", foreignKeys(table, schema, connection));
-        section(html, "Referenced by", referencedBy(namespace, tableName, schema, connection));
+        section(html, "Columns", columns(table, palette));
+        section(html, "Foreign keys", foreignKeys(table, schema, connection, palette));
+        section(html, "Referenced by", referencedBy(table, namespace, tableName, schema, connection, palette));
         // The card ends with its sections, like the column card: a trailing content block leaves a gap above the location bar.
         section(html, "Editor", link(SqlDocLinks.open(connection, namespace, metadata.getName()), "Open in Lattice"));
         html.append(DocumentationMarkup.SECTIONS_END);
     }
 
-    /** Names, types and flags as three aligned columns; nothing inside a cell wraps, and the flags are grey. */
-    private static @Nullable String columns(ExplorerMetadataSnapshot.Table table) {
+    /** Names, types and flags as three aligned columns; nothing inside a cell wraps. Names carry their key color, types their kind's. */
+    private static @Nullable String columns(ExplorerMetadataSnapshot.Table table, SqlDocPalette palette) {
         if (!table.columnsLoaded()) return DocumentationMarkup.GRAYED_START + "not read yet" + DocumentationMarkup.GRAYED_END;
         if (table.columns().isEmpty()) return null;
         StringBuilder rows = new StringBuilder("<table cellspacing=\"0\" cellpadding=\"0\">");
@@ -76,33 +83,54 @@ public final class SqlDocRenderer {
                         .append(" more").append(DocumentationMarkup.GRAYED_END).append("</td></tr>");
                 break;
             }
-            List<String> flags = new ArrayList<>();
-            if (column.isPrimaryKey()) flags.add("PK");
-            if (column.isForeignKey()) flags.add("FK");
-            if (!column.isNullable()) flags.add("not null");
-            rows.append("<tr>").append(CELL).append("<b>").append(esc(column.getName())).append("</b></td>")
-                    .append(CELL).append(unbroken(column.getFormattedType())).append("</td>")
-                    .append("<td valign=\"top\" nowrap=\"nowrap\">");
-            if (!flags.isEmpty()) rows.append(DocumentationMarkup.GRAYED_START).append(unbroken(String.join(", ", flags))).append(DocumentationMarkup.GRAYED_END);
-            rows.append("</td></tr>");
+            rows.append("<tr>").append(CELL).append("<b>").append(columnName(column, palette)).append("</b></td>")
+                    .append(CELL).append(SqlDocPalette.paint(palette.typeColor(column), unbroken(column.getFormattedType()))).append("</td>")
+                    .append("<td valign=\"top\" nowrap=\"nowrap\">").append(flags(column, palette)).append("</td></tr>");
         }
         return rows.append("</table>").toString();
+    }
+
+    /** A column's name in its key color, or plain when it is no key. */
+    private static String columnName(ColumnMetadata column, SqlDocPalette palette) {
+        String color = palette.nameColor(column);
+        return color.isEmpty() ? esc(column.getName()) : SqlDocPalette.paint(color, esc(column.getName()));
+    }
+
+    /** PK and FK in the key colors, then "not null" in grey. */
+    private static String flags(ColumnMetadata column, SqlDocPalette palette) {
+        List<String> flags = new ArrayList<>();
+        if (column.isPrimaryKey()) flags.add(SqlDocPalette.paint(palette.key(), "<b>PK</b>"));
+        if (column.isForeignKey() || column.getReference() != null) flags.add(SqlDocPalette.paint(palette.foreignKey(), "<b>FK</b>"));
+        if (!column.isNullable()) flags.add(SqlDocPalette.paint(palette.muted(), "not&nbsp;null"));
+        return String.join(SqlDocPalette.paint(palette.muted(), ",&nbsp;"), flags);
     }
 
     /** Escaped text whose spaces do not break the line. */
     private static String unbroken(String text) { return esc(text).replace(" ", "&nbsp;"); }
 
-    private static @Nullable String foreignKeys(ExplorerMetadataSnapshot.Table table, SqlSchema schema, String connection) {
-        List<String> lines = new ArrayList<>();
-        for (ColumnMetadata column : table.columns()) {
-            ColumnReference reference = column.getReference();
-            if (reference != null) lines.add(esc(column.getName()) + " &rarr; " + referenceLink(reference, schema, connection));
+    /** This table's column, an arrow and the other end, as rows of an aligned table. The other end wraps; the rest does not. */
+    private static String mapping(List<String[]> rows, String arrow, SqlDocPalette palette) {
+        StringBuilder html = new StringBuilder("<table cellspacing=\"0\" cellpadding=\"0\">");
+        for (String[] row : rows) {
+            html.append("<tr>").append(CELL).append(row[0]).append("</td>").append(CELL).append(SqlDocPalette.paint(palette.muted(), arrow))
+                    .append("</td><td valign=\"top\">").append(row[1]).append("</td></tr>");
         }
-        return lines.isEmpty() ? null : String.join("<br>", lines);
+        return html.append("</table>").toString();
     }
 
-    private static @Nullable String referencedBy(String namespaceName, String tableName, SqlSchema schema, String connection) {
-        List<String> lines = new ArrayList<>();
+    private static @Nullable String foreignKeys(ExplorerMetadataSnapshot.Table table, SqlSchema schema, String connection, SqlDocPalette palette) {
+        List<String[]> rows = new ArrayList<>();
+        for (ColumnMetadata column : table.columns()) {
+            ColumnReference reference = column.getReference();
+            if (reference != null) rows.add(new String[] {columnName(column, palette), referenceLink(reference, schema, connection)});
+        }
+        return rows.isEmpty() ? null : mapping(rows, "&rarr;", palette);
+    }
+
+    /** The columns of other tables that point here, grouped by the column of this table they point at and separated by commas, which wrap. */
+    private static @Nullable String referencedBy(ExplorerMetadataSnapshot.Table table, String namespaceName, String tableName, SqlSchema schema,
+                                                 String connection, SqlDocPalette palette) {
+        Map<String, List<String>> byColumn = new LinkedHashMap<>();
         int total = 0;
         for (var namespace : schema.namespaces()) {
             for (var other : namespace.tables()) {
@@ -112,33 +140,44 @@ public final class SqlDocRenderer {
                     if (reference.namespace() != null && !reference.namespace().equalsIgnoreCase(namespaceName)) continue;
                     if (++total > MAX_LISTED) continue;
                     var to = new SqlTarget.Column(namespace.name(), other.metadata().getName(), column.getName());
-                    lines.add(link(SqlDocLinks.show(connection, to), other.metadata().getName() + "." + column.getName()));
+                    byColumn.computeIfAbsent(reference.column().toLowerCase(Locale.ROOT), key -> new ArrayList<>())
+                            .add(link(SqlDocLinks.show(connection, to), other.metadata().getName() + "." + column.getName()));
                 }
             }
         }
-        if (total > MAX_LISTED) lines.add(DocumentationMarkup.GRAYED_START + "... " + (total - MAX_LISTED) + " more" + DocumentationMarkup.GRAYED_END);
-        return lines.isEmpty() ? null : String.join("<br>", lines);
+        List<String[]> rows = new ArrayList<>();
+        for (var entry : byColumn.entrySet()) {
+            rows.add(new String[] {referencedColumn(table, entry.getKey(), palette), String.join(", ", entry.getValue())});
+        }
+        String more = total > MAX_LISTED ? "<br>" + DocumentationMarkup.GRAYED_START + "... " + (total - MAX_LISTED) + " more" + DocumentationMarkup.GRAYED_END : "";
+        return rows.isEmpty() ? null : mapping(rows, "&larr;", palette) + more;
+    }
+
+    /** The name of the column of this table that is pointed at, in its key color. */
+    private static String referencedColumn(ExplorerMetadataSnapshot.Table table, String name, SqlDocPalette palette) {
+        return table.columns().stream().filter(c -> c.getName().equalsIgnoreCase(name)).findFirst()
+                .map(c -> columnName(c, palette)).orElse(esc(name));
     }
 
     // ---- column ----------------------------------------------------------------------------------------------------
 
-    private static boolean column(StringBuilder html, SqlTarget.Column target, SqlSchema schema, String connection) {
+    private static boolean column(StringBuilder html, SqlTarget.Column target, SqlSchema schema, String connection, SqlDocPalette palette) {
         var table = schema.table(target.namespace(), target.table());
         if (table == null) return false;
         ColumnMetadata column = table.columns().stream().filter(c -> c.getName().equals(target.column())).findFirst().orElse(null);
         if (column == null) return false;
         String tableLink = link(SqlDocLinks.show(connection, new SqlTarget.Table(target.namespace(), target.table())),
                 target.namespace() + "." + table.metadata().getName());
-        html.append(DocumentationMarkup.DEFINITION_START).append(tableLink).append(".<b>").append(esc(column.getName())).append("</b> ")
-                .append(esc(column.getFormattedType())).append(DocumentationMarkup.DEFINITION_END);
+        html.append(DocumentationMarkup.DEFINITION_START).append(tableLink).append(".<b>").append(columnName(column, palette)).append("</b> ")
+                .append(SqlDocPalette.paint(palette.typeColor(column), esc(column.getFormattedType()))).append(DocumentationMarkup.DEFINITION_END);
         comment(html, column.getComment());
         html.append(DocumentationMarkup.SECTIONS_START);
-        section(html, "Nullability", column.isNullable() ? "nullable" : "not null");
+        section(html, "Nullability", column.isNullable() ? "nullable" : SqlDocPalette.paint(palette.muted(), "not null"));
         if (column.getDefaultValue() != null) section(html, "Default", esc(column.getDefaultValue()));
         List<String> keys = new ArrayList<>();
-        if (column.isPrimaryKey()) keys.add("primary key");
-        if (column.getReference() != null) keys.add("foreign key &rarr; " + referenceLink(column.getReference(), schema, connection));
-        else if (column.isForeignKey()) keys.add("foreign key");
+        if (column.isPrimaryKey()) keys.add(SqlDocPalette.paint(palette.key(), "<b>primary key</b>"));
+        if (column.getReference() != null) keys.add(SqlDocPalette.paint(palette.foreignKey(), "<b>foreign key</b>") + " &rarr; " + referenceLink(column.getReference(), schema, connection));
+        else if (column.isForeignKey()) keys.add(SqlDocPalette.paint(palette.foreignKey(), "<b>foreign key</b>"));
         if (!keys.isEmpty()) section(html, "Key", String.join(", ", keys));
         List<String> extra = new ArrayList<>();
         if (column.isAutoIncrement()) extra.add("auto increment");
@@ -150,23 +189,23 @@ public final class SqlDocRenderer {
 
     // ---- alias and schema ------------------------------------------------------------------------------------------
 
-    private static boolean alias(StringBuilder html, SqlTarget.Alias target, SqlSchema schema, String connection) {
+    private static boolean alias(StringBuilder html, SqlTarget.Alias target, SqlSchema schema, String connection, SqlDocPalette palette) {
         var table = schema.table(target.namespace(), target.table());
         if (table == null) return false;
         var to = new SqlTarget.Table(target.namespace(), table.metadata().getName());
-        html.append(DocumentationMarkup.DEFINITION_START).append("<b>").append(esc(target.alias())).append("</b> ")
+        html.append(DocumentationMarkup.DEFINITION_START).append("<b>").append(SqlDocPalette.paint(palette.accent(), esc(target.alias()))).append("</b> ")
                 .append(DocumentationMarkup.GRAYED_START).append("alias for ").append(DocumentationMarkup.GRAYED_END)
                 .append(link(SqlDocLinks.show(connection, to), target.namespace() + "." + table.metadata().getName()))
                 .append(DocumentationMarkup.DEFINITION_END);
-        tableBody(html, table, target.namespace(), table.metadata().getName(), schema, connection);
+        tableBody(html, table, target.namespace(), table.metadata().getName(), schema, connection, palette);
         return true;
     }
 
-    private static boolean namespace(StringBuilder html, SqlTarget.Schema target, SqlSchema schema, String connection) {
+    private static boolean namespace(StringBuilder html, SqlTarget.Schema target, SqlSchema schema, String connection, SqlDocPalette palette) {
         var namespace = schema.namespace(target.namespace());
         if (namespace == null) return false;
         html.append(DocumentationMarkup.DEFINITION_START).append("<b>").append(esc(namespace.name())).append("</b> ")
-                .append(DocumentationMarkup.GRAYED_START).append("schema").append(DocumentationMarkup.GRAYED_END).append(DocumentationMarkup.DEFINITION_END);
+                .append(SqlDocPalette.paint(palette.accent(), "schema")).append(DocumentationMarkup.DEFINITION_END);
         html.append(DocumentationMarkup.SECTIONS_START);
         if (!namespace.tablesLoaded()) {
             section(html, "Tables", DocumentationMarkup.GRAYED_START + "not read yet" + DocumentationMarkup.GRAYED_END);

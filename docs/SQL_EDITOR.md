@@ -1,6 +1,6 @@
 # SQL editor support
 
-Lattice edits SQL in your own project, not only in its console. Today that means dialect-aware syntax highlighting, code completion, hover details and local validation, in `.sql` files and in SQL strings of Java and Kotlin code.
+Lattice edits SQL in your own project, not only in its console. Today that means dialect-aware syntax highlighting, code completion, hover details, local validation, and sending, explaining or dry-running a statement, in `.sql` files and in SQL strings of Java and Kotlin code.
 
 ## What you get
 
@@ -18,14 +18,16 @@ Keywords, built-in functions and data types are colored from per-dialect word li
 
 ## Completion
 
-Completion works in `.sql` files, follows the file's dialect, and needs no shortcut after a dot or after a clause word that expects a table or column (`FROM`, `JOIN`, `WHERE`, `SET`, `ORDER BY`...). `Ctrl+Space` opens it anywhere else.
+Completion works in `.sql` files, follows the file's dialect, and needs no shortcut while you type a word, after a dot, after a clause word that expects a table or column (`FROM`, `JOIN`, `ON`, `WHERE`, `SET`, `ORDER BY`...), and after the `(` or `,` of an `INSERT` column list, a `SET` list or an `ORDER BY` list. `Ctrl+Space` opens it anywhere else. Comments before or inside a statement do not change what is suggested.
 
 | Where the caret is | Suggestions |
 |---|---|
 | Start of a statement | `SELECT`, `INSERT INTO`, `UPDATE`, `DELETE FROM`, `CREATE TABLE`... plus the dialect's own (`SHOW` and `USE` for MySQL, `COPY` for PostgreSQL, `MERGE INTO` for H2 and HSQLDB) |
 | After `FROM`, `JOIN`, `UPDATE`, `INSERT INTO`, `DROP TABLE` | Tables and views of the default schema, and the other schemas (partitioned and foreign tables count as tables, materialized views as views) |
+| After `FROM`, when the select list names columns | The same, with the tables and views of the default schema that hold the most of those columns first and the columns each holds after the name: after `SELECT total, customer_id FROM`, `orders has total, customer_id` |
 | After `schema.` | That schema's tables |
 | Select list, `WHERE`, `HAVING`, `ORDER BY`, `GROUP BY` | Columns of the tables in the statement, aliases, functions, and keywords where the word before the caret ends an expression (`IS NULL`, `ASC`, `GROUP BY`...) |
+| Select list of a statement that names no table yet | Every column of the default schema, once per name, with the tables that hold it after the name (`id customers, orders, order_items`); choosing one inserts the name alone |
 | After `alias.` or `table.` | That table's columns |
 | After `JOIN`, with tables already in the statement | Every table joined to one of them by a foreign key, in either direction, first and written out with an alias and its condition: after `FROM orders o JOIN`, `customers c ON c.id = o.customer_id` and `order_items oi ON oi.order_id = o.id`. The alias is the initials of the table's words (`order_items` gives `oi`), numbered when that name is taken (`c2`) or a keyword. Plain tables follow |
 | `ON` after a `JOIN` | The foreign key equality between the joined table and an earlier one, such as `o.customer_id = c.id`, first |
@@ -43,18 +45,121 @@ Details:
 - Names come from the metadata cache. The first completion for a connection reads its default schema in the background (columns for up to 300 tables) and the popup says so; the next popup includes the result. Completion never connects on its own to a connection nobody used, and a DDL change run in the console refreshes only the affected table.
 - Without a connection that applies, keywords, functions and types are still offered.
 
+## Schema colors
+
+Once the file's connection has its schema cached, names the schema knows are colored by what they are, on top of the syntax colors:
+
+| Name | Look (coral, the default) |
+|---|---|
+| Table | coral, bold |
+| View | salmon, bold italic |
+| Table alias, and the alias in `o.id` | light coral |
+| Primary key column | gold, bold |
+| Foreign key column | purple, bold |
+| Any other column | by the kind of value it holds: numbers blue, text green, dates and times orange, booleans teal, binary pink, JSON, enums and the like tan |
+
+Tables, views and aliases come in four families, chosen under **Settings | Tools | Lattice SQL Editor | Schema name colors**, with the families listed on the left and the same SQL shown on a light and on a dark editor on the right (the defaults of the family; colors you have set in the color scheme are not shown): **Coral** (the default), **Periwinkle**, **Lime**, and **Neutral**, which uses the editor's text color (bold for tables and views, faded for aliases) and so follows any theme. Columns look the same in every family. A column that is both a primary key and a foreign key shows as a primary key. Names the schema does not know (a typo, an expression alias, a derived table) and files with no connection keep the syntax colors. The colors are the same everywhere SQL is shown: `.sql` files, SQL in Java and Kotlin strings and its cards, the SQL console and the WHERE and ORDER BY fields, the Generated SQL, Create table and Alter table previews, the parameter card, and the hover cards. They are read from the cached schema only (a dialog opened before the schema is cached shows the syntax colors alone), and follow the editor color scheme: each family's colors are keys under **Settings | Editor | Color Scheme | Lattice SQL | Schema names**, with defaults that are lighter on a dark scheme and deeper on a light one. The hover cards use the same colors. They turn off with **Syntax highlighting** in the SQL editor settings, and files over 300,000 characters keep the syntax colors only.
+
 ## Hover details
 
 Hover over a name in a `.sql` file (or press `Ctrl+Q`, `F1` on macOS) to see what the file's connection knows about it. The popup's location bar names the connection and its database type (`shop-mysql · MySQL`) with the type's icon; the card itself does not repeat it.
 
 | Over | Card |
 |---|---|
-| A table or view | Comment, the columns as an aligned table of name and type with the flags `PK`, `FK` and `not null`, foreign keys (each a link to its target column), the columns that reference it, and **Open in Lattice** to open its data editor |
+| A table or view | Comment, the columns as an aligned table of name and type with the flags `PK`, `FK` and `not null`, foreign keys (`column → target`, the target a link), the columns that reference it (`column ← table.column`, naming which column of this table is pointed at), and **Open in Lattice** to open its data editor |
 | A column, bare or after `alias.`, `table.` or `schema.table.` | Type, comment, nullability (`nullable` or `not null`), default, primary or foreign key (the target is a link), auto increment or generated |
 | An alias | The table it stands for, as a link, then the table's card: comment, columns, keys and what references it |
 | A schema | Its tables, as links |
 
-Links in a card open the card of the target. Names resolve the way completion resolves them: through aliases, schema-qualified names, `UPDATE ... SET` and `INSERT` column lists, ignoring case, and with quoted names unquoted. Keywords, unknown names and derived-table aliases show nothing, as does a file with no connection or a connection whose schema has not been read yet; hovering starts that read, so the card appears on the next hover. The cards read the metadata cache and never contact the database.
+Cards are colored to be read at a glance, with the same colors as [Schema colors](#schema-colors): primary key columns and their `PK` flag are gold, foreign key columns and `FK` purple, and each type has the color of what it holds (numbers blue, text green, dates and times orange, booleans teal, binary pink, JSON, enums and the like tan). The palette is lighter on a dark editor color scheme and deeper on a light one. Links in a card open the card of the target. Names resolve the way completion resolves them: through aliases, schema-qualified names, `UPDATE ... SET` and `INSERT` column lists, ignoring case, and with quoted names unquoted. Keywords, unknown names and derived-table aliases show nothing, as does a file with no connection or a connection whose schema has not been read yet; hovering starts that read, so the card appears on the next hover. The cards read the metadata cache and never contact the database.
+
+## SQL in Lattice's own editors
+
+The SQL that Lattice itself shows follows the same support as a `.sql` file, for the dialect of the connection it belongs to, with the colors of the editor color scheme (Settings | Editor | Color Scheme | Lattice SQL):
+
+| Where | What it has |
+|---|---|
+| **SQL console** | Highlighting, completion, hover and the checks of [Validation](#validation), against the connection and the database chosen in the console's picker; the findings are underlined as in a file and shown on hover. `Ctrl+Enter` still runs the selection or the whole text |
+| **WHERE and ORDER BY fields** of the table editor | Highlighting and completion. The field holds the end of `select * from <table> where ...` (or `order by ...`), so it completes the table's columns, functions and keywords; `Enter` applies the filter unless the completion popup is open |
+| **Create and Alter table preview**, **Generated SQL**, **parameter card** | Highlighting only, as these are generated and read-only |
+
+The console and the filter fields are IDE editors only inside a project and while **Enable Lattice SQL editor support** is on; otherwise they are plain text fields as before. Their findings come from the same cached schema as a file's and are not inspections, so they cannot be silenced with `-- noinspection`; **Validation** in the settings turns them off with the rest. Console history and templates are not colored.
+
+## Running statements
+
+Right-click in a `.sql` file or in a SQL string of Java or Kotlin code and open **Lattice SQL**, or press `Alt+Enter` on the statement:
+
+| Action | What it does |
+|---|---|
+| **Run** | Runs a query (`SELECT`, or a `WITH` that only reads) in the Lattice console of the file's connection and schema, with parameter values written in, and shows its results there. The console's text is replaced by the query. Other statements are refused |
+| **Send to Console** | Puts the statement, as written, in the Lattice console of the file's connection and schema, replacing the console's text. Parameters are left as they are and no values are asked for. It does not run it |
+| **Explain Statement** | Shows the database's execution plan in a **Dry Run** tab. The statement is not executed |
+| **Run and Roll Back** | Runs an `INSERT`, `UPDATE`, `DELETE` or `MERGE` (and MySQL `REPLACE`) in a transaction, reports the rows it affects, and always rolls it back |
+
+The actions work on the selection if there is one, otherwise on the statement around the caret. In a Java or Kotlin string they work on the whole string. They need a file bound to a connection (see [Choosing a connection](#choosing-a-connection)) and have no default shortcuts; search for them by name under Settings | Keymap to assign one.
+
+### SQL cards
+
+Each statement of a `.sql` file, and the SQL of each Java or Kotlin string, sits on a card: a rounded background that hugs the SQL text. A string built by concatenation or templates is one card. Rest the mouse on a card, or put the caret in it, and a toolbar appears above its top-right corner:
+
+| Button | What it does |
+|---|---|
+| **No connection** | Shown only while the file has no connection; chooses one |
+| **Run** | On a query card: runs the query in the console straight away |
+| **Run and Roll Back** | On any other card: as above, on the card's statement |
+| **Send to Console** | As above, on the card's SQL |
+| **Copy SQL** | Copies the SQL as plain text: quotes, escapes and concatenation removed, `?` for the parts built at run time |
+| **More** | **Explain Statement** and **SQL Connection for This File...** |
+
+The toolbar acts on the card it is shown above, not on the statement at the caret. It stays pinned while the caret is in the card: clicking inside the card, typing and scrolling keep it, and it follows the card as the text changes and the editor scrolls (it hides only while the card is entirely out of view). For a moment after an edit, while the card is read again, the buttons work on the statement at the caret and **Copy SQL** waits, so nothing acts on SQL that has changed. It follows the caret to the next card, and a card under the mouse takes it from the caret's card while the mouse rests there. A toolbar that is only there because the mouse rests on a card (the caret is elsewhere) hides when you type or scroll. It goes away when the caret leaves the card and the mouse is not on one, and when the editor loses focus. After you use a button it closes and stays closed until the caret leaves the card and comes back, the editor regains focus, or the mouse rests on the card again. A query card (`SELECT`, or a `WITH` that only reads) shows **Run**; every other card shows **Run and Roll Back** in its place. A button that does not suit the card stays visible but disabled, and its tooltip says why: Run and Roll Back on DDL, Explain on DDL, either on a string holding more than one statement ("Select a single statement"), and every action except Copy SQL while the file has no connection.
+
+Cards are not shown in Lattice's own SQL editors, in viewers and diffs, or in files too large to analyse. A card is drawn over the IDE's injected-language background and the caret-row highlight, and the selection is drawn over the card.
+
+### Parameters
+
+`?`, `:name` and `$1` are parameters. MySQL `@name` is a session variable and is left alone. In a `.sql` file for PostgreSQL, `?`, `?|` and `?&` are jsonb operators; in a Java or Kotlin string `?` is a JDBC parameter for every database. The parts of a string that are only known at run time (`"... where id = " + id`) become positional parameters. A statement that mixes positional and named parameters is refused.
+
+Before a statement with parameters is run or explained, its card lifts into a focused card of its own over the editor, with the SQL where the card's SQL was and a field in the place of each parameter. Code around the card does not move. A statement without a card (cards turned off) gets the same card over its first line. What you type replaces the parameter exactly as typed: nothing is quoted, escaped or converted, so write `'Ace%'` with its quotes for text and `42` without them for a number. No type is guessed, and nothing is said about what a field expects. A field has a fixed width while it is empty or short and grows with its value. The buttons are under the SQL, at the left. Every occurrence of a repeated `:name` is the same value. **Enter** runs; **Esc**, a click elsewhere or switching to another editor tab cancels. Values are remembered per file and parameter in the project's workspace file (`.idea/workspace.xml`), never in shared project files, and fill the fields the next time.
+
+Run, Explain and Run and Roll Back run the SQL with the values written in; nothing is bound.
+
+### Dry Run tab
+
+Each connection has one **Dry Run** tab, reused by every run. Its header names the connection, schema, statement kind and the values used; **Copy**, **Re-run** (same statement and values) and **Send to Console** act on the shown run. One dry run per connection runs at a time.
+
+| Database | Explain sends |
+|---|---|
+| MySQL | `EXPLAIN FORMAT=TREE` from 8.0.16, `EXPLAIN` before |
+| PostgreSQL | `EXPLAIN (FORMAT TEXT, VERBOSE)` |
+| H2 | `EXPLAIN` |
+| HSQLDB | `EXPLAIN PLAN FOR` |
+
+`EXPLAIN ANALYZE` is never sent. Explain accepts queries and the statements Run and Roll Back accepts. When a database does not accept bound parameters in its explain statement (HSQLDB), the plan is computed with the values written into the SQL and the tab says so.
+
+Dry runs use a connection of their own, opened for the run and closed after it, so the console and any transaction open in it are never touched.
+
+### Run and Roll Back
+
+Before connecting, Run and Roll Back refuses anything that could commit or change the schema: DDL, `COMMIT`, `ROLLBACK`, `SET`, `CALL`, `LOCK TABLES`, `LOAD DATA`, `COPY`, `SELECT ... INTO`, more than one statement, and MySQL executable comments (`/*! ... */`). Queries are refused too; use Explain for them.
+
+On MySQL it also refuses, without running the statement, when it cannot confirm the change can be rolled back: a table on an engine without transactions (MyISAM, MEMORY, ARCHIVE...), a table that has triggers, a view, a table it cannot find, and a call to a function that is not built in. MySQL's lock wait is limited to the run's 60-second timeout.
+
+A confirmation lists what a rollback does not undo:
+
+- Sequence and auto-increment values are consumed.
+- Triggers fire, including any effects outside the database.
+- Row locks are held until the rollback, and other sessions can wait on them.
+
+**Don't ask again for this project** skips it; turn it back on with **Confirm before Run and Roll Back** under Settings | Tools | Lattice SQL Editor | Project Defaults.
+
+| Result | Meaning |
+|---|---|
+| **Rolled back** | Rows affected, time taken and any warnings; the changes were undone |
+| An error | The statement failed and was rolled back |
+| **Cancelled** | Stopped from the progress bar; "Cancelled; any changes were rolled back" once it had started |
+| **Outcome unknown** | The rollback could not be confirmed. Lattice closed its connection, so the database should discard the changes; check the data if it matters |
+
+If the tab was closed while a run was going, a rolled-back or unknown outcome is also shown as a notification.
 
 ## SQL in Java and Kotlin strings
 
@@ -122,6 +227,19 @@ It is built to be quiet when unsure:
 - **Large files.** A script over 200,000 characters is not validated.
 - **Names** match ignoring case and quoting, so a difference only in case is never reported.
 
+## Status icon
+
+Each editor with Lattice SQL (`.sql` files, and Java or Kotlin files with SQL in strings) shows Lattice's state for the file at its top right, beside the error and warning counts:
+
+| Icon | State |
+|---|---|
+| Spinner | Reading the schema of the file's connection, checking the file's SQL, or finding the SQL in it (for cards) |
+| Unplugged | No connection; SQL is checked for syntax only |
+| Warning | The schema could not be read; table and column names are not checked. Retried after 30 seconds |
+| Lattice | Ready, or the schema is not read yet or may be out of date (the tooltip says which) |
+
+Clicking it shows the file, connection, schema (table count or state) and number of cards, with **Reload Schema** (**Read Schema** before the first read), which reads the schema now, and **Choose Connection...** or **Change Connection...**.
+
 ## Connections found in the project
 
 Lattice reads the database URLs in the project's configuration files, so a Spring or Jakarta EE project needs no setup:
@@ -154,6 +272,7 @@ The status bar entry says when a connection was chosen because of the project's 
 | Code completion | On |
 | Keyword case when inserted | As typed (or always upper or lower case) |
 | Hover documentation | On |
+| Show SQL cards | On |
 | Validation | On, as five inspections whose severities you set under Editor | Inspections; **Configure inspections...** opens that page at Lattice SQL |
 | SQL in Java and Kotlin strings | On, as three switches: marked strings, known calls and strict content check |
 | Known calls | A list of JDBC, Spring `JdbcTemplate`, JPA, Hibernate, jOOQ and Exposed method names, edited with the add, edit and remove buttons; an empty list means the default one |
@@ -162,7 +281,7 @@ Everything on the page except the first checkbox is disabled while Lattice SQL e
 
 The **Project Defaults** page sets what applies to the current project only: the default connection for its SQL (or Automatic, which uses the project's files and then the only connection), whether its configuration files are read to find the database, and, while some offers are turned down, a checkbox "Offer the N databases I turned down again" that takes effect when you apply the page.
 
-Colors are under **Settings | Editor | Color Scheme | Lattice SQL**. **Tools | Lattice: Restore the IDE's Built-in SQL Handling** switches off `.sql` handling in one step, with an undo in the notice it shows.
+Colors are under **Settings | Editor | Color Scheme | Lattice SQL**; **Schema names** sets the colors of tables, views, aliases and columns, and **SQL card** sets the card's background and its border (the effect colour). **Tools | Lattice: Restore the IDE's Built-in SQL Handling** switches off `.sql` handling in one step, with an undo in the notice it shows.
 
 ## Large files and projects
 
@@ -187,7 +306,8 @@ The Database plugin brings its own SQL support. Where it is enabled, Lattice's S
 
 ## Limits
 
-- Not available yet: filling in parameters (`?`, `:name`, `$1`) to preview the final SQL, sending a statement from the editor to the Lattice console, and a read-only dry run.
+- Run and Roll Back reports the number of rows affected, not the changed rows themselves. A whole SQL file cannot be sent or dry-run at once, and the actions work on one statement.
+- Explain and Run and Roll Back run against the connection's default database; a statement that relies on another schema must qualify its names.
 - Strings are found by what is written at the call site. Kotlin calls are matched by name only, because Kotlin PSI cannot resolve a call here; Java also honors `@Language` on a resolved method's parameters.
 - R2DBC URLs, other databases and URLs assembled in code are not read, and a URL whose parts are all unresolved placeholders matches by type only.
 - Validation is a tolerant scanner, not a full SQL parser: it finds the mistakes above, not every way a statement can be invalid for a particular server, and it can miss a mistake that sits behind something it cannot see through.

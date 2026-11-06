@@ -9,6 +9,7 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.lang.injection.InjectedLanguageManager;
 import com.segfault03.ideadb.sql.lang.LatticeSqlFileType;
 import com.segfault03.ideadb.sql.lang.LatticeSqlLanguage;
+import com.segfault03.ideadb.sql.card.SqlCardDataKeys;
 import org.jetbrains.annotations.NotNull;
 
 /** Editor menu action: choose the connection for the current SQL file. */
@@ -18,7 +19,7 @@ public final class ChooseSqlConnectionAction extends AnAction implements DumbAwa
     @Override public void update(@NotNull AnActionEvent event) {
         VirtualFile file = event.getData(CommonDataKeys.VIRTUAL_FILE);
         event.getPresentation().setEnabledAndVisible(event.getProject() != null && file != null
-                && (file.getFileType() == LatticeSqlFileType.INSTANCE || isInsideInjectedSql(event)));
+                && (file.getFileType() == LatticeSqlFileType.INSTANCE || event.getData(SqlCardDataKeys.SQL_CARD) != null || isInsideInjectedSql(event)));
     }
 
     /** In a Java or Kotlin file, whether the caret is in a string that is SQL. */

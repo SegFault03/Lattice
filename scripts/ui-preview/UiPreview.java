@@ -460,6 +460,41 @@ public final class UiPreview {
             throw new AssertionError("Featured value workspace must open on a selected table cell");
         return editor;
     }
+    static void renderSqlParameters(String theme) throws Exception {
+        String sql = "select * from orders where customer_id = :customer and placed_at >= :since";
+        var panel = new com.segfault03.ideadb.sql.run.SqlParameterPanel(sql,
+                com.segfault03.ideadb.sql.run.SqlParameters.of(sql, com.segfault03.ideadb.sql.dialect.SqlDialects.MYSQL, false),
+                DatabaseType.MYSQL, Map.of(
+                        ":customer", new com.segfault03.ideadb.sql.run.SqlParameterValue(com.segfault03.ideadb.sql.run.SqlParameterValue.Type.NUMBER, "42"),
+                        ":since", new com.segfault03.ideadb.sql.run.SqlParameterValue(com.segfault03.ideadb.sql.run.SqlParameterValue.Type.DATE, "2026-01-01")));
+        panel.setBorder(javax.swing.BorderFactory.createEmptyBorder(12, 12, 12, 12));
+        render(panel, theme + "-sql-parameters-640", 640, 300);
+    }
+
+    static void renderDryRun(String theme) throws Exception {
+        String sql = "update orders set status = :status where customer_id = :customer";
+        ConnectionConfig config = config(DatabaseType.MYSQL);
+        var target = new com.segfault03.ideadb.sql.run.SqlRunTarget(sql, com.segfault03.ideadb.sql.dialect.SqlDialects.MYSQL, config,
+                new com.intellij.testFramework.LightVirtualFile("orders.sql"),
+                com.segfault03.ideadb.sql.run.SqlParameters.of(sql, com.segfault03.ideadb.sql.dialect.SqlDialects.MYSQL, false));
+        var values = new java.util.LinkedHashMap<String, com.segfault03.ideadb.sql.run.SqlParameterValue>();
+        values.put(":status", new com.segfault03.ideadb.sql.run.SqlParameterValue(com.segfault03.ideadb.sql.run.SqlParameterValue.Type.TEXT, "shipped"));
+        values.put(":customer", new com.segfault03.ideadb.sql.run.SqlParameterValue(com.segfault03.ideadb.sql.run.SqlParameterValue.Type.NUMBER, "42"));
+        var plan = new com.segfault03.ideadb.sql.run.DryRunPanel(null, config);
+        plan.showRunning(target, "DML", values);
+        plan.show(new com.segfault03.ideadb.service.DryRunResult.Plan(
+                "-> Update orders on orders  (cost=1.10 rows=1)\n    -> Index lookup on orders using idx_customer (customer_id=42)  (cost=1.10 rows=1)", false, 6));
+        render(plan, theme + "-dry-run-plan-720", 720, 300);
+        var rolledBack = new com.segfault03.ideadb.sql.run.DryRunPanel(null, config);
+        rolledBack.showRunning(target, "DML", values);
+        rolledBack.show(new com.segfault03.ideadb.service.DryRunResult.RolledBack(3, java.util.List.of("Data truncated for column 'status' at row 2"), 18));
+        render(rolledBack, theme + "-dry-run-rolled-back-720", 720, 300);
+        var unknown = new com.segfault03.ideadb.sql.run.DryRunPanel(null, config);
+        unknown.showRunning(target, "DML", values);
+        unknown.show(new com.segfault03.ideadb.service.DryRunResult.OutcomeUnknown(config.getName(), "Communications link failure during rollback"));
+        render(unknown, theme + "-dry-run-outcome-unknown-720", 720, 300);
+    }
+
     static void renderCellDetails(String theme) throws Exception {
         renderApprovedInspector(theme);
         renderCachedMenuThemeRefresh(theme);
@@ -530,17 +565,16 @@ public final class UiPreview {
             throw new AssertionError("Ordinary cell selection must keep a closed inspector closed");
         invoke(editor, "toggleInspector", new Class<?>[0]);
         JLayeredPane overlay = (JLayeredPane)field(editor, "gridOverlay");
-        JScrollPane dataScroll = (JScrollPane)field(editor, "dataScroll");
-        Rectangle gridBounds = dataScroll.getBounds();
+        JComponent workspace = (JComponent)field(editor, "tableWorkspace");
         int columnsWidth = grid.getColumnModel().getTotalColumnWidth();
         invoke(editor, "toggleInspector", new Class<?>[0]);
         invoke(editor, "toggleInspector", new Class<?>[0]);
         for (int pass = 0; pass < 4; pass++) layout(editor);
-        if (!gridBounds.equals(dataScroll.getBounds()) || columnsWidth != grid.getColumnModel().getTotalColumnWidth())
-            throw new AssertionError("Opening the overlay must preserve grid bounds and column widths");
-        if (overlay.getLayer(details) <= overlay.getLayer(dataScroll) || details.getX() <= 0
-                || details.getX() + details.getWidth() != overlay.getWidth())
-            throw new AssertionError("The inspector must overlay the right edge of the grid");
+        if (columnsWidth != grid.getColumnModel().getTotalColumnWidth())
+            throw new AssertionError("Opening the inspector must preserve column widths");
+        if (details.getX() <= 0 || details.getX() + details.getWidth() != overlay.getWidth()
+                || details.getY() != 0 || details.getHeight() != overlay.getHeight() || workspace.getWidth() != details.getX())
+            throw new AssertionError("The inspector must dock to the right edge for the editor's full height");
         JComponent widthHandle = (JComponent)field(editor, "inspectorResizeHandle");
         int initialWidth = details.getWidth();
         widthHandle.dispatchEvent(new java.awt.event.MouseEvent(widthHandle, java.awt.event.MouseEvent.MOUSE_PRESSED,
@@ -551,9 +585,9 @@ public final class UiPreview {
                 0, 0, -93, 20, 1, false, java.awt.event.MouseEvent.BUTTON1));
         render(editor, theme + "-inspector-width-resized-1440", 1440, 900);
         int resizedWidth = details.getWidth();
-        if (resizedWidth != initialWidth + 96 || !gridBounds.equals(dataScroll.getBounds())
+        if (resizedWidth != initialWidth + 96 || workspace.getWidth() != details.getX()
                 || columnsWidth != grid.getColumnModel().getTotalColumnWidth())
-            throw new AssertionError("Dragging the sidebar must change only its overlay width");
+            throw new AssertionError("Dragging the sidebar must trade only the workspace width for its own");
         invoke(editor, "toggleInspector", new Class<?>[0]); invoke(editor, "toggleInspector", new Class<?>[0]);
         for (int pass = 0; pass < 4; pass++) layout(editor);
         if (details.getWidth() != resizedWidth) throw new AssertionError("Reopening must retain the chosen sidebar width");
@@ -920,13 +954,15 @@ public final class UiPreview {
         @SuppressWarnings("unchecked") JComboBox<QueryHistoryEntry> history = (JComboBox<QueryHistoryEntry>)field(panel, "historyCombo");
         history.addItem(new QueryHistoryEntry("SELECT 42;"));
         history.setSelectedIndex(1);
-        if (!editor.getText().equals("SELECT 42;")) throw new AssertionError("History must restore the full query");
+        // History inserts beside what was typed rather than replacing it, and selects the restored query.
+        if (!editor.getText().endsWith("SELECT 42;") || !"SELECT 42;".equals(editor.getSelectedText()))
+            throw new AssertionError("History must restore the full query");
         performToolbarAction(panel, "Clear query text");
         if (!editor.getText().isEmpty()) throw new AssertionError("Clear action must clear the query");
         if (run.isEnabled() || clear.isEnabled()) throw new AssertionError("Clear must update both action states");
         panel.setSqlText("SELECT 1; SELECT 2;");
         editor.select(10, 19);
-        editor.getActionMap().get("runSql").actionPerformed(new java.awt.event.ActionEvent(editor, 0, "runSql"));
+        invoke(panel, "executeCurrentSql", new Class<?>[0]); // what the Ctrl+Enter shortcut runs
         if (((JButton)field(panel, "runBtn")).isEnabled() || !((JButton)field(panel, "cancelBtn")).isEnabled()
                 || ((JComboBox<?>)field(panel, "databaseCombo")).isEnabled() || ((JComboBox<?>)field(panel, "resultLimit")).isEnabled())
             throw new AssertionError("Executing controls must reflect the active query");
@@ -952,8 +988,12 @@ public final class UiPreview {
         TableDataEditorPanel panel = table(false);
         JTable table = (JTable)field(panel, "dataTable");
         TableModel model = (TableModel)field(panel, "tableModel");
-        if (!model.isCellEditable(0, 0) || !model.getColumnName(0).contains("Auto") || model.getColumnName(0).contains("AI"))
-            throw new AssertionError("Auto columns must be labeled Auto and allow editing");
+        // Header tags are icon-only; auto-increment is named in the inspector, not the column title.
+        var getColumnMeta = model.getClass().getMethod("getColumnMeta", int.class);
+        getColumnMeta.setAccessible(true);
+        ColumnMetadata idColumn = (ColumnMetadata)getColumnMeta.invoke(model, 0);
+        if (!model.isCellEditable(0, 0) || !model.getColumnName(0).equals("id") || idColumn == null || !idColumn.isAutoIncrement())
+            throw new AssertionError("Auto columns must keep a plain title, stay auto-increment and allow editing");
         model.setValueAt("invalid identity", 0, 0);
         if (((JButton)field(panel, "saveBtn")).isEnabled()) throw new AssertionError("Invalid auto values must disable Commit");
         model.setValueAt(2001L, 0, 0);
@@ -1190,7 +1230,7 @@ public final class UiPreview {
         icon.paintIcon(new JLabel(), graphics, 0, 0);
         graphics.dispose();
         int expected = switch (type) {
-            case MYSQL -> 0x00758F;
+            case MYSQL -> JBColor.isBright() ? 0x00758F : 0x2A8FA8; // source-mysql-badge_dark.svg lightens it for contrast
             case HSQLDB -> 0x7256A8;
             case POSTGRESQL -> 0x4169E1;
             case H2 -> 0x2471A3;
@@ -1294,6 +1334,8 @@ public final class UiPreview {
                 renderExplorerSearch(theme);
                 renderTableTabIcons(theme);
                 render(valueWorkspacePreview(), theme + "-cell-details-1440", 1440, 900);
+                renderSqlParameters(theme);
+                renderDryRun(theme);
                 render(ExplorerPreview.create(config(DatabaseType.MYSQL), true), theme + "-side-panel-empty-340", 340, 620);
                 connectionMenuPreview(ExplorerPreview.create(config(DatabaseType.MYSQL), true),
                         "Add a connection…", theme + "-side-panel-connection-menu-340", 340, 620);

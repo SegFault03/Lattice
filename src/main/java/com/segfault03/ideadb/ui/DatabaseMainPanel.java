@@ -96,7 +96,8 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 this::refreshSelectedNode, this::openConsoleForSelected,
                 this::showSourceFilter,
                 this::toggleSearch,
-                () -> DatabaseEditorManager.getInstance(project).openWelcome());
+                () -> DatabaseEditorManager.getInstance(project).openWelcome(),
+                () -> com.segfault03.ideadb.sql.SqlEditorSupport.openSettings(project));
         searchBar = new DatabaseExplorerSearchBar(query -> {
             if (searchController != null) searchController.changed(query);
         }, () -> setSearchVisible(false), () -> searchController.navigate(-1), () -> searchController.navigate(1));
@@ -471,7 +472,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         try {
             String sql = generatedSql(data, action);
             if (connectionAvailable(node)) DatabaseEditorManager.getInstance(project).openConsole(data.getConnectionConfig(), data.getDatabaseName(), sql);
-            else new GeneratedSqlDialog(project, sql).show();
+            else new GeneratedSqlDialog(project, data.getConnectionConfig(), data.getDatabaseName(), sql).show();
         } catch (IllegalStateException error) {
             updateExplorerStatus("Could not generate SQL · Refresh the table", DatabaseUi.Tone.ERROR);
             Messages.showErrorDialog(project, error.getMessage(), "Could not generate SQL");

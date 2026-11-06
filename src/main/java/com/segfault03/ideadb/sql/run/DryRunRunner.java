@@ -1,0 +1,168 @@
+package com.segfault03.ideadb.sql.run;
+
+import com.intellij.notification.NotificationGroupManager;
+import com.intellij.notification.NotificationType;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ModalityState;
+import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.progress.ProgressIndicator;
+import com.intellij.openapi.progress.Task;
+import com.intellij.openapi.project.Project;
+import com.intellij.openapi.ui.Messages;
+import com.intellij.psi.PsiFile;
+import com.intellij.util.concurrency.AppExecutorUtil;
+import com.segfault03.ideadb.model.ConnectionConfig;
+import com.segfault03.ideadb.service.DryRunResult;
+import com.segfault03.ideadb.service.DryRunService;
+import com.segfault03.ideadb.service.QueryExecution;
+import com.segfault03.ideadb.sql.card.SqlCard;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+
+/** What Explain Statement and Run and Roll Back share: checks on the EDT, then the JDBC work in a cancellable background task. */
+final class DryRunRunner {
+    static final String TITLE = "Lattice SQL";
+    static final String ALREADY_RUNNING = "A dry run is already running for this connection.";
+
+    enum Mode {
+        EXPLAIN("Lattice: Explain"), ROLL_BACK("Lattice: Run and Roll Back");
+        final String taskTitle;
+        Mode(String taskTitle) { this.taskTitle = taskTitle; }
+    }
+
+    private DryRunRunner() {}
+
+    /** The whole action, from the caret to the tab; call on the EDT. */
+    static void start(@NotNull Project project, @NotNull Editor editor, @NotNull PsiFile file, @NotNull Mode mode) { start(project, editor, file, null, mode); }
+
+    /** With a card, the card's SQL; otherwise the statement at the caret. */
+    static void start(@NotNull Project project, @NotNull Editor editor, @NotNull PsiFile file, @Nullable SqlCard card, @NotNull Mode mode) {
+        SqlRunTarget target = SqlRunActionSupport.targetOrShowProblem(project, editor, file, card,
+                mode == Mode.EXPLAIN ? SqlRunActionSupport.CardUse.EXPLAIN : SqlRunActionSupport.CardUse.ROLLBACK);
+        if (target == null || target.connection() == null) return;
+        ConnectionConfig config = target.connection();
+        SqlStatementKind kind = SqlStatementKind.of(target.sql(), target.profile());
+        String refusal = mode == Mode.EXPLAIN ? SqlStatementKind.explainRefusal(kind) : SqlStatementKind.rollbackRefusal(kind);
+        if (refusal != null) {
+            Messages.showErrorDialog(project, refusal, TITLE);
+            return;
+        }
+        if (DryRunRegistry.getInstance(project).isBusy(config.getId())) {
+            Messages.showErrorDialog(project, ALREADY_RUNNING, TITLE);
+            return;
+        }
+        SqlRunActionSupport.askValues(project, editor, target, card, mode == Mode.EXPLAIN ? "Explain" : "Run and Roll Back", values -> {
+            if (mode == Mode.ROLL_BACK && !RollbackConfirmation.confirm(project, config, kind)) return;
+            launch(project, target, kind, mode, values);
+        });
+    }
+
+    /** The same statement with the same values, as Re-run does it; the confirmation still applies. */
+    private static void rerun(Project project, SqlRunTarget target, SqlStatementKind kind, Mode mode, Map<String, SqlParameterValue> values) {
+        ConnectionConfig config = target.connection();
+        if (config == null) return;
+        if (DryRunRegistry.getInstance(project).isBusy(config.getId())) {
+            Messages.showErrorDialog(project, ALREADY_RUNNING, TITLE);
+            return;
+        }
+        if (mode == Mode.ROLL_BACK && !RollbackConfirmation.confirm(project, config, kind)) return;
+        launch(project, target, kind, mode, values);
+    }
+
+    private static void launch(Project project, SqlRunTarget target, SqlStatementKind kind, Mode mode, Map<String, SqlParameterValue> values) {
+        ConnectionConfig config = target.connection();
+        // The values are part of the SQL as entered, so there is nothing to bind.
+        String literalSql = SqlLiteralRenderer.render(target.sql(), target.parameters(), values, config.getType());
+        SqlLiteralRenderer.JdbcStatement statement = new SqlLiteralRenderer.JdbcStatement(literalSql, List.of());
+        List<SqlStatementKind.QualifiedName> tables = mode == Mode.ROLL_BACK ? SqlStatementKind.targetTableNames(target.sql(), target.profile()) : List.of();
+        List<String> functions = mode == Mode.ROLL_BACK ? SqlStatementKind.userFunctionCalls(target.sql(), target.profile()) : List.of();
+
+        DryRunRegistry registry = DryRunRegistry.getInstance(project);
+        if (!registry.tryBegin(config.getId())) {
+            Messages.showErrorDialog(project, ALREADY_RUNNING, TITLE);
+            return;
+        }
+        try {
+            DryRunPanel panel = DryRunVirtualFile.open(project, config);
+            panel.showRunning(target, kind == SqlStatementKind.DML ? "DML" : "Query", values);
+            panel.setRerunHandler(() -> rerun(project, target, kind, mode, values));
+            queue(project, config, mode, kind, statement, literalSql, tables, functions, panel, registry);
+        } catch (RuntimeException | Error e) {
+            registry.end(config.getId()); // nothing was queued, so onFinished will not clear it
+            throw e;
+        }
+    }
+
+    private static void queue(Project project, ConnectionConfig config, Mode mode, SqlStatementKind kind, SqlLiteralRenderer.JdbcStatement statement,
+                              String literalSql, List<SqlStatementKind.QualifiedName> tables, List<String> functions, DryRunPanel panel, DryRunRegistry registry) {
+        new Task.Backgroundable(project, mode.taskTitle, true) {
+            private volatile DryRunResult result = new DryRunResult.Failed("The dry run did not finish.");
+
+            @Override public void run(@NotNull ProgressIndicator indicator) {
+                QueryExecution execution = new QueryExecution();
+                try {
+                    result = execute(indicator, execution, () -> mode == Mode.EXPLAIN
+                            ? DryRunService.getInstance().explain(config, statement, literalSql, execution)
+                            : DryRunService.getInstance().runAndRollBack(config, kind, statement, tables, functions, execution));
+                } finally {
+                    ApplicationManager.getApplication().invokeLater(() -> {
+                        registry.end(config.getId());
+                        boolean tabStillOpen = DryRunVirtualFile.existingPanel(project, config) == panel;
+                        panel.show(result);
+                        if (!tabStillOpen) notifyClosedTab(project, config, result);
+                    }, ModalityState.any(), project.getDisposed());
+                }
+            }
+
+            /** After success, cancel or failure, including a task the platform never started. */
+            @Override public void onFinished() { registry.end(config.getId()); }
+        }.queue();
+    }
+
+    /** The user closed the tab while the run was going, so a result that matters is announced instead of lost. */
+    private static void notifyClosedTab(Project project, ConnectionConfig config, DryRunResult result) {
+        String title;
+        String content;
+        NotificationType type = NotificationType.INFORMATION;
+        if (result instanceof DryRunResult.RolledBack done) {
+            title = "Run and Roll Back finished on " + config.getName();
+            content = done.rows() + " row(s) affected; rolled back";
+        } else if (result instanceof DryRunResult.OutcomeUnknown unknown) {
+            title = DryRunPanel.unknownBanner(unknown);
+            content = DryRunPanel.unknownBody(unknown);
+            type = NotificationType.WARNING;
+        } else {
+            return;
+        }
+        NotificationGroupManager.getInstance().getNotificationGroup("Lattice SQL editor").createNotification(title, content, type).notify(project);
+    }
+
+    /** Runs the call on another thread so that cancelling the progress can reach the JDBC statement while it is in flight. */
+    private static DryRunResult execute(ProgressIndicator indicator, QueryExecution execution, java.util.function.Supplier<DryRunResult> call) {
+        CompletableFuture<DryRunResult> future = CompletableFuture.supplyAsync(call, AppExecutorUtil.getAppExecutorService());
+        boolean cancelSent = false;
+        while (true) {
+            try {
+                return future.get(100, TimeUnit.MILLISECONDS);
+            } catch (TimeoutException stillRunning) {
+                if (!cancelSent && indicator.isCanceled()) {
+                    cancelSent = true;
+                    execution.cancel();
+                }
+            } catch (InterruptedException interrupted) {
+                execution.cancel();
+                Thread.currentThread().interrupt();
+                return new DryRunResult.Cancelled(false);
+            } catch (java.util.concurrent.ExecutionException failed) {
+                Throwable cause = failed.getCause() != null ? failed.getCause() : failed;
+                return new DryRunResult.Failed(cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName());
+            }
+        }
+    }
+}

@@ -58,14 +58,20 @@ public class DatabaseEditorManager implements com.intellij.openapi.Disposable {
         });
     }
 
-    public void openConsole(ConnectionConfig config, String initialDb, String initialSql) {
+    public void openConsole(ConnectionConfig config, String initialDb, String initialSql) { openConsole(config, initialDb, initialSql, false); }
+
+    /** With {@code run}, the console also runs {@code initialSql} as soon as it can. */
+    public void openConsole(ConnectionConfig config, String initialDb, String initialSql, boolean run) {
         String key = "console:" + config.getId() + ":" + (initialDb != null ? initialDb : "");
         ApplicationManager.getApplication().invokeLater(() -> {
             if (disposed || project.isDisposed()) return;
             DatabaseVirtualFile vf = openFiles.get(key);
             if (vf instanceof SqlConsoleVirtualFile console && FileEditorManager.getInstance(project).isFileOpen(vf)) {
                 FileEditorManager.getInstance(project).openFile(vf, true);
-                if (initialSql != null && console.getPanel() != null) console.getPanel().insertSqlText(initialSql);
+                if (initialSql != null && console.getPanel() != null) {
+                    if (run) console.getPanel().runSqlText(initialSql);
+                    else console.getPanel().setSqlText(initialSql);
+                }
                 return;
             }
             // Open immediately. The production panel loads its database picker with visible feedback.
@@ -73,7 +79,9 @@ public class DatabaseEditorManager implements com.intellij.openapi.Disposable {
             openFiles.put(key, console);
             FileEditorManager.getInstance(project).openFile(console, true);
             if (initialSql != null) ApplicationManager.getApplication().invokeLater(() -> {
-                if (!disposed && !project.isDisposed() && console.getPanel() != null) console.getPanel().setSqlText(initialSql);
+                if (disposed || project.isDisposed() || console.getPanel() == null) return;
+                console.getPanel().setSqlText(initialSql);
+                if (run) console.getPanel().runSqlText(initialSql);
             });
         });
     }

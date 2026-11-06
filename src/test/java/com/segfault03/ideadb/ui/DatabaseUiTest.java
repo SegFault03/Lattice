@@ -30,7 +30,7 @@ class DatabaseUiTest {
                     assertEquals(background, menu.getBackground()); assertEquals(background, child.getBackground());
                     assertEquals(background, count.getBackground()); assertEquals(foreground, count.getForeground());
                     assertEquals(background, truncate.getBackground()); assertEquals(foreground, truncate.getForeground());
-                    assertFalse(menu.isOpaque()); assertFalse(child.isOpaque());
+                    assertTrue(menu.isOpaque()); assertTrue(child.isOpaque());
                     assertFalse(menu.isLightWeightPopupEnabled()); assertFalse(child.isLightWeightPopupEnabled());
                     assertEquals(listeners, menu.getPopupMenuListeners().length, "Opening must not accumulate listeners");
                 }
@@ -39,6 +39,54 @@ class DatabaseUiTest {
                 closePopup(nested.getPopupMenu());
                 closePopup(menu);
                 for (int index = 0; index < keys.length; index++) UIManager.put(keys[index], previous[index]);
+            }
+        });
+    }
+
+    @Test void openingAMenuWithAnUnchangedPaletteDoesNotReinstallItsUi() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            String key = "MenuItem.foreground";
+            Object previous = UIManager.get(key);
+            JPopupMenu menu = DatabaseUi.popupMenu();
+            try {
+                JMenuItem item = new JMenuItem("Count rows"); menu.add(item);
+                var itemUi = item.getUI();
+                var popupUi = menu.getUI();
+                for (int open = 0; open < 3; open++)
+                    for (var listener : menu.getPopupMenuListeners())
+                        listener.popupMenuWillBecomeVisible(new javax.swing.event.PopupMenuEvent(menu));
+                assertSame(itemUi, item.getUI(), "A repeat open repaints over the first paint, so it must not reinstall the UI");
+                assertSame(popupUi, menu.getUI());
+                UIManager.put(key, new javax.swing.plaf.ColorUIResource(Color.MAGENTA));
+                for (var listener : menu.getPopupMenuListeners())
+                    listener.popupMenuWillBecomeVisible(new javax.swing.event.PopupMenuEvent(menu));
+                assertNotSame(itemUi, item.getUI(), "A palette change must still refresh the cached menu");
+            } finally {
+                closePopup(menu);
+                UIManager.put(key, previous);
+            }
+        });
+    }
+
+    @Test void thePopupIsTheOpaqueSurfaceSoATranslucentHoverIsDrawnOverTheThemeBackground() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            JPopupMenu menu = DatabaseUi.popupMenu();
+            JMenu nested = DatabaseUi.submenu("Export");
+            try {
+                JMenuItem count = new JMenuItem("Count rows"); count.setOpaque(true); menu.add(count);
+                menu.addSeparator(); menu.add(nested);
+                JMenuItem csv = new JMenuItem("CSV…"); csv.setOpaque(true); nested.add(csv);
+                for (var listener : menu.getPopupMenuListeners())
+                    listener.popupMenuWillBecomeVisible(new javax.swing.event.PopupMenuEvent(menu));
+                JPopupMenu child = nested.getPopupMenu();
+                for (var listener : child.getPopupMenuListeners())
+                    listener.popupMenuWillBecomeVisible(new javax.swing.event.PopupMenuEvent(child));
+                // Swing fills an opaque hovered item with the selection color alone; a translucent one must land on the popup's fill.
+                assertFalse(count.isOpaque()); assertFalse(nested.isOpaque()); assertFalse(csv.isOpaque());
+                assertTrue(menu.isOpaque()); assertTrue(child.isOpaque());
+            } finally {
+                closePopup(nested.getPopupMenu());
+                closePopup(menu);
             }
         });
     }
@@ -72,7 +120,7 @@ class DatabaseUiTest {
             for (int pass = 0; pass < 2; pass++) {
                 if (pass > 0) SwingUtilities.updateComponentTreeUI(submenu);
                 JPopupMenu popup = submenu.getPopupMenu();
-                assertFalse(popup.isOpaque());
+                assertTrue(popup.isOpaque());
                 assertFalse(popup.isLightWeightPopupEnabled());
                 assertSame(submenu, popup.getInvoker());
                 assertSame(sql, submenu.getItem(0));
