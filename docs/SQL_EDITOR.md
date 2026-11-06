@@ -24,8 +24,10 @@ Completion works in `.sql` files, follows the file's dialect, and needs no short
 |---|---|
 | Start of a statement | `SELECT`, `INSERT INTO`, `UPDATE`, `DELETE FROM`, `CREATE TABLE`... plus the dialect's own (`SHOW` and `USE` for MySQL, `COPY` for PostgreSQL, `MERGE INTO` for H2 and HSQLDB) |
 | After `FROM`, `JOIN`, `UPDATE`, `INSERT INTO`, `DROP TABLE` | Tables and views of the default schema, and the other schemas (partitioned and foreign tables count as tables, materialized views as views) |
+| After `FROM`, when the select list names columns | The same, with the tables and views of the default schema that hold the most of those columns first and the columns each holds after the name: after `SELECT total, customer_id FROM`, `orders has total, customer_id` |
 | After `schema.` | That schema's tables |
 | Select list, `WHERE`, `HAVING`, `ORDER BY`, `GROUP BY` | Columns of the tables in the statement, aliases, functions, and keywords where the word before the caret ends an expression (`IS NULL`, `ASC`, `GROUP BY`...) |
+| Select list of a statement that names no table yet | Every column of the default schema, once per name, with the tables that hold it after the name (`id customers, orders, order_items`); choosing one inserts the name alone |
 | After `alias.` or `table.` | That table's columns |
 | After `JOIN`, with tables already in the statement | Every table joined to one of them by a foreign key, in either direction, first and written out with an alias and its condition: after `FROM orders o JOIN`, `customers c ON c.id = o.customer_id` and `order_items oi ON oi.order_id = o.id`. The alias is the initials of the table's words (`order_items` gives `oi`), numbered when that name is taken (`c2`) or a keyword. Plain tables follow |
 | `ON` after a `JOIN` | The foreign key equality between the joined table and an earlier one, such as `o.customer_id = c.id`, first |

@@ -251,4 +251,11 @@ class SqlStatementAnalyzerTest {
         assertFalse(at("^").lowercaseKeywords(), "nothing to follow: upper case");
         assertTrue(at("select 1;\n^").lowercaseKeywords(), "an empty statement follows the file's first keyword");
     }
+
+    @Test void aFromSlotKnowsTheNamesItsSelectListUses() {
+        assertEquals(java.util.Set.of("ID", "NAME", "TOTAL"), at("select id, c.name, upper(total) as shout from ^").usedNames());
+        assertEquals(java.util.Set.of("B"), at("select a from t where a in (select b from ^)").usedNames(), "only the caret's own query");
+        assertEquals(java.util.Set.of(), at("select * from orders o join ^").usedNames(), "a join slot has its own ranking");
+        assertEquals(java.util.Set.of(), at("delete from ^").usedNames());
+    }
 }

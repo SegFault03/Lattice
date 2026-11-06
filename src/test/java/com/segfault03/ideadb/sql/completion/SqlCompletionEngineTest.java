@@ -97,6 +97,33 @@ class SqlCompletionEngineTest {
 
     // ---- columns ---------------------------------------------------------------------------------------------------------
 
+    @Test void aSelectListBeforeItsFromOffersTheSchemasColumnsWithTheTablesThatHoldThem() {
+        var suggestions = suggest("select ^", SqlDialects.MYSQL);
+        assertEquals(List.of("id", "name", "total", "customer_id", "quantity", "order_id"), labels(suggestions, Kind.COLUMN));
+        var id = suggestions.stream().filter(s -> s.kind() == Kind.COLUMN && s.label().equals("id")).findFirst().orElseThrow();
+        assertEquals("customers, orders, order_items", id.tailText());
+        assertEquals("id", id.insertText(), "the plain name; the FROM slot infers the table");
+        var total = suggestions.stream().filter(s -> s.kind() == Kind.COLUMN && s.label().equals("total")).findFirst().orElseThrow();
+        assertEquals("orders, order_summary", total.tailText());
+        assertEquals(List.of(), labels(suggest("select ^ from log"), Kind.COLUMN), "a named table still limits the list, even one not cached");
+    }
+
+    @Test void aFromAfterTheSelectListRanksTheTablesHoldingItsColumnsFirst() {
+        var suggestions = suggest("select total, customer_id from ^", SqlDialects.MYSQL);
+        var tables = suggestions.stream().filter(s -> s.kind() == Kind.TABLE || s.kind() == Kind.VIEW).toList();
+        assertEquals(List.of("orders", "order_summary", "customers", "order_items"), tables.stream().map(SqlSuggestion::label).toList());
+        assertEquals("has total, customer_id", tables.get(0).tailText());
+        assertEquals("has total", tables.get(1).tailText());
+        assertEquals("PUBLIC", tables.get(2).tailText(), "a table holding none of them is listed as usual");
+
+        assertEquals(List.of("customers", "orders", "order_items"),
+                labels(suggest("select id, name from ^", SqlDialects.MYSQL), Kind.TABLE), "two of two before one of two");
+        assertEquals(List.of("orders", "customers", "order_items"),
+                labels(suggest("select o.total, upper(total) from ^", SqlDialects.MYSQL), Kind.TABLE), "qualified and function arguments count");
+        assertEquals(List.of("customers", "orders", "order_items"),
+                labels(suggest("select count(*) as total, nothing from ^", SqlDialects.MYSQL), Kind.TABLE), "functions, aliases and unknown names do not");
+    }
+
     @Test void theSelectListOffersColumnsFromEveryTableInScope() {
         var suggestions = suggest("select ^ from orders", SqlDialects.MYSQL);
         assertEquals(List.of("id", "total", "customer_id"), labels(suggestions, Kind.COLUMN));

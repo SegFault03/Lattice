@@ -2,6 +2,7 @@ package com.segfault03.ideadb.sql.completion;
 
 import com.segfault03.ideadb.model.ColumnMetadata;
 import com.segfault03.ideadb.model.ColumnReference;
+import com.segfault03.ideadb.service.ExplorerMetadataSnapshot;
 import com.intellij.openapi.progress.ProgressManager;
 import com.segfault03.ideadb.sql.completion.SqlContext.Position;
 import com.segfault03.ideadb.sql.completion.SqlContext.TableRef;
@@ -51,12 +52,14 @@ public final class SqlCompletionEngine {
         boolean quoted = context.openQuote() != 0;
         switch (position) {
             case TABLE_NAME -> {
+                tablesHoldingSelectedColumns(context, profile, schema, out);
                 tablesAndNamespaces(null, context, profile, schema, out);
                 relatedTables(context, profile, schema, out);
             }
             case SELECT_LIST, CONDITION, ORDER_GROUP -> {
                 if (!context.afterOperand()) {
-                    scopeColumns(context, profile, schema, out);
+                    if (position == Position.SELECT_LIST && context.tables().isEmpty()) schemaColumns(context, profile, schema, out);
+                    else scopeColumns(context, profile, schema, out);
                     scopeNames(context, profile, out);
                     joinConditions(context, profile, schema, out);
                 }
@@ -113,7 +116,68 @@ public final class SqlCompletionEngine {
         }
     }
 
+    /**
+     * A FROM written after its select list: the tables of the default schema that hold the most of the listed columns
+     * come first, and the tail names the columns each one holds. Names no table holds (keywords, expression words)
+     * do not count against a table.
+     */
+    private static void tablesHoldingSelectedColumns(SqlContext context, SqlDialectProfile profile, @Nullable SqlSchema schema,
+                                                     List<SqlSuggestion> out) {
+        if (schema == null || context.usedNames().isEmpty() || !context.joinPrior().isEmpty()) return;
+        var namespace = schema.namespace(null);
+        if (namespace == null) return;
+        Map<ExplorerMetadataSnapshot.Table, List<String>> held = new LinkedHashMap<>();
+        Set<String> known = new HashSet<>();
+        for (var table : namespace.tables()) {
+            ProgressManager.checkCanceled();
+            List<String> matches = new ArrayList<>();
+            for (ColumnMetadata column : table.columns()) {
+                if (context.usedNames().contains(column.getName().toUpperCase(Locale.ROOT))) matches.add(column.getName());
+            }
+            if (matches.isEmpty()) continue;
+            held.put(table, matches);
+            for (String match : matches) known.add(match.toUpperCase(Locale.ROOT));
+        }
+        for (var entry : held.entrySet()) {
+            var table = entry.getKey();
+            String name = table.metadata().getName();
+            boolean view = table.metadata().isView();
+            double share = (double) entry.getValue().size() / known.size();
+            out.add(new SqlSuggestion(view ? Kind.VIEW : Kind.TABLE, name, insertion(name, context, profile),
+                    view ? "view" : "table", "has " + String.join(", ", entry.getValue()), TABLE + 5 + 20 * share));
+        }
+    }
+
     // ---- columns -----------------------------------------------------------------------------------------------------
+
+    /** Most of the columns of the schema, one per name, kept short so the popup stays responsive on big schemas. */
+    private static final int SCHEMA_COLUMN_LIMIT = 2000;
+
+    /**
+     * A select list before its FROM: every column of the default schema, one entry per name with the tables that hold
+     * it in the tail. Choosing one inserts the plain name; the FROM slot then ranks those tables first.
+     */
+    private static void schemaColumns(SqlContext context, SqlDialectProfile profile, @Nullable SqlSchema schema, List<SqlSuggestion> out) {
+        if (schema == null) return;
+        var namespace = schema.namespace(null);
+        if (namespace == null) return;
+        Map<String, ColumnMetadata> first = new LinkedHashMap<>();
+        Map<String, List<String>> owners = new LinkedHashMap<>();
+        for (var table : namespace.tables()) {
+            ProgressManager.checkCanceled();
+            for (ColumnMetadata column : table.columns()) {
+                String key = column.getName();
+                if (!first.containsKey(key) && first.size() >= SCHEMA_COLUMN_LIMIT) continue;
+                first.putIfAbsent(key, column);
+                owners.computeIfAbsent(key, k -> new ArrayList<>()).add(table.metadata().getName());
+            }
+        }
+        for (var entry : first.entrySet()) {
+            List<String> tables = owners.get(entry.getKey());
+            String tail = tables.size() <= 3 ? String.join(", ", tables) : String.join(", ", tables.subList(0, 3)) + " +" + (tables.size() - 3);
+            out.add(column(entry.getValue(), insertion(entry.getKey(), context, profile), tail, COLUMN));
+        }
+    }
 
     private static void scopeColumns(SqlContext context, SqlDialectProfile profile, @Nullable SqlSchema schema, List<SqlSuggestion> out) {
         if (schema == null) return;

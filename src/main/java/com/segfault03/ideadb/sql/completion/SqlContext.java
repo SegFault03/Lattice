@@ -6,7 +6,10 @@ import org.jetbrains.annotations.Nullable;
 import java.util.List;
 import java.util.Set;
 
-/** What the caret is in: the clause, the name being typed, and which tables are in scope there. */
+/**
+ * What the caret is in: the clause, the name being typed, and which tables are in scope there. {@code usedNames} holds,
+ * upper-cased, the columns an INSERT column list already names, or at a FROM table slot the names its select list uses.
+ */
 public record SqlContext(@NotNull Position position, @NotNull String prefix, int prefixStart, char openQuote,
                          @NotNull List<String> qualifier, @NotNull List<TableRef> tables, @Nullable TableRef target,
                          @Nullable TableRef joinTarget, @NotNull List<TableRef> joinPrior, boolean afterOperand,
