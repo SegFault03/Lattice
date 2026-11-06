@@ -17,10 +17,11 @@ Validate the change through a PR targeting `main`. That workflow runs the databa
 1. Update `pluginVersion` in `gradle.properties` for ordinary local builds.
 2. Move relevant `docs/CHANGELOG.md` entries into a matching version section, including any prerelease suffix, and keep an Unreleased section for future changes.
    For a release with new workflows, also update `src/main/resources/release-notes/release.properties`:
-   set its `edition` and `since` versions and curate the illustrated guides. Keep
-   the three referenced README screenshots current. Gradle packages those PNGs and
-   the changelog, and replaces the guide's version with the actual build version,
-   including tag overrides. Keep the concise descriptor change notes aligned.
+   set its `edition` and `since` versions and curate the illustrated guides. Refresh
+   their images as described in [UI previews](UI_PREVIEW.md#whats-new-guide-images).
+   Gradle packages those PNGs and the changelog, and replaces the guide's version
+   with the actual build version, including tag overrides. Keep the concise
+   descriptor change notes aligned.
 3. Commit the preparation to `staging`, then open a PR from `staging` to `main`.
    Branch pushes run functional/build/archive checks; the main-targeted PR runs
    the full validation gate, including tooling, regression/integration, UI and

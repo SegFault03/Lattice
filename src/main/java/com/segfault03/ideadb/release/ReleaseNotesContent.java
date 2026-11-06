@@ -6,7 +6,7 @@ import java.util.*;
 
 /** Curated guides and screenshots shipped with the same version as the plugin. */
 public final class ReleaseNotesContent {
-    public record Feature(String id, String title, String description, List<String> steps, String image, String alt) {}
+    public record Feature(String id, String label, String title, String description, List<String> steps, String image, String alt) {}
     private static final Properties CONTENT = load();
     private ReleaseNotesContent() {}
 
@@ -26,7 +26,7 @@ public final class ReleaseNotesContent {
     public static String since() { return CONTENT.getProperty("since"); }
     public static String summary() { return CONTENT.getProperty("summary"); }
     public static List<Feature> features() {
-        return Arrays.stream(CONTENT.getProperty("features").split(",")).map(id -> new Feature(id,
+        return Arrays.stream(CONTENT.getProperty("features").split(",")).map(id -> new Feature(id, CONTENT.getProperty(id + ".label"),
                 CONTENT.getProperty(id + ".title"), CONTENT.getProperty(id + ".description"),
                 List.of(CONTENT.getProperty(id + ".steps").split("\\|")),
                 "/release-notes/images/" + CONTENT.getProperty(id + ".image"), CONTENT.getProperty(id + ".alt"))).toList();

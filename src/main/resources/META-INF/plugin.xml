@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.segfault03.lattice</id>
     <name>Lattice</name>
-    <version>0.1.0-alpha</version>
+    <version>0.2.0-alpha</version>
     <vendor url="https://github.com/SegFault03/Lattice">Lattice contributors</vendor>
 
     <description><![CDATA[
@@ -18,21 +18,22 @@
         <li><b>SQL Query Console:</b> Execute queries with Ctrl+Enter, result tables, affected row counts, elapsed time, query history, timeouts and cancellation.</li>
         <li><b>Visual Table Design:</b> Create and alter tables with column navigation and complete SQL previews. Batch column changes, rename tables and retain unfinished edits after partial DDL failures.</li>
         <li><b>Export:</b> Export data directly to CSV, JSON, and SQL INSERTs, and export/view CREATE TABLE DDL.</li>
-        <li><b>SQL Highlighting, Completion, Hover and Validation:</b> Dialect-aware highlighting, schema-aware completion (tables, columns, joins, keywords), hover details (comments, types, keys) and local validation (syntax errors, unknown tables and columns) for .sql files and for SQL strings in Java and Kotlin code, following the connection you choose, or the one your Spring or Jakarta EE configuration points at. Turn it off in Settings | Tools | Lattice SQL Editor.</li>
+        <li><b>SQL Highlighting, Completion, Hover and Validation:</b> Dialect-aware highlighting, schema-aware completion (tables, columns, joins, keywords), hover details (comments, types, keys) and local validation (syntax errors, unknown tables and columns) for .sql files and for SQL strings in Java and Kotlin code, following the connection you choose, or the one your Spring or Jakarta EE configuration points at. Turn it off in Settings | Tools | Lattice SQL Editor. Where the IDE's Database plugin is enabled, this support starts off.</li>
+        <li><b>SQL Cards and Dry Runs:</b> Run, Send to Console, Explain and Run and Roll Back statements from a card behind each one, with parameter values typed in place. Available where the IDE's Database plugin is disabled.</li>
         <li><b>What's New:</b> Illustrated, offline feature guides in an editor tab, with a dismissible once-per-version update notice.</li>
     </ul>
     <p>Requires IntelliJ IDEA 2025.1 or later and the IDE's Java 21+ runtime. This is an alpha release; see the project documentation for database compatibility and limitations.</p>
     <h4>Coming soon:</h4>
-    <p>The roadmap includes generating POJOs, DTOs and JavaBeans; query preview and running SQL from your code in the Lattice console; and table relationship graphs and dependency trees. These features are not available yet.</p>
+    <p>The roadmap includes generating POJOs, DTOs and JavaBeans; running a whole SQL file in the Lattice console; and table relationship graphs and dependency trees. These features are not available yet.</p>
     ]]></description>
 
     <change-notes><![CDATA[
     <ul>
-        <li>Connect to PostgreSQL and H2 alongside MySQL and HSQLDB; search and filter grouped data sources.</li>
-        <li>Inspect values and column details, keep NULL/default choices in drafts, and stage changes before committing.</li>
-        <li>Review complete SQL previews in the redesigned create/alter table dialogs.</li>
-        <li>Browse cached metadata offline; refresh saved connections on startup while preserving the explorer's expansion, selection and scroll position.</li>
-        <li>Read illustrated, offline release guides from What's New in Lattice, with a once-per-version update notice.</li>
+        <li>Write SQL with your schema at hand: dialect highlighting, schema colors, completion with foreign key joins, and hover cards in .sql files and SQL strings in Java and Kotlin.</li>
+        <li>Catch syntax errors and unknown tables and columns as you type, with no calls to the database.</li>
+        <li>Run, Explain, Send to Console or Run and Roll Back a statement from its SQL card, with parameter values typed in place.</li>
+        <li>Find the databases your project's configuration files point at, and apply a saved connection that matches.</li>
+        <li>Read the illustrated guides in What's New in Lattice. Where the IDE's Database plugin is enabled, SQL support starts off, and SQL cards and dry runs need that plugin disabled.</li>
     </ul>
     ]]></change-notes>
 

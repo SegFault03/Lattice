@@ -23,21 +23,23 @@ Lattice is a database client for IntelliJ IDEA. Connect to MySQL, PostgreSQL, HS
 - Offline schema browsing from cached metadata; changes refresh the explorer and affected editors.
 - Passwords and custom JDBC URLs stored through IntelliJ PasswordSafe.
 
-## 0.1.0-alpha highlights
+## 0.2.0-alpha highlights
 
-**0.1.0-alpha** is a minor alpha release, with the following changes since
-**0.0.2-alpha**. Open **Tools → What's New in Lattice**
+**0.2.0-alpha** is a minor alpha release, with the following changes since
+**0.1.0-alpha**. Open **Tools → What's New in Lattice**
 or use the link on Lattice's welcome screen for illustrated, offline feature guides.
 A dismissible update notice appears once per version across projects; **Don't show
 again** disables future notices without hiding the guide.
 
-- **PostgreSQL and H2:** PostgreSQL adds schema browsing and transactional DDL. H2 supports memory, file and TCP connections, with service workflows for MySQL/PostgreSQL compatibility modes.
-- **Explorer:** Group and filter connections by engine, search across sources and database objects, identify key columns, and browse cached metadata offline. Startup and later refreshes preserve the current explorer view.
-- **Table work:** Inspect formatted or raw values and column definitions, stage edits explicitly, recover drafts, and apply create/alter batches with SQL previews.
-- **Drivers and sessions:** Reuse verified downloads, discover Maven-cached and project-default drivers in the background, and safely retire connections when sessions change.
-- **Welcome screen:** A refreshed starting point now reflects all four supported databases and current query, edit and export workflows.
+- **Schema-aware SQL:** Dialect highlighting, schema colors, completion with foreign key joins, and hover cards in `.sql` files and in SQL strings in Java and Kotlin.
+- **SQL cards and dry runs:** Run, Explain, Send to Console or Run and Roll Back a statement from the card behind it, with parameter values typed in place.
+- **Validation:** Syntax errors and unknown tables and columns are underlined as you type, with no calls to the database.
+- **Project connections:** Lattice reads the databases your configuration files point at and applies a saved connection that matches.
+- **Everywhere SQL is shown:** The console, filter fields and table dialogs use the same highlighting and colors.
 
-See the [changelog](docs/CHANGELOG.md) and [commits since the last release](https://github.com/SegFault03/Lattice/compare/v0.0.2-alpha...main) for details.
+Where the IDE's Database plugin is enabled, Lattice's SQL support starts off, and SQL cards and dry runs need that plugin disabled; see [SQL editor support](docs/SQL_EDITOR.md#intellij-idea-ultimate).
+
+See the [changelog](docs/CHANGELOG.md) and [commits since the last release](https://github.com/SegFault03/Lattice/compare/v0.1.0-alpha...main) for details.
 
 ## Screenshots
 

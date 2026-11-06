@@ -110,10 +110,6 @@ tasks.processResources {
     filesMatching("release-notes/release.properties") {
         expand("version" to project.version.toString())
     }
-    from("screenshots") {
-        include("side-panel.png", "alter-table-dialog.png", "connection-dialog.png")
-        into("release-notes/images")
-    }
     from("docs/CHANGELOG.md") { into("release-notes") }
 }
 

@@ -4,12 +4,14 @@ Patch notes are selected by the exact release version, including prerelease suff
 
 ## [Unreleased]
 
+## [0.2.0-alpha]
+
 ### SQL editor
 
 - Ask for parameter values in the statement's own card instead of a dialog: on Run, Run and Roll Back or Explain the card lifts over the editor with a field in place of each `?`, `:name` or `$1`. What you type is written into the SQL exactly as typed (quotes included), with no type hints; fields start at a fixed width and grow with their value, and the buttons sit at the left. Enter runs, Esc or switching editor tabs cancels. Send to Console copies the statement into the console as written, without asking for values.
 - Show Lattice's state for the file at the editor's top right, beside the error counts (not in the SQL console): a spinner while the schema is read or the SQL is checked, and otherwise whether names can be checked (no connection, schema unreadable, out of date, ready). Click for details, Reload Schema and the connection chooser.
 - Pin a SQL card's toolbar while the caret is in the card: clicking inside the card no longer dismisses it, typing and scrolling keep it (it follows the card), and it appears when the caret enters a card. After an edit its buttons work on the statement at the caret until the card has been read again, and it closes after one of its actions until the caret leaves and re-enters.
-- Color names by what they are once the connection's schema is cached: tables, views and aliases each have a color in one of four families you choose in the SQL editor settings (Coral, Periwinkle, Lime or Neutral, with the choice shown on a light and a dark editor), and columns are gold (primary key), purple (foreign key) or colored by the kind of value they hold. The colors apply in `.sql` files, SQL in strings, the SQL console and filter fields, and the Generated SQL, Create table, Alter table and parameter previews, follow the editor color scheme (Settings | Editor | Color Scheme | Lattice SQL | Schema names), and are the ones the hover cards use.
+- Color names by what they are once the connection's schema is cached: tables, views and aliases each have a color in one of four families you choose in the SQL editor settings (Periwinkle by default, or Coral, Lime or Neutral, with the choice shown on a light and a dark editor), and columns are gold (primary key), purple (foreign key) or colored by the kind of value they hold. The colors apply in `.sql` files, SQL in strings, the SQL console and filter fields, and the Generated SQL, Create table, Alter table and parameter previews, follow the editor color scheme (Settings | Editor | Color Scheme | Lattice SQL | Schema names), and are the ones the hover cards use.
 - Highlight `.sql` files for the database dialect of the connection you choose (MySQL, PostgreSQL, HSQLDB, H2, or generic SQL), with its own colors, a connection banner, per-file and project defaults, and Settings | Tools | Lattice SQL Editor. This replaces the IDE's highlighting-only SQL file type for `.sql`; a notice offers to turn it off, and it starts off where the Ultimate Database plugin is enabled.
 - Complete keywords, functions, types, tables, views, aliases and columns in `.sql` files for the dialect of the file's connection, with foreign key joins after `JOIN` and join conditions after `ON`, explorer icons with `PK`/`FK` flags, columns of the statement's tables, quoting that follows the dialect's case folding, and an option in Settings | Tools | Lattice SQL Editor.
 - Validate SQL locally, with no database calls: syntax errors, unknown tables and columns (with "did you mean" fixes), ambiguous columns and alias mistakes, as five inspections under Editor | Inspections | Lattice SQL. The schema checks use only the cached schema, stay silent when it may be out of date, and skip queries they cannot fully see.
@@ -45,6 +47,7 @@ Patch notes are selected by the exact release version, including prerelease suff
 - Keep the selection and column widths when a table refreshes, reuse an editor's read connection between pages, and keep the page-size control in sync when a reload is refused.
 - Offer each engine's common column types in create and alter dialogs, accept typed types for every engine, quote text defaults such as `42`, and change only the edited clauses when altering a PostgreSQL column.
 - Show the table footer in one row, show key columns by icon alone (auto-increment is listed in the inspector), and use platform selection colors and a dark-theme MySQL logo in the table dialogs.
+- Update What's New in Lattice with illustrated guides to the SQL editor features.
 
 ## [0.1.0-alpha]
 

@@ -74,6 +74,7 @@ test-binaries/
 !/assets/icon.png
 !/src/main/resources/META-INF/pluginIcon.png
 !/src/main/resources/META-INF/pluginIcon@2x.png
+!/src/main/resources/release-notes/images/*.png
 !/screenshots/side-panel.png
 !/screenshots/welcome.png
 !/screenshots/alter-table-dialog.png

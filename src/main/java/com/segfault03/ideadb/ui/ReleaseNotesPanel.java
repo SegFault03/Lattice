@@ -36,11 +36,10 @@ public final class ReleaseNotesPanel extends JPanel {
         summary.setFont(font().deriveFont(font().getSize2D() + 2)); introduction.add(summary);
         JPanel navigation = new JPanel(new FlowLayout(FlowLayout.LEADING, JBUI.scale(16), 0));
         navigation.setOpaque(false);
-        String[] labels = {"Value inspector", "Alter table", "Connections"};
         var features = ReleaseNotesContent.features();
-        for (int i = 0; i < features.size(); i++) {
-            String id = features.get(i).id();
-            ActionLink link = new ActionLink(labels[i]);
+        for (var feature : features) {
+            String id = feature.id();
+            ActionLink link = new ActionLink(feature.label());
             link.addActionListener(event -> scrollTo(id)); navigation.add(link);
         }
         introduction.add(navigation); content.add(introduction);

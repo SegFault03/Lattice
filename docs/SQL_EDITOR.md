@@ -49,16 +49,16 @@ Details:
 
 Once the file's connection has its schema cached, names the schema knows are colored by what they are, on top of the syntax colors:
 
-| Name | Look (coral, the default) |
+| Name | Look (periwinkle, the default) |
 |---|---|
-| Table | coral, bold |
-| View | salmon, bold italic |
-| Table alias, and the alias in `o.id` | light coral |
+| Table | periwinkle, bold |
+| View | lighter periwinkle, bold italic |
+| Table alias, and the alias in `o.id` | light periwinkle |
 | Primary key column | gold, bold |
 | Foreign key column | purple, bold |
 | Any other column | by the kind of value it holds: numbers blue, text green, dates and times orange, booleans teal, binary pink, JSON, enums and the like tan |
 
-Tables, views and aliases come in four families, chosen under **Settings | Tools | Lattice SQL Editor | Schema name colors**, with the families listed on the left and the same SQL shown on a light and on a dark editor on the right (the defaults of the family; colors you have set in the color scheme are not shown): **Coral** (the default), **Periwinkle**, **Lime**, and **Neutral**, which uses the editor's text color (bold for tables and views, faded for aliases) and so follows any theme. Columns look the same in every family. A column that is both a primary key and a foreign key shows as a primary key. Names the schema does not know (a typo, an expression alias, a derived table) and files with no connection keep the syntax colors. The colors are the same everywhere SQL is shown: `.sql` files, SQL in Java and Kotlin strings and its cards, the SQL console and the WHERE and ORDER BY fields, the Generated SQL, Create table and Alter table previews, the parameter card, and the hover cards. They are read from the cached schema only (a dialog opened before the schema is cached shows the syntax colors alone), and follow the editor color scheme: each family's colors are keys under **Settings | Editor | Color Scheme | Lattice SQL | Schema names**, with defaults that are lighter on a dark scheme and deeper on a light one. The hover cards use the same colors. They turn off with **Syntax highlighting** in the SQL editor settings, and files over 300,000 characters keep the syntax colors only.
+Tables, views and aliases come in four families, chosen under **Settings | Tools | Lattice SQL Editor | Schema name colors**, with the families listed on the left and the same SQL shown on a light and on a dark editor on the right (the defaults of the family; colors you have set in the color scheme are not shown): **Coral**, **Periwinkle** (the default), **Lime**, and **Neutral**, which uses the editor's text color (bold for tables and views, faded for aliases) and so follows any theme. Columns look the same in every family. A column that is both a primary key and a foreign key shows as a primary key. Names the schema does not know (a typo, an expression alias, a derived table) and files with no connection keep the syntax colors. The colors are the same everywhere SQL is shown: `.sql` files, SQL in Java and Kotlin strings and its cards, the SQL console and the WHERE and ORDER BY fields, the Generated SQL, Create table and Alter table previews, the parameter card, and the hover cards. They are read from the cached schema only (a dialog opened before the schema is cached shows the syntax colors alone), and follow the editor color scheme: each family's colors are keys under **Settings | Editor | Color Scheme | Lattice SQL | Schema names**, with defaults that are lighter on a dark scheme and deeper on a light one. The hover cards use the same colors. They turn off with **Syntax highlighting** in the SQL editor settings, and files over 300,000 characters keep the syntax colors only.
 
 ## Hover details
 
@@ -302,7 +302,7 @@ Lattice's SQL editor needs IntelliJ IDEA 2025.1 or later (build 251+). SQL in Ja
 
 ## IntelliJ IDEA Ultimate
 
-The Database plugin brings its own SQL support. Where it is enabled, Lattice's SQL editor support starts off and a one-time notice offers to turn it on. Behavior with both active has not been tested, so leave it off unless you want to try.
+The Database plugin brings its own SQL support, and unified IntelliJ IDEA builds bundle it. Where it is enabled, Lattice's SQL editor support starts off and a one-time notice offers to turn it on. Behavior with both active has not been tested, so leave it off unless you want to try. SQL cards and the Run, Send to Console, Explain and Run and Roll Back actions stay unavailable while the Database plugin is enabled, whatever this setting says; disable that plugin to use them.
 
 ## Limits
 
