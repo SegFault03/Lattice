@@ -118,6 +118,14 @@
       "platforms": ["linux", "windows", "macos"], "ci_hosts": ["linux"], "requires": ["java21"]
     },
     {
+      "id": "ide-2026.2.3", "group": "ide-compatibility", "phase": "ide", "kind": "verifier", "version": "2026.2.3",
+      "platforms": ["linux", "windows", "macos"], "ci_hosts": ["linux"], "requires": ["java21"]
+    },
+    {
+      "id": "ide-2026.3", "group": "ide-compatibility", "phase": "ide", "kind": "verifier", "version": "2026.3",
+      "platforms": ["linux", "windows", "macos"], "ci_hosts": ["linux"], "requires": ["java21"]
+    },
+    {
       "id": "jdbc-mysql", "group": "database-compatibility", "phase": "database", "kind": "database", "mode": "mysql",
       "platforms": ["linux", "windows"], "ci_hosts": ["linux"],
       "unsupported": {"macos": "The one-shot database matrix supports Linux Docker and native Windows fixtures."},

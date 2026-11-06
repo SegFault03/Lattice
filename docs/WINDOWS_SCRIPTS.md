@@ -146,7 +146,7 @@ Add `--windows-ui` for the Windows-supported UI cases:
 .\scripts\windows\one-shot-test.ps1 --windows-ui @deps
 ```
 
-The three mode flags are mutually exclusive: `--skip-compatibility` runs routine build/live checks; `--compatibility-only` runs packaging, IDE verification and database matrices; `--database-compatibility-only` runs just the database matrices. `--windows-ui` is available only with the full suite and requires an interactive 1440x800+ desktop. It runs editor recovery assertions plus HSQLDB, alter-table, table-dialogs, scaled cell-inspector and search UI scenarios; PostgreSQL and H2 real-IDE flows require Linux fixtures. With `--binaries-dir`, matrix JARs and prepared UI fixtures are retained under `jdbc-cache/` and `ui-maven-repository/` even when `--cleanup` is set. Repeat `--ide-sdk VERSION=PATH` for 2025.1/2025.2/2025.3 and `--mysql-home VERSION=PATH` for 5.5.62/5.6.51/5.7.44/8.4.2. `--jdbc-dir` contains mysql/ and hsqldb/ subfolders; `--java8-home` is the legacy runtime. Failures save logs under build/one-shot-test/. Fixtures choose free loopback ports automatically, including each matrix server. `--mysql-port PORT` / `--hsqldb-port PORT` request fixed free ports for MySQL and the live HSQLDB fixture. Allow at least 10 GiB free workspace space.
+The three mode flags are mutually exclusive: `--skip-compatibility` runs routine build/live checks; `--compatibility-only` runs packaging, IDE verification and database matrices; `--database-compatibility-only` runs just the database matrices. `--windows-ui` is available only with the full suite and requires an interactive 1440x800+ desktop. It runs editor recovery assertions plus HSQLDB, alter-table, table-dialogs, scaled cell-inspector and search UI scenarios; PostgreSQL and H2 real-IDE flows require Linux fixtures. With `--binaries-dir`, matrix JARs and prepared UI fixtures are retained under `jdbc-cache/` and `ui-maven-repository/` even when `--cleanup` is set. Repeat `--ide-sdk VERSION=PATH` for 2025.1/2025.2/2025.3/2026.2.3/2026.3 and `--mysql-home VERSION=PATH` for 5.5.62/5.6.51/5.7.44/8.4.2. `--jdbc-dir` contains mysql/ and hsqldb/ subfolders; `--java8-home` is the legacy runtime. Failures save logs under build/one-shot-test/. Fixtures choose free loopback ports automatically, including each matrix server. `--mysql-port PORT` / `--hsqldb-port PORT` request fixed free ports for MySQL and the live HSQLDB fixture. Allow at least 10 GiB free workspace space.
 
 Complete options (forwarded unchanged to Python):
 
@@ -357,12 +357,13 @@ Run JetBrains Plugin Verifier against one plugin ZIP and one IntelliJ SDK.
 .\scripts\windows\verify-plugin.ps1 $zip --ide-version 2025.1 @deps
 ```
 
-The ZIP is a required positional argument. `--ide-version` is 2025.1 (default), 2025.2 or 2025.3. `--ide-home` supplies its extracted SDK, and `--verifier-jar` supplies checksum-pinned Verifier 1.410. `--reports` defaults to build/compatibility/verifier-ci/; each invocation gets a unique report directory. `--cache` selects a legacy static SDK/verifier cache; prefer shared dependency flags for new commands.
+The ZIP is a required positional argument. `--ide-version` is 2025.1 (default), 2025.2, 2025.3, 2026.2.3 or 2026.3. `--ide-home` supplies its extracted SDK, and `--verifier-jar` supplies checksum-pinned Verifier 1.410. `--reports` defaults to build/compatibility/verifier-ci/; each invocation gets a unique report directory. `--cache` selects a legacy static SDK/verifier cache; prefer shared dependency flags for new commands.
 
 Complete options (forwarded unchanged to Python):
 
 ```text
-usage: verify-plugin.py [-h] [--ide-version {2025.1,2025.2,2025.3}]
+usage: verify-plugin.py [-h]
+                        [--ide-version {2025.1,2025.2,2025.3,2026.2.3,2026.3}]
                         [--ide-home IDE_HOME] [--java-home JAVA_HOME]
                         [--cache CACHE] [--verifier-jar VERIFIER_JAR]
                         [--download-dir DOWNLOAD_DIR] [--cleanup]
@@ -376,7 +377,7 @@ positional arguments:
 
 options:
   -h, --help            show this help message and exit
-  --ide-version {2025.1,2025.2,2025.3}
+  --ide-version {2025.1,2025.2,2025.3,2026.2.3,2026.3}
   --ide-home IDE_HOME
   --java-home JAVA_HOME
   --cache CACHE

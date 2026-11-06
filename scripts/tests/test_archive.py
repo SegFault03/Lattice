@@ -23,7 +23,7 @@ class ArchiveTests(unittest.TestCase):
             outer.writestr("Lattice/lib/mysql-connector-j-26.7.0.jar", "driver")
             outer.writestr("Lattice/lib/hsqldb-2.7.4.jar", "driver")
             outer.writestr("Lattice/lib/postgresql-42.7.14.jar", "driver")
-            outer.writestr("Lattice/lib/h2-2.3.232.jar", "driver")
+            outer.writestr("Lattice/lib/h2-2.5.252.jar", "driver")
             outer.writestr("Lattice/lib/protobuf-java-4.36.2.jar", "runtime")
             if extra:
                 outer.writestr(extra, "unwanted")

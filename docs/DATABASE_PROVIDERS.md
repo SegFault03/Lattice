@@ -115,7 +115,7 @@ and support for non-JDBC sources are outside the provider contract.
 
 ## H2 validation scope
 
-The bundled H2 2.3.232 runs in ordinary `test`: the shared end-to-end service
+The bundled H2 2.5.252 runs in ordinary `test`: the shared end-to-end service
 workflow covers schema/table DDL, browsing, grid mutations and rollback,
 pagination, export/reimport, console namespace selection and table alterations.
 `H2FeatureTest` covers file persistence, generated columns, identity and timestamp
@@ -127,9 +127,9 @@ accepts H2 2.x; older 1.x databases require an external migration.
 and recovery checks. `H2RegressionTest` also covers typed export replay, native
 view DDL, identity state, failed batches/alterations, transaction ownership,
 cancellation races and timeouts. The compatibility matrix tests H2 2.1.214,
-2.2.224 and 2.3.232 across memory/file, all TCP driver/server pairs and MySQL/
-PostgreSQL compatibility-mode service workflows. Java 8 runs 2.1/2.2; 2.3 requires
-Java 11+ bytecode and is exercised on Java 21 with an expected Java 8 rejection.
+2.2.224, 2.3.232 and 2.5.252 across memory/file, all TCP driver/server pairs and MySQL/
+PostgreSQL compatibility-mode service workflows. Java 8 runs 2.1/2.2; 2.3 and 2.5 require
+Java 11+ bytecode and are exercised on Java 21 with an expected Java 8 rejection.
 
 The real IntelliJ UI scenario supports an H2 TCP fixture with full dark/light
 functional checks. See [H2 validation](H2_TESTING.md) for suite boundaries,

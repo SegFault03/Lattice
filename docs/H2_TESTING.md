@@ -52,16 +52,16 @@ complete definition, so unrelated update expressions and identity options surviv
 
 ## Driver/runtime matrix
 
-The matrix uses drivers and servers **2.1.214**, **2.2.224** and **2.3.232**:
+The matrix uses drivers and servers **2.1.214**, **2.2.224**, **2.3.232** and **2.5.252**:
 
-- Six embedded cases: memory and file mode with each selected driver.
-- Five TCP cases: each matching driver/server, plus oldest/newest in both directions.
-- Six mode cases: MySQL and PostgreSQL compatibility modes with each driver.
-- A negative runtime check: 2.3.232 must reject Java 8 with `UnsupportedClassVersionError`.
+- Eight embedded cases: memory and file mode with each selected driver.
+- Six TCP cases: each matching driver/server, plus oldest/newest in both directions.
+- Eight mode cases: MySQL and PostgreSQL compatibility modes with each driver.
+- Negative runtime checks: 2.3.232 and 2.5.252 must reject Java 8 with `UnsupportedClassVersionError`.
 
 2.1.214 and 2.2.224 run both as Java 8 probes/servers and as isolated drivers in the
-Java 21 plugin JVM. 2.3.232 has Java 11 bytecode and runs on Java 21; it cannot run
-on Java 8. The matrix reports the actual JVM versions. It does not test Java 11
+Java 21 plugin JVM. 2.3.232 and 2.5.252 have Java 11 bytecode and run on Java 21;
+they cannot run on Java 8. The matrix reports the actual JVM versions. It does not test Java 11
 itself, H2 1.x migration, arbitrary third-party types or all compatibility-mode SQL.
 
 Results are in `build/compatibility/h2/results.txt` for the matrix-only command or

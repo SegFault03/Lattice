@@ -808,8 +808,8 @@ class IntellijUiScreenshotTest {
 
                 if (h2) {
                     connectionDialog.x { byAccessibleName("H2") }.waitFound().click()
-                    availableDriverCombo.selectItem("2.3.232 · Bundled")
-                    assertDriverSummary(connectionDialog, "2.3.232 · Bundled")
+                    availableDriverCombo.selectItem("2.5.252 · Bundled")
+                    assertDriverSummary(connectionDialog, "2.5.252 · Bundled")
                     val mode = connectionDialog.x(JComboBoxUiComponent::class.java) { and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"), byAccessibleName("Mode:")) }.waitFound()
                     mode.selectItem("In-Memory (mem)")
                     val h2MemoryName = connectionDialog.x(JTextFieldUI::class.java) { and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("Database name:")) }.waitFound()
@@ -906,7 +906,7 @@ class IntellijUiScreenshotTest {
                     captureScreen(screenshotsDirectory.resolve("connection-context-menu.png"))
                     frame.x { byVisibleText("Edit connection…") }.waitFound().click()
                     frame.x(DialogUiComponent::class.java) { byTitle("Edit connection") }.waitFound().also {
-                        assertDriverSummary(it, if (h2) "2.3.232 · Bundled" else if (postgres) "42.7.14 · Bundled" else "2.7.3-jdk8 · Downloaded")
+                        assertDriverSummary(it, if (h2) "2.5.252 · Bundled" else if (postgres) "42.7.14 · Bundled" else "2.7.3-jdk8 · Downloaded")
                         captureScreen(screenshotsDirectory.resolve("edit-connection.png"))
                         it.pressButton("Cancel")
                     }
@@ -1786,7 +1786,7 @@ class IntellijUiScreenshotTest {
                 if (!postgres && !h2 && !System.getProperty("ui.skip.remote.downloads", "false").toBoolean())
                     appendLine("Driver download flow: MySQL 5.1.49 downloaded from Maven Central; progress bar displayed and download controls were disabled during transfer")
                 if (h2) {
-                    appendLine("H2 driver selection: 2.3.232 · BUNDLED; memory/file/server forms inspected")
+                    appendLine("H2 driver selection: 2.5.252 · BUNDLED; memory/file/server forms inspected")
                     appendLine("H2 TCP fixture: production connection test, schema/table DDL, grid validation/commit/revert, CSV/JSON/SQL exports, query cancellation and session recovery verified")
                 }
                 if (postgres) {
@@ -1802,7 +1802,7 @@ class IntellijUiScreenshotTest {
                 appendLine("JetBrains ActionLink child bounds on Welcome screen: $jetBrainsActionLinkBounds")
                 appendLine("IDE JBR release: ${Files.readString(ideHome.resolve("jbr/release")).lineSequence().filter { it.startsWith("JAVA_VERSION=") || it.startsWith("IMPLEMENTOR=") }.joinToString(", ")}")
                 appendLine("Test worker JVM: ${System.getProperty("java.version")} (${System.getProperty("java.vendor")})")
-                appendLine("Connection flow: ${if (h2) "H2 TCP server / H2 2.3.232" else if (postgres) "PostgreSQL server $postgresPort / pgJDBC 42.7.14" else "HSQLDB in-memory server"}; live test connection succeeded")
+                appendLine("Connection flow: ${if (h2) "H2 TCP server / H2 2.5.252" else if (postgres) "PostgreSQL server $postgresPort / pgJDBC 42.7.14" else "HSQLDB in-memory server"}; live test connection succeeded")
                 appendLine("Table insert validation: empty row displayed its auto ID and nullable timestamp defaults, marked its missing required name invalid, and kept Commit disabled until the name was supplied")
                 appendLine("Table edit validation: unchanged integer stayed clean; invalid integer was highlighted and blocked Commit; restoring the original stayed clean; a valid changed integer committed and reloaded")
                 appendLine("Table flow: created LATTICE_PEOPLE through the production dialog, inserted Ada Lovelace, and edited its ID through the production data grid")

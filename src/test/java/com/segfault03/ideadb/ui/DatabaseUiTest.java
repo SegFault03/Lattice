@@ -6,6 +6,29 @@ import java.awt.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DatabaseUiTest {
+    @Test void aSolidColorIconKeepsItsSizeAndAlphaAndReplacesEveryColor() {
+        Icon source = new Icon() {
+            @Override public void paintIcon(Component component, Graphics graphics, int x, int y) {
+                graphics.setColor(new Color(40, 90, 200, 128));
+                graphics.fillRect(x, y, 2, 4);
+            }
+            @Override public int getIconWidth() { return 4; }
+            @Override public int getIconHeight() { return 4; }
+        };
+        Icon white = DatabaseUi.solidColorIcon(source, new Color(255, 255, 255, 10));
+        assertEquals(4, white.getIconWidth());
+        assertEquals(4, white.getIconHeight());
+        var target = new java.awt.image.BufferedImage(6, 6, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = target.createGraphics();
+        white.paintIcon(null, graphics, 1, 1);
+        graphics.dispose();
+        Color painted = new Color(target.getRGB(1, 1), true);
+        assertEquals(new Color(255, 255, 255).getRGB() & 0x00FFFFFF, painted.getRGB() & 0x00FFFFFF, "Gray and tinted glyphs must become the requested color");
+        assertTrue(Math.abs(painted.getAlpha() - 128) <= 1, "The source alpha must survive: " + painted.getAlpha());
+        assertEquals(0, new Color(target.getRGB(4, 1), true).getAlpha(), "Transparent pixels must stay transparent");
+        assertEquals(0, new Color(target.getRGB(0, 0), true).getAlpha(), "The icon must paint at its position");
+    }
+
     @Test void cachedPopupAndSubmenuRefreshTheirPaletteOnEveryOpen() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             String[] keys = {"PopupMenu.background", "MenuItem.background", "MenuItem.foreground"};

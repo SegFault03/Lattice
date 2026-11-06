@@ -77,6 +77,34 @@ class DatabaseProviderTest {
         assertFalse(mysql.isolatesClass(hsql.driverClasses().getFirst()));
     }
 
+    @Test void releasesBelowThePatchedFloorWarnWhileNewerOrUnrecognizedOnesDoNot() {
+        var hsql = DatabaseProviders.get(DatabaseType.HSQLDB).driver();
+        var mysql = DatabaseProviders.get(DatabaseType.MYSQL).driver();
+        var postgres = DatabaseProviders.get(DatabaseType.POSTGRESQL).driver();
+        var h2 = DatabaseProviders.get(DatabaseType.H2).driver();
+        for (String affected : List.of("2.6.1-jdk8", "2.7.0", "2.5.2", "2.2.9")) assertFalse(hsql.securityWarning(affected).isEmpty(), affected);
+        for (String affected : List.of("8.1.0", "8.0.33", "5.1.49")) assertFalse(mysql.securityWarning(affected).isEmpty(), affected);
+        for (String affected : List.of("42.7.11", "42.7.3", "42.2.27")) assertFalse(postgres.securityWarning(affected).isEmpty(), affected);
+        assertFalse(h2.securityWarning("2.1.214").isEmpty());
+        for (String patched : List.of("2.7.1", "2.7.1-jdk8", "2.7.4")) assertEquals("", hsql.securityWarning(patched), patched);
+        for (String patched : List.of("8.2.0", "9.0.0", "26.7.0")) assertEquals("", mysql.securityWarning(patched), patched);
+        for (String patched : List.of("42.7.12", "42.7.14")) assertEquals("", postgres.securityWarning(patched), patched);
+        assertEquals("", h2.securityWarning("2.2.220"));
+        assertTrue(hsql.securityWarning("2.6.1-jdk8").contains("2.7.1"));
+        // A local JAR's label can be a file name or a manifest value rather than a clean release.
+        assertFalse(mysql.securityWarning("8.0.33 (Revision: abc.def)").isEmpty());
+        for (String unrecognized : List.of("", "custom-driver.jar", "private-build"))
+            assertEquals("", mysql.securityWarning(unrecognized), unrecognized);
+        assertEquals("", mysql.securityWarning(null));
+    }
+
+    @Test void theNewestSuggestedDriverOfEveryEngineIsClearOfAdvisories() {
+        for (DatabaseType type : DatabaseType.values()) {
+            var driver = DatabaseProviders.get(type).driver();
+            assertEquals("", driver.securityWarning(driver.suggestedVersions().getFirst()), type.name());
+        }
+    }
+
     @Test void customUrlsAndEmbeddedModesPreserveConnectionOptions() {
         assertEquals(HsqlMode.MEM, new ConnectionConfig(DatabaseType.MYSQL, "legacy defaults").getHsqlMode());
         var config = new ConnectionConfig(DatabaseType.HSQLDB, "embedded");

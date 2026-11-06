@@ -75,7 +75,7 @@ dependencies {
     }
 
     implementation("org.postgresql:postgresql:42.7.14") { exclude(group = "org.checkerframework", module = "checker-qual") }
-    implementation("com.h2database:h2:2.3.232")
+    implementation("com.h2database:h2:2.5.252")
     implementation("org.hsqldb:hsqldb:2.7.4")
     implementation("com.mysql:mysql-connector-j:26.7.0")
     constraints {

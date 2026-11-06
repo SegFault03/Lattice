@@ -18,6 +18,16 @@ public interface DriverDescriptor {
     String artifactPath(String selection);
     default String baseVersion(String selection) { return selection; }
     default boolean includesRelease(String version) { return acceptsVersion(version); }
+    /** The first release clear of every published advisory; blank when none is known. */
+    default String firstPatchedVersion() { return ""; }
+    /** Old servers can need affected releases, so they stay selectable with a warning. Blank for a safe or unrecognized version. */
+    default String securityWarning(String version) {
+        String patched = firstPatchedVersion();
+        String release = version == null ? "" : version.strip();
+        if (patched.isEmpty() || !release.matches("\\d+(\\.\\d+)+.*") || DriverVersionOrder.descending(release, patched) <= 0) return "";
+        return displayName() + " " + release + " has known security vulnerabilities. Use " + patched
+                + " or later unless your server needs this release.";
+    }
 
     default boolean acceptsVersion(String selection) {
         try { artifactPath(selection); return true; }

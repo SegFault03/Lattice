@@ -80,6 +80,16 @@ def extract(archive, destination):
             bundle.extractall(destination, filter='data')
 
 
+def ide_release(version):
+    """Community builds end at 2025.3; later releases are published only as the unified IDE."""
+    for code in ('IIC', 'IIU'):
+        with urllib.request.urlopen(f'https://data.services.jetbrains.com/products/releases?code={code}&type=release', timeout=60) as response:
+            release = next((item for item in json.load(response)[code] if item['version'] == version), None)
+        if release:
+            return release
+    raise ValueError(f'IntelliJ IDEA has no release {version}')
+
+
 class Dependencies:
     def __init__(self, args):
         self.base = resolved_path(getattr(args, 'download_dir', None) or cache_directory())
@@ -247,10 +257,7 @@ class Dependencies:
             raise ValueError('Portable Windows IDE downloads require x64; supply --ide-home on ARM64')
         if system == 'linux' and platform.machine().lower() in ('aarch64', 'arm64'):
             system += 'ARM64'
-        with urllib.request.urlopen('https://data.services.jetbrains.com/products/releases?code=IIC&type=release', timeout=60) as response:
-            releases = json.load(response)['IIC']
-        release = next(item for item in releases if item['version'] == version)
-        package = release['downloads'][system]
+        package = ide_release(version)['downloads'][system]
         link = package['link']
         checksum_url = package['checksumLink']
         with urllib.request.urlopen(checksum_url, timeout=60) as response:

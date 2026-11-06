@@ -10,7 +10,7 @@ change.
 
 Enable Actions and configure signing secrets before tagged releases; see [signing and Marketplace publishing](MARKETPLACE.md). The publish job uses the repository's `GITHUB_TOKEN` with `contents: write`.
 
-Validate the change through a PR targeting `main`. That workflow runs the database/Java 8 and IDEA 2025.1–2025.3 compatibility matrices on the PR merge build. Every branch push runs functional/build/archive checks. The main-targeted PR additionally runs tooling, regression/integration, UI and compatibility suites; inspect its retained evidence. Merge the release commit into `main` before creating its tag. There is no manual release or hosted smoke-upload trigger; use local dry runs below.
+Validate the change through a PR targeting `main`. That workflow runs the database/Java 8 and IDEA 2025.1–2025.3, 2026.2.3 and 2026.3 compatibility matrices on the PR merge build. Every branch push runs functional/build/archive checks. The main-targeted PR additionally runs tooling, regression/integration, UI and compatibility suites; inspect its retained evidence. Merge the release commit into `main` before creating its tag. There is no manual release or hosted smoke-upload trigger; use local dry runs below.
 
 ## Prepare a version
 

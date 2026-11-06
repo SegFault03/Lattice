@@ -74,13 +74,13 @@ in the PR. Repository agent instructions are in [AGENTS.md](../AGENTS.md).
 | `tooling-tests` | Python runners, fixture ownership, Windows launcher execution, archive/release tooling, workflow event routing and release ancestry | Main PR only; Linux, Windows, macOS |
 | `backend-tests` | Remaining model/service/Swing regressions; transactions, validation, cancellation and recovery; H2 file/TCP/TLS and isolated drivers; SQL editor IDE fixtures (`platformTest`, `javaPlatformTest`, `kotlinPlatformTest`: language, completion, hover, injection, validation, project discovery) on Linux; owned MySQL/HSQLDB/PostgreSQL integration on Linux | Main PR only; three hosts, live external-engine fixtures on Linux |
 | `ui-tests` | Headless editor recovery assertions; HSQLDB full flow; mixed alter/recovery; create/mutation refresh at 125%; inspector recovery at 125% with both themes; SQL editor Send to Console, Explain and Run and Roll Back; one search, PostgreSQL and H2 flow | Main PR only; independent Linux matrix jobs |
-| `ide-compatibility` | Plugin Verifier against IDEA 2025.1, 2025.2 and 2025.3 using the exact ZIP from `functional-build` | Main PR only; one Linux job per IDE |
+| `ide-compatibility` | Plugin Verifier against IDEA 2025.1, 2025.2, 2025.3, 2026.2.3 and 2026.3 using the exact ZIP from `functional-build` | Main PR only; one Linux job per IDE |
 | `database-compatibility` | MySQL, HSQLDB, PostgreSQL and H2 server/JDBC matrices with real Java 8/21 probes and explicit unsupported-runtime checks | Main PR only; independent Linux job per engine |
 | `full-validation` | Requires all preceding groups to succeed; failures, cancellations and unexpected skipped groups fail the gate | Main PR only |
 
 The plugin itself targets Java 21 / IntelliJ build 251. Java 8 probes validate
 compatible JDBC drivers and server runtimes, not running the plugin on Java 8.
-H2 2.3's expected Java 8 rejection is part of that matrix.
+The expected Java 8 rejection of H2 2.3 and later is part of that matrix.
 The local plan is platform-specific: macOS has functional, regression and IDE
 verification adapters but no JDBC matrix adapters. Planner tests explicitly cover
 Linux, Windows and macOS rather than inheriting the test runner's host.

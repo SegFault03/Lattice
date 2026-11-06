@@ -18,6 +18,7 @@ import com.segfault03.ideadb.sql.discovery.JdbcDiscovery
 import com.segfault03.ideadb.sql.run.SqlRunState
 import com.segfault03.ideadb.state.DatabaseSettingsState
 import com.segfault03.ideadb.ui.Icons
+import javax.swing.JList
 
 /** Settings | Tools | Lattice SQL Editor | Project Defaults: what applies to the SQL of this project only. */
 class SqlProjectConfigurable(private val project: Project) : BoundConfigurable("Project Defaults"), SearchableConfigurable {
@@ -35,12 +36,14 @@ class SqlProjectConfigurable(private val project: Project) : BoundConfigurable("
         // The panel shows the saved state as soon as it exists, whether or not the caller resets it.
         val dialog = panel {
             row("Default connection:") {
-                comboBox(connections, SimpleListCellRenderer.create<Any?> { label, value, _ ->
-                    if (value is ConnectionConfig) {
-                        label.text = value.name
-                        label.icon = Icons.dataSource(value.type, 16)
-                    } else {
-                        label.text = AUTOMATIC
+                comboBox(connections, object : SimpleListCellRenderer<Any?>() {
+                    override fun customize(list: JList<out Any?>, value: Any?, index: Int, selected: Boolean, hasFocus: Boolean) {
+                        if (value is ConnectionConfig) {
+                            text = value.name
+                            icon = Icons.dataSource(value.type, 16)
+                        } else {
+                            text = AUTOMATIC
+                        }
                     }
                 }).comment("Used for SQL files and strings that have no connection of their own")
                     .onIsModified { selectedId() != bindings.defaultConnectionId() }

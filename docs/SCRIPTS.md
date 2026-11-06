@@ -96,7 +96,7 @@ Owned fixtures choose free loopback ports automatically, so an existing MySQL on
 
 ## Linux and Windows one-shot validation
 
-Run `python scripts/one-shot-test.py` (or `powershell -File scripts/windows/one-shot-test.ps1`) for tooling tests, the CI functional and regression tasks, package validation, live database and fallback-driver tests, IntelliJ 2025.1–2025.3 verification, MySQL and HSQLDB Java 8 matrices, and the H2 driver/server/runtime matrix. Linux also runs the PostgreSQL/Java 8 matrix. On Windows, add `--windows-ui` to run the production editor checks and the five main-PR UI scenarios supported by the Windows desktop: HSQLDB, alter-table, table-dialogs, scaled cell-inspector and search. The PostgreSQL and H2 real-IDE UI jobs use Linux-only fixtures. The Windows UI mode requires an interactive 1440×800+ desktop and stores screenshots, runtime evidence and JUnit results under `build/ui-review/windows-ci/`. The runner prints its step count for the selected mode and host.
+Run `python scripts/one-shot-test.py` (or `powershell -File scripts/windows/one-shot-test.ps1`) for tooling tests, the CI functional and regression tasks, package validation, live database and fallback-driver tests, IntelliJ 2025.1–2025.3, 2026.2.3 and 2026.3 verification, MySQL and HSQLDB Java 8 matrices, and the H2 driver/server/runtime matrix. Linux also runs the PostgreSQL/Java 8 matrix. On Windows, add `--windows-ui` to run the production editor checks and the five main-PR UI scenarios supported by the Windows desktop: HSQLDB, alter-table, table-dialogs, scaled cell-inspector and search. The PostgreSQL and H2 real-IDE UI jobs use Linux-only fixtures. The Windows UI mode requires an interactive 1440×800+ desktop and stores screenshots, runtime evidence and JUnit results under `build/ui-review/windows-ci/`. The runner prints its step count for the selected mode and host.
 
 Windows uses portable native MySQL servers, initialized with fresh data under the run's workspace. Existing installation data and `fixture-data` are never used. Missing Windows servers come from Oracle's ZIP archives with published MD5 checksums; missing Microsoft CRT files are extracted from signature-verified redistributables into a private PATH, with a checksum-pinned portable 7-Zip extractor. No server service or system runtime is installed. Linux uses Docker; a running Docker daemon is a prerequisite. `--docker PATH` selects an explicit CLI and also opts Windows into Docker. Containers/processes owned by the run are always stopped, even with `--no-cleanup`. Downloaded Docker images are retained with `--no-cleanup`; existing images are always retained. Docker's image storage is controlled by its daemon, independently of `--download-dir`.
 
@@ -222,7 +222,7 @@ The root `gradlew` / `gradlew.bat` are the standard Gradle wrapper launchers. Pu
 | Event | Functional/build/archive | Regression/integration/UI/tooling | JDBC/Java/IDE | Release/sign/publish |
 | --- | --- | --- | --- | --- |
 | Push to any branch | Linux, Windows, macOS | No | No | No |
-| PR targeting `main` | Same checks on merge commit | Grouped main PR suites | All four databases and IDEA 2025.1–2025.3 | No |
+| PR targeting `main` | Same checks on merge commit | Grouped main PR suites | All four databases and IDEA 2025.1–2025.3, 2026.2.3 and 2026.3 | No |
 | PR targeting `staging` or any other branch | Same checks on merge commit | No | No | No |
 | Manual CI run | Linux, Windows, macOS | No | No | No |
 | New `v*` tag reachable from `main` | Release functional/build checks | No | No | Yes |

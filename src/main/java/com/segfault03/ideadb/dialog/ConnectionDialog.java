@@ -243,6 +243,9 @@ public class ConnectionDialog extends DialogWrapper {
                 label.setText(driver.version() + " · UNAVAILABLE");
                 label.setEnabled(false);
             }
+            if (rendered instanceof JLabel label)
+                label.setIcon(driver != null && !driverSecurityWarning(driver.type(), driver.version()).isEmpty()
+                        ? com.intellij.icons.AllIcons.General.Warning : null);
             return rendered;
         });
         bundledDriverCombo.getAccessibleContext().setAccessibleName("Available driver");
@@ -264,6 +267,9 @@ public class ConnectionDialog extends DialogWrapper {
                 label.setForeground(JBColor.namedColor("Label.disabledForeground", new JBColor(0x8C8C8C, 0x777777)));
                 label.setEnabled(false);
             }
+            if (rendered instanceof JLabel label)
+                label.setIcon(value instanceof String version && !driverSecurityWarning((DatabaseType) typeCombo.getSelectedItem(), version).isEmpty()
+                        ? com.intellij.icons.AllIcons.General.Warning : null);
             return rendered;
         });
         // The action buttons below can make this card wider than the fields. Avoid BorderLayout.NORTH
@@ -609,9 +615,12 @@ public class ConnectionDialog extends DialogWrapper {
     }
 
     private void setDriverStatus(String message) {
+        setDriverStatus(message, driverBusy || discoveryBusy ? DatabaseUi.Tone.BUSY : DatabaseUi.Tone.NORMAL);
+    }
+
+    private void setDriverStatus(String message, DatabaseUi.Tone tone) {
         message = java.util.Objects.requireNonNullElse(message, " ");
-        DatabaseUi.status(driverStatusLabel, "<html><body width='300'>" + escapeHtml(message) + "</body></html>",
-                driverBusy || discoveryBusy ? DatabaseUi.Tone.BUSY : DatabaseUi.Tone.NORMAL);
+        DatabaseUi.status(driverStatusLabel, "<html><body width='300'>" + escapeHtml(message) + "</body></html>", tone);
         driverStatusLabel.setToolTipText(message);
         driverStatusLabel.getAccessibleContext().setAccessibleDescription(message);
         refreshFormSize();
@@ -825,7 +834,10 @@ public class ConnectionDialog extends DialogWrapper {
             case LOCAL_JAR -> "Local JAR";
         };
         driverSummary.setText((selectedDriver.isBlank() ? source == DriverSource.LOCAL_JAR ? "Choose a JAR" : "Choose a version" : selectedDriver) + " · " + origin);
-        driverSummary.setToolTipText(formatDriverLabel(type, selectedDriver) + " · " + origin);
+        // The summary stays visible while the driver details are collapsed, so it carries the warning too.
+        String securityWarning = driverSecurityWarning(type, selectedDriver);
+        driverSummary.setIcon(securityWarning.isEmpty() ? null : com.intellij.icons.AllIcons.General.Warning);
+        driverSummary.setToolTipText(formatDriverLabel(type, selectedDriver) + " · " + origin + (securityWarning.isEmpty() ? "" : ". " + securityWarning));
         driverSummary.getAccessibleContext().setAccessibleDescription(driverSummary.getToolTipText());
         if (source == DriverSource.BUNDLED) {
             var selected = (InstalledDriver) bundledDriverCombo.getSelectedItem();
@@ -851,7 +863,14 @@ public class ConnectionDialog extends DialogWrapper {
             } catch (IllegalArgumentException error) { setDriverStatus(error.getMessage()); }
         } else setDriverStatus("Select the driver JAR matching your database server.");
         if (discoveryBusy) setDriverStatus("Looking for locally available drivers…");
+        else if (!securityWarning.isEmpty()) {
+            String status = driverStatusLabel.getToolTipText();
+            setDriverStatus(status + (status.endsWith(".") ? " " : ". ") + securityWarning, DatabaseUi.Tone.WARNING);
+        }
         updateTestAvailability();
+    }
+    private static String driverSecurityWarning(DatabaseType type, String version) {
+        return type == null ? "" : DatabaseProviders.get(type).driver().securityWarning(version);
     }
     private String selectedDriverVersion() {
         Object selected = driverVersionCombo.getEditor().getItem();

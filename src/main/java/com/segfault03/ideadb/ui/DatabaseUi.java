@@ -1,8 +1,9 @@
 package com.segfault03.ideadb.ui;
 
 import com.intellij.ui.JBColor;
-import com.intellij.util.IconUtil;
+import com.intellij.util.ui.ImageUtil;
 import com.intellij.util.ui.JBUI;
+import com.intellij.util.ui.UIUtil;
 import com.segfault03.ideadb.model.DatabaseType;
 
 import javax.swing.*;
@@ -245,6 +246,28 @@ public final class DatabaseUi {
         if (button instanceof DialogButton dialogButton) dialogButton.setEmphasisColor(color);
     }
 
+    /** The icon in one opaque color, keeping its alpha, scale and antialiasing. */
+    static Icon solidColorIcon(Icon icon, Color color) {
+        Color opaque = new Color(color.getRGB() & 0x00FFFFFF);
+        return new Icon() {
+            @Override public void paintIcon(Component component, Graphics graphics, int x, int y) {
+                int width = getIconWidth(), height = getIconHeight();
+                if (width <= 0 || height <= 0) return;
+                var image = ImageUtil.createImage(graphics, width, height, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+                Graphics2D painter = image.createGraphics();
+                try {
+                    icon.paintIcon(component, painter, 0, 0);
+                    painter.setComposite(AlphaComposite.SrcIn);
+                    painter.setColor(opaque);
+                    painter.fillRect(0, 0, width, height);
+                } finally { painter.dispose(); }
+                UIUtil.drawImage(graphics, image, x, y, null);
+            }
+            @Override public int getIconWidth() { return icon.getIconWidth(); }
+            @Override public int getIconHeight() { return icon.getIconHeight(); }
+        };
+    }
+
     /** Native sizing, focus ring, border and surface geometry shared with Cancel/Close. */
     private static final class DialogButton extends JButton {
         private Icon plainIcon, emphasizedIcon;
@@ -255,10 +278,7 @@ public final class DatabaseUi {
         private void setEmphasisColor(Color color) {
             if (Objects.equals(emphasisColor, color)) return;
             emphasisColor = color;
-            emphasizedIcon = color == null || plainIcon == null ? plainIcon : IconUtil.filterIcon(plainIcon,
-                    () -> new java.awt.image.RGBImageFilter() {
-                        @Override public int filterRGB(int x, int y, int rgb) { return (rgb & 0xFF000000) | 0x00FFFFFF; }
-                    }, null);
+            emphasizedIcon = color == null || plainIcon == null ? plainIcon : solidColorIcon(plainIcon, Color.WHITE);
             putClientProperty("lattice.action.emphasis", color);
             refreshAppearance();
         }
@@ -330,12 +350,7 @@ public final class DatabaseUi {
             Color color = UIManager.getColor("Button.disabledText");
             if (color == null) color = JBColor.namedColor("Label.disabledForeground", JBColor.GRAY);
             if (disabledGlyph == null || disabledSource != icon || !Objects.equals(disabledColor, color)) {
-                int rgb = color.getRGB() & 0x00FFFFFF;
-                disabledGlyph = IconUtil.filterIcon(icon, () -> new java.awt.image.RGBImageFilter() {
-                    @Override public int filterRGB(int x, int y, int source) {
-                        return (source & 0xFF000000) | rgb;
-                    }
-                }, null);
+                disabledGlyph = solidColorIcon(icon, color);
                 disabledSource = icon;
                 disabledColor = color;
             }
@@ -385,13 +400,7 @@ public final class DatabaseUi {
             setBackground(color);
             setForeground(color == null ? null : Color.WHITE);
             // Colorize preserves source brightness: gray glyphs would stay gray on white.
-            // Filter only RGB, keeping the native icon's alpha, scale and antialiasing.
-            setIcon(color == null || defaultIcon == null ? defaultIcon : IconUtil.filterIcon(defaultIcon,
-                    () -> new java.awt.image.RGBImageFilter() {
-                        @Override public int filterRGB(int x, int y, int rgb) {
-                            return (rgb & 0xFF000000) | 0x00FFFFFF;
-                        }
-                    }, null));
+            setIcon(color == null || defaultIcon == null ? defaultIcon : solidColorIcon(defaultIcon, Color.WHITE));
             putClientProperty("lattice.action.emphasis", color);
             repaint();
         }

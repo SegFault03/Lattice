@@ -11,12 +11,14 @@ The build-tool baseline is Gradle 9.8.0 through the checksum-pinned wrapper and 
 | 2025.1 Community | 251.23774.435 | Compatible |
 | 2025.2 Community | 252.23892.409 | Compatible |
 | 2025.3 Unified/Ultimate | 253.28294.334 | Compatible |
+| 2026.2.3 Unified/Ultimate | 262.10968.63 | Compatible |
+| 2026.3 Unified/Ultimate | 263.7307.200 | Compatible |
 
-The SQL editor features (highlighting, completion, hover, SQL in Java and Kotlin strings, project connection discovery) are part of that ZIP. They load their Java and Kotlin code through optional plugin descriptors, so the ZIP also works in IDEs without those plugins, and the Kotlin part reads PSI only, which both Kotlin plugin modes provide. Plugin Verifier reports nine uses of experimental platform API for 2025.1, 2025.2 and 2025.3: the documentation target API behind hover (`TargetPresentation`, `Pointer`) and one existing table renderer key. They are not compatibility errors; a future IDE release may change them. The IDE fixture tests for these features (`platformTest`, `javaPlatformTest`, `kotlinPlatformTest`) run against the 2025.1 Community SDK.
+The SQL editor features (highlighting, completion, hover, SQL in Java and Kotlin strings, project connection discovery) are part of that ZIP. They load their Java and Kotlin code through optional plugin descriptors, so the ZIP also works in IDEs without those plugins, and the Kotlin part reads PSI only, which both Kotlin plugin modes provide. Plugin Verifier also reports uses of deprecated, internal and experimental platform API, including the documentation target API behind hover (`TargetPresentation`, `Pointer`), the highlighter order behind SQL cards and one existing table renderer key. They are not compatibility errors; a future IDE release may change them. The IDE fixture tests for these features (`platformTest`, `javaPlatformTest`, `kotlinPlatformTest`) run against the 2025.1 Community SDK.
 
 Only PRs targeting `main` run the IntelliJ and JDBC compatibility matrices. IDE
 jobs verify the exact ZIP produced by the PR merge build against each of the
-three 2025 SDKs. The shared catalog generates independent database jobs for
+five target SDKs. The shared catalog generates independent database jobs for
 MySQL, HSQLDB, PostgreSQL and H2, including Java 8/21 probes. Each uses the same
 `--suite ID` adapter as the local aggregate; one engine's failure does not cancel
 the others. `--database-compatibility-only` aggregates these entries locally.
@@ -51,7 +53,7 @@ PostgreSQL additionally covers the 9.1 catalog/driver-policy boundary, JSONB
 Intermediate releases and every historical driver/server pairing are not release
 claims. HSQLDB 2.5.2 is retained because that Maven artifact reports engine 2.6.0.
 
-PostgreSQL is a native server: Java 8 compatibility applies to its JDBC driver. The plugin packages pgJDBC 42.7.14 (Java 8 bytecode). pgJDBC's documented server floor is 8.4; releases from 42.7.4 no longer guarantee servers older than 9.1, so select 42.7.3 or 42.2.27 for 8.4/9.0. See the [pgJDBC download policy](https://jdbc.postgresql.org/download/).
+PostgreSQL is a native server: Java 8 compatibility applies to its JDBC driver. The plugin packages pgJDBC 42.7.14 (Java 8 bytecode). pgJDBC's documented server floor is 8.4; releases from 42.7.4 no longer guarantee servers older than 9.1, so select 42.7.3 or 42.2.27 for 8.4/9.0. Both have known vulnerabilities, so use them only for those servers. See the [pgJDBC download policy](https://jdbc.postgresql.org/download/).
 
 The PostgreSQL matrix runs on Linux with Docker. Windows retains its native MySQL/HSQLDB matrix and can run PostgreSQL integration tests against an external server. Selected fixtures for 8.4.22, 9.0.23 and 10.23 build checksum-pinned vendor sources because usable official image tags are unavailable. All fixture ports bind to loopback; fixtures are disposable. To run PostgreSQL alone:
 
@@ -72,17 +74,28 @@ The wizard selects bundled, downloaded or local-JAR drivers. Downloads are expli
 
 Downloaded drivers are never pruned automatically; clearing the IDE JDBC cache removes them and the bundled list returns to the packaged driver.
 
+Old servers can need old drivers, so releases with published security advisories stay selectable. The wizard marks them with a warning, naming the first release clear of those advisories:
+
+| Driver | First patched release |
+|---|---|
+| Connector/J | 8.2.0 |
+| HSQLDB | 2.7.1 |
+| pgJDBC | 42.7.12 |
+| H2 | 2.2.220 |
+
+The advisories include remote code execution in HSQLDB and SQL injection in older pgJDBC. Prefer a patched release unless the server cannot use one.
+
 Test Connection reads DatabaseMetaData after authenticated connection and reports server/driver versions and elapsed time. It cannot reliably infer versions when authentication or protocol negotiation fails, and does not replace the chosen driver automatically.
 
 Legacy HSQLDB schema/SCRIPT handling and MySQL column-rename syntax were exercised by the matrix. HSQLDB multi-statement DDL is not atomic. Full CREATE reconstruction may be unavailable on older engines and is labeled partial. See [CONTRIBUTING](CONTRIBUTING.md) for portable baseline tests.
 
 ## H2 integration
 
-H2 2.3.232 is bundled. The H2 matrix tests drivers/servers 2.1.214, 2.2.224 and
-2.3.232: memory/file, five TCP pairs (same-version and oldest/newest in both directions), and MySQL/PostgreSQL-mode
+H2 2.5.252 is bundled. The H2 matrix tests drivers/servers 2.1.214, 2.2.224, 2.3.232
+and 2.5.252: memory/file, six TCP pairs (same-version and oldest/newest in both directions), and MySQL/PostgreSQL-mode
 service workflows. Drivers 2.1.214 and 2.2.224 also run real Java 8 probes and
-servers; 2.3.232 requires Java 11+ bytecode and runs on Java 21, with a negative
-Java 8 check. A dedicated bundled-driver TLS fixture verifies certificate trust,
+servers; 2.3.232 and 2.5.252 require Java 11+ bytecode and run on Java 21, with
+negative Java 8 checks. A dedicated bundled-driver TLS fixture verifies certificate trust,
 production services, authentication failure redaction and recovery. Native view
 DDL replay and typed exports run once per embedded driver and compatibility mode.
 TCP pairs retain the production workflow and Java-runtime checks; bundled TCP/TLS

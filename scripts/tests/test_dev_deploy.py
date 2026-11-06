@@ -69,7 +69,7 @@ class DeploymentTests(unittest.TestCase):
             archive.writestr("Lattice/lib/mysql-connector-j-26.7.0.jar", "driver")
             archive.writestr("Lattice/lib/hsqldb-2.7.4.jar", "driver")
             archive.writestr("Lattice/lib/postgresql-42.7.14.jar", "driver")
-            archive.writestr("Lattice/lib/h2-2.3.232.jar", "driver")
+            archive.writestr("Lattice/lib/h2-2.5.252.jar", "driver")
             archive.writestr("Lattice/lib/protobuf-java-4.36.2.jar", "runtime")
             if extra:
                 archive.writestr(extra, "bad")

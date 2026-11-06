@@ -36,6 +36,8 @@ Patch notes are selected by the exact release version, including prerelease suff
 - Check the connection form on Save as well as on Test, and mask passwords in the JDBC URL shown and copied by the connection dialog. Driver origins read Bundled, Downloaded or Local Maven.
 - Report MySQL generated columns as generated rather than auto-increment, so SQL INSERT exports leave them out.
 - Keep a connection's position in the explorer after editing it, and look up table columns without listing the whole schema first.
+- Warn in the connection dialog when the selected JDBC driver has known security vulnerabilities, and name the first patched release. Older drivers stay available for old servers.
+- Bundle H2 2.5.252. On binary values, `LENGTH()`, `CHAR_LENGTH()` and `CHARACTER_LENGTH()` now return bytes, constraints between temporary and permanent tables are refused, and view definitions cannot use session variables in `FETCH` or `OFFSET`.
 
 ### Table and SQL tools
 
