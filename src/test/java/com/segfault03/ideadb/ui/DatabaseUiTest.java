@@ -68,6 +68,28 @@ class DatabaseUiTest {
         });
     }
 
+    @Test void popupItemsPaintTheirOwnSurfaceSoHoverRepaintsCannotShowStaleRows() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            JPopupMenu menu = DatabaseUi.popupMenu();
+            JMenu nested = DatabaseUi.submenu("Export");
+            try {
+                JMenuItem count = new JMenuItem("Count rows"); count.setOpaque(false); menu.add(count);
+                menu.addSeparator(); menu.add(nested);
+                JMenuItem csv = new JMenuItem("CSV…"); csv.setOpaque(false); nested.add(csv);
+                for (var listener : menu.getPopupMenuListeners())
+                    listener.popupMenuWillBecomeVisible(new javax.swing.event.PopupMenuEvent(menu));
+                JPopupMenu child = nested.getPopupMenu();
+                for (var listener : child.getPopupMenuListeners())
+                    listener.popupMenuWillBecomeVisible(new javax.swing.event.PopupMenuEvent(child));
+                assertTrue(count.isOpaque()); assertTrue(nested.isOpaque()); assertTrue(csv.isOpaque());
+                assertFalse(menu.isOpaque(), "The popup surface stays with IDEA's popup UI");
+            } finally {
+                closePopup(nested.getPopupMenu());
+                closePopup(menu);
+            }
+        });
+    }
+
     private static void closePopup(JPopupMenu popup) {
         for (var listener : popup.getPopupMenuListeners()) listener.popupMenuWillBecomeInvisible(new javax.swing.event.PopupMenuEvent(popup));
     }
