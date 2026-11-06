@@ -82,8 +82,8 @@ class SqlSemanticColorsTest {
         }
     }
 
-    @Test void withoutAnIdeTheCoralFamilyApplies() {
-        assertEquals(ColorFamily.CORAL, SqlSemanticColors.family());
-        assertEquals(Role.TABLE.key(ColorFamily.CORAL), Role.TABLE.key());
+    @Test void withoutAnIdeTheDefaultPeriwinkleFamilyApplies() {
+        assertEquals(ColorFamily.PERIWINKLE, SqlSemanticColors.family());
+        assertEquals(Role.TABLE.key(ColorFamily.PERIWINKLE), Role.TABLE.key());
     }
 }

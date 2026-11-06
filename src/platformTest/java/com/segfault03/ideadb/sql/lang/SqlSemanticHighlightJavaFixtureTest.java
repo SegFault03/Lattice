@@ -121,12 +121,13 @@ public class SqlSemanticHighlightJavaFixtureTest extends H2SqlFixtureTestCase {
 
     public void testTheFamilyIsKeptInTheSettings() {
         var settings = com.segfault03.ideadb.sql.settings.SqlEditorSettings.getInstance();
-        assertEquals(com.segfault03.ideadb.sql.settings.SqlEditorSettings.ColorFamily.CORAL, settings.schemaColorFamily());
-        settings.schemaColorFamily(com.segfault03.ideadb.sql.settings.SqlEditorSettings.ColorFamily.PERIWINKLE);
+        assertEquals(com.segfault03.ideadb.sql.settings.SqlEditorSettings.ColorFamily.PERIWINKLE, settings.schemaColorFamily());
+        settings.schemaColorFamily(com.segfault03.ideadb.sql.settings.SqlEditorSettings.ColorFamily.LIME);
+        assertEquals(com.segfault03.ideadb.sql.settings.SqlEditorSettings.ColorFamily.LIME, settings.schemaColorFamily());
         var restored = new com.segfault03.ideadb.sql.settings.SqlEditorSettings.State();
         restored.schemaColorFamily = "not a family";
         settings.loadState(restored);
-        assertEquals("an unknown value falls back to coral", com.segfault03.ideadb.sql.settings.SqlEditorSettings.ColorFamily.CORAL, settings.schemaColorFamily());
+        assertEquals("an unknown value falls back to periwinkle", com.segfault03.ideadb.sql.settings.SqlEditorSettings.ColorFamily.PERIWINKLE, settings.schemaColorFamily());
     }
 
     public void testASchemeWithoutTheColorsGetsDefaultsThatSuitItsBrightness() {

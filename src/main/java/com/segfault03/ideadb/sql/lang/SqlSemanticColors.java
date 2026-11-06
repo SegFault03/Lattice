@@ -99,13 +99,13 @@ public final class SqlSemanticColors {
 
     private SqlSemanticColors() {}
 
-    /** The family the user chose for table, view and alias names; coral when there is no IDE (plain unit tests). */
+    /** The family the user chose for table, view and alias names; periwinkle, the default, when there is no IDE (plain unit tests). */
     public static @NotNull ColorFamily family() {
-        if (ApplicationManager.getApplication() == null) return ColorFamily.CORAL;
+        if (ApplicationManager.getApplication() == null) return ColorFamily.PERIWINKLE;
         try {
             return SqlEditorSettings.getInstance().schemaColorFamily();
         } catch (RuntimeException unavailable) {
-            return ColorFamily.CORAL;
+            return ColorFamily.PERIWINKLE;
         }
     }
 

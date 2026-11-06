@@ -33,7 +33,7 @@ public final class SqlEditorSettings implements PersistentStateComponent<SqlEdit
         /** How keywords are cased when inserted: AS_TYPED follows the text around, UPPER and LOWER force it. */
         public String keywordCase = KeywordCase.AS_TYPED.name();
         /** The colors of table, view and alias names: one of {@link ColorFamily}. */
-        public String schemaColorFamily = ColorFamily.CORAL.name();
+        public String schemaColorFamily = ColorFamily.PERIWINKLE.name();
         /** SQL inside Java and Kotlin strings: all of it, then each way a string can be recognized. */
         public boolean injection = true;
         public boolean injectExplicit = true;
@@ -101,7 +101,7 @@ public final class SqlEditorSettings implements PersistentStateComponent<SqlEdit
     public synchronized void keywordCase(@NotNull KeywordCase value) { state.keywordCase = value.name(); }
 
     public synchronized @NotNull ColorFamily schemaColorFamily() {
-        try { return ColorFamily.valueOf(state.schemaColorFamily); } catch (RuntimeException unknown) { return ColorFamily.CORAL; }
+        try { return ColorFamily.valueOf(state.schemaColorFamily); } catch (RuntimeException unknown) { return ColorFamily.PERIWINKLE; }
     }
     public synchronized void schemaColorFamily(@NotNull ColorFamily value) {
         state.schemaColorFamily = value.name();
