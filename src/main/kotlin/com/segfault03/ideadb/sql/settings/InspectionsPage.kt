@@ -8,7 +8,6 @@ import com.intellij.openapi.options.ex.ConfigurableWrapper
 import com.intellij.openapi.options.ex.Settings
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.profile.codeInspection.ui.ErrorsConfigurable
-import com.intellij.profile.codeInspection.ui.inspectionsTree.InspectionConfigTreeNode
 import com.intellij.profile.codeInspection.ui.inspectionsTree.InspectionsConfigTreeTable
 import com.intellij.util.ui.UIUtil
 import java.awt.Component
@@ -67,8 +66,8 @@ object InspectionsPage {
     fun groupSelectedIn(root: Component?): Boolean {
         val container = root as? javax.swing.JComponent ?: (root as? javax.swing.RootPaneContainer)?.rootPane ?: return false
         val tree = UIUtil.findComponentsOfType(container, InspectionsConfigTreeTable::class.java).firstOrNull()?.tree ?: return false
-        val node = tree.selectionPath?.lastPathComponent as? InspectionConfigTreeNode.Group ?: return false
-        return node.toString() == GROUP
+        val node = tree.selectionPath?.lastPathComponent as? javax.swing.tree.TreeNode ?: return false
+        return !node.isLeaf && node.toString() == GROUP
     }
 
     /** Switches the settings dialog that holds [source] to the inspections page, or opens one when there is none. */

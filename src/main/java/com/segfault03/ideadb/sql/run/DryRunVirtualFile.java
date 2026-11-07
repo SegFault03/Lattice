@@ -2,6 +2,7 @@ package com.segfault03.ideadb.sql.run;
 
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.fileEditor.FileEditorManager;
+import com.intellij.openapi.fileEditor.OpenFileDescriptor;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.Key;
@@ -71,7 +72,7 @@ public final class DryRunVirtualFile extends DatabaseVirtualFile {
 
     private static final Tabs EDITOR_TABS = new Tabs() {
         @Override public boolean isOpen(@NotNull Project project, @NotNull VirtualFile file) { return FileEditorManager.getInstance(project).isFileOpen(file); }
-        @Override public void open(@NotNull Project project, @NotNull VirtualFile file) { FileEditorManager.getInstance(project).openFile(file, true); }
+        @Override public void open(@NotNull Project project, @NotNull VirtualFile file) { new OpenFileDescriptor(project, file).navigate(true); }
     };
 
     @TestOnly

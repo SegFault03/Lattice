@@ -98,8 +98,7 @@ final class TableDialogChrome {
         @Override public Dimension getMaximumSize() { return getPreferredSize(); }
         @Override protected void paintComponent(Graphics graphics) {
             Icon icon=getIcon();if(icon==null)return;
-            Icon resolved=IconLoader.getIconSnapshot(icon);
-            if(resolved!=null) resolved.paintIcon(this,graphics,0,Math.max(0,(getHeight()-JBUI.scale(size))/2));
+            icon.paintIcon(this,graphics,0,Math.max(0,(getHeight()-JBUI.scale(size))/2));
         }
     }
 

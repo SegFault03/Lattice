@@ -2,7 +2,7 @@ package com.segfault03.ideadb.sql.binding;
 
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.application.ReadAction;
+import com.segfault03.ideadb.sql.ReadActions;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.fileEditor.FileEditorManagerEvent;
 import com.intellij.openapi.fileEditor.FileEditorManagerListener;
@@ -61,7 +61,7 @@ final class SqlConnectionWidget implements StatusBarWidget, StatusBarWidget.Mult
      */
     private @Nullable VirtualFile sqlFile() {
         if (project.isDisposed()) return null;
-        return ReadAction.compute(() -> {
+        return ReadActions.compute(() -> {
             VirtualFile[] selected = FileEditorManager.getInstance(project).getSelectedFiles();
             if (selected.length == 0) return null;
             VirtualFile file = selected[0];
@@ -88,11 +88,9 @@ final class SqlConnectionWidget implements StatusBarWidget, StatusBarWidget.Mult
         return "The SQL dialect and Lattice connection used for this file." + origin + " Click to choose.";
     }
 
-    @Override public @Nullable ListPopup getPopupStep() {
+    @Override public @Nullable ListPopup getPopup() {
         VirtualFile file = sqlFile();
         if (file == null) return null;
         return SqlConnectionChooser.filePopup(project, file, SqlConnectionChooser.editorOf(project, file));
     }
-
-    @Override public @Nullable ListPopup getPopup() { return getPopupStep(); }
 }

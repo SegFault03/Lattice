@@ -280,7 +280,7 @@ public class SqlInjectionJavaFixtureTest extends H2SqlFixtureTestCase {
         myFixture.configureByText("Plain.java", inClass("String s = \"hello\";"));
         myFixture.doHighlighting();
         assertEquals("No SQL in the file, no entry", "", presentation.getSelectedValue());
-        assertNull(presentation.getPopupStep());
+        assertNull(presentation.getPopup());
 
         var host = myFixture.configureByText("A.java", inClass("void f(Connection c) throws Exception { c.prepareStatement(\"select * from books\"); }"));
         myFixture.doHighlighting();
@@ -288,7 +288,7 @@ public class SqlInjectionJavaFixtureTest extends H2SqlFixtureTestCase {
         assertNotNull(presentation.getTooltipText());
 
         // Choosing there binds the Java file, which is what injected SQL resolves through.
-        var popup = presentation.getPopupStep();
+        var popup = (com.intellij.openapi.ui.popup.ListPopup) presentation.getPopup();
         assertNotNull(popup);
         try {
             @SuppressWarnings("unchecked") var step = (ListPopupStepEx<Object>) popup.getListStep();

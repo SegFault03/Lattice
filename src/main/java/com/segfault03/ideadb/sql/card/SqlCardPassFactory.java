@@ -8,7 +8,6 @@ import com.intellij.codeHighlighting.TextEditorHighlightingPassRegistrar;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.EditorKind;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.io.FileUtilRt;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.testFramework.LightVirtualFile;
 import com.intellij.psi.PsiFile;
@@ -34,10 +33,13 @@ public final class SqlCardPassFactory implements TextEditorHighlightingPassFacto
      * Writable editors of files on disk. Not viewers, diffs, previews or consoles, and not Lattice's own SQL inputs,
      * whose in-memory files are {@link LightVirtualFile}s; their editor kind cannot tell them apart from a file's.
      */
+    /** The platform's own limit for loading a file's content, above which it stops analyzing the file. */
+    private static final int MAX_DOCUMENT_LENGTH = 20 * 1024 * 1024;
+
     static boolean showsCards(@NotNull Editor editor, @Nullable VirtualFile file) {
         EditorKind kind = editor.getEditorKind();
         return kind != EditorKind.DIFF && kind != EditorKind.PREVIEW && kind != EditorKind.CONSOLE && !editor.isViewer()
                 && file != null && !(file instanceof LightVirtualFile) && !(file instanceof SqlConsoleVirtualFile)
-                && !FileUtilRt.isTooLarge(editor.getDocument().getTextLength());
+                && editor.getDocument().getTextLength() <= MAX_DOCUMENT_LENGTH;
     }
 }

@@ -1,6 +1,6 @@
 package com.segfault03.ideadb.sql.coexist;
 
-import com.intellij.ide.plugins.IdeaPluginDescriptor;
+import com.intellij.ide.plugins.PluginManager;
 import com.intellij.ide.plugins.PluginManagerCore;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.extensions.PluginId;
@@ -50,8 +50,7 @@ public final class UltimateDatabasePlugin {
     public static @NotNull Presence presence() {
         Presence override = overriddenForTests;
         if (override != null) return override;
-        IdeaPluginDescriptor descriptor = PluginManagerCore.getPlugin(ID);
-        return presenceOf(descriptor != null && descriptor.isEnabled(), LicensingFacade.getInstance());
+        return presenceOf(PluginManager.isPluginInstalled(ID) && !PluginManagerCore.isDisabled(ID), LicensingFacade.getInstance());
     }
 
     /** Pure rule, so it can be tested without an Ultimate IDE. The platform's own licensing keeps a stamp only for a license or a trial. */

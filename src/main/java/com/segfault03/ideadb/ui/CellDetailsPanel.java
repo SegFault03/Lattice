@@ -2,6 +2,7 @@ package com.segfault03.ideadb.ui;
 
 import com.intellij.icons.AllIcons;
 import com.intellij.ui.JBColor;
+import com.intellij.ui.scale.JBUIScale;
 import com.intellij.util.ui.JBUI;
 import com.segfault03.ideadb.model.ColumnMetadata;
 import com.segfault03.ideadb.model.RowDefaults;
@@ -329,7 +330,7 @@ final class CellDetailsPanel extends JPanel {
                 }
             }
             if (isFocusOwner() && DatabaseUi.isFocusVisible(this)) {
-                g.setColor(new JBColor(0x356EDE, 0x8AAFFF)); g.setStroke(new BasicStroke(JBUI.scale(2f)));
+                g.setColor(new JBColor(0x356EDE, 0x8AAFFF)); g.setStroke(new BasicStroke(JBUIScale.scale(2f)));
                 g.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, arc, arc);
             }
             g.dispose(); super.paintComponent(graphics);
@@ -840,9 +841,9 @@ final class CellDetailsPanel extends JPanel {
         Font labelFont = bodyFont();
         Font buttonFont = UIManager.getFont("Button.font");
         if (labelFont != null) {
-            title.setFont(labelFont.deriveFont(Font.BOLD, labelFont.getSize2D() + JBUI.scale(6f)));
+            title.setFont(labelFont.deriveFont(Font.BOLD, labelFont.getSize2D() + JBUIScale.scale(6f)));
             eyebrow.setFont(labelFont); identity.setFont(labelFont); summary.setFont(labelFont);
-            valueHeading.setFont(labelFont.deriveFont(Font.BOLD, labelFont.getSize2D() + JBUI.scale(1f)));
+            valueHeading.setFont(labelFont.deriveFont(Font.BOLD, labelFont.getSize2D() + JBUIScale.scale(1f)));
             tableNoteLabel.setFont(labelFont); footerLabel.setFont(labelFont); validation.setFont(labelFont);
             valueArea.setFont(DatabaseUi.codeFont(labelFont.getSize2D()));
         }

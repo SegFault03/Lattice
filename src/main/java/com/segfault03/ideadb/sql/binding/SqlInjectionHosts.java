@@ -2,7 +2,7 @@ package com.segfault03.ideadb.sql.binding;
 
 import com.intellij.injected.editor.DocumentWindow;
 import com.intellij.lang.injection.InjectedLanguageManager;
-import com.intellij.openapi.application.ReadAction;
+import com.segfault03.ideadb.sql.ReadActions;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiDocumentManager;
@@ -20,7 +20,7 @@ public final class SqlInjectionHosts {
      * (the status bar, a refresh), which no longer holds a read lock of its own, so the read action is taken here.
      */
     public static boolean hostsSql(@NotNull Project project, @NotNull VirtualFile file) {
-        return ReadAction.compute(() -> hostsSqlInReadAction(project, file));
+        return ReadActions.compute(() -> hostsSqlInReadAction(project, file));
     }
 
     private static boolean hostsSqlInReadAction(Project project, VirtualFile file) {

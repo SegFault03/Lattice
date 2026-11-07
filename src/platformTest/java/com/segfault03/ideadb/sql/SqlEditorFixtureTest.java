@@ -317,14 +317,13 @@ public class SqlEditorFixtureTest extends BasePlatformTestCase {
         myFixture.configureByText("notes.txt", "select 1");
         assertEquals("Other files show nothing", "", presentation.getSelectedValue());
         assertNull(presentation.getTooltipText());
-        assertNull("and offer nothing to choose", presentation.getPopupStep());
+        assertNull("and offer nothing to choose", presentation.getPopup());
 
         VirtualFile file = sqlFile("select 1");
         assertEquals("SQL: Generic SQL", presentation.getSelectedValue());
         assertNotNull(presentation.getTooltipText());
-        var popup = presentation.getPopupStep();
+        var popup = presentation.getPopup();
         assertNotNull("a click opens the chooser above the entry", popup);
-        assertSame(popup.getClass(), presentation.getPopup().getClass());
         popup.dispose();
 
         SqlBindingsState.getInstance(getProject()).bindFileToConnection(file, mysql.getId());

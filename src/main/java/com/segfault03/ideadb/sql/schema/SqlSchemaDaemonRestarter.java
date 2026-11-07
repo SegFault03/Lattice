@@ -30,7 +30,7 @@ public final class SqlSchemaDaemonRestarter implements SqlSchemaListener {
 
         private static void restartAll() {
             for (Project project : ProjectManager.getInstance().getOpenProjects()) {
-                if (!project.isDisposed()) DaemonCodeAnalyzer.getInstance(project).restart();
+                if (!project.isDisposed()) DaemonCodeAnalyzer.getInstance(project).settingsChanged();
             }
         }
 

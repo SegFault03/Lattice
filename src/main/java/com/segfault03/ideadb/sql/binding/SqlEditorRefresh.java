@@ -32,7 +32,7 @@ public final class SqlEditorRefresh {
             }
             EditorNotifications.getInstance(project).updateNotifications(file);
             SqlConnectionWidget.update(project);
-            DaemonCodeAnalyzer.getInstance(project).restart();
+            DaemonCodeAnalyzer.getInstance(project).settingsChanged();
         });
     }
 
@@ -47,7 +47,7 @@ public final class SqlEditorRefresh {
             if (project.isDisposed()) return;
             List<VirtualFile> withSql = hosts.stream().filter(host -> SqlInjectionHosts.hostsSql(project, host)).toList();
             if (!withSql.isEmpty()) FileContentUtil.reparseFiles(project, withSql, true);
-            DaemonCodeAnalyzer.getInstance(project).restart();
+            DaemonCodeAnalyzer.getInstance(project).settingsChanged();
         });
     }
 }

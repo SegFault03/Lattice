@@ -3,7 +3,7 @@ package com.segfault03.ideadb.sql.run;
 import com.intellij.codeInsight.hint.HintManager;
 import com.intellij.icons.AllIcons;
 import com.intellij.openapi.Disposable;
-import com.intellij.openapi.application.ReadAction;
+import com.segfault03.ideadb.sql.ReadActions;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.util.Disposer;
@@ -19,7 +19,7 @@ import com.intellij.openapi.ui.popup.JBPopup;
 import com.intellij.openapi.editor.ScrollType;
 import com.intellij.openapi.fileEditor.FileEditorManagerEvent;
 import com.intellij.openapi.fileEditor.FileEditorManagerListener;
-import com.intellij.psi.impl.source.tree.injected.InjectedLanguageUtil;
+import com.intellij.injected.editor.EditorWindow;
 import com.segfault03.ideadb.sql.card.SqlCardDataKeys;
 import com.segfault03.ideadb.editor.DatabaseEditorManager;
 import com.intellij.openapi.actionSystem.AnActionEvent;
@@ -137,13 +137,13 @@ final class SqlRunActionSupport {
     static @Nullable SqlRunTarget targetOrShowProblem(@NotNull Project project, @NotNull Editor editor, @NotNull PsiFile file,
                                                      @Nullable SqlCard card, @NotNull CardUse use) {
         if (card != null) {
-            String refusal = ReadAction.compute(() -> cardRefusal(card, use, isBound(project, file)));
+            String refusal = ReadActions.compute(() -> cardRefusal(card, use, isBound(project, file)));
             if (refusal != null) {
                 HintManager.getInstance().showErrorHint(editor, refusal);
                 return null;
             }
         }
-        SqlRunTarget.Resolution resolution = ReadAction.compute(() -> card != null
+        SqlRunTarget.Resolution resolution = ReadActions.compute(() -> card != null
                 ? SqlRunTarget.resolve(project, card, InjectedLanguageManager.getInstance(project).getTopLevelFile(file).getVirtualFile())
                 : SqlRunTarget.resolve(project, editor, file));
         if (resolution instanceof SqlRunTarget.Problem problem) {
@@ -187,7 +187,7 @@ final class SqlRunActionSupport {
         ConnectionConfig connection = target.connection();
         var form = new SqlParameterForm(target.sql(), target.parameters(),
                 connection != null ? connection.getType() : DatabaseType.MYSQL, connection, initial, actionText);
-        Editor host = InjectedLanguageUtil.getTopLevelEditor(editor);
+        Editor host = (editor instanceof EditorWindow window ? window.getDelegate() : editor);
         // A card's toolbar is only shown for a card in view; without a card the form goes on the caret's line.
         if (card == null) host.getScrollingModel().scrollToCaret(ScrollType.MAKE_VISIBLE);
         JBPopup popup = SqlParameterPopup.show(host, SqlCardAnchor.of(host, card), form, remembering);

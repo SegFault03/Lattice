@@ -6,7 +6,7 @@ import com.intellij.codeInsight.daemon.impl.UpdateHighlightersUtil;
 import com.intellij.codeInsight.intention.IntentionAction;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.application.ReadAction;
+import com.segfault03.ideadb.sql.ReadActions;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.event.DocumentEvent;
@@ -76,7 +76,7 @@ final class SqlEmbeddedValidation implements Disposable {
 
     private void run() {
         long stamp = document.getModificationStamp();
-        Result found = ReadAction.compute(() -> new Result(diagnose(), names()));
+        Result found = ReadActions.compute(() -> new Result(diagnose(), names()));
         ApplicationManager.getApplication().invokeLater(() -> show(found, stamp), project.getDisposed());
     }
 

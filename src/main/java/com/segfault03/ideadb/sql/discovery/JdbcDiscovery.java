@@ -4,6 +4,7 @@ import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ModalityState;
 import com.intellij.openapi.application.ReadAction;
+import com.segfault03.ideadb.sql.ReadActions;
 import com.intellij.openapi.components.Service;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
@@ -86,7 +87,7 @@ public final class JdbcDiscovery implements Disposable {
 
     /** Scans now, on the calling thread, for a caller that needs the result before it continues. Needs indexes: call in smart mode. */
     public void refreshNow() {
-        if (!project.isDisposed()) publish(ReadAction.compute(() -> scan(project)));
+        if (!project.isDisposed()) publish(ReadActions.compute(() -> scan(project)));
     }
 
     private void publish(List<DiscoveredConnection> result) {
@@ -183,7 +184,7 @@ public final class JdbcDiscovery implements Disposable {
         List<String> paths = new ArrayList<>(List.of(event.getPath()));
         if (event instanceof VFileMoveEvent move) paths.add(move.getOldPath());
         else if (event instanceof VFilePropertyChangeEvent change && change.isRename()) paths.add(change.getOldPath());
-        String[] roots = ReadAction.compute(() ->
+        String[] roots = ReadActions.compute(() ->
                 Arrays.stream(ProjectRootManager.getInstance(project).getContentRoots()).map(VirtualFile::getPath).toArray(String[]::new));
         for (String path : paths) {
             for (String root : roots) if (path.equals(root) || path.startsWith(root.endsWith("/") ? root : root + "/")) return true;

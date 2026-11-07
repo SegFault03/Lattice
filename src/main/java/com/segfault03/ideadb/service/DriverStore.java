@@ -5,7 +5,7 @@ import com.segfault03.ideadb.provider.DatabaseProviders;
 import com.segfault03.ideadb.model.DatabaseType;
 import com.segfault03.ideadb.model.InstalledDriver;
 import com.intellij.openapi.project.Project;
-import com.intellij.ide.plugins.PluginManager;
+import com.intellij.openapi.application.PathManager;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.io.File;
@@ -103,11 +103,9 @@ public final class DriverStore {
     private static File packagedJar(DatabaseType type) {
         String keyword = DatabaseProviders.get(type).driver().packagedJarKeyword();
         try {
-            var descriptor = PluginManager.getPluginByClass(DriverStore.class);
-            Path pluginPath = descriptor == null ? null : descriptor.getPluginPath();
-            if (pluginPath != null) {
-                Path libraryDirectory = Files.isDirectory(pluginPath.resolve("lib"))
-                        ? pluginPath.resolve("lib") : pluginPath;
+            Path pluginJar = PathManager.getJarForClass(DriverStore.class);
+            if (pluginJar != null && Files.isRegularFile(pluginJar)) {
+                Path libraryDirectory = pluginJar.getParent();
                 try (var jars = Files.newDirectoryStream(libraryDirectory, "*.jar")) {
                     List<Path> matches = new ArrayList<>();
                     for (Path candidate : jars) {

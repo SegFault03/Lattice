@@ -11,7 +11,7 @@ import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiLanguageInjectionHost;
-import com.intellij.psi.impl.source.tree.injected.InjectedLanguageUtil;
+import com.intellij.injected.editor.EditorWindow;
 import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.sql.binding.SqlBindingsState;
 import com.segfault03.ideadb.sql.card.SqlCard;
@@ -43,7 +43,7 @@ public record SqlRunTarget(@NotNull String sql, @NotNull SqlDialectProfile profi
     public static @Nullable Resolution resolve(@NotNull Project project, @NotNull Editor editor, @NotNull PsiFile psiFile) {
         InjectedLanguageManager injections = InjectedLanguageManager.getInstance(project);
         PsiFile hostFile = injections.getTopLevelFile(psiFile);
-        Editor hostEditor = InjectedLanguageUtil.getTopLevelEditor(editor);
+        Editor hostEditor = (editor instanceof EditorWindow window ? window.getDelegate() : editor);
         VirtualFile virtualFile = hostFile.getVirtualFile();
         if (virtualFile == null) return null;
         VirtualFile file = SqlBindingsState.hostOf(virtualFile);
@@ -113,13 +113,9 @@ public record SqlRunTarget(@NotNull String sql, @NotNull SqlDialectProfile profi
     /** The selection as offsets into the injected text, or null when it spans more than one fragment of the injection. */
     private static int @Nullable [] selectionWithinOneFragment(PsiFile injected, int hostStart, int hostEnd) {
         var document = PsiDocumentManager.getInstance(injected.getProject()).getDocument(injected);
-        List<PsiLanguageInjectionHost.Shred> shreds = InjectedLanguageUtil.getShreds(injected);
-        if (!(document instanceof DocumentWindow window) || shreds == null) return null;
-        for (PsiLanguageInjectionHost.Shred shred : shreds) {
-            PsiLanguageInjectionHost host = shred.getHost();
-            if (host == null) continue;
-            int from = host.getTextRange().getStartOffset() + shred.getRangeInsideHost().getStartOffset();
-            TextRange fragment = TextRange.from(from, shred.getRangeInsideHost().getLength());
+        if (!(document instanceof DocumentWindow window)) return null;
+        // Each host range is one fragment of the string the SQL is injected into.
+        for (com.intellij.openapi.util.Segment fragment : window.getHostRanges()) {
             if (fragment.getStartOffset() <= hostStart && hostEnd <= fragment.getEndOffset()) {
                 return new int[] {window.hostToInjected(hostStart), window.hostToInjected(hostEnd)};
             }

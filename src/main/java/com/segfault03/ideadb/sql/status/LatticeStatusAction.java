@@ -2,7 +2,7 @@ package com.segfault03.ideadb.sql.status;
 
 import com.intellij.openapi.actionSystem.ActionUpdateThread;
 import com.intellij.openapi.actionSystem.AnActionEvent;
-import com.intellij.openapi.application.ReadAction;
+import com.segfault03.ideadb.sql.ReadActions;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.project.DumbAwareAction;
@@ -91,7 +91,7 @@ final class LatticeStatusAction extends DumbAwareAction {
     }
 
     private boolean isLatticeSql(Project project) {
-        return ReadAction.compute(() -> {
+        return ReadActions.compute(() -> {
             PsiFile psi = PsiDocumentManager.getInstance(project).getPsiFile(editor.getDocument());
             return psi != null && psi.getLanguage().isKindOf(LatticeSqlLanguage.INSTANCE);
         });
