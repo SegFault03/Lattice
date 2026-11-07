@@ -241,8 +241,10 @@ Complete options (forwarded unchanged to Python):
 ```text
 usage: ui-preview.py [-h] [--ide-home IDE_HOME] [--java-home JAVA_HOME]
                      [--compare-with COMPARE_WITH] [--output OUTPUT]
-                     [--all-previews] [--flatlaf-jar FLATLAF_JAR]
-                     [--junit-jar JUNIT_JAR] [--hamcrest-jar HAMCREST_JAR]
+                     [--all-previews] [--checks-only] [--source-filter-only]
+                     [--search-only] [--tab-icons-only] [--cell-details-only]
+                     [--flatlaf-jar FLATLAF_JAR] [--junit-jar JUNIT_JAR]
+                     [--hamcrest-jar HAMCREST_JAR]
                      [--download-dir DOWNLOAD_DIR] [--cleanup] [--no-cleanup]
                      [--binaries-dir BINARIES_DIR]
                      [--gradle-user-home GRADLE_USER_HOME]
@@ -251,7 +253,7 @@ Render database UI components without launching an IntelliJ IDE window.
 Requires JDK 21 and an IntelliJ 2025.1 SDK (Gradle's cached SDK is
 discovered). The IntelliJ test application supplies native action-system
 services; preview-only service shadows block database work and FlatLaf
-approximates IDE themes. Refreshes the five featured screenshots/ PNGs and a
+approximates IDE themes. Refreshes the seven featured screenshots/ PNGs and a
 local gallery under ignored build/ui-preview/.
 
 options:
@@ -262,9 +264,19 @@ options:
   --compare-with COMPARE_WITH
                         Previous output directory for before/after comparison
   --output OUTPUT       Gallery/build directory; screenshots/ keeps only the
-                        five featured images
+                        seven featured images
   --all-previews        Generate the full light/dark preview gallery; by
-                        default only the five featured screens are rendered
+                        default only the seven featured screens are rendered
+  --checks-only         Run editor recovery assertions without rendering
+                        screenshots or updating the gallery
+  --source-filter-only  Render only the source filter in light/dark themes,
+                        without updating screenshots/
+  --search-only         Render the explorer search in light/dark themes,
+                        without updating screenshots/
+  --tab-icons-only      Render table tab source badges in light/dark themes,
+                        without updating screenshots/
+  --cell-details-only   Render focused cell and column details in both themes,
+                        without updating tracked screenshots
   --flatlaf-jar FLATLAF_JAR
                         Existing FlatLaf 3.8 JAR
   --junit-jar JUNIT_JAR

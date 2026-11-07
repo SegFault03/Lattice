@@ -32,7 +32,9 @@ The guide images under `src/main/resources/release-notes/images/` are rendered
 by `WhatsNewRendersJavaFixtureTest`. It paints the real editor, schema, highlighting,
 cards and panels. Popups cannot open without a display, so they are composed around
 the editor from what the features return. The scenes simulate the Database plugin
-being disabled, because cards and dry runs need that.
+being disabled, because cards and dry runs need that. The README's SQL editor section
+shows `guide-schema.png` and `guide-dry-run.png` directly, so refresh and review
+them with the guide.
 
 Supply an extracted IDEA 2026.2.3 directory, and use JDK 21 to run Gradle. In PowerShell:
 
