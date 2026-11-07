@@ -9,6 +9,8 @@
 
 Lattice is a database client for IntelliJ IDEA. Connect to MySQL, PostgreSQL, HSQLDB or H2; browse schemas, work with table data, run SQL and manage database definitions without leaving your IDE.
 
+Lattice is in alpha; the current release is **0.2.0-alpha**. Expect changes between releases.
+
 ## Features
 
 - Explorer groups connections by database type, with search and filters for sources, schemas, tables and columns.
@@ -58,6 +60,15 @@ Previews use sample data and show the current production Swing screens.
 </p>
 <p>
 <img src="screenshots/alter-table-dialog.png" alt="Alter table dialog with a column inspector and SQL preview" width="800">
+</p>
+
+### SQL editor
+
+<p>
+<img src="src/main/resources/release-notes/images/guide-schema.png" alt="SQL file with schema colors, a completion list offering foreign key joins and a hover card describing the customers table" width="900">
+</p>
+<p>
+<img src="src/main/resources/release-notes/images/guide-dry-run.png" alt="Parameter card over an update statement, above a Dry Run tab reporting three rows affected and rolled back" width="900">
 </p>
 
 ### Table data and SQL
@@ -110,7 +121,7 @@ Older releases with known security vulnerabilities stay available for old server
 
 For H2, select Memory for a named database that lasts until its last connection closes, File for a persistent database path, or Server for TCP (default port 9092). File mode accepts the database base path or an existing `.mv.db` file. The bundled driver is H2 2.5.252 (Java 11+ bytecode, tested on Java 21); H2 2.1.214 and 2.2.224 also pass Java 8 probes. Custom URLs preserve options such as `IFEXISTS` and SSL settings. Service workflows also run in H2 MySQL/PostgreSQL compatibility modes; this does not establish complete SQL emulation. H2 1.x file migration is not validated. H2 DDL can commit an open transaction, so finish console transactions before schema changes.
 
-Generated MySQL URLs currently disable TLS and use UTC for the driver/server session. For remote or TLS-required servers, use a custom JDBC URL with your required security options. Custom URLs retain your options.
+Generated MySQL URLs request TLS when the server offers it (`sslMode=PREFERRED`), use UTC for the driver/server session and give up connecting after 10 seconds. For servers that require TLS or certificate checks, use a custom JDBC URL with the security options you need. Custom URLs retain your options.
 
 ## Inspect and edit data
 
@@ -201,13 +212,13 @@ focused commands, prerequisites and report paths.
 | `build/` | Ignored build output, distribution ZIPs and validation reports |
 | `screenshots/` | The seven tracked README preview images |
 
-The seven README screenshots are the featured product previews. Concept renders under `design/` are tracked with their design studies; validation output and other generated files belong under ignored `build/`.
+The seven README screenshots are the featured product previews; the two SQL editor images come from `src/main/resources/release-notes/images/`. Concept renders under `design/` are tracked with their design studies; validation output and other generated files belong under ignored `build/`.
 
 ## Releases and support
 
 Code is compiled and tested against the oldest supported IDE, IntelliJ 2025.1, and the newest stable, IntelliJ 2026.3 (on PRs targeting `main`). Every branch push and PR runs embedded functional checks and plugin build/archive validation on Linux, Windows and macOS. PRs targeting `main` additionally run grouped tooling, regression/integration, production Swing and real-IDE UI, JDBC/Java and IntelliJ 2025.1–2025.3, 2026.2.3 and 2026.3 compatibility checks. PRs targeting `staging` run the commit tier. See [CI test groups](docs/CI_TESTING.md) for scope and commands.
 
-A new tag such as `v0.1.0-alpha` triggers the [release workflow](.github/workflows/release.yml) only after its commit is verified as reachable from `main`. Tags have no branch of their own; a tag on an unmerged feature commit is rejected before any build, signing or publication job. The tag pipeline runs release functional/build checks, ZIP validation, signing and signature verification, then publishes a GitHub Release and submits the same signed ZIP to JetBrains Marketplace. Compatibility matrices are confined to PRs. GitHub Releases include patch notes, commit history, checksums and corresponding MySQL sources. Prereleases are not designated latest; Marketplace submissions use the public Stable channel and become available after JetBrains approval. There is no manual release trigger; use the local dry-run commands in [Releasing](docs/RELEASING.md).
+A new tag such as `v0.2.0-alpha` triggers the [release workflow](.github/workflows/release.yml) only after its commit is verified as reachable from `main`. Tags have no branch of their own; a tag on an unmerged feature commit is rejected before any build, signing or publication job. The tag pipeline runs release functional/build checks, ZIP validation, signing and signature verification, then publishes a GitHub Release and submits the same signed ZIP to JetBrains Marketplace. Compatibility matrices are confined to PRs. GitHub Releases include patch notes, commit history, checksums and corresponding MySQL sources. Prereleases are not designated latest; Marketplace submissions use the public Stable channel and become available after JetBrains approval. There is no manual release trigger; use the local dry-run commands in [Releasing](docs/RELEASING.md).
 
 See [CHANGELOG](docs/CHANGELOG.md), [RELEASING](docs/RELEASING.md), [Marketplace publishing](docs/MARKETPLACE.md), [issue reporting](docs/ISSUE.md) and [security reporting](docs/SECURITY.md).
 
