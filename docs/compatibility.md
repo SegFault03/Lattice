@@ -2,9 +2,9 @@
 
 ## IntelliJ baseline
 
-Production targets Java 21 and IntelliJ IDEA 2025.1 (build 251). Plugin Verifier 1.410 checked the packaged ZIP against full SDKs without ignored compatibility errors:
+Production targets Java 21 and IntelliJ IDEA 2025.1 (build 251). Plugin Verifier 1.411 checked the packaged ZIP against full SDKs without ignored compatibility errors:
 
-The build-tool baseline is Gradle 9.8.0 through the checksum-pinned wrapper and IntelliJ Platform Gradle Plugin 2.19.0 and Kotlin 2.4.21 compiling for Kotlin API 2.1. Pure tests, plugin packaging, UI previews, live MySQL/HSQLDB/PostgreSQL flows, the Java 8 JDBC probes and the IntelliJ matrix are validated separately so a dependency change can be checked against each layer.
+The build-tool baseline is Gradle 9.9.0 through the checksum-pinned wrapper and IntelliJ Platform Gradle Plugin 2.20.0 and Kotlin 2.4.21 compiling for Kotlin API 2.1. Pure tests, plugin packaging, UI previews, live MySQL/HSQLDB/PostgreSQL flows, the Java 8 JDBC probes and the IntelliJ matrix are validated separately so a dependency change can be checked against each layer.
 
 | IDEA | Build | Result |
 |---|---|---|

@@ -257,8 +257,8 @@ def run_plugin_verifier(runner: CommandRunner, source: Path, env: dict[str, str]
         command += ['--ide-home', str(sdk)]
         if args.verifier_jar:
             command += ['--verifier-jar', str(args.verifier_jar)]
-        elif deps.existing('tools/verifier/verifier-cli-1.410-all.jar'):
-            command += ['--verifier-jar', str(deps.existing('tools/verifier/verifier-cli-1.410-all.jar'))]
+        elif deps.existing('tools/verifier/verifier-cli-1.411-all.jar'):
+            command += ['--verifier-jar', str(deps.existing('tools/verifier/verifier-cli-1.411-all.jar'))]
     runner.run(command, cwd=source, env=env, name=f"plugin-verifier-{version}", timeout=900)
 
 

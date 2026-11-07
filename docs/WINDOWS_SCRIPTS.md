@@ -357,7 +357,7 @@ Run JetBrains Plugin Verifier against one plugin ZIP and one IntelliJ SDK.
 .\scripts\windows\verify-plugin.ps1 $zip --ide-version 2025.1 @deps
 ```
 
-The ZIP is a required positional argument. `--ide-version` is 2025.1 (default), 2025.2, 2025.3, 2026.2.3 or 2026.3. `--ide-home` supplies its extracted SDK, and `--verifier-jar` supplies checksum-pinned Verifier 1.410. `--reports` defaults to build/compatibility/verifier-ci/; each invocation gets a unique report directory. `--cache` selects a legacy static SDK/verifier cache; prefer shared dependency flags for new commands.
+The ZIP is a required positional argument. `--ide-version` is 2025.1 (default), 2025.2, 2025.3, 2026.2.3 or 2026.3. `--ide-home` supplies its extracted SDK, and `--verifier-jar` supplies checksum-pinned Verifier 1.411. `--reports` defaults to build/compatibility/verifier-ci/; each invocation gets a unique report directory. `--cache` selects a legacy static SDK/verifier cache; prefer shared dependency flags for new commands.
 
 Complete options (forwarded unchanged to Python):
 
@@ -382,7 +382,7 @@ options:
   --java-home JAVA_HOME
   --cache CACHE
   --verifier-jar VERIFIER_JAR
-                        Local checksum-pinned Plugin Verifier 1.410 JAR
+                        Local checksum-pinned Plugin Verifier 1.411 JAR
   --download-dir DOWNLOAD_DIR
                         Download/cache parent; only directories created by
                         this run are cleaned

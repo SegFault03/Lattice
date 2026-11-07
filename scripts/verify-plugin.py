@@ -12,8 +12,8 @@ import uuid
 from common import ROOT, cache_directory, java_command
 from dependencies import Dependencies, add_dependency_options, executable, ide_release
 
-VERIFIER_SHA256 = "59a5ef05cbdf0584cbfd6cb6ca802c74ecf340fdeadc5a73eac24af622c22010"
-VERIFIER_URL = "https://github.com/JetBrains/intellij-plugin-verifier/releases/download/1.410/verifier-cli-1.410-all.jar"
+VERIFIER_SHA256 = "d6cc1c1f17761bb5efff187f98b63fb792c7ef2a2fb9202bb5dbea05ebc02bfa"
+VERIFIER_URL = "https://github.com/JetBrains/intellij-plugin-verifier/releases/download/1.411/verifier-cli-1.411-all.jar"
 SDK_LAYOUT = "Checksum-verified SDK extraction, layout 2\n"
 
 
@@ -76,7 +76,7 @@ def main():
     parser.add_argument("--ide-home", type=Path)
     parser.add_argument("--java-home", type=Path)
     parser.add_argument("--cache", type=Path)
-    parser.add_argument("--verifier-jar", type=Path, help="Local checksum-pinned Plugin Verifier 1.410 JAR")
+    parser.add_argument("--verifier-jar", type=Path, help="Local checksum-pinned Plugin Verifier 1.411 JAR")
     add_dependency_options(parser)
     parser.add_argument("--reports", type=Path, default=ROOT / "build/compatibility/verifier-ci")
     args = parser.parse_args()
@@ -111,7 +111,7 @@ def verify(args, deps):
     except ValueError:
         java_home = deps.java(args.java_home)
         java = str(executable(java_home, 'java'))
-    verifier = args.verifier_jar or (args.cache / 'tools/verifier/verifier-cli-1.410-all.jar' if args.cache and (args.cache / 'tools/verifier/verifier-cli-1.410-all.jar').is_file() else None) or deps.existing('tools/verifier/verifier-cli-1.410-all.jar') or cache / 'tools/verifier/verifier-cli-1.410-all.jar'
+    verifier = args.verifier_jar or (args.cache / 'tools/verifier/verifier-cli-1.411-all.jar' if args.cache and (args.cache / 'tools/verifier/verifier-cli-1.411-all.jar').is_file() else None) or deps.existing('tools/verifier/verifier-cli-1.411-all.jar') or cache / 'tools/verifier/verifier-cli-1.411-all.jar'
     if not verifier.exists():
         if args.verifier_jar:
             raise ValueError('--verifier-jar does not exist')

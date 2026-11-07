@@ -3,7 +3,7 @@ import org.jetbrains.intellij.platform.gradle.tasks.RunIdeTask
 
 plugins {
     id("java")
-    id("org.jetbrains.intellij.platform") version "2.19.0"
+    id("org.jetbrains.intellij.platform") version "2.20.0"
     id("org.jetbrains.kotlin.jvm") version "2.4.21"
 }
 
@@ -73,7 +73,7 @@ dependencies {
     intellijPlatform {
         if (localIde == null) intellijIdeaCommunity("2025.1") else local(localIde)
         bundledPlugins()
-        pluginVerifier("1.410")
+        pluginVerifier("1.411")
         zipSigner("0.1.24")
         testFramework(TestFrameworkType.Starter, configurationName = "uiTestImplementation")
         testFramework(TestFrameworkType.Platform, configurationName = "platformTestImplementation")

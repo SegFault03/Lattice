@@ -86,7 +86,7 @@ class SdkTests(unittest.TestCase):
             archive = root / "plugin.zip"
             archive.write_bytes(b"placeholder")
             (root / "product-info.json").write_text("{}")
-            jar = root / "tools/verifier/verifier-cli-1.410-all.jar"
+            jar = root / "tools/verifier/verifier-cli-1.411-all.jar"
             jar.parent.mkdir(parents=True)
             jar.write_bytes(b"placeholder")
             report_paths = []
