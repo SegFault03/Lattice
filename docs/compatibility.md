@@ -4,7 +4,7 @@
 
 Production targets Java 21 and IntelliJ IDEA 2025.1 (build 251). Plugin Verifier 1.410 checked the packaged ZIP against full SDKs without ignored compatibility errors:
 
-The build-tool baseline is Gradle 9.8.0 through the checksum-pinned wrapper and IntelliJ Platform Gradle Plugin 2.19.0. Pure tests, plugin packaging, UI previews, live MySQL/HSQLDB/PostgreSQL flows, the Java 8 JDBC probes and the IntelliJ matrix are validated separately so a dependency change can be checked against each layer.
+The build-tool baseline is Gradle 9.8.0 through the checksum-pinned wrapper and IntelliJ Platform Gradle Plugin 2.19.0 and Kotlin 2.4.21 compiling for Kotlin API 2.1. Pure tests, plugin packaging, UI previews, live MySQL/HSQLDB/PostgreSQL flows, the Java 8 JDBC probes and the IntelliJ matrix are validated separately so a dependency change can be checked against each layer.
 
 | IDEA | Build | Result |
 |---|---|---|
@@ -14,7 +14,7 @@ The build-tool baseline is Gradle 9.8.0 through the checksum-pinned wrapper and 
 | 2026.2.3 Unified/Ultimate | 262.10968.63 | Compatible |
 | 2026.3 Unified/Ultimate | 263.7307.200 | Compatible |
 
-The SQL editor features (highlighting, completion, hover, SQL in Java and Kotlin strings, project connection discovery) are part of that ZIP. They load their Java and Kotlin code through optional plugin descriptors, so the ZIP also works in IDEs without those plugins, and the Kotlin part reads PSI only, which both Kotlin plugin modes provide. Plugin Verifier also reports uses of deprecated, internal and experimental platform API, including the documentation target API behind hover (`TargetPresentation`, `Pointer`), the highlighter order behind SQL cards and one existing table renderer key. They are not compatibility errors; a future IDE release may change them. The IDE fixture tests for these features (`platformTest`, `javaPlatformTest`, `kotlinPlatformTest`) run against the 2025.1 Community SDK.
+The SQL editor features (highlighting, completion, hover, SQL in Java and Kotlin strings, project connection discovery) are part of that ZIP. They load their Java and Kotlin code through optional plugin descriptors, so the ZIP also works in IDEs without those plugins, and the Kotlin part reads PSI only, which both Kotlin plugin modes provide. Plugin Verifier also reports uses of deprecated, internal and experimental platform API, including the documentation target API behind hover (`TargetPresentation`, `Pointer`), the highlighter order behind SQL cards and one existing table renderer key. They are not compatibility errors; a future IDE release may change them. The IDE fixture tests for these features (`platformTest`, `javaPlatformTest`, `kotlinPlatformTest`) run against both [IDE targets](CI_TESTING.md#ide-targets): the 2025.1 Community SDK and the 2026.3 unified SDK, beside its Database plugin.
 
 Only PRs targeting `main` run the IntelliJ and JDBC compatibility matrices. IDE
 jobs verify the exact ZIP produced by the PR merge build against each of the

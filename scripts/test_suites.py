@@ -63,6 +63,8 @@ def load_catalog(path=CATALOG):
         if suite['kind'] == 'live' and any('mysql' in fixtures for fixtures in suite['fixtures'].values()):
             if 'mysql' not in suite['requires'] or not suite.get('mysql_native_version') or not suite.get('mysql_docker_image'):
                 raise ValueError(f'{name}: declare native and Docker MySQL fixture versions')
+        if suite.get('ide_version') and suite['kind'] not in {'gradle', 'ui'}:
+            raise ValueError(f'{name}: only Gradle and UI suites can select their own IDE target')
         if suite['kind'] == 'verifier' and not suite.get('version'):
             raise ValueError(f'{name}: missing IDE version')
         if suite['kind'] == 'database' and suite.get('mode') not in {'mysql', 'hsqldb', 'h2', 'postgres'}:

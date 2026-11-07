@@ -38,7 +38,7 @@ Supply an extracted IDEA 2026.2.3 directory, and use JDK 21 to run Gradle. In Po
 
 ```powershell
 $env:LATTICE_WHATS_NEW_OUTPUT = "$PWD\src\main\resources\release-notes\images"
-.\gradlew.bat javaPlatformTest --tests "*WhatsNewRendersJavaFixtureTest" --rerun -I scripts/gradle/whats-new-renders.init.gradle "-Plattice.ide.home=C:/path/to/idea-2026.2.3"
+.\gradlew.bat javaPlatformTest --tests "*WhatsNewRendersJavaFixtureTest" --rerun "-Plattice.ide.home=C:/path/to/idea-2026.2.3"
 Remove-Item Env:LATTICE_WHATS_NEW_OUTPUT
 ```
 

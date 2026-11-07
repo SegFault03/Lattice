@@ -165,7 +165,8 @@ public class DatabaseConnectionManager implements com.intellij.openapi.Disposabl
         }
     }
 
-    private static void closeQuietly(Connection conn) {
+    /** Closing can wait on the server, so on the UI thread it moves to a background thread. */
+    static void closeQuietly(Connection conn) {
         var application=com.intellij.openapi.application.ApplicationManager.getApplication();
         if(conn!=null && application!=null && application.isDispatchThread()) {
             application.executeOnPooledThread(() -> closeQuietly(conn)); return;

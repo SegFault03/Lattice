@@ -266,7 +266,7 @@ The status bar entry says when a connection was chosen because of the project's 
 
 | Setting | Default |
 |---|---|
-| Enable Lattice SQL editor support | On. Off where IntelliJ IDEA Ultimate's Database plugin is enabled. |
+| Enable Lattice SQL editor support | On. Off in IntelliJ IDEA Ultimate where the Database plugin is enabled. |
 | Handle `.sql` files | On |
 | Syntax highlighting | On |
 | Code completion | On |
@@ -300,9 +300,18 @@ Lattice replaces the IDE's highlighting-only SQL file type for the `.sql` extens
 
 Lattice's SQL editor needs IntelliJ IDEA 2025.1 or later (build 251+). SQL in Java and Kotlin strings needs the bundled Java and Kotlin plugins, which Lattice loads only when present; the Kotlin part reads Kotlin PSI only and works in both the K1 and K2 modes. Hover uses the platform's documentation target API, which JetBrains marks experimental: Plugin Verifier reports those uses and a future IDE release may require a small adaptation. See [compatibility](compatibility.md).
 
-## IntelliJ IDEA Ultimate
+## The Database plugin
 
-The Database plugin brings its own SQL support, and unified IntelliJ IDEA builds bundle it. Where it is enabled, Lattice's SQL editor support starts off and a one-time notice offers to turn it on. Behavior with both active has not been tested, so leave it off unless you want to try. SQL cards and the Run, Send to Console, Explain and Run and Roll Back actions stay unavailable while the Database plugin is enabled, whatever this setting says; disable that plugin to use them.
+The Database plugin brings its own SQL support, and unified IntelliJ IDEA builds bundle it. What Lattice does depends on the edition. A one-time warning explains it, and your choice in the settings wins afterwards.
+
+| Edition, with the Database plugin enabled | Lattice's SQL editor support | SQL cards and dry runs |
+|---|---|---|
+| IntelliJ IDEA Ultimate, including a trial | Off by default; a warning offers to turn it on, and you may notice conflicts if you do | Unavailable until you disable the Database plugin |
+| Community edition (no Ultimate license) | On by default; a warning says you may notice conflicts and offers to turn it off | Available |
+
+Lattice tells the editions apart by whether the IDE holds a license or a trial for the product, and follows a license that arrives or lapses while the IDE runs. Without an enabled Database plugin there is nothing to conflict with, so support is on with no warning.
+
+The conflict known so far is in Java: strings marked with a `// language=SQL` comment, which is what the Treat this string as SQL fix writes, go to the Database plugin's SQL rather than Lattice's. `@Language("SQL")`, strings Lattice recognizes by the call they are passed to or by their text, `.sql` files and Kotlin strings passed the same fixture tests with both plugins active. These tests run without a license, so they do not exercise the plugin as a paid user sees it.
 
 ## Limits
 

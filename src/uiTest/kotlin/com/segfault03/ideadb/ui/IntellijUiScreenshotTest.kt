@@ -23,9 +23,9 @@ import com.intellij.driver.sdk.ui.components.elements.waitForNoOpenedDialogs
 import com.intellij.driver.sdk.ui.remote.Window
 import com.intellij.driver.sdk.waitForIndicators
 import com.intellij.ide.starter.driver.engine.runIdeWithDriver
-import com.intellij.ide.starter.ide.IdeProductProvider
 import com.intellij.ide.starter.ide.installer.ExistingIdeInstaller
 import com.intellij.ide.starter.junit5.hyphenateWithClass
+import com.intellij.ide.starter.models.IdeInfo
 import com.intellij.ide.starter.models.TestCase
 import com.intellij.ide.starter.plugins.PluginConfigurator
 import com.intellij.ide.starter.project.LocalProjectInfo
@@ -111,7 +111,13 @@ class IntellijUiScreenshotTest {
 
         val ideHome = Path.of(requireNotNull(System.getProperty("ui.ide.home")))
         val productCode = System.getProperty("ui.ide.product", "IC")
-        val ideInfo = (if (productCode == "IU") IdeProductProvider.IU else IdeProductProvider.IC).copy(
+        // Named arguments, because Starter's product catalog and this constructor differ between the IDE targets.
+        val ideInfo = IdeInfo(
+            productCode = productCode,
+            platformPrefix = if (productCode == "IU") "idea" else "Idea",
+            executableFileName = "idea",
+            qodanaProductCode = if (productCode == "IU") "QDJVM" else "QDJVMC",
+            fullName = if (productCode == "IU") "IDEA" else "IDEA Community",
             buildNumber = requireNotNull(System.getProperty("ui.ide.build")),
             version = requireNotNull(System.getProperty("ui.ide.version")),
             getInstaller = { ExistingIdeInstaller(ideHome) },
@@ -354,6 +360,7 @@ class IntellijUiScreenshotTest {
                     frame.x { byVisibleText("Create table…") }.waitFound().click()
                     frame.x(DialogUiComponent::class.java) { byTitle("Create table in PUBLIC") }.waitFound().also { dialog ->
                         inspectorInput(dialog, "Table name").text = name
+                        addScenarioColumns(dialog)
                         dialog.x { byAccessibleName("Create new table") }.waitFound().click()
                     }
                     frame.x(DialogUiComponent::class.java) { byTitle("Table created") }.waitFound().pressButton("OK")
@@ -626,7 +633,7 @@ class IntellijUiScreenshotTest {
                         val mysqlProgressBar = mysqlDialog.x(UiComponent::class.java) {
                             byAccessibleName("Driver download progress")
                         }.waitFound()
-                        assertTrue(mysqlProgressBar.component.isVisible(), "The progress bar should appear during a driver download")
+                        assertTrue(mysqlProgressBar.component.isShowing(), "The progress bar should appear during a driver download")
                         assertTrue(!mysqlDownloadButton.component.isEnabled(), "Download should be disabled during the transfer")
                         assertTrue(!mysqlDriverVersionCombo.component.isEnabled(), "The version selector should be disabled during the transfer")
                         assertTrue(
@@ -987,6 +994,7 @@ class IntellijUiScreenshotTest {
                 byTitle("Create table in $schemaName")
             }.waitFound()
             inspectorInput(createTableDialog, "Table name").text = "LATTICE_PEOPLE"
+            addScenarioColumns(createTableDialog)
             Thread.sleep(500)
             assertCreateTableLayout(createTableDialog)
             captureScreen(screenshotsDirectory.resolve("create-table-dialog.png"))
@@ -1203,7 +1211,7 @@ class IntellijUiScreenshotTest {
                 }
                 robot.waitForIdle()
                 waitUntil("double-clicking the value area enters edit mode") {
-                    details.x { byAccessibleName("Stage this value; Commit saves it to the database") }.waitFound().component.isVisible()
+                    details.x { byAccessibleName("Stage this value; Commit saves it to the database") }.waitFound().component.isShowing()
                 }
                 captureScreen(screenshotsDirectory.resolve("value-workspace-editing.png"))
 
@@ -1501,10 +1509,7 @@ class IntellijUiScreenshotTest {
                 val applyButton = tableEditor.x { byAccessibleName("Apply filter and sort") }.waitFound()
                 check(!applyButton.component.isEnabled()) { "Empty clauses must disable Apply" }
                 check(!tableEditor.x { byAccessibleName("Clear WHERE and ORDER BY clauses") }.waitFound().component.isEnabled())
-                val whereInput = tableEditor.xx(JTextFieldUI::class.java) {
-                    byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField")
-                }.list().first()
-                whereInput.text = "1 = 1"
+                setWhereClause(tableEditor, "1 = 1")
                 applyButton.click()
                 waitUntil("Apply completed") { applyButton.component.isEnabled() }
                 captureScreen(screenshotsDirectory.resolve("table-action-focus-after-click.png"))
@@ -1513,11 +1518,11 @@ class IntellijUiScreenshotTest {
                     frame.x { byVisibleText("Count rows") }.waitFound().click()
                 }
                 waitUntil("row count completed") { tableEditor.hasSubtext("1 saved row matches the filter") }
-                whereInput.text = "\"id\" = -999"
+                setWhereClause(tableEditor, "\"id\" = -999")
                 tableEditor.x { byVisibleText("Apply") }.waitFound().click()
                 waitUntil("empty filter result") { dataGrid.rowCount() == 0 }
                 captureScreen(screenshotsDirectory.resolve("table-filter-empty.png"))
-                whereInput.text = "invalid_column = 1"
+                setWhereClause(tableEditor, "invalid_column = 1")
                 tableEditor.x { byVisibleText("Apply") }.waitFound().click()
                 frame.x(DialogUiComponent::class.java) { byTitle("Data Fetch Error") }.waitFound().also {
                     captureScreen(screenshotsDirectory.resolve("table-filter-error.png"))
@@ -1669,8 +1674,8 @@ class IntellijUiScreenshotTest {
                     captureScreen(screenshotsDirectory.resolve("sql-console-loading-databases.png"))
                 } finally { jdbcFixture.resumeResponses() }
                 waitUntil("console database picker ready") { console.x { byVisibleText("Run") }.waitFound().component.isEnabled() }
-                val query = console.xx { byJavaClass("com.intellij.ui.components.JBTextArea") }.list().first()
-                val queryText = cast(query.component, JTextComponent::class)
+                val query = console.xx { byType("com.intellij.ui.EditorTextField") }.list().first()
+                val queryText = cast(query.component, LiveEditorTextField::class)
                 captureScreen(screenshotsDirectory.resolve("sql-console-ready.png"))
                 val runQuery = console.x { byVisibleText("Run") }.waitFound()
                 val stopQuery = console.x { byVisibleText("Stop") }.waitFound()
@@ -2035,19 +2040,29 @@ class IntellijUiScreenshotTest {
         }
     }
 
+    /** The SQL editors of the WHERE and ORDER BY clauses, in that order. */
+    private fun filterClauses(editor: UiComponent): List<UiComponent> {
+        val clauses = editor.x { byJavaClass("com.segfault03.ideadb.ui.TableFilterPanel") }.waitFound()
+            .xx { byType("com.intellij.ui.EditorTextField") }.list()
+        check(clauses.size == 2) { "Expected WHERE and ORDER BY editors, found ${clauses.size}" }
+        return clauses
+    }
+
+    private fun setWhereClause(editor: UiComponent, text: String) {
+        val where = filterClauses(editor).first()
+        editor.driver.withContext(OnDispatcher.EDT) { cast(where.component, LiveEditorTextField::class).setText(text) }
+    }
+
     private fun twoRowFilterWindowWidth(frame: IdeaFrameUI, editor: UiComponent): Int {
         // Clear adds to the action group; font/theme metrics vary by OS.
         val filters = editor.x { byJavaClass("com.segfault03.ideadb.ui.TableFilterPanel") }.waitFound()
-        val where = editor.x(JTextFieldUI::class.java) {
-            and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("WHERE"))
-        }.waitFound()
-        val order = editor.x(JTextFieldUI::class.java) {
-            and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName("ORDER BY"))
-        }.waitFound()
+        val (where, order) = filterClauses(editor)
         val apply = editor.x { byAccessibleName("Apply filter and sort") }.waitFound()
         return editor.driver.withContext(OnDispatcher.EDT) {
-            val whereGroup = cast(cast(where.component, LiveSwingComponent::class).getParent(), LiveSwingComponent::class)
-            val orderGroup = cast(cast(order.component, LiveSwingComponent::class).getParent(), LiveSwingComponent::class)
+            // Each clause's editor sits in its frame, and the frame beside its label in the group.
+            fun group(clause: UiComponent) = cast(cast(cast(clause.component, LiveSwingComponent::class).getParent(), LiveSwingComponent::class).getParent(), LiveSwingComponent::class)
+            val whereGroup = group(where)
+            val orderGroup = group(order)
             val actions = cast(cast(apply.component, LiveSwingComponent::class).getParent(), LiveSwingComponent::class)
             // The filter panel has symmetric horizontal padding. Its group's X
             // position measures that padding without crossing Driver's Insets API.
@@ -2086,6 +2101,18 @@ class IntellijUiScreenshotTest {
         waitUntil("New connection '$name' ready to add") {
             dialog.x { byVisibleText("Add connection") }.waitFound().component.isEnabled()
         }
+    }
+
+    /** New tables start with only an id; the scenarios need a required name and a timestamp beside it. */
+    private fun addScenarioColumns(dialog: UiComponent) {
+        dialog.x { byAccessibleName("Add column") }.waitFound().click()
+        inspectorInput(dialog, "Column name").text = "name"
+        dialog.x { byAccessibleName("Allow NULL values") }.waitFound().click()
+        dialog.x { byAccessibleName("Add column") }.waitFound().click()
+        inspectorInput(dialog, "Column name").text = "created_at"
+        selectComboItemWithKeyboard(dialog.x(JComboBoxUiComponent::class.java) {
+            and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"), byAccessibleName("Data type"))
+        }.waitFound(), "TIMESTAMP")
     }
 
     private fun selectInspectorColumn(dialog: UiComponent, index: Int) {
@@ -2143,8 +2170,10 @@ class IntellijUiScreenshotTest {
             conn.metaData.getColumns(null,"PUBLIC",table,"%").use { rows -> buildList { while(rows.next())add(rows.getString("COLUMN_NAME") to rows.getInt("COLUMN_SIZE")) } }
         }
         var dialog = open(); inspectorInput(dialog,"Table name").text = "customers"
-        select(dialog,"name"); inspectorInput(dialog,"Length / precision").text = "120"
-        select(dialog,"created_at"); dialog.x { byAccessibleName("Allow NULL values") }.waitFound().click()
+        add(dialog,"name"); inspectorInput(dialog,"Length / precision").text = "120"
+        add(dialog,"created_at")
+        selectComboItemWithKeyboard(dialog.x(JComboBoxUiComponent::class.java) { and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"),byAccessibleName("Data type")) }.waitFound(),"TIMESTAMP")
+        dialog.x { byAccessibleName("Allow NULL values") }.waitFound().click()
         inspectorInput(dialog,"Default value").text = "SQL:CURRENT_TIMESTAMP"
         add(dialog,"email"); inspectorInput(dialog,"Length / precision").text = "oops"
         select(dialog,"name"); check(!dialog.x { byAccessibleName("Create new table") }.waitFound().component.isEnabled())
@@ -2194,7 +2223,7 @@ class IntellijUiScreenshotTest {
         inspectorInput(dialog,"Table name").text = "customers_archive"; ready(dialog)
         dialog.x { byAccessibleName("Create new table") }.waitFound().click()
         frame.x(DialogUiComponent::class.java) { byTitle("Table created") }.waitFound().pressButton("OK"); frame.waitForNoOpenedDialogs()
-        check(columns("customers_archive").size == 4 && columns("customers_archive").last() == ("nickname" to 64))
+        check(columns("customers_archive").size == 2 && columns("customers_archive").last() == ("nickname" to 64))
         waitUntil("archive appears") { tree.pathExists(*(schema + arrayOf("Tables (2)","customers_archive"))) }
         dialog = open(); inspectorInput(dialog,"Table name").text = "discarded_table"; dialog.pressButton("Cancel")
         frame.x(DialogUiComponent::class.java) { byTitle("Discard changes") }.waitFound().pressButton("Discard"); frame.waitForNoOpenedDialogs()
@@ -2473,7 +2502,7 @@ class IntellijUiScreenshotTest {
         waitUntil("alter dialog refreshes the existing grid") { columnNames().any { it.startsWith("refresh_note") } }
         menu("Open in SQL console")
         val console = frame.x { byJavaClass("com.segfault03.ideadb.ui.SqlQueryConsolePanel") }.waitFound()
-        val text = console.driver.cast(console.xx { byJavaClass("com.intellij.ui.components.JBTextArea") }.list().first().component, JTextComponent::class)
+        val text = console.driver.cast(console.xx { byType("com.intellij.ui.EditorTextField") }.list().first().component, LiveEditorTextField::class)
         val run = console.x { byVisibleText("Run") }.waitFound()
         val stop = console.x { byVisibleText("Stop") }.waitFound()
         fun execute(sql: String) {
@@ -2791,14 +2820,15 @@ class IntellijUiScreenshotTest {
     private fun selectComboItemWithKeyboard(combo: JComboBoxUiComponent, label: String) {
         val index = combo.listValues().indexOf(label)
         check(index >= 0) { "Missing combo item '$label': ${combo.listValues()}" }
-        // Navigate the real popup and verify its result before using the next card.
+        // Navigate the real popup and verify its result before using the next card. Home stays in an
+        // editable combo's text, so step from the row the popup opens on.
+        val current = combo.driver.cast(combo.component, LiveComboSelection::class).getSelectedIndex().coerceAtLeast(0)
         clickComboArrow(combo)
         val robot = Robot()
-        robot.keyPress(KeyEvent.VK_HOME)
-        robot.keyRelease(KeyEvent.VK_HOME)
-        repeat(index) {
-            robot.keyPress(KeyEvent.VK_DOWN)
-            robot.keyRelease(KeyEvent.VK_DOWN)
+        val step = if (index >= current) KeyEvent.VK_DOWN else KeyEvent.VK_UP
+        repeat(kotlin.math.abs(index - current)) {
+            robot.keyPress(step)
+            robot.keyRelease(step)
         }
         robot.keyPress(KeyEvent.VK_ENTER)
         robot.keyRelease(KeyEvent.VK_ENTER)
@@ -2926,6 +2956,11 @@ interface LiveBalloonBuilder {
 interface LiveBalloon {
     fun isDisposed(): Boolean
     fun setBounds(bounds: Rectangle)
+}
+
+@Remote("com.intellij.ui.EditorTextField")
+interface LiveEditorTextField {
+    fun setText(text: String)
 }
 
 @Remote("javax.swing.JComponent")

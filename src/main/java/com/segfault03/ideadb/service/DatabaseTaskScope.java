@@ -69,9 +69,9 @@ public final class DatabaseTaskScope implements AutoCloseable {
         return String.join("\n",config.getId(),config.buildJdbcUrl(),String.valueOf(config.getUser()),String.valueOf(config.getPassword()),
                 String.valueOf(config.isAutoCommit()),String.valueOf(config.getDriverSource()),config.getDriverVersion(),config.getDriverJarPath());
     }
-    private static void closeQuietly(Connection connection) {
-        if(connection!=null) try { connection.close(); } catch(java.sql.SQLException ignored) { }
-    }
+    private static void closeQuietly(Connection connection) { DatabaseConnectionManager.closeQuietly(connection); }
+    @org.jetbrains.annotations.TestOnly
+    synchronized void parkIdleForTests(Connection connection) { idle=connection; idleKey=""; }
     public void cancelPending() {
         Connection stale;
         synchronized(this) {

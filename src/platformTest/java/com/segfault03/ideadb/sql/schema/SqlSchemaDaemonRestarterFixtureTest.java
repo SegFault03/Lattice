@@ -10,7 +10,7 @@ public class SqlSchemaDaemonRestarterFixtureTest extends H2SqlFixtureTestCase {
 
     private boolean upToDate() {
         var analyzer = (DaemonCodeAnalyzerImpl) DaemonCodeAnalyzer.getInstance(getProject());
-        return analyzer.getFileStatusMap().allDirtyScopesAreNull(myFixture.getEditor().getDocument());
+        return analyzer.isErrorAnalyzingFinished(myFixture.getFile());
     }
 
     public void testAFinishedSchemaReadHighlightsOpenEditorsAgain() {

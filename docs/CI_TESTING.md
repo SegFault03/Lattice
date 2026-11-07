@@ -72,11 +72,33 @@ in the PR. Repository agent instructions are in [AGENTS.md](../AGENTS.md).
 | `suite-plan` | Validate catalog/workflow routing and emit shared UI, IDE and database matrices | Every event; metadata only |
 | `functional-build` | Provider registration, URLs, defaults, driver selection, embedded H2/HSQLDB schema and table operations, CRUD, exports and key metadata; plugin ZIP drivers, licenses and bytecode | Every commit; Linux, Windows, macOS |
 | `tooling-tests` | Python runners, fixture ownership, Windows launcher execution, archive/release tooling, workflow event routing and release ancestry | Main PR only; Linux, Windows, macOS |
-| `backend-tests` | Remaining model/service/Swing regressions; transactions, validation, cancellation and recovery; H2 file/TCP/TLS and isolated drivers; SQL editor IDE fixtures (`platformTest`, `javaPlatformTest`, `kotlinPlatformTest`: language, completion, hover, injection, validation, project discovery) on Linux; owned MySQL/HSQLDB/PostgreSQL integration on Linux | Main PR only; three hosts, live external-engine fixtures on Linux |
-| `ui-tests` | Headless editor recovery assertions; HSQLDB full flow; mixed alter/recovery; create/mutation refresh at 125%; inspector recovery at 125% with both themes; SQL editor Send to Console, Explain and Run and Roll Back; one search, PostgreSQL and H2 flow | Main PR only; independent Linux matrix jobs |
+| `backend-tests` | Remaining model/service/Swing regressions; transactions, validation, cancellation and recovery; H2 file/TCP/TLS and isolated drivers; SQL editor IDE fixtures (`platformTest`, `javaPlatformTest`, `kotlinPlatformTest`: language, completion, hover, injection, validation, project discovery) on Linux; owned MySQL/HSQLDB/PostgreSQL integration on Linux; every source set compiled, and the functional, regression, IDE fixture and H2 integration suites run, against the newest IDE target on Linux | Main PR only; three hosts, live external-engine fixtures on Linux |
+| `ui-tests` | Headless editor recovery assertions; HSQLDB full flow; mixed alter/recovery; create/mutation refresh at 125%; inspector recovery at 125% with both themes; SQL editor Send to Console, Explain and Run and Roll Back; one search, PostgreSQL and H2 flow; HSQLDB full flow on the newest IDE target | Main PR only; independent Linux matrix jobs |
 | `ide-compatibility` | Plugin Verifier against IDEA 2025.1, 2025.2, 2025.3, 2026.2.3 and 2026.3 using the exact ZIP from `functional-build` | Main PR only; one Linux job per IDE |
 | `database-compatibility` | MySQL, HSQLDB, PostgreSQL and H2 server/JDBC matrices with real Java 8/21 probes and explicit unsupported-runtime checks | Main PR only; independent Linux job per engine |
 | `full-validation` | Requires all preceding groups to succeed; failures, cancellations and unexpected skipped groups fail the gate | Main PR only |
+
+## IDE targets
+
+Code is compiled and tested against two IDE targets:
+
+- **Oldest supported:** IntelliJ 2025.1, the `since-build` of the plugin. It is the
+  default SDK of every suite and builds the release ZIP.
+- **Newest stable:** IntelliJ 2026.3. The `backend-newest-ide` and `ui-newest-ide`
+  suites select it with `ide_version` in the catalog.
+
+When JetBrains ships a newer stable release, change `ide_version` in both suites and
+add a verifier suite for it. When the supported floor rises, change the default SDK
+in `build.gradle.kts` and `since-build`. Plugin Verifier suites check the packaged ZIP
+against further releases without compiling anything.
+
+Source has to compile on both targets, and classes are compiled for Java 21 and
+Kotlin API 2.1 whichever SDK is on the classpath, because the plugin runs on the
+oldest target's runtime. The newest target is a unified IDE that bundles the Database
+plugin, and fixtures hold no license, so they run beside it in the Community state;
+see [the Database plugin](SQL_EDITOR.md#the-database-plugin).
+
+## Java and platform scope
 
 The plugin itself targets Java 21 / IntelliJ build 251. Java 8 probes validate
 compatible JDBC drivers and server runtimes, not running the plugin on Java 8.

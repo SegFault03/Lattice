@@ -34,6 +34,8 @@ public class SqlConnectionChooserFixtureTest extends BasePlatformTestCase {
         postgres = new ConnectionConfig(DatabaseType.POSTGRESQL, "shop-postgres");
         connections.addConnection(mysql);
         connections.addConnection(postgres);
+        // The light project outlives each test, and with it what discovery found in another test's files.
+        JdbcDiscovery.getInstance(getProject()).refreshNow();
     }
 
     @Override protected void tearDown() throws Exception {

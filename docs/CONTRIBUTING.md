@@ -9,7 +9,7 @@ python scripts/test.py --build
 python -m unittest discover -s scripts/tests -v
 ```
 
-On Linux/macOS you can also use `./gradlew test buildPlugin`; on Windows use `.\gradlew.bat test buildPlugin`. Set `JAVA_HOME` to JDK 21 or put Java on PATH, or pass `--java-home /path/to/jdk-21` to `scripts/test.py`. Gradle downloads the configured SDK. `--ide-home` / `-Plattice.ide.home` optionally select your own IntelliJ 2025.1 SDK.
+On Linux/macOS you can also use `./gradlew test buildPlugin`; on Windows use `.\gradlew.bat test buildPlugin`. Set `JAVA_HOME` to JDK 21 or put Java on PATH, or pass `--java-home /path/to/jdk-21` to `scripts/test.py`. Gradle downloads the configured SDK. `--ide-home` / `-Plattice.ide.home` optionally select your own IntelliJ SDK. Changes must compile and pass on both [IDE targets](CI_TESTING.md#ide-targets), so use only API present on both.
 
 ## SQL editor fixture tests
 

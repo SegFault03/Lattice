@@ -59,8 +59,12 @@ class SqlEditorConfigurable : BoundConfigurable("Lattice SQL Editor"), Searchabl
             row {
                 master = checkBox("Enable Lattice SQL editor support")
                     .bindSelected({ settings.isEnabled() }, { if (it != settings.isEnabled()) settings.setEnabled(it) })
-                if (UltimateDatabasePlugin.isActive()) {
-                    master.comment("The IDE's Database plugin is enabled and provides SQL support, so this is off unless you turn it on")
+                when (UltimateDatabasePlugin.presence()) {
+                    UltimateDatabasePlugin.Presence.ULTIMATE ->
+                        master.comment("IntelliJ IDEA Ultimate's Database plugin provides SQL support, so this is off unless you turn it on. You may notice conflicts if you do, and SQL cards and dry runs stay unavailable.")
+                    UltimateDatabasePlugin.Presence.COMMUNITY ->
+                        master.comment("The IDE's Database plugin is also enabled, so you may notice conflicts in SQL files")
+                    UltimateDatabasePlugin.Presence.ABSENT -> {}
                 }
             }
 

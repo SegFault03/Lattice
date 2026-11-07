@@ -8,6 +8,8 @@ Read `AGENTS.md` before changing CI, workflows, `build.gradle.kts` test tasks, o
 
 Requirements: JDK 21 (`JAVA_HOME` or on PATH), Python 3.11+ for helper scripts. Gradle downloads the IntelliJ 2025.1 SDK on first use.
 
+Code is compiled and tested against two IDE targets: the oldest supported, IntelliJ 2025.1, which also builds the release ZIP, and the newest stable, IntelliJ 2026.3. Select the newest with `-Plattice.ide.home=/path/to/idea-2026.3`; see `docs/CI_TESTING.md#ide-targets`.
+
 ```sh
 ./gradlew test buildPlugin          # unit tests + plugin ZIP (build/distributions/)
 ./gradlew buildPlugin -x test       # packaging only

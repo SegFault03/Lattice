@@ -10,6 +10,7 @@ import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.options.ShowSettingsUtil;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
+import com.intellij.ui.LicensingFacade;
 import com.intellij.util.FileContentUtil;
 import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.sql.binding.SqlBindingsState;
@@ -51,10 +52,17 @@ public final class SqlEditorSupport {
                 settings.takeoverNoticeShown(true);
                 announceTakeover(project);
             }
-            if (UltimateDatabasePlugin.isActive() && !settings.isExplicit() && !settings.ultimateNoticeShown()) {
-                settings.ultimateNoticeShown(true);
-                announceStandDown(project);
-            }
+            announceCoexistence(project);
+            // A license can arrive or lapse while the IDE runs, which changes who handles SQL.
+            AtomicReference<UltimateDatabasePlugin.Presence> presence = new AtomicReference<>(UltimateDatabasePlugin.presence());
+            ApplicationManager.getApplication().getMessageBus().connect(SqlEditorProjectScope.of(project))
+                    .subscribe(LicensingFacade.LicenseStateListener.TOPIC, (LicensingFacade.LicenseStateListener) licensing ->
+                            ApplicationManager.getApplication().invokeLater(() -> {
+                                UltimateDatabasePlugin.Presence now = UltimateDatabasePlugin.presence();
+                                if (project.isDisposed() || now == presence.getAndSet(now)) return;
+                                settingsChanged();
+                                announceCoexistence(project);
+                            }));
             pruneBindings(project);
             ApplicationManager.getApplication().executeOnPooledThread(() -> {
                 if (!project.isDisposed()) SqlBindingsState.getInstance(project).pruneMissingFiles();
@@ -117,11 +125,42 @@ public final class SqlEditorSupport {
         notification.notify(project);
     }
 
+    /** Warns once about the Database plugin, unless the user has already chosen for themselves. */
+    public static void announceCoexistence(Project project) {
+        SqlEditorSettings settings = SqlEditorSettings.getInstance();
+        if (settings.isExplicit()) return;
+        switch (UltimateDatabasePlugin.presence()) {
+            case ULTIMATE -> {
+                if (settings.ultimateNoticeShown()) return;
+                settings.ultimateNoticeShown(true);
+                announceStandDown(project);
+            }
+            case COMMUNITY -> {
+                if (settings.communityConflictNoticeShown()) return;
+                settings.communityConflictNoticeShown(true);
+                announceConflictRisk(project);
+            }
+            case ABSENT -> {}
+        }
+    }
+
     private static void announceStandDown(Project project) {
         Notification notification = group().createNotification("Lattice SQL editor support is off",
-                "The Database plugin already provides SQL support here. You can turn Lattice's on anyway.", NotificationType.INFORMATION);
+                "IntelliJ IDEA Ultimate's Database plugin provides SQL support here. You can turn Lattice's on, but you may notice conflicts. "
+                        + "SQL cards and dry runs stay unavailable while that plugin is enabled.", NotificationType.WARNING);
         notification.addAction(NotificationAction.createSimpleExpiring("Turn on anyway", () -> {
             SqlEditorSettings.getInstance().setEnabled(true);
+            settingsChanged();
+        }));
+        notification.addAction(NotificationAction.createSimple("Settings", () -> openSettings(project)));
+        notification.notify(project);
+    }
+
+    private static void announceConflictRisk(Project project) {
+        Notification notification = group().createNotification("Lattice SQL editor support is on",
+                "The IDE's Database plugin is also enabled, so you may notice conflicts in SQL files. You can turn Lattice's support off.", NotificationType.WARNING);
+        notification.addAction(NotificationAction.createSimpleExpiring("Turn off", () -> {
+            SqlEditorSettings.getInstance().setEnabled(false);
             settingsChanged();
         }));
         notification.addAction(NotificationAction.createSimple("Settings", () -> openSettings(project)));

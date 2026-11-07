@@ -81,6 +81,16 @@ public class SendToConsoleFixtureTest extends H2SqlFixtureTestCase {
         assertTrue(opened.isEmpty());
     }
 
+    public void testOfferedInTheCommunityEditionWithTheDatabasePluginEnabled() {
+        UltimateDatabasePlugin.setPresenceForTests(UltimateDatabasePlugin.Presence.COMMUNITY, getTestRootDisposable());
+        // Without a chosen connection the actions show but cannot run, which is all this needs to see.
+        connections.removeConnection(h2.getId());
+        connections.addConnection(new ConnectionConfig(DatabaseType.H2, "a"));
+        connections.addConnection(new ConnectionConfig(DatabaseType.H2, "b"));
+        myFixture.configureByText("q.sql", "select <caret>1");
+        RUN_ACTIONS.forEach((id, text) -> assertTrue(id, myFixture.testAction(ActionManager.getInstance().getAction(id)).isVisible()));
+    }
+
     public void testHiddenWhenUltimateActive() {
         UltimateDatabasePlugin.setActiveForTests(true, getTestRootDisposable());
         myFixture.configureByText("q.sql", "select <caret>1");

@@ -85,6 +85,13 @@ def cached_platform_test_jars(sdk, gradle_cache):
                   if not jar.name.endswith('-sources.jar'))
 
 
+def platform_prefix(sdk):
+    """Names the product's ApplicationInfo resource: Community and the unified IDE spell it differently."""
+    info = sdk / 'product-info.json'
+    code = json.loads(info.read_text(encoding='utf-8')).get('productCode') if info.is_file() else None
+    return 'idea' if code == 'IU' else 'Idea'
+
+
 def run():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--ide-home', type=Path, help='IntelliJ SDK installation directory')
@@ -198,7 +205,7 @@ def render(args, deps, parser):
                          '--add-opens=java.desktop/sun.font=ALL-UNNAMED',
                          '--add-opens=java.desktop/sun.java2d=ALL-UNNAMED',
                          '--add-opens=java.desktop/sun.swing=ALL-UNNAMED',
-                         '-Djava.awt.headless=true', '-Didea.is.unit.test=true', '-Didea.platform.prefix=Idea',
+                         '-Djava.awt.headless=true', '-Didea.is.unit.test=true', f'-Didea.platform.prefix={platform_prefix(sdk)}',
                          # A newer IDE only gives a plugin on the class path a loader of its own if it has a jar.
                          '-Didea.force.use.core.classloader=true',
                          f'-Didea.home.path={sdk}', f'-Didea.config.path={config_path}',

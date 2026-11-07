@@ -26,6 +26,7 @@ import com.segfault03.ideadb.sql.binding.SqlDialectResolver;
 import com.segfault03.ideadb.sql.binding.SqlEditorRefresh;
 import com.segfault03.ideadb.sql.dialect.SqlDialects;
 import com.segfault03.ideadb.sql.doc.SqlDocumentationTarget;
+import com.segfault03.ideadb.sql.coexist.UltimateDatabasePlugin;
 import com.segfault03.ideadb.sql.lang.LatticeSqlLanguage;
 import com.segfault03.ideadb.sql.settings.SqlEditorSettings;
 import com.segfault03.ideadb.sql.binding.SqlBindingsState;
@@ -98,7 +99,18 @@ public class SqlInjectionJavaFixtureTest extends H2SqlFixtureTestCase {
         assertTrue(text, text.contains("select o.id") && text.contains("from orders o"));
     }
 
+    /** The Database plugin injects its own SQL into strings marked with a language comment, ahead of Lattice's: the conflict docs/SQL_EDITOR.md describes. */
+    private static boolean databasePluginTakesMarkedStrings() {
+        return UltimateDatabasePlugin.presence() != UltimateDatabasePlugin.Presence.ABSENT;
+    }
+
     public void testALanguageAnnotationOrCommentMakesAnyStringSql() {
+        if (databasePluginTakesMarkedStrings()) {
+            assertEquals("anything goes here", injectedAtCaret(inClass("@Language(\"SQL\") String q = \"anything go<caret>es here\";")));
+            assertNull(injectedAtCaret(inClass("// language=SQL\nString q = \"anything go<caret>es here\";")));
+            assertNull(injectedAtCaret(inClass("void f() {\n  //language=PostgreSQL\n  String q = \"anything go<caret>es here\";\n}")));
+            return;
+        }
         assertEquals("anything goes here", injectedAtCaret(inClass("@Language(\"SQL\") String q = \"anything go<caret>es here\";")));
         assertEquals("anything goes here", injectedAtCaret(inClass("// language=SQL\nString q = \"anything go<caret>es here\";")));
         assertEquals("anything goes here", injectedAtCaret(inClass("void f() {\n  //language=PostgreSQL\n  String q = \"anything go<caret>es here\";\n}")));
@@ -226,7 +238,7 @@ public class SqlInjectionJavaFixtureTest extends H2SqlFixtureTestCase {
         var doc = hostDocument();
         myFixture.launchAction(action);
         assertTrue(doc.getText().contains("    // language=SQL\n    String q = \"anything goes here\""));
-        assertTrue("the string is SQL now", isSqlNow(top));
+        assertEquals("the string is SQL now", !databasePluginTakesMarkedStrings(), isSqlNow(top));
     }
 
     public void testTheIntentionIsOfferedInAMultiLineCallAboveTheWholeStatement() {

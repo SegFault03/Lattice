@@ -4,7 +4,7 @@ import org.jetbrains.intellij.platform.gradle.tasks.RunIdeTask
 plugins {
     id("java")
     id("org.jetbrains.intellij.platform") version "2.19.0"
-    id("org.jetbrains.kotlin.jvm") version "2.0.21"
+    id("org.jetbrains.kotlin.jvm") version "2.4.21"
 }
 
 group = "com.segfault03.lattice"
@@ -59,13 +59,18 @@ fun sdkPluginJars(directory: String) =
 val javaPluginJars = sdkPluginJars("plugins/java/lib")
 val kotlinPluginJars = sdkPluginJars("plugins/Kotlin/lib")
 
+// The baseline of the SDK selected with lattice.ide.home; the default SDK is the oldest IDE target.
+val localIde: String? = providers.gradleProperty("lattice.ide.home").orNull
+val sdkBaseline = localIde?.let {
+    (groovy.json.JsonSlurper().parse(file("$it/product-info.json")) as Map<*, *>)["buildNumber"].toString().substringBefore('.').toInt()
+} ?: 251
+
 dependencies {
     compileOnly(javaPluginJars)
     compileOnly(kotlinPluginJars)
     testCompileOnly(javaPluginJars)
     testCompileOnly(kotlinPluginJars)
     intellijPlatform {
-        val localIde = providers.gradleProperty("lattice.ide.home").orNull
         if (localIde == null) intellijIdeaCommunity("2025.1") else local(localIde)
         bundledPlugins()
         pluginVerifier("1.410")
@@ -96,13 +101,29 @@ dependencies {
 
     uiTestImplementation(kotlin("stdlib"))
     uiTestRuntimeOnly(kotlin("reflect"))
-    uiTestImplementation("org.kodein.di:kodein-di-jvm:7.20.2")
-    uiTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.10.1")
+    // The platform plugin removes coroutines from Starter's dependencies. Starter on newer SDKs needs JetBrains' patched
+    // build, which the SDK itself carries, and brings its own Kodein; the older pins would shadow both.
+    if (sdkBaseline < 260) {
+        uiTestImplementation("org.kodein.di:kodein-di-jvm:7.20.2")
+        uiTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.10.1")
+    } else {
+        uiTestRuntimeOnly(files("$localIde/lib/intellij.libraries.kotlinx.coroutines.core.jar"))
+    }
 }
 
 java {
     sourceCompatibility = JavaVersion.VERSION_21
     targetCompatibility = JavaVersion.VERSION_21
+}
+
+// The IDE supplies the Kotlin runtime, so whichever SDK is on the classpath, compile for the oldest target's Java and
+// Kotlin. These are set per task because the platform plugin otherwise derives them from the SDK's own runtime.
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile>().configureEach {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
+        apiVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_1)
+        languageVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_1)
+    }
 }
 
 tasks.processResources {
@@ -140,6 +161,10 @@ intellijPlatformTesting.testIde.register("regressionTest") {
     }
 }
 
+// The SDK's test framework chooses the JUnit version of the fixture source set; the inherited test classpath must not shadow it.
+fun withoutInheritedJUnit(inherited: FileCollection) =
+    inherited.filter { !it.name.startsWith("junit-platform-") && !it.name.startsWith("junit-jupiter-") && !it.name.startsWith("junit-vintage-") }
+
 intellijPlatformTesting.testIde.register("platformTest") {
     // The Maven plugin is an optional dependency; this fixture proves Lattice loads and works without it.
     plugins { disablePlugin("org.jetbrains.idea.maven") }
@@ -148,7 +173,7 @@ intellijPlatformTesting.testIde.register("platformTest") {
         group = "verification"
         testClassesDirs = sourceSets["platformTest"].output.classesDirs
         // Append, never replace: the IDE test runtime (platform test framework, sandbox) is already on the classpath.
-        classpath += sourceSets["platformTest"].runtimeClasspath
+        classpath = withoutInheritedJUnit(classpath) + sourceSets["platformTest"].runtimeClasspath
         useJUnitPlatform { includeEngines("junit-vintage") }
         systemProperty("junit.jupiter.extensions.autodetection.enabled", "false")
         // Fixtures that need the Java or Kotlin plugin run in their own JVMs below: the two cannot share one.
@@ -166,7 +191,7 @@ for ((taskName, pluginJars, pattern) in listOf(
             description = "Run IDE fixture tests that need the ${pattern.removePrefix("*").removeSuffix("FixtureTest")} plugin"
             group = "verification"
             testClassesDirs = sourceSets["platformTest"].output.classesDirs
-            classpath += sourceSets["platformTest"].runtimeClasspath
+            classpath = withoutInheritedJUnit(classpath) + sourceSets["platformTest"].runtimeClasspath
             pluginJars.forEach { classpath += it }
             useJUnitPlatform { includeEngines("junit-vintage") }
             systemProperty("junit.jupiter.extensions.autodetection.enabled", "false")

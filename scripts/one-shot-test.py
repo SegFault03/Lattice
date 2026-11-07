@@ -233,13 +233,13 @@ def project_version(source: Path) -> str:
 
 
 def run_gradle(runner: CommandRunner, source: Path, *tasks: str, properties: list[str] | None = None,
-               name: str, timeout: int = 900) -> None:
+               name: str, timeout: int = 900, ide_home: Path | None = None) -> None:
     command = gradle_command(source) + ["--no-daemon", "--console=plain", "--stacktrace", *tasks]
     if os.name == 'nt' and any(any(c in arg for c in '\"&|<>^%!\r\n') for arg in [str(source), *(properties or [])]):
         raise RunnerError('Windows Gradle paths must not contain shell metacharacters')
     command.extend(properties or [])
-    if runner.env.get('LATTICE_BUILD_IDE'):
-        sdk = runner.env['LATTICE_BUILD_IDE']
+    if ide_home or runner.env.get('LATTICE_BUILD_IDE'):
+        sdk = str(ide_home or runner.env['LATTICE_BUILD_IDE'])
         if os.name == 'nt' and any(c in sdk for c in '\"&|<>^%!\r\n'):
             raise RunnerError('Windows SDK paths must not contain shell metacharacters')
         command.append('-Plattice.ide.home=' + sdk)
@@ -404,9 +404,17 @@ def build_archive(context, tasks, package_tasks=None):
     context.archive = archive
 
 
+def suite_ide(suite, context):
+    """The SDK of a suite with its own IDE target; otherwise the shared baseline's."""
+    args, version = context.args, suite.get("ide_version")
+    if not version:
+        return context.deps.ide(args.ide_home)
+    return context.deps.ide((getattr(args, "ide_homes", None) or {}).get(version), version)
+
+
 def run_ui_suite(suite, context):
     args, source, runner = context.args, context.source, context.runner
-    ide = context.deps.ide(args.ide_home)
+    ide = suite_ide(suite, context)
     name = suite["id"].removeprefix("ui-")
     output = (ROOT / "build/ui-review/windows-ci" / context.stamp / name if os.name == "nt"
               else source / "build/ui-review" / name)
@@ -490,7 +498,8 @@ def execute_suite(suite, context):
     if kind == "build":
         build_archive(context, suite["tasks"], suite["package_tasks"])
     elif kind == "gradle":
-        run_gradle(runner, source, *suite["tasks"], name=suite["id"])
+        run_gradle(runner, source, *suite["tasks"], name=suite["id"], timeout=suite.get("timeout", 900),
+                   ide_home=suite_ide(suite, context) if suite.get("ide_version") else None)
     elif kind == "command":
         ide = context.deps.ide(args.ide_home) if "ide" in suite["requires"] else None
         values = {"python": sys.executable, "java_home": str(context.java_home),

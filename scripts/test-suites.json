@@ -30,6 +30,13 @@
       "requires": ["java21"], "tasks": ["platformTest", "javaPlatformTest", "kotlinPlatformTest"]
     },
     {
+      "id": "backend-newest-ide", "group": "backend-tests", "phase": "base", "kind": "gradle", "ide_version": "2026.3", "timeout": 2400,
+      "platforms": ["linux", "windows"], "ci_hosts": ["linux"],
+      "unsupported": {"macos": "The newest IDE target is compiled and tested on Linux in CI and on Windows locally; no macOS SDK adapter is maintained."},
+      "requires": ["java21"],
+      "tasks": ["compileUiTestKotlin", "functionalTest", "regressionTest", "platformTest", "javaPlatformTest", "kotlinPlatformTest", "h2IntegrationTest"]
+    },
+    {
       "id": "backend-h2", "group": "backend-tests", "phase": "base", "kind": "gradle",
       "platforms": ["linux", "windows", "macos"], "ci_hosts": ["linux", "windows", "macos"],
       "requires": ["java21"], "tasks": ["h2IntegrationTest"]
@@ -54,6 +61,12 @@
     },
     {
       "id": "ui-hsqldb", "group": "ui-tests", "phase": "ui", "kind": "ui", "theme": "ExperimentalDark", "env": {},
+      "platforms": ["linux", "windows"], "ci_hosts": ["linux"],
+      "unsupported": {"macos": "No native macOS real-IDE UI launcher is maintained."},
+      "requires": ["java21", "ide", "desktop", "ui-fixtures"]
+    },
+    {
+      "id": "ui-newest-ide", "group": "ui-tests", "phase": "ui", "kind": "ui", "theme": "ExperimentalDark", "env": {}, "ide_version": "2026.3",
       "platforms": ["linux", "windows"], "ci_hosts": ["linux"],
       "unsupported": {"macos": "No native macOS real-IDE UI launcher is maintained."},
       "requires": ["java21", "ide", "desktop", "ui-fixtures"]

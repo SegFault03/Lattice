@@ -37,7 +37,7 @@ again** disables future notices without hiding the guide.
 - **Project connections:** Lattice reads the databases your configuration files point at and applies a saved connection that matches.
 - **Everywhere SQL is shown:** The console, filter fields and table dialogs use the same highlighting and colors.
 
-Where the IDE's Database plugin is enabled, Lattice's SQL support starts off, and SQL cards and dry runs need that plugin disabled; see [SQL editor support](docs/SQL_EDITOR.md#intellij-idea-ultimate).
+In IntelliJ IDEA Ultimate, Lattice's SQL support starts off, and SQL cards and dry runs need the Database plugin disabled. In the Community edition it stays on, with a warning that you may notice conflicts if that plugin is enabled; see [SQL editor support](docs/SQL_EDITOR.md#the-database-plugin).
 
 See the [changelog](docs/CHANGELOG.md) and [commits since the last release](https://github.com/SegFault03/Lattice/compare/v0.1.0-alpha...main) for details.
 
@@ -205,7 +205,7 @@ The seven README screenshots are the featured product previews. Concept renders 
 
 ## Releases and support
 
-Every branch push and PR runs embedded functional checks and plugin build/archive validation on Linux, Windows and macOS. PRs targeting `main` additionally run grouped tooling, regression/integration, production Swing and real-IDE UI, JDBC/Java and IntelliJ 2025.1–2025.3, 2026.2.3 and 2026.3 compatibility checks. PRs targeting `staging` run the commit tier. See [CI test groups](docs/CI_TESTING.md) for scope and commands.
+Code is compiled and tested against the oldest supported IDE, IntelliJ 2025.1, and the newest stable, IntelliJ 2026.3 (on PRs targeting `main`). Every branch push and PR runs embedded functional checks and plugin build/archive validation on Linux, Windows and macOS. PRs targeting `main` additionally run grouped tooling, regression/integration, production Swing and real-IDE UI, JDBC/Java and IntelliJ 2025.1–2025.3, 2026.2.3 and 2026.3 compatibility checks. PRs targeting `staging` run the commit tier. See [CI test groups](docs/CI_TESTING.md) for scope and commands.
 
 A new tag such as `v0.1.0-alpha` triggers the [release workflow](.github/workflows/release.yml) only after its commit is verified as reachable from `main`. Tags have no branch of their own; a tag on an unmerged feature commit is rejected before any build, signing or publication job. The tag pipeline runs release functional/build checks, ZIP validation, signing and signature verification, then publishes a GitHub Release and submits the same signed ZIP to JetBrains Marketplace. Compatibility matrices are confined to PRs. GitHub Releases include patch notes, commit history, checksums and corresponding MySQL sources. Prereleases are not designated latest; Marketplace submissions use the public Stable channel and become available after JetBrains approval. There is no manual release trigger; use the local dry-run commands in [Releasing](docs/RELEASING.md).
 

@@ -842,7 +842,7 @@ public class ConnectionDialog extends DialogWrapper {
         if (source == DriverSource.BUNDLED) {
             var selected = (InstalledDriver) bundledDriverCombo.getSelectedItem();
             String packaged = DriverStore.packagedVersion(type);
-            if ("UNAVAILABLE".equals(origin))
+            if ("Unavailable".equals(origin))
                 setDriverStatus("The selected driver is no longer available. Choose another available driver or download it again.");
             else if (selected != null && selected.kind() == InstalledDriver.Kind.DOWNLOADED)
                 setDriverStatus(selected.version() + " is stored on this machine and ready to use.");

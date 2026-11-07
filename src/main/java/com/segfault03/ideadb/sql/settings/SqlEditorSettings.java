@@ -14,8 +14,8 @@ import org.jetbrains.annotations.Nullable;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Application settings for SQL editor support. The master switch is "automatic" until the user decides: on in
- * Community, off where the Ultimate Database plugin already provides SQL support.
+ * Application settings for SQL editor support. The master switch is "automatic" until the user decides: on in the
+ * Community edition, off in IntelliJ IDEA Ultimate, where the Database plugin provides SQL support.
  */
 @State(name = "com.segfault03.ideadb.sql.settings.SqlEditorSettings", storages = @Storage("LatticeSqlEditor.xml"))
 public final class SqlEditorSettings implements PersistentStateComponent<SqlEditorSettings.State>, ModificationTracker {
@@ -45,6 +45,7 @@ public final class SqlEditorSettings implements PersistentStateComponent<SqlEdit
         public Boolean appliedClaim;
         public boolean takeoverNoticeShown;
         public boolean ultimateNoticeShown;
+        public boolean communityConflictNoticeShown;
     }
 
     /** Case of the keywords, functions and types that completion inserts. */
@@ -170,4 +171,6 @@ public final class SqlEditorSettings implements PersistentStateComponent<SqlEdit
     public synchronized void takeoverNoticeShown(boolean shown) { state.takeoverNoticeShown = shown; }
     public synchronized boolean ultimateNoticeShown() { return state.ultimateNoticeShown; }
     public synchronized void ultimateNoticeShown(boolean shown) { state.ultimateNoticeShown = shown; }
+    public synchronized boolean communityConflictNoticeShown() { return state.communityConflictNoticeShown; }
+    public synchronized void communityConflictNoticeShown(boolean shown) { state.communityConflictNoticeShown = shown; }
 }

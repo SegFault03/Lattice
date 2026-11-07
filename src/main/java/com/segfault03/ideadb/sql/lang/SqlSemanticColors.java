@@ -83,7 +83,7 @@ public final class SqlSemanticColors {
         /** Whether the role looks different in each family: table, view and alias do, columns do not. */
         public boolean byFamily() { return byFamily; }
         /** The key of the role in the family the user chose. */
-        public @NotNull TextAttributesKey key() { return key(family()); }
+        public @NotNull TextAttributesKey key() { return key(byFamily ? family() : ColorFamily.CORAL); }
         public @NotNull TextAttributesKey key(@NotNull ColorFamily family) { return keys[family.ordinal()]; }
         /** The role's distinct keys: one for a column role, one per family for the others. */
         public @NotNull List<TextAttributesKey> keys() { return List.copyOf(new LinkedHashSet<>(List.of(keys))); }
