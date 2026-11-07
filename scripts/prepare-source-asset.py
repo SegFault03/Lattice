@@ -7,9 +7,9 @@ import urllib.request
 from common import ROOT, cache_directory
 from dependencies import Dependencies, add_dependency_options
 
-NAME = "mysql-connector-j-26.7.0-source.tar.gz"
-URL = "https://codeload.github.com/mysql/mysql-connector-j/tar.gz/refs/tags/26.7.0"
-SHA256 = "8c739fa84f8031bc14b3e6f5e2de27da2b8f6ec24480075e7393490758e5d1e5"
+NAME = "mysql-connector-j-26.10.0-source.tar.gz"
+URL = "https://codeload.github.com/mysql/mysql-connector-j/tar.gz/refs/tags/26.10.0"
+SHA256 = "b1e260bae2f7df796a8ea89b2b2c64c5ae60f2590bdd72021308b81d6e113c00"
 
 
 def main():
@@ -17,7 +17,7 @@ def main():
     parser.add_argument("--output", type=Path, default=ROOT / "build/release")
     parser.add_argument("--cache", type=Path)
     parser.add_argument("--github-output", type=Path, help="Append the prepared filename to this Actions output file")
-    parser.add_argument("--source-archive", type=Path, help="Existing checksum-pinned Connector/J 26.7.0 source archive")
+    parser.add_argument("--source-archive", type=Path, help="Existing checksum-pinned Connector/J 26.10.0 source archive")
     add_dependency_options(parser)
     args = parser.parse_args()
     with Dependencies(args) as deps:

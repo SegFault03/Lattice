@@ -54,7 +54,7 @@ The tag workflow:
 5. Publishes a GitHub Release only when the main-ancestry guard, build/tests and Windows/macOS baseline checks succeed. Tooling, regression/integration, UI and compatibility suites run exclusively on PRs targeting `main`, rather than again on tags.
 6. After GitHub publication succeeds, submits the same signed ZIP to Marketplace's public Stable channel with `isHidden=false`. Alpha/RC tags remain GitHub prereleases; Marketplace visibility follows JetBrains approval.
 
-Release assets are the plugin ZIP, the unmodified MySQL Connector/J 26.7.0 corresponding-source archive and `SHA256SUMS`. The GitHub description combines the matching changelog section (or populated Unreleased notes) with all commits since the preceding reachable lower-version release tag. Marketplace What's New uses the same patch notes rendered as HTML headings, bullet lists and paragraphs; inline code is supported and raw HTML is escaped. The first release includes the reachable commit history.
+Release assets are the plugin ZIP, the unmodified MySQL Connector/J 26.10.0 corresponding-source archive and `SHA256SUMS`. The GitHub description combines the matching changelog section (or populated Unreleased notes) with all commits since the preceding reachable lower-version release tag. Marketplace What's New uses the same patch notes rendered as HTML headings, bullet lists and paragraphs; inline code is supported and raw HTML is escaped. The first release includes the reachable commit history.
 
 Build/test/verification failures publish no release. The publish job uploads assets to a draft, then makes it public after successful upload. A failed GitHub publish can leave a draft; remove that failed draft before retrying. Diagnostics and candidate artifacts are retained for seven days. A GitHub publish retry fails if a release already exists; it does not overwrite published assets. Use a new version for changed published artifacts. A failed Marketplace submission leaves the GitHub Release intact: check whether Marketplace accepted the version, then rerun only the Marketplace job if it is absent. Do not rerun a successful GitHub publish job. The workflow does not perform project-close/dynamic-unload UI tests.
 
@@ -66,7 +66,7 @@ Python 3.11+ is required (3.12 recommended for SDK archive extraction).
 python scripts/release.py --version 0.1.0-alpha
 python scripts/test.py --live --mysql --hsqldb --postgres --build --version 0.1.0-alpha --notes-file build/release/patch-notes.html
 python scripts/prepare-source-asset.py
-python scripts/check-release-archive.py build/distributions/Lattice-0.1.0-alpha.zip --version 0.1.0-alpha --source build/release/mysql-connector-j-26.7.0-source.tar.gz --checksums build/release/SHA256SUMS
+python scripts/check-release-archive.py build/distributions/Lattice-0.1.0-alpha.zip --version 0.1.0-alpha --source build/release/mysql-connector-j-26.10.0-source.tar.gz --checksums build/release/SHA256SUMS
 python scripts/verify-plugin.py build/distributions/Lattice-0.1.0-alpha.zip --ide-version 2025.1
 ```
 

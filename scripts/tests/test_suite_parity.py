@@ -88,12 +88,12 @@ class SuiteParityTests(unittest.TestCase):
         context = Namespace(args=Namespace(cleanup=True, binaries_dir=Path('assets'), mysql_port=None),
                             source=Path('checkout'), runner=MagicMock(), java8_home=Path('java8'),
                             probe_classes=Path('probe'), jdbc_cache=Path('assets/jdbc-cache'), native=False)
-        with patch.object(one_shot, 'MYSQL_MATRIX', (('8.4.2', ('26.7.0',)),)), \
+        with patch.object(one_shot, 'MYSQL_MATRIX', (('8.4.2', ('26.10.0',)),)), \
              patch.object(one_shot, 'mysql_server', return_value=nullcontext()), \
              patch.object(one_shot, 'run_gradle') as execute:
             one_shot.run_database_suite(test_suites.suite_by_id('jdbc-mysql'), context)
         properties = execute.call_args.kwargs['properties']
-        self.assertIn('-Plattice.compatibility.drivers=26.7.0', properties)
+        self.assertIn('-Plattice.compatibility.drivers=26.10.0', properties)
         self.assertIn('-Plattice.compatibility.cleanup=false', properties)
         self.assertIn(f'-Plattice.compatibility.cache={context.jdbc_cache}', properties)
 

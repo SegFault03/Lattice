@@ -565,7 +565,7 @@ class IntellijUiScreenshotTest {
                 val mysqlAvailableDriverLabels = mysqlAvailableDriverCombo.listValues()
                 println("Available MySQL driver entries: ${mysqlAvailableDriverLabels.joinToString()}")
                 check(mysqlAvailableDriverLabels.containsAll(listOf(
-                    "26.7.0 · Bundled", "9.0.0 · Local Maven", "8.4.0 · Local Maven", "8.0.33 · Local Maven",
+                    "26.10.0 · Bundled", "9.0.0 · Local Maven", "8.4.0 · Local Maven", "8.0.33 · Local Maven",
                 ))) { "Expected bundled and Maven-discovered MySQL releases: $mysqlAvailableDriverLabels" }
                 captureScreen(screenshotsDirectory.resolve("mysql-connection-dialog-available-driver-list.png"))
                 pressEscape()
@@ -575,16 +575,16 @@ class IntellijUiScreenshotTest {
                 captureScreen(screenshotsDirectory.resolve("driver-type-switch-hsql-project-default.png"))
                 mysqlDialog.x { byAccessibleName("MySQL") }.waitFound().click()
                 assertDriverSummary(mysqlDialog, "8.4.0 · Local Maven")
-                mysqlAvailableDriverCombo.selectItem("26.7.0 · Bundled")
+                mysqlAvailableDriverCombo.selectItem("26.10.0 · Bundled")
                 mysqlDialog.x { byAccessibleName("HSQLDB") }.waitFound().click()
                 assertDriverSummary(mysqlDialog, "2.7.2 · Local Maven")
                 mysqlDialog.x { byAccessibleName("MySQL") }.waitFound().click()
-                assertDriverSummary(mysqlDialog, "26.7.0 · Bundled")
+                assertDriverSummary(mysqlDialog, "26.10.0 · Bundled")
                 captureScreen(screenshotsDirectory.resolve("driver-type-switch-mysql-manual-choice.png"))
                 mysqlAvailableDriverCombo.selectItem("8.4.0 · Local Maven")
                 if (review) {
-                    mysqlAvailableDriverCombo.selectItem("26.7.0 · Bundled")
-                    assertDriverSummary(mysqlDialog, "26.7.0 · Bundled")
+                    mysqlAvailableDriverCombo.selectItem("26.10.0 · Bundled")
+                    assertDriverSummary(mysqlDialog, "26.10.0 · Bundled")
                     captureScreen(screenshotsDirectory.resolve("mysql-driver-summary-bundled.png"))
                     mysqlAvailableDriverCombo.selectItem("8.4.0 · Local Maven")
                 }

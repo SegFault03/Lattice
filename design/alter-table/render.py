@@ -46,9 +46,9 @@ def main():
         test_jars = preview.cached_test_runtime_jars(gradle_cache)
         if not test_jars:
             parser.error('Cache the IntelliJ test runtime first; see docs/UI_PREVIEW.md.')
-        flatlaf = deps.file('tools/flatlaf/flatlaf-3.7.2.jar',
-                           'https://repo.maven.apache.org/maven2/com/formdev/flatlaf/3.7.2/flatlaf-3.7.2.jar',
-                           '917aff3963c88d797d0fd9b9ccbd70f7681c101df9d11c59e2bc7a3a6c0fabf4', args.flatlaf_jar)
+        flatlaf = deps.file('tools/flatlaf/flatlaf-3.8.jar',
+                           'https://repo.maven.apache.org/maven2/com/formdev/flatlaf/3.8/flatlaf-3.8.jar',
+                           '8d8489dee6b9512a669be7670fd2d010f6a7dcfb23b622329ce3c61f8529e76b', args.flatlaf_jar)
         cp = os.pathsep.join(map(str, [flatlaf] + jars + test_jars))
         classes = build / 'classes'
         classes.mkdir(exist_ok=True)

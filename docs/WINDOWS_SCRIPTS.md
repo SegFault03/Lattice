@@ -234,7 +234,7 @@ Render the production Swing UI without opening an IDE; refresh the seven tracked
 .\scripts\windows\ui-preview.ps1 --all-previews @deps
 ```
 
-To refresh the images you commit, render on the [UI baseline](UI_PREVIEW.md#baseline-for-tracked-images) with `--ide-home` and `--java-home`. `--all-previews` renders a light/dark gallery. `--output` defaults to build/ui-preview/; `--compare-with` points to an earlier gallery for comparisons. Gallery HTML/ZIP files are ignored. Every successful run refreshes the seven images under screenshots/; review their Git diff. JUnit 4.13.2, Hamcrest Core 1.3 and FlatLaf 3.7.2 can be supplied individually.
+To refresh the images you commit, render on the [UI baseline](UI_PREVIEW.md#baseline-for-tracked-images) with `--ide-home` and `--java-home`. `--all-previews` renders a light/dark gallery. `--output` defaults to build/ui-preview/; `--compare-with` points to an earlier gallery for comparisons. Gallery HTML/ZIP files are ignored. Every successful run refreshes the seven images under screenshots/; review their Git diff. JUnit 4.13.2, Hamcrest Core 1.3 and FlatLaf 3.8 can be supplied individually.
 
 Complete options (forwarded unchanged to Python):
 
@@ -266,7 +266,7 @@ options:
   --all-previews        Generate the full light/dark preview gallery; by
                         default only the five featured screens are rendered
   --flatlaf-jar FLATLAF_JAR
-                        Existing FlatLaf 3.7.2 JAR
+                        Existing FlatLaf 3.8 JAR
   --junit-jar JUNIT_JAR
                         Existing JUnit 4.13.2 JAR
   --hamcrest-jar HAMCREST_JAR
@@ -404,7 +404,7 @@ options:
 Validate release ZIP layout, plugin descriptor, licenses and Java 21 bytecode; optionally write SHA256SUMS.
 
 ```powershell
-.\scripts\windows\check-release-archive.ps1 $zip --version $version --source "$assets\sources\mysql-connector-j-26.7.0-source.tar.gz" --checksums build/release/SHA256SUMS
+.\scripts\windows\check-release-archive.ps1 $zip --version $version --source "$assets\sources\mysql-connector-j-26.10.0-source.tar.gz" --checksums build/release/SHA256SUMS
 ```
 
 The ZIP and `--version` are required. `--source` adds the source archive to the checksums list; `--checksums` names the output file. This command uses only Python and input files, so it has no dependency/download/cleanup flags. It does not build the ZIP.
@@ -428,10 +428,10 @@ options:
 
 ## prepare-source-asset.ps1
 
-Retrieve or reuse the checksum-pinned Connector/J 26.7.0 corresponding source archive.
+Retrieve or reuse the checksum-pinned Connector/J 26.10.0 corresponding source archive.
 
 ```powershell
-.\scripts\windows\prepare-source-asset.ps1 --source-archive "$assets\sources\mysql-connector-j-26.7.0-source.tar.gz" @deps
+.\scripts\windows\prepare-source-asset.ps1 --source-archive "$assets\sources\mysql-connector-j-26.10.0-source.tar.gz" @deps
 ```
 
 `--output` defaults to build/release/. `--source-archive` supplies an existing archive; `--cache` selects a legacy source cache. `--github-output` appends its filename to an Actions output file when explicitly requested. The output archive is retained even with cleanup enabled.
@@ -454,7 +454,7 @@ options:
                         Append the prepared filename to this Actions output
                         file
   --source-archive SOURCE_ARCHIVE
-                        Existing checksum-pinned Connector/J 26.7.0 source
+                        Existing checksum-pinned Connector/J 26.10.0 source
                         archive
   --download-dir DOWNLOAD_DIR
                         Download/cache parent; only directories created by

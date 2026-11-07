@@ -100,7 +100,7 @@ Choose a JDBC driver compatible with your server. HSQLDB requires a matching ser
 
 Select MySQL, HSQLDB, PostgreSQL or H2, enter connection details, and choose a driver:
 
-- **Bundled driver**: the plugin includes Connector/J 26.7.0, HSQLDB 2.7.4, pgJDBC 42.7.14 and H2 2.5.252, plus every version you have downloaded. Pick one from the list to reuse it without downloading again.
+- **Bundled driver**: the plugin includes Connector/J 26.10.0, HSQLDB 2.7.4, pgJDBC 42.7.14 and H2 2.5.252, plus every version you have downloaded. Pick one from the list to reuse it without downloading again.
 - **Download a version**: choose or enter a version and click **Download**. Downloads are explicit and checksum-verified, and a release is fetched at most once. Afterwards it appears in the bundled list.
 - **Local JAR**: select an existing JDBC driver.
 

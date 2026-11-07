@@ -28,7 +28,7 @@ abstract class JdbcMetadataAdapter implements MetadataAdapter {
             while (rs.next()) {
                 String tableName = rs.getString("TABLE_NAME");
                 String tableType = rs.getString("TABLE_TYPE");
-                TableMetadata tm = new TableMetadata(catalog, schema, tableName, tableType, blankToNull(rs.getString("REMARKS")));
+                TableMetadata tm = new TableMetadata(catalog, schema, tableName, tableType, tableComment(tableType, rs.getString("REMARKS")));
                 tables.add(tm);
             }
         }
@@ -36,6 +36,8 @@ abstract class JdbcMetadataAdapter implements MetadataAdapter {
         tables.sort(Comparator.comparing(TableMetadata::getName));
         return tables;
     }
+
+    protected String tableComment(String tableType, String remarks) { return blankToNull(remarks); }
 
     private static List<String> reportedTableTypes(DatabaseMetaData meta) {
         List<String> types = new ArrayList<>();

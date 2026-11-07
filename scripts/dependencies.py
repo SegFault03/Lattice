@@ -152,9 +152,9 @@ class Dependencies:
             artifact = 'org/hsqldb/hsqldb/2.7.4/' + name
             expected = '5fab2bb4384ac06b762638c8fa2740c944b8d080e4796c0c6c2af8b90dd4e5ad'
         elif kind == 'mysql':
-            name = 'mysql-connector-j-26.7.0.jar'
-            artifact = 'com/mysql/mysql-connector-j/26.7.0/' + name
-            expected = '69084713593a4aa8d07c383619b9639276f08bccf8faf1c562178147d389b1e1'
+            name = 'mysql-connector-j-26.10.0.jar'
+            artifact = 'com/mysql/mysql-connector-j/26.10.0/' + name
+            expected = 'cef70caf532833c9ab8f41f74773ce22c08bf503fad215c9c2ee1e9db87e759e'
         else:
             raise ValueError('Unknown JDBC driver: ' + kind)
         return self.file(f'jdbc/{kind}/{name}', 'https://repo.maven.apache.org/maven2/' + artifact,

@@ -74,7 +74,7 @@ dependencies {
         if (localIde == null) intellijIdeaCommunity("2025.1") else local(localIde)
         bundledPlugins()
         pluginVerifier("1.411")
-        zipSigner("0.1.24")
+        zipSigner("0.1.45")
         testFramework(TestFrameworkType.Starter, configurationName = "uiTestImplementation")
         testFramework(TestFrameworkType.Platform, configurationName = "platformTestImplementation")
     }
@@ -82,30 +82,30 @@ dependencies {
     implementation("org.postgresql:postgresql:42.7.14") { exclude(group = "org.checkerframework", module = "checker-qual") }
     implementation("com.h2database:h2:2.5.252")
     implementation("org.hsqldb:hsqldb:2.7.4")
-    implementation("com.mysql:mysql-connector-j:26.7.0")
+    implementation("com.mysql:mysql-connector-j:26.10.0")
     constraints {
         implementation("com.google.protobuf:protobuf-java:4.36.2") {
             because("Use the current patched protobuf runtime required by Connector/J")
         }
     }
 
-    testImplementation("org.junit.jupiter:junit-jupiter-api:5.14.4")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.14.4")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.14.4")
+    testImplementation("org.junit.jupiter:junit-jupiter-api:6.1.3")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:6.1.3")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.1.3")
     // IntelliJ 2025 test logging still references JUnit 4 runtime types.
     testRuntimeOnly("junit:junit:4.13.2")
 
     // BasePlatformTestCase is JUnit 3/4 style; the vintage engine runs it on the JUnit Platform.
     "platformTestImplementation"("junit:junit:4.13.2")
-    "platformTestRuntimeOnly"("org.junit.vintage:junit-vintage-engine:5.14.4")
+    "platformTestRuntimeOnly"("org.junit.vintage:junit-vintage-engine:6.1.3")
 
     uiTestImplementation(kotlin("stdlib"))
     uiTestRuntimeOnly(kotlin("reflect"))
     // The platform plugin removes coroutines from Starter's dependencies. Starter on newer SDKs needs JetBrains' patched
     // build, which the SDK itself carries, and brings its own Kodein; the older pins would shadow both.
     if (sdkBaseline < 260) {
-        uiTestImplementation("org.kodein.di:kodein-di-jvm:7.20.2")
-        uiTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.10.1")
+        uiTestImplementation("org.kodein.di:kodein-di-jvm:7.33.0")
+        uiTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.11.0")
     } else {
         uiTestRuntimeOnly(files("$localIde/lib/intellij.libraries.kotlinx.coroutines.core.jar"))
     }

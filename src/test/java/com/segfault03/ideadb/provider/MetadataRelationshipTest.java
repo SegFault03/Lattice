@@ -35,6 +35,44 @@ class MetadataRelationshipTest {
         verify(config);
     }
 
+    @Test @Tag("integration") void mysqlExpressionDefaultsAreOrdinaryColumnsThatSqlExportsKeep() throws Exception {
+        var config = new ConnectionConfig(DatabaseType.MYSQL, "MySQL defaults");
+        config.setPort(Integer.getInteger("lattice.test.mysql.port", 3306));
+        var manager = new DatabaseConnectionManager();
+        var provider = DatabaseProviders.get(config.getType());
+        String namespace = "DEF_" + UUID.randomUUID().toString().replace("-", "").toUpperCase(Locale.ROOT);
+        try (Connection connection = manager.getConnection(config)) {
+            DdlService.getInstance().createDatabase(connection, config, namespace);
+            try {
+                provider.selectNamespace(connection, namespace);
+                String table = DdlService.formatTable(config, namespace, "EVENTS");
+                try (var statement = connection.createStatement()) {
+                    statement.execute("CREATE TABLE " + table + " (`ID` INT PRIMARY KEY, `CREATED_AT` TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+                            + "`LABEL` VARCHAR(40) DEFAULT ('fallback'), `DOUBLED` INT GENERATED ALWAYS AS (`ID` * 2) STORED)");
+                    statement.execute("INSERT INTO " + table + " (`ID`, `CREATED_AT`, `LABEL`) VALUES (1, '2001-02-03 04:05:06', 'kept')");
+                }
+                var columns = MetadataService.getInstance().getColumns(connection, config, namespace, "EVENTS");
+                assertFalse(column(columns, "CREATED_AT").isGenerated(), "A CURRENT_TIMESTAMP default holds data");
+                assertFalse(column(columns, "LABEL").isGenerated(), "An expression default holds data");
+                assertTrue(column(columns, "DOUBLED").isGenerated(), "A computed column is still generated");
+
+                var output = java.nio.file.Files.createTempFile("lattice-defaults", ".sql");
+                try {
+                    assertEquals(1, ExportService.getInstance().exportPersisted(connection, config, namespace, "EVENTS", null, "sql", output.toFile()));
+                    String export = java.nio.file.Files.readString(output);
+                    assertTrue(export.contains("`CREATED_AT`") && export.contains("`LABEL`"), export);
+                    assertFalse(export.contains("`DOUBLED`"), export);
+                } finally {
+                    java.nio.file.Files.deleteIfExists(output);
+                }
+            } finally {
+                DdlService.getInstance().dropDatabase(connection, config, namespace);
+            }
+        } finally {
+            manager.dispose();
+        }
+    }
+
     @Test @Tag("integration") @Tag("postgres") void postgresServerReportsCommentsAndForeignKeyTargets() throws Exception {
         var config = new ConnectionConfig(DatabaseType.POSTGRESQL, "PostgreSQL relationships");
         config.setPort(Integer.getInteger("lattice.test.postgres.port", 5432));
@@ -82,7 +120,8 @@ class MetadataRelationshipTest {
                 assertTrue(table(tables, "BOOK_TITLES").isView());
                 assertFalse(table(tables, "BOOKS").isView());
 
-                var columns = metadata.getColumns(connection, config, namespace, "BOOKS");
+                // By their listed names: a case-insensitive server stores them in its own case, and the cache is keyed by name.
+                var columns = metadata.getColumns(connection, config, namespace, table(tables, "BOOKS").getName());
                 var authorColumn = column(columns, "AUTHOR_ID");
                 assertTrue(authorColumn.isForeignKey());
                 ColumnReference reference = authorColumn.getReference();
@@ -94,7 +133,7 @@ class MetadataRelationshipTest {
                 assertNull(column(columns, "ID").getComment());
                 assertNull(column(columns, "ID").getReference(), "A plain column has no target");
                 assertFalse(column(columns, "ID").isForeignKey());
-                assertEquals("Full name", column(metadata.getColumns(connection, config, namespace, "AUTHORS"), "NAME").getComment());
+                assertEquals("Full name", column(metadata.getColumns(connection, config, namespace, table(tables, "AUTHORS").getName()), "NAME").getComment());
 
                 assertCacheKeepsEverything(config, namespace);
             } finally {

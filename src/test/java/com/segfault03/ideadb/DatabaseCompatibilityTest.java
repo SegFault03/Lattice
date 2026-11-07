@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit;
 
 /** Opt-in downloadable driver/server matrix; uses only dedicated test fixtures and temporary schemas. */
 public final class DatabaseCompatibilityTest {
-    private static final List<String> MYSQL = List.of("5.1.49", "6.0.6", "8.0.33", "26.7.0");
+    private static final List<String> MYSQL = List.of("5.1.49", "6.0.6", "8.0.33", "26.10.0");
     private static final List<String> HSQL = List.of("2.2.9", "2.3.6", "2.4.1", "2.5.2", "2.6.1-jdk8", "2.7.4-jdk8");
     private static List<String> selectedVersions(List<String> defaults) {
         String selected = System.getProperty("lattice.test.compatibility.drivers");
@@ -101,7 +101,7 @@ public final class DatabaseCompatibilityTest {
             int port=Integer.parseInt(args[1]); String server=args[2];
             Path java8=args.length > 3 ? Path.of(args[3]) : null;
             Path tests=args.length > 4 ? Path.of(args[4]) : null;
-            for(String version:selectedVersions(server.startsWith("8.") ? List.of("8.0.33","26.7.0") : server.startsWith("5.5.") ? List.of("5.1.49","6.0.6","8.0.33") : List.of("8.0.33"))) {
+            for(String version:selectedVersions(server.startsWith("8.") ? List.of("8.0.33","26.10.0") : server.startsWith("5.5.") ? List.of("5.1.49","6.0.6","8.0.33") : List.of("8.0.33"))) {
                 Path jar=null;
                 try {
                     jar=DriverCatalog.download(DatabaseType.MYSQL,version);

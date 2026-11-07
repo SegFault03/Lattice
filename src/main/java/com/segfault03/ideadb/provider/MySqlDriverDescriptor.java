@@ -10,7 +10,7 @@ final class MySqlDriverDescriptor implements DriverDescriptor {
     public List<Coordinate> coordinates() { return List.of(new Coordinate("com.mysql", "mysql-connector-j"), new Coordinate("mysql", "mysql-connector-java")); }
     public List<String> driverClasses() { return List.of("com.mysql.cj.jdbc.Driver", "com.mysql.jdbc.Driver"); }
     public List<String> isolatedPackages() { return List.of("com.mysql."); }
-    public List<String> suggestedVersions() { return List.of("26.7.0", "9.0.0", "8.4.0", "8.0.33", "5.1.49"); }
+    public List<String> suggestedVersions() { return List.of("26.10.0", "9.0.0", "8.4.0", "8.0.33", "5.1.49"); }
     public String firstPatchedVersion() { return "8.2.0"; }
     public boolean includesRelease(String version) { return acceptsVersion(version) && Integer.parseInt(version.split("\\.")[0]) >= 5; }
     public String artifactPath(String selection) {

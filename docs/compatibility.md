@@ -41,7 +41,7 @@ and disposable fixtures retain their existing cleanup and isolation checks.
 |---|---|---|
 | MySQL 5.5.62 | Connector/J 5.1.49, 6.0.6, 8.0.33 | 3 |
 | MySQL 5.6.51, 5.7.44 | Connector/J 8.0.33 | 2 |
-| MySQL 8.4.2 | Connector/J 8.0.33, 26.7.0 | 2 |
+| MySQL 8.4.2 | Connector/J 8.0.33, 26.10.0 | 2 |
 | HSQLDB 2.2.9, 2.3.6, 2.4.1, Maven artifact 2.5.2 | Matching server/driver | 4 |
 | HSQLDB 2.6.1, 2.7.4 | Matching `-jdk8` artifact | 2 |
 | PostgreSQL 8.4.22, 9.0.23 | pgJDBC 42.2.27, 42.7.3 | 4 |

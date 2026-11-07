@@ -87,7 +87,7 @@ class DatabaseProviderTest {
         for (String affected : List.of("42.7.11", "42.7.3", "42.2.27")) assertFalse(postgres.securityWarning(affected).isEmpty(), affected);
         assertFalse(h2.securityWarning("2.1.214").isEmpty());
         for (String patched : List.of("2.7.1", "2.7.1-jdk8", "2.7.4")) assertEquals("", hsql.securityWarning(patched), patched);
-        for (String patched : List.of("8.2.0", "9.0.0", "26.7.0")) assertEquals("", mysql.securityWarning(patched), patched);
+        for (String patched : List.of("8.2.0", "9.0.0", "26.10.0")) assertEquals("", mysql.securityWarning(patched), patched);
         for (String patched : List.of("42.7.12", "42.7.14")) assertEquals("", postgres.securityWarning(patched), patched);
         assertEquals("", h2.securityWarning("2.2.220"));
         assertTrue(hsql.securityWarning("2.6.1-jdk8").contains("2.7.1"));
