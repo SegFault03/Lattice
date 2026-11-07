@@ -1590,16 +1590,14 @@ class IntellijUiScreenshotTest {
                     }
                 }
                 csvAction.click()
-                val exportFile = screenshotsDirectory.resolve("persisted-rows.csv").toAbsolutePath()
+                var exportFile = screenshotsDirectory.resolve("persisted-rows.csv").toAbsolutePath()
                 val windowsFileChooser = System.getProperty("os.name").startsWith("Windows", ignoreCase = true)
                 val saveExport = if (windowsFileChooser) {
                     pasteNativeFileChooserPath(exportFile.toString())
                     null
                 } else {
                     frame.x(DialogUiComponent::class.java) { byTitle("Export All Persisted Rows") }.waitFound().also { dialog ->
-                        val filename = dialog.xx(JTextFieldUI::class.java) { byType(javax.swing.JTextField::class.java) }
-                            .list().single { it.text.endsWith(".csv") }
-                        filename.text = exportFile.toString()
+                        exportFile = nameSaveTarget(dialog, exportFile, "csv", projectDirectory)
                     }
                 }
                 captureScreen(screenshotsDirectory.resolve("table-export-file-chooser.png"))
@@ -1631,9 +1629,8 @@ class IntellijUiScreenshotTest {
                     formatRobot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
                     formatRobot.waitForIdle()
                     val save = frame.x(DialogUiComponent::class.java) { byTitle("Export All Persisted Rows") }.waitFound()
-                    val exported = screenshotsDirectory.resolve("persisted-rows.${format.lowercase()}").toAbsolutePath()
-                    save.xx(JTextFieldUI::class.java) { byType(javax.swing.JTextField::class.java) }
-                        .list().single { it.text.endsWith(".${format.lowercase()}") }.text = exported.toString()
+                    val exported = nameSaveTarget(
+                        save, screenshotsDirectory.resolve("persisted-rows.${format.lowercase()}").toAbsolutePath(), format.lowercase(), projectDirectory)
                     save.pressButton("OK")
                     frame.x(DialogUiComponent::class.java) { byTitle("Export Complete") }.waitFound().pressButton("OK")
                     val text = Files.readString(exported)
@@ -2854,6 +2851,21 @@ class IntellijUiScreenshotTest {
         robot.keyPress(KeyEvent.VK_ESCAPE)
         robot.keyRelease(KeyEvent.VK_ESCAPE)
         robot.waitForIdle()
+    }
+
+    /**
+     * Names the file in the Swing save chooser and returns where it will be written. Older choosers accept a full path
+     * as the name. The 2026.3 chooser validates the name as a bare file name, disables OK for a path, and saves into
+     * its own folder, which is the project directory.
+     */
+    private fun nameSaveTarget(dialog: DialogUiComponent, target: Path, extension: String, chooserFolder: Path): Path {
+        val field = dialog.xx(JTextFieldUI::class.java) { byType(javax.swing.JTextField::class.java) }
+            .list().single { it.text.endsWith(".$extension") }
+        field.text = target.toString()
+        val ok = dialog.x { byVisibleText("OK") }.waitFound()
+        if (runCatching { waitUntil("save chooser accepts the full path", 3_000) { ok.component.isEnabled() } }.isSuccess) return target
+        field.text = target.fileName.toString()
+        return chooserFolder.resolve(target.fileName)
     }
 
     /** A right-click right after a grid refresh can be dropped on a slow runner, so reopen the menu before failing. */
