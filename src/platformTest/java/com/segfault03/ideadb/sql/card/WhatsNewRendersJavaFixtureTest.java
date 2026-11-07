@@ -49,16 +49,27 @@ import java.util.function.Consumer;
 /**
  * Renders the What's New guide images: the real editor, schema and panels, painted headlessly. Popups cannot open without a
  * display, so they are composed around the editor from what the features return. Set {@code LATTICE_WHATS_NEW_OUTPUT} to
- * write the images in the Islands Light theme, which needs an IDE that has it; otherwise they are only rendered, which
- * keeps the scenes working on the compile baseline.
+ * write the guide images, and {@code LATTICE_README_OUTPUT} to write the README's SQL editor images ({@code sql-editor.png}
+ * and {@code dry-run.png}, the completion and dry-run scenes), in the Islands Light theme, which needs an IDE that has it;
+ * otherwise they are only rendered, which keeps the scenes working on the compile baseline.
  */
 public class WhatsNewRendersJavaFixtureTest extends H2SqlFixtureTestCase {
     private static final String THEME = "Islands Light", EDITOR_SCHEME = "Light", EDITOR_SCHEME_FILE = "themes/expUI/expUI_lightScheme.xml";
     private static final int WIDTH = 1040, SCALE = 2, TAB = 34;
 
+    /** True when the images are being written, which needs the Islands Light theme and real icons. */
+    private static boolean writing() {
+        return System.getenv("LATTICE_WHATS_NEW_OUTPUT") != null || System.getenv("LATTICE_README_OUTPUT") != null;
+    }
+
+    private static Path outputDirectory(String variable) throws IOException {
+        String output = System.getenv(variable);
+        return output == null ? null : Files.createDirectories(Path.of(output));
+    }
+
     static {
         // Fixtures paint platform icons as empty placeholders unless real ones are active before AllIcons is first read.
-        if (System.getenv("LATTICE_WHATS_NEW_OUTPUT") != null) com.intellij.ui.IconManager.Companion.activate(new com.intellij.ui.icons.CoreIconManager());
+        if (writing()) com.intellij.ui.IconManager.Companion.activate(new com.intellij.ui.icons.CoreIconManager());
     }
 
     @Override protected String[] schemaStatements() {
@@ -74,7 +85,7 @@ public class WhatsNewRendersJavaFixtureTest extends H2SqlFixtureTestCase {
 
     /** The unified IDE's Ultimate startup activities cannot be created in a fixture; for a render their logged errors are noise. */
     private static <T extends Throwable> void tolerant(com.intellij.util.ThrowableRunnable<T> work) throws T {
-        if (System.getenv("LATTICE_WHATS_NEW_OUTPUT") == null) {
+        if (!writing()) {
             work.run();
             return;
         }
@@ -91,18 +102,22 @@ public class WhatsNewRendersJavaFixtureTest extends H2SqlFixtureTestCase {
     public void testRenderGuides() throws Exception { tolerant(this::renderGuides); }
 
     private void renderGuides() throws Exception {
-        String output = System.getenv("LATTICE_WHATS_NEW_OUTPUT");
-        Path directory = output == null ? null : Files.createDirectories(Path.of(output));
-        if (directory != null) applyTheme();
+        Path directory = outputDirectory("LATTICE_WHATS_NEW_OUTPUT");
+        Path readme = outputDirectory("LATTICE_README_OUTPUT");
+        if (writing()) applyTheme();
         // The unified IDE bundles the Database plugin, and cards and the run actions only exist where it is disabled.
         com.segfault03.ideadb.sql.coexist.UltimateDatabasePlugin.setActiveForTests(false, getTestRootDisposable());
         com.segfault03.ideadb.sql.settings.SqlFileTypeClaim.apply(true);
         myFixture.enableInspections(LatticeSqlSyntaxInspection.class, LatticeSqlUnknownTableInspection.class, LatticeSqlUnknownColumnInspection.class,
                 LatticeSqlAmbiguousColumnInspection.class, LatticeSqlAliasInspection.class);
         loadSchema();
-        write(directory, "guide-schema.png", schemaScene());
+        BufferedImage schema = schemaScene();
+        write(directory, "guide-schema.png", schema);
+        write(readme, "sql-editor.png", schema);
         write(directory, "guide-strings.png", stringsScene());
-        write(directory, "guide-dry-run.png", dryRunScene());
+        BufferedImage dryRun = dryRunScene();
+        write(directory, "guide-dry-run.png", dryRun);
+        write(readme, "dry-run.png", dryRun);
         write(directory, "guide-validation.png", validationScene());
     }
 

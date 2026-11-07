@@ -67,7 +67,7 @@ Common Python commands stay at the root of `scripts/`. PowerShell commands and h
 | `postgres-compatibility.py` | PostgreSQL 8.4–18 / Java 8 driver feature matrix, with selectable server cases | Linux Docker; optional GCC 14+/make host compiler for VFS storage |
 | `postgres-ui-review.py` | Full real-IDE UI flow against an owned PostgreSQL 18 fixture | Linux Docker/X11; same UI dependencies as the native review runner |
 | `one-shot-test.py` | Shared CI/local suite runner with full, routine-check, compatibility-only and focused suite/group modes; `--windows-ui` includes real IDE validation | Aggregate on Linux or Windows; individual suites on catalog-supported hosts; Python 3.11+, network for missing assets, at least 10 GiB free for isolated runs; Docker required only for Docker fixtures |
-| `ui-preview.py` | Render production Swing screens and refresh the seven README screenshots; optionally build a light/dark gallery | Windows, Linux or macOS; JDK 21; local/cached IntelliJ 2025.1 SDK, JUnit, Hamcrest and FlatLaf, or network to download missing assets |
+| `ui-preview.py` | Render production Swing screens and refresh the nine README screenshots; optionally build a light/dark gallery | Windows, Linux or macOS; JDK 21; local/cached IntelliJ 2025.1 SDK, JUnit, Hamcrest and FlatLaf, or network to download missing assets |
 | `dev-deploy.py` | Build, discover a local IDEA, deploy Lattice and restart a running IDE | Installed IntelliJ IDEA 2025.1+; JDK 21; Git for full tooling tests |
 | `release.py` | Validate a version/tag and generate Markdown GitHub notes plus HTML Marketplace headings/bullets, paragraphs and inline code; `--marketplace-smoke` requires an explicit prerelease version without a tag | Git |
 | `check-release-archive.py` | Check ZIP layout, descriptor, bytecode, licenses; generate checksums | Built plugin ZIP |
@@ -106,15 +106,15 @@ Use `--java-home PATH`, `--java8-home PATH`, `--ide-home PATH` for the build bas
 
 ## UI previews and screenshots
 
-The seven featured PNGs are rendered at higher pixel density to meet Marketplace's 1200 × 760 recommendation while retaining their aspect ratios. README display widths remain unchanged. These files can be uploaded directly to Marketplace.
+The nine featured PNGs are rendered at higher pixel density to meet Marketplace's 1200 × 760 recommendation while retaining their aspect ratios. README display widths remain unchanged. These files can be uploaded directly to Marketplace.
 
-For quick component layout feedback and the seven README images, run:
+For quick component layout feedback and the nine README images, run:
 
 ```sh
 python scripts/ui-preview.py
 ```
 
-This renders production Swing components with fixture data and a headless IntelliJ test application that supplies platform services such as the native Action System. It opens no IDE window. It discovers local JDK 21, IntelliJ 2025.1 and JUnit/Hamcrest jars, downloading missing inputs plus checksum-verified FlatLaf under `--download-dir`. Supply `--flatlaf-jar`, `--junit-jar` and `--hamcrest-jar` to override individual jars. `--all-previews` adds light/dark gallery variants; `--output` selects another gallery directory; `--compare-with` adds a before/after view. The default run refreshes only the seven tracked PNGs under `screenshots/`; commit images rendered on the [UI baseline](UI_PREVIEW.md#baseline-for-tracked-images). See [UI preview instructions](UI_PREVIEW.md).
+This renders production Swing components with fixture data and a headless IntelliJ test application that supplies platform services such as the native Action System. It opens no IDE window. It discovers local JDK 21, IntelliJ 2025.1 and JUnit/Hamcrest jars, downloading missing inputs plus checksum-verified FlatLaf under `--download-dir`. Supply `--flatlaf-jar`, `--junit-jar` and `--hamcrest-jar` to override individual jars. `--all-previews` adds light/dark gallery variants; `--output` selects another gallery directory; `--compare-with` adds a before/after view. The default run refreshes only the nine tracked PNGs under `screenshots/`: seven from the Swing render and two SQL editor images that it renders through Gradle's What's New fixture test, which needs an IDE with the Islands Light theme. Pass `--skip-sql-editor` to refresh the seven and keep the tracked two. Commit images rendered on the [UI baseline](UI_PREVIEW.md#baseline-for-tracked-images). See [UI preview instructions](UI_PREVIEW.md).
 
 Main PR CI uses `python scripts/ui-preview.py --checks-only` for production editor recovery assertions without rendering screenshots or updating the gallery.
 

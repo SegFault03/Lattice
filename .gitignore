@@ -2,7 +2,7 @@
 .gradle/
 .kotlin/
 build/
-# Only the seven README screenshots are versioned.
+# Only the nine README screenshots are versioned.
 /screenshots/*
 !/screenshots/side-panel.png
 !/screenshots/welcome.png
@@ -11,6 +11,8 @@ build/
 !/screenshots/table-view.png
 !/screenshots/table-editing.png
 !/screenshots/sql-console.png
+!/screenshots/sql-editor.png
+!/screenshots/dry-run.png
 allure-results/
 
 # Distribution
@@ -70,7 +72,7 @@ test-binaries/
 *.png
 *.jpg
 *.jpeg
-# Authored branding and the seven documented previews
+# Authored branding and the nine documented previews
 !/assets/icon.png
 !/src/main/resources/META-INF/pluginIcon.png
 !/src/main/resources/META-INF/pluginIcon@2x.png
@@ -82,3 +84,5 @@ test-binaries/
 !/screenshots/table-view.png
 !/screenshots/table-editing.png
 !/screenshots/sql-console.png
+!/screenshots/sql-editor.png
+!/screenshots/dry-run.png

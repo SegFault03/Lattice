@@ -228,23 +228,23 @@ options:
 
 ## ui-preview.ps1
 
-Render the production Swing UI without opening an IDE; refresh the seven tracked README screenshots at higher pixel density (at least 1200 × 760), preserving aspect ratios and README display sizes. The same PNGs can be uploaded to Marketplace.
+Render the production Swing UI without opening an IDE; refresh the nine tracked README screenshots at higher pixel density (at least 1200 × 760), preserving aspect ratios and README display sizes. The same PNGs can be uploaded to Marketplace.
 
 ```powershell
 .\scripts\windows\ui-preview.ps1 --all-previews @deps
 ```
 
-To refresh the images you commit, render on the [UI baseline](UI_PREVIEW.md#baseline-for-tracked-images) with `--ide-home` and `--java-home`. `--all-previews` renders a light/dark gallery. `--output` defaults to build/ui-preview/; `--compare-with` points to an earlier gallery for comparisons. Gallery HTML/ZIP files are ignored. Every successful run refreshes the seven images under screenshots/; review their Git diff. JUnit 4.13.2, Hamcrest Core 1.3 and FlatLaf 3.8 can be supplied individually.
+To refresh the images you commit, render on the [UI baseline](UI_PREVIEW.md#baseline-for-tracked-images) with `--ide-home` and `--java-home`. `--all-previews` renders a light/dark gallery. `--output` defaults to build/ui-preview/; `--compare-with` points to an earlier gallery for comparisons. Gallery HTML/ZIP files are ignored. Every successful run refreshes the nine images under screenshots/; review their Git diff. Two of them, the SQL editor images, are rendered through Gradle on an IDE with the Islands Light theme such as the baseline; use `--skip-sql-editor` to keep the tracked two when rendering on another IDE. JUnit 4.13.2, Hamcrest Core 1.3 and FlatLaf 3.8 can be supplied individually.
 
 Complete options (forwarded unchanged to Python):
 
 ```text
 usage: ui-preview.py [-h] [--ide-home IDE_HOME] [--java-home JAVA_HOME]
                      [--compare-with COMPARE_WITH] [--output OUTPUT]
-                     [--all-previews] [--checks-only] [--source-filter-only]
-                     [--search-only] [--tab-icons-only] [--cell-details-only]
-                     [--flatlaf-jar FLATLAF_JAR] [--junit-jar JUNIT_JAR]
-                     [--hamcrest-jar HAMCREST_JAR]
+                     [--skip-sql-editor] [--all-previews] [--checks-only]
+                     [--source-filter-only] [--search-only] [--tab-icons-only]
+                     [--cell-details-only] [--flatlaf-jar FLATLAF_JAR]
+                     [--junit-jar JUNIT_JAR] [--hamcrest-jar HAMCREST_JAR]
                      [--download-dir DOWNLOAD_DIR] [--cleanup] [--no-cleanup]
                      [--binaries-dir BINARIES_DIR]
                      [--gradle-user-home GRADLE_USER_HOME]
@@ -253,8 +253,11 @@ Render database UI components without launching an IntelliJ IDE window.
 Requires JDK 21 and an IntelliJ 2025.1 SDK (Gradle's cached SDK is
 discovered). The IntelliJ test application supplies native action-system
 services; preview-only service shadows block database work and FlatLaf
-approximates IDE themes. Refreshes the seven featured screenshots/ PNGs and a
-local gallery under ignored build/ui-preview/.
+approximates IDE themes. Refreshes the nine featured screenshots/ PNGs and a
+local gallery under ignored build/ui-preview/. Seven come from the Swing
+render; the two SQL editor images come from the What's New fixture test, which
+Gradle runs on an IDE that has the Islands Light theme (see --skip-sql-
+editor).
 
 options:
   -h, --help            show this help message and exit
@@ -264,7 +267,10 @@ options:
   --compare-with COMPARE_WITH
                         Previous output directory for before/after comparison
   --output OUTPUT       Gallery/build directory; screenshots/ keeps only the
-                        seven featured images
+                        nine featured images
+  --skip-sql-editor     Keep the tracked SQL editor images instead of
+                        rendering them; they need an IDE with the Islands
+                        Light theme
   --all-previews        Generate the full light/dark preview gallery; by
                         default only the seven featured screens are rendered
   --checks-only         Run editor recovery assertions without rendering
@@ -633,7 +639,7 @@ Default themes: ExperimentalDark, ExperimentalLight, ExperimentalLightWithLightH
 
 `windows-common.ps1`, `windows-script-dependencies.py` and `native_mysql.py` are internal helpers, not additional public commands. The first serializes native PowerShell arguments; the second prepares the JDK/SDK/JDBC inputs, launches the UI script and owns cleanup; the third initializes and stops portable MySQL fixtures.
 
-The seven README PNGs under `screenshots/` are the tracked product previews; design-concept renders under `design/` are retained references. Other screenshots, archives, JDBC/server/IDE binaries and validation reports belong under ignored `build/`. Authored branding/plugin icons and the committed Gradle wrapper JAR remain source infrastructure. The fallback-driver test stages Maven-resolved JDBC drivers under build/fallback-drivers/; a checked-in lib/ directory is unnecessary.
+The nine README PNGs under `screenshots/` are the tracked product previews; design-concept renders under `design/` are retained references. Other screenshots, archives, JDBC/server/IDE binaries and validation reports belong under ignored `build/`. Authored branding/plugin icons and the committed Gradle wrapper JAR remain source infrastructure. The fallback-driver test stages Maven-resolved JDBC drivers under build/fallback-drivers/; a checked-in lib/ directory is unnecessary.
 
 ## H2 functional and compatibility checks
 

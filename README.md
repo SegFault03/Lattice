@@ -65,10 +65,10 @@ Previews use sample data and show the current production Swing screens.
 ### SQL editor
 
 <p>
-<img src="src/main/resources/release-notes/images/guide-schema.png" alt="SQL file with schema colors, a completion list offering foreign key joins and a hover card describing the customers table" width="900">
+<img src="screenshots/sql-editor.png" alt="SQL file with schema colors, a completion list offering foreign key joins and a hover card describing the customers table" width="900">
 </p>
 <p>
-<img src="src/main/resources/release-notes/images/guide-dry-run.png" alt="Parameter card over an update statement, above a Dry Run tab reporting three rows affected and rolled back" width="900">
+<img src="screenshots/dry-run.png" alt="Parameter card over an update statement, above a Dry Run tab reporting three rows affected and rolled back" width="900">
 </p>
 
 ### Table data and SQL
@@ -162,7 +162,7 @@ Use `python3` if that is your system's Python command. All optional development/
 
 ### Quick local UI testing
 
-To render the seven featured production Swing screens in light mode, run `python scripts/ui-preview.py` with optional JDK 21 and IntelliJ SDK paths (missing inputs are downloaded), then open `build/ui-preview/index.html`. It uses a headless IntelliJ test application for platform services without opening an IDE window. Pass `--all-previews` for the light/dark gallery. The seven README images in `screenshots/` are refreshed by default; review them and commit them with UI changes. See [UI previews](docs/UI_PREVIEW.md) for setup and the full-IDE capture commands.
+To render the seven featured production Swing screens in light mode, run `python scripts/ui-preview.py` with optional JDK 21 and IntelliJ SDK paths (missing inputs are downloaded), then open `build/ui-preview/index.html`. It uses a headless IntelliJ test application for platform services without opening an IDE window. Pass `--all-previews` for the light/dark gallery. The nine README images in `screenshots/` are refreshed by default; review them and commit them with UI changes. Seven are painted by the helper. The two SQL editor images are rendered through Gradle and need an IDE with the Islands Light theme such as IntelliJ 2026.2.3; pass `--skip-sql-editor` to keep the tracked ones. See [UI previews](docs/UI_PREVIEW.md) for setup and the full-IDE capture commands.
 
 To run the tooling and pure Java tests, build the ZIP, find an installed IntelliJ IDEA, and deploy the freshly built plugin:
 
@@ -210,9 +210,9 @@ focused commands, prerequisites and report paths.
 | `.github/` | GitHub issue forms, pull request template and workflows |
 | `assets/`, `licenses/` | Branding and dependency license texts |
 | `build/` | Ignored build output, distribution ZIPs and validation reports |
-| `screenshots/` | The seven tracked README preview images |
+| `screenshots/` | The nine tracked README preview images |
 
-The seven README screenshots are the featured product previews; the two SQL editor images come from `src/main/resources/release-notes/images/`. Concept renders under `design/` are tracked with their design studies; validation output and other generated files belong under ignored `build/`.
+The nine README screenshots are the featured product previews. Concept renders under `design/` are tracked with their design studies; validation output and other generated files belong under ignored `build/`.
 
 ## Releases and support
 

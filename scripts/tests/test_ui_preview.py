@@ -71,7 +71,7 @@ class UiPreviewTests(unittest.TestCase):
                 })
                 self.assertEqual(archive.read('before/dark-table-1100.png'), b'baseline screenshot')
 
-    def test_publish_keeps_only_five_stable_readme_names(self):
+    def test_publish_keeps_only_the_stable_readme_names(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             output = root / 'custom-gallery'
@@ -91,6 +91,30 @@ class UiPreviewTests(unittest.TestCase):
                 self.assertEqual((screenshots / alias).read_bytes(), source.encode())
             self.assertEqual({path.name for path in screenshots.glob('*.png')}, set(preview.FEATURED_SCREENSHOTS))
             self.assertFalse((screenshots / 'light-stale.png').exists())
+
+    def test_sql_editor_images_are_published_when_rendered_and_kept_otherwise(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            output = root / 'custom-gallery'
+            screenshots = root / 'screenshots'
+            output.mkdir()
+            screenshots.mkdir()
+            for theme in ('light', 'dark'):
+                names = [name.replace('light-', theme + '-', 1) for name in preview.FEATURED_SCREENSHOTS.values()]
+                (output / f'{theme}-manifest.txt').write_text('\n'.join(names))
+                for name in names:
+                    (output / name).write_bytes(name.encode())
+            for name in preview.SQL_EDITOR_SCREENSHOTS:
+                (screenshots / name).write_bytes(b'tracked render')
+            preview.publish_screenshots(output, screenshots)
+            for name in preview.SQL_EDITOR_SCREENSHOTS:
+                self.assertEqual((screenshots / name).read_bytes(), b'tracked render')
+            (output / 'sql-editor.png').write_bytes(b'new completion render')
+            preview.publish_screenshots(output, screenshots)
+            self.assertEqual((screenshots / 'sql-editor.png').read_bytes(), b'new completion render')
+            self.assertEqual((screenshots / 'dry-run.png').read_bytes(), b'tracked render')
+            self.assertEqual({path.name for path in screenshots.glob('*.png')},
+                             set(preview.FEATURED_SCREENSHOTS) | set(preview.SQL_EDITOR_SCREENSHOTS))
 
     def test_missing_featured_variant_leaves_previous_readme_images_intact(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -14,7 +14,7 @@ Code is compiled and tested against two IDE targets: the oldest supported, Intel
 ./gradlew test buildPlugin          # unit tests + plugin ZIP (build/distributions/)
 ./gradlew buildPlugin -x test       # packaging only
 python -m unittest discover -s scripts/tests -v   # tooling regression tests
-python scripts/ui-preview.py        # headless Swing screenshots (light, seven README images)
+python scripts/ui-preview.py        # headless Swing screenshots (light, nine README images)
 ```
 
 Tracked images are rendered headlessly on IntelliJ 2026.2.3 in Islands Light with the default Periwinkle schema colors; see `docs/UI_PREVIEW.md#baseline-for-tracked-images`.

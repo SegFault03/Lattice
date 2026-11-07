@@ -4,7 +4,9 @@
 Requires JDK 21 and an IntelliJ 2025.1 SDK (Gradle's cached SDK is discovered).
 The IntelliJ test application supplies native action-system services; preview-only
 service shadows block database work and FlatLaf approximates IDE themes.
-Refreshes the seven featured screenshots/ PNGs and a local gallery under ignored build/ui-preview/.
+Refreshes the nine featured screenshots/ PNGs and a local gallery under ignored build/ui-preview/.
+Seven come from the Swing render; the two SQL editor images come from the What's New fixture
+test, which Gradle runs on an IDE that has the Islands Light theme (see --skip-sql-editor).
 """
 import argparse
 import hashlib
@@ -30,10 +32,29 @@ FEATURED_SCREENSHOTS = {
     'table-editing.png': 'light-table-new-row-1100.png',
     'sql-console.png': 'light-sql-console-1100.png',
 }
+# Rendered by WhatsNewRendersJavaFixtureTest, which writes them under these names.
+SQL_EDITOR_SCREENSHOTS = ('sql-editor.png', 'dry-run.png')
 
 
 def gradle_wrapper():
     return r".\gradlew.bat" if os.name == 'nt' else './gradlew'
+
+
+def render_sql_editor_images(sdk, output):
+    """Runs the What's New fixture test, which writes the README's SQL editor images into output."""
+    for name in SQL_EDITOR_SCREENSHOTS:
+        (output / name).unlink(missing_ok=True)
+    command = [gradle_wrapper(), '--quiet', 'javaPlatformTest', '--tests', '*WhatsNewRendersJavaFixtureTest',
+               '--rerun', f'-Plattice.ide.home={sdk}']
+    try:
+        subprocess.run(command, check=True, cwd=ROOT, timeout=1800, env={**os.environ, 'LATTICE_README_OUTPUT': str(output)})
+    except subprocess.CalledProcessError as error:
+        raise SystemExit('The SQL editor images need an IDE that has the Islands Light theme, such as IntelliJ 2026.2.3 '
+                         '(see docs/UI_PREVIEW.md#baseline-for-tracked-images). Pass --ide-home for one, or '
+                         '--skip-sql-editor to keep the tracked images.') from error
+    for name in SQL_EDITOR_SCREENSHOTS:
+        if not (output / name).is_file():
+            raise SystemExit(f'The What\'s New render did not write {name}')
 
 
 def java_args(command, args, path):
@@ -98,7 +119,9 @@ def run():
     parser.add_argument('--java-home', type=Path, help='JDK 21 installation directory')
     parser.add_argument('--compare-with', type=Path, help='Previous output directory for before/after comparison')
     parser.add_argument('--output', type=Path, default=ROOT / 'build/ui-preview',
-                        help='Gallery/build directory; screenshots/ keeps only the seven featured images')
+                        help='Gallery/build directory; screenshots/ keeps only the nine featured images')
+    parser.add_argument('--skip-sql-editor', action='store_true',
+                        help='Keep the tracked SQL editor images instead of rendering them; they need an IDE with the Islands Light theme')
     parser.add_argument('--all-previews', action='store_true',
                         help='Generate the full light/dark preview gallery; by default only the seven featured screens are rendered')
     parser.add_argument('--checks-only', action='store_true',
@@ -219,6 +242,8 @@ def render(args, deps, parser):
     if len(themes) == 1:
         (output / 'dark-manifest.txt').write_text('', encoding='utf-8')
     if not args.source_filter_only and not args.search_only and not args.tab_icons_only and not args.cell_details_only:
+        if not args.skip_sql_editor:
+            render_sql_editor_images(sdk, output)
         publish_screenshots(output, screenshots)
     render_gallery(output, baseline)
 
@@ -247,7 +272,11 @@ def publish_screenshots(output, screenshots):
     screenshots.mkdir(parents=True, exist_ok=True)
     for alias, source in FEATURED_SCREENSHOTS.items():
         shutil.copyfile(output / source, screenshots / alias)
-    featured = set(FEATURED_SCREENSHOTS)
+    # The SQL editor images are refreshed only when this run rendered them; otherwise the tracked ones stay.
+    for name in SQL_EDITOR_SCREENSHOTS:
+        if (output / name).is_file():
+            shutil.copyfile(output / name, screenshots / name)
+    featured = set(FEATURED_SCREENSHOTS) | set(SQL_EDITOR_SCREENSHOTS)
     for path in screenshots.glob('*.png'):
         if path.name not in featured:
             path.unlink()

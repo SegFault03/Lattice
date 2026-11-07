@@ -54,6 +54,7 @@ class ScriptLayoutTests(unittest.TestCase):
                    'scratch/runtime.dll', 'scratch/source.tar.gz', 'scripts/__pycache__/common.pyc']
         allowed = ['screenshots/side-panel.png', 'screenshots/connection-dialog.png',
                    'screenshots/table-view.png', 'screenshots/table-editing.png', 'screenshots/sql-console.png',
+                   'screenshots/sql-editor.png', 'screenshots/dry-run.png',
                    'gradle/wrapper/gradle-wrapper.jar', 'assets/icon.png', 'AGENTS.md',
                    'src/main/resources/META-INF/pluginIcon.png', 'scripts/windows/test.ps1']
         # One-shot validation deliberately copies source without .git metadata.

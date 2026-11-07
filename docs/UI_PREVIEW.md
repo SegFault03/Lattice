@@ -21,7 +21,7 @@ the theme of their captured sample UI. This feature does not require JCEF.
 
 ### Baseline for tracked images
 
-Render every tracked image, the seven README screenshots and the What's New guide
+Render every tracked image, the nine README screenshots and the What's New guide
 images, headlessly on IntelliJ IDEA 2026.2.3 in the Islands Light theme, with the
 default Periwinkle schema colors. Neither render opens a window or uses the desktop.
 The IDE version here is separate from the plugin's compile baseline, IntelliJ 2025.1.
@@ -32,9 +32,11 @@ The guide images under `src/main/resources/release-notes/images/` are rendered
 by `WhatsNewRendersJavaFixtureTest`. It paints the real editor, schema, highlighting,
 cards and panels. Popups cannot open without a display, so they are composed around
 the editor from what the features return. The scenes simulate the Database plugin
-being disabled, because cards and dry runs need that. The README's SQL editor section
-shows `guide-schema.png` and `guide-dry-run.png` directly, so refresh and review
-them with the guide.
+being disabled, because cards and dry runs need that. The same test also writes the
+README's two SQL editor images, `sql-editor.png` (completion with a hover card) and
+`dry-run.png` (a statement with its named parameters filled in, above the Dry Run tab),
+into the directory named by `LATTICE_README_OUTPUT`. `ui-preview.py` sets that variable
+and publishes them to `screenshots/`, so the guide and the README render from the same scenes.
 
 Supply an extracted IDEA 2026.2.3 directory, and use JDK 21 to run Gradle. In PowerShell:
 
@@ -172,7 +174,7 @@ On an IDE that has the Islands themes the helper installs the real theme, its ed
 
 Without a project the SQL console falls back to a plain text area, so the featured image shows its text in a pane colored by `SqlSwingHighlighter` over a sample schema.
 
-It paints the plugin's production Swing screens with fixture data and a headless IntelliJ test application for platform services such as the Action System. It does not open an IDE window or recreate the screens in separate UI code. The default run uses a light look and feel and refreshes these seven tracked README images:
+It paints the plugin's production Swing screens with fixture data and a headless IntelliJ test application for platform services such as the Action System. It does not open an IDE window or recreate the screens in separate UI code. The default run uses a light look and feel and refreshes these nine tracked README images:
 
 - `screenshots/side-panel.png`
 - `screenshots/welcome.png`
@@ -181,6 +183,10 @@ It paints the plugin's production Swing screens with fixture data and a headless
 - `screenshots/table-view.png`
 - `screenshots/table-editing.png`
 - `screenshots/sql-console.png`
+- `screenshots/sql-editor.png`
+- `screenshots/dry-run.png`
+
+The last two are not painted by the helper. It runs the [What's New render](#whats-new-guide-images) through Gradle, which needs an IDE with the Islands Light theme such as the 2026.2.3 baseline. On any other IDE, pass `--skip-sql-editor` to refresh the first seven and keep the tracked SQL editor images; the run otherwise stops before replacing any image.
 
 The featured images are painted directly at higher pixel density: at least 2×, or a larger integer scale to meet the Marketplace recommendation of 1200 × 760 pixels. Component layout and aspect ratio stay unchanged. The README scales images for its layout, with height determined automatically. Upload the same PNGs under `screenshots/` to Marketplace; no separate export is needed. The featured light/dark variants in `--all-previews` also use this resolution; other gallery variants keep their original resolution.
 
@@ -204,7 +210,7 @@ python scripts/ui-preview.py --all-previews --output build/ui-after --compare-wi
 python scripts/ui-preview.py --java-home /path/to/jdk-21 --ide-home /path/to/intellij-sdk
 ```
 
-`--all-previews` adds light and dark variants to the gallery; `--output` changes generated build output but still refreshes the seven README images; `--compare-with` adds a before/after gallery. The helper requires the IntelliJ 2025.1 SDK and JUnit/Hamcrest runtime jars in the selected Gradle cache, or explicit JDK/SDK paths.
+`--all-previews` adds light and dark variants to the gallery; `--output` changes generated build output but still refreshes the nine README images; `--compare-with` adds a before/after gallery. The helper requires the IntelliJ 2025.1 SDK and JUnit/Hamcrest runtime jars in the selected Gradle cache, or explicit JDK/SDK paths.
 
 These previews show component layout and Swing painting with fixture data. For IDE chrome, live plugin loading, tool-window behavior and database-backed flows, Linux users can use [`capture-intellij-ui.sh`](../scripts/linux/capture-intellij-ui.sh) or [`review-intellij-ui.sh`](../scripts/linux/review-intellij-ui.sh). Windows users can use [`capture-intellij-ui.ps1`](../scripts/windows/capture-intellij-ui.ps1) or [`review-intellij-ui.ps1`](../scripts/windows/review-intellij-ui.ps1) from an interactive desktop session; captures use the primary display, which must be at least 1440×800. Windows capture automatically restores the newly launched `lattice-ui-test` IDE when another application takes the foreground, preserving focus in IDE dialogs and popups. Allow the capture script to use the desktop while it runs; a locked desktop still prevents capture. Their setup and output paths are documented in the [script reference](SCRIPTS.md).
 
