@@ -1483,16 +1483,19 @@ class IntellijUiScreenshotTest {
                 captureScreen(screenshotsDirectory.resolve("table-literal-null.png"))
                 revertButton.click()
                 waitUntil("NULL reverted") { tableCellText(dataGrid, 0, 1) == "Ada Lovelace" }
-                dataGrid.rightClickCell(0, 2)
-                check(!frame.x { byVisibleText("Use database default") }.waitFound().component.isEnabled())
+                val existingRowDefault = findAfterOpeningMenu({ dataGrid.rightClickCell(0, 2) }) {
+                    frame.x { byVisibleText("Use database default") }.waitFound()
+                }
+                check(!existingRowDefault.component.isEnabled())
                 captureScreen(screenshotsDirectory.resolve("table-existing-default-disabled.png"))
                 pressEscape()
                 tableEditor.x { byAccessibleName("Add a new row") }.waitFound().click()
                 waitUntil("review default row added") { dataGrid.rowCount() == 2 }
                 replaceCellValue(dataGrid, 1, 1, "Review defaults")
                 replaceCellValue(dataGrid, 1, 0, "99")
-                dataGrid.rightClickCell(1, 0)
-                frame.x { byVisibleText("Use database default") }.waitFound().click()
+                findAfterOpeningMenu({ dataGrid.rightClickCell(1, 0) }) {
+                    frame.x { byVisibleText("Use database default") }.waitFound()
+                }.click()
                 waitUntil("auto default restored") { tableCellText(dataGrid, 1, 0) == "(Auto)" }
                 captureScreen(screenshotsDirectory.resolve("table-use-default.png"))
                 revertButton.click()
@@ -2851,6 +2854,21 @@ class IntellijUiScreenshotTest {
         robot.keyPress(KeyEvent.VK_ESCAPE)
         robot.keyRelease(KeyEvent.VK_ESCAPE)
         robot.waitForIdle()
+    }
+
+    /** A right-click right after a grid refresh can be dropped on a slow runner, so reopen the menu before failing. */
+    private fun <T> findAfterOpeningMenu(openMenu: () -> Unit, find: () -> T): T {
+        var failure: Exception? = null
+        repeat(3) {
+            openMenu()
+            try {
+                return find()
+            } catch (e: Exception) {
+                failure = e
+                pressEscape()
+            }
+        }
+        throw failure!!
     }
 
     private fun pasteNativeFileChooserPath(path: String) {
