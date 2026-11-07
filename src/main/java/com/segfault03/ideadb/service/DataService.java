@@ -266,13 +266,34 @@ public class DataService {
         }
         public static QueryOptions defaults() { return new QueryOptions(10000,60,100); }
     }
-    private static final java.util.regex.Pattern READ_ONLY_START = java.util.regex.Pattern.compile(
-            "^(?:\\s|\\(|--[^\\n]*\\n|/\\*.*?\\*/)*(select|show|explain|describe|desc|values|table|with)\\b", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.DOTALL);
+    private static final java.util.regex.Pattern READ_ONLY_KEYWORD = java.util.regex.Pattern.compile(
+            "(select|show|explain|describe|desc|values|table|with)\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
+    /** Index of the first character that is not whitespace, an opening parenthesis or a complete comment. */
+    private static int skipLeadingNoise(String sql) {
+        int i = 0, n = sql.length();
+        while (i < n) {
+            char c = sql.charAt(i);
+            if (Character.isWhitespace(c) || c == '(') {
+                i++;
+            } else if (sql.startsWith("--", i)) {
+                int end = sql.indexOf('\n', i);
+                if (end < 0) return n;
+                i = end + 1;
+            } else if (sql.startsWith("/*", i)) {
+                int end = sql.indexOf("*/", i + 2);
+                if (end < 0) return i;
+                i = end + 2;
+            } else {
+                break;
+            }
+        }
+        return i;
+    }
     private static final java.util.regex.Pattern WRITES = java.util.regex.Pattern.compile("\\b(insert|update|delete|merge)\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
     /** Leading-keyword check only; a WITH that mentions DML is treated as a write. */
     static boolean isReadOnlyQuery(String sql) {
-        var start = READ_ONLY_START.matcher(sql);
-        return start.find() && !(start.group(1).equalsIgnoreCase("with") && WRITES.matcher(sql).find());
+        var start = READ_ONLY_KEYWORD.matcher(sql).region(skipLeadingNoise(sql), sql.length());
+        return start.lookingAt() && !(start.group(1).equalsIgnoreCase("with") && WRITES.matcher(sql).find());
     }
     public QueryResult executeQuery(Connection conn, String dbName, String sql) {
         return executeQuery(conn, dbName, sql, QueryOptions.defaults(), new QueryExecution());

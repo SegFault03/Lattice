@@ -21,6 +21,12 @@ class QueryChangeTrackingTest {
             assertFalse(DataService.isReadOnlyQuery(write), write);
     }
 
+    @Test void leadingCommentCheckStaysLinearOnUnclosedComments() {
+        assertTrue(DataService.isReadOnlyQuery("/* a * b **/ /* c\n*/ select 1"));
+        assertTimeoutPreemptively(java.time.Duration.ofSeconds(5), () ->
+                assertFalse(DataService.isReadOnlyQuery("/*" + "*/ /*".repeat(50_000) + " select 1")));
+    }
+
     private static java.util.Properties credentials() {
         var properties = new java.util.Properties();
         properties.setProperty("user", "SA"); properties.setProperty("password", "");
