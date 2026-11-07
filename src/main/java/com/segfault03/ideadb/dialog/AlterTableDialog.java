@@ -129,7 +129,7 @@ public class AlterTableDialog extends DialogWrapper {
                 String name = request.targetTableName();
                 List<ColumnMetadata> columns;
                 try { columns = MetadataService.getInstance().getColumns(conn, config, databaseName, name); }
-                catch (Exception refresh) { columns = List.of(); }
+                catch (Exception refresh) { columns = null; }
                 finish(name, columns);
             } catch (Exception error) {
                 // H2/HSQLDB/MySQL can commit DDL incrementally. Never replay completed steps blindly.
@@ -169,10 +169,12 @@ public class AlterTableDialog extends DialogWrapper {
             // A completed write must invalidate other views even if this dialog has closed.
             DatabaseChangeListener.publish(DatabaseChange.table(config.getId(), databaseName, null));
             if (isDisposed()) return;
-            tableMetadata.setColumns(loaded);
+            // A failed refresh keeps the cached columns; the published change makes open views reload them.
+            if (loaded != null) tableMetadata.setColumns(loaded);
+            else editor.status("Table updated · Structure could not be reloaded", DatabaseUi.Tone.ERROR);
             if (!name.equals(tableMetadata.getName()) && project != null && !project.isDisposed()) {
                 TableMetadata renamed = new TableMetadata(tableMetadata.getCatalog(), tableMetadata.getSchema(), name, tableMetadata.getType());
-                renamed.setColumns(loaded);
+                if (loaded != null) renamed.setColumns(loaded);
                 project.getMessageBus().syncPublisher(TableRenameListener.TOPIC).tableRenamed(config, databaseName, tableMetadata.getName(), renamed);
             }
             close(OK_EXIT_CODE);

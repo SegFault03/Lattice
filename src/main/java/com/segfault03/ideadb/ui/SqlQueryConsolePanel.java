@@ -1,5 +1,7 @@
 package com.segfault03.ideadb.ui;
 
+import com.intellij.openapi.editor.colors.EditorColorsManager;
+import com.intellij.openapi.editor.colors.EditorFontType;
 import com.intellij.icons.AllIcons;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
@@ -16,6 +18,9 @@ import com.segfault03.ideadb.model.ReadOnlyResultModel;
 import com.segfault03.ideadb.service.DataService;
 import com.segfault03.ideadb.service.DatabaseConnectionManager;
 import com.segfault03.ideadb.service.DatabaseSession;
+import com.segfault03.ideadb.sql.view.EmbeddedSqlInput;
+import com.segfault03.ideadb.sql.view.SqlInput;
+import com.segfault03.ideadb.sql.view.SwingSqlInput;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableCellRenderer;
@@ -36,12 +41,17 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     private final DatabaseSession session;
     private boolean running;
     private boolean loadingDatabases;
+    /** A run asked for while the console was loading or busy. */
+    private boolean runWhenReady;
     private volatile com.segfault03.ideadb.service.QueryExecution execution;
     private JButton cancelBtn;
     private JComboBox<Integer> resultLimit;
     private volatile boolean disposed;
 
     private JComboBox<String> databaseCombo;
+    /** The query editor: an IDE editor with Lattice SQL support in the IDE, a plain text area where there is no project. */
+    private SqlInput input;
+    /** The text area behind {@link #input} when there is no project to build an editor in; null otherwise. */
     private JBTextArea editorArea;
     private JButton runBtn;
     private JButton clearBtn;
@@ -85,6 +95,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
             Object selected = databaseCombo.getSelectedItem();
             if (selected != null) {
                 activeDatabase = selected.toString();
+                if (input != null) input.setNamespace(activeDatabase);
             }
         });
         int menuShortcut = GraphicsEnvironment.isHeadless() ? java.awt.event.InputEvent.CTRL_DOWN_MASK
@@ -99,7 +110,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         resultLimit.setSelectedItem(1000);
         resultLimit.setToolTipText("Maximum rows returned by the next query");
         clearBtn = DatabaseUi.action("Clear", Icons.CLEAR, "Clear query text");
-        clearBtn.addActionListener(e -> editorArea.setText(""));
+        clearBtn.addActionListener(e -> input.setText(""));
         JComponent toolbar = DatabaseActionToolbar.create(this, "SQL actions", runBtn, cancelBtn, null,
                 clearBtn, null, DatabaseActionToolbar.picker("Database", databaseCombo));
         heading.add(toolbar, BorderLayout.NORTH);
@@ -111,7 +122,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         historyCombo.addActionListener(e -> {
             if (historyCombo.getSelectedIndex() > 0) {
                 QueryHistoryEntry query = (QueryHistoryEntry) historyCombo.getSelectedItem();
-                if (query != null && query.sql()!=null) setSqlText(query.sql());
+                if (query != null && query.sql()!=null) insertSqlText(query.sql());
             }
         });
         historyCombo.setToolTipText("Restore a recent query into the editor");
@@ -128,7 +139,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         snippetCombo.addActionListener(e -> {
             if (snippetCombo.getSelectedIndex() > 0) {
                 String snip = (String) snippetCombo.getSelectedItem();
-                editorArea.insert(snip + "\n", editorArea.getCaretPosition());
+                input.insertAtCaret(snip + "\n");
                 snippetCombo.setSelectedIndex(0);
             }
         });
@@ -143,25 +154,30 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         splitter.setDividerWidth(JBUI.scale(4));
 
         // Editor
-        editorArea = new JBTextArea();
-        editorArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, getFont().getSize()));
-        editorArea.setMargin(JBUI.insets(10, 12));
-        editorArea.setTabSize(4);
-        editorArea.setText("-- " + config.getName() + "\n-- Write your query and press " + runShortcut + " to execute\n\n");
-        editorArea.setCaretPosition(editorArea.getText().length());
-        DatabaseUi.onTextChange(editorArea, this::updateRunEnabled);
-        editorArea.addCaretListener(event -> updateRunEnabled());
+        String introduction = "-- " + config.getName() + "\n-- Write your query and press " + runShortcut + " to execute\n\n";
+        JComponent editorView;
+        if (EmbeddedSqlInput.isAvailable(project)) {
+            input = EmbeddedSqlInput.create(project, config, activeDatabase, "", true, introduction, "SQL query");
+            editorView = input.component();
+        } else {
+            editorArea = new JBTextArea();
+            editorArea.setFont(EditorColorsManager.getInstance().getGlobalScheme().getFont(EditorFontType.PLAIN));
+            editorArea.setMargin(JBUI.insets(10, 12));
+            editorArea.setTabSize(4);
+            editorArea.setText(introduction);
+            editorArea.setCaretPosition(editorArea.getText().length());
+            JBScrollPane editorScroll = new JBScrollPane(editorArea);
+            editorScroll.setBorder(JBUI.Borders.empty());
+            editorScroll.setRowHeaderView(new SqlLineNumbers(editorArea));
+            input = new SwingSqlInput(editorArea, editorScroll);
+            editorView = editorScroll;
+        }
+        input.onChange(this::updateRunEnabled);
+        input.onCaretMoved(this::updateRunEnabled);
         updateRunEnabled();
 
         // Keyboard Shortcut: Ctrl+Enter / Cmd+Enter to Run
-        KeyStroke runKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, menuShortcut);
-        editorArea.getInputMap().put(runKeyStroke, "runSql");
-        editorArea.getActionMap().put("runSql", new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                executeCurrentSql();
-            }
-        });
+        input.registerShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, menuShortcut), this::executeCurrentSql);
 
         JPanel queryPanel = new JPanel(new WidthAwareBorderLayout());
         JPanel queryCaption = new JPanel(new WrapLayout(FlowLayout.LEFT, JBUI.scale(8), JBUI.scale(4)));
@@ -173,10 +189,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         shortcutHint.setForeground(JBColor.namedColor("Label.infoForeground", JBColor.GRAY));
         queryCaption.add(shortcutHint);
         queryPanel.add(queryCaption, BorderLayout.NORTH);
-        JBScrollPane editorScroll = new JBScrollPane(editorArea);
-        editorScroll.setBorder(JBUI.Borders.empty());
-        editorScroll.setRowHeaderView(new SqlLineNumbers(editorArea));
-        queryPanel.add(editorScroll, BorderLayout.CENTER);
+        queryPanel.add(editorView, BorderLayout.CENTER);
         splitter.setFirstComponent(queryPanel);
 
         // Results Pane
@@ -194,7 +207,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         messagesArea = new JBTextArea();
         messagesArea.getAccessibleContext().setAccessibleName("SQL query messages");
         messagesArea.setEditable(false);
-        messagesArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        messagesArea.setFont(EditorColorsManager.getInstance().getGlobalScheme().getFont(EditorFontType.PLAIN));
         messagesArea.setForeground(NORMAL_MSG_COLOR);
         messagesArea.setMargin(JBUI.insets(10, 12));
         JBScrollPane messagesScroll = new JBScrollPane(messagesArea);
@@ -205,17 +218,26 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         add(splitter, BorderLayout.CENTER);
 
         // South: Status Bar
-        JPanel statusBar = new JPanel(new WidthAwareBorderLayout(0, JBUI.scale(4)));
+        JPanel statusBar = new JPanel(new WidthAwareBorderLayout(JBUI.scale(8), JBUI.scale(4)));
         statusBar.setBorder(BorderFactory.createCompoundBorder(
                 JBUI.Borders.customLineTop(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR), JBUI.Borders.empty(4, 12)));
         statusLabel = new WrappingLabel("Ready");
         statusLabel.getAccessibleContext().setAccessibleName("SQL query status");
-        statusBar.add(statusLabel, BorderLayout.NORTH);
+        // One row, like the table editor's footer: the status reads left and the row limit sits at the right.
         JPanel limitRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 0, 0));
         limitRow.setOpaque(false);
         limitRow.add(DatabaseUi.labeledInput(new JBLabel("Max rows"), resultLimit));
-        statusBar.add(limitRow, BorderLayout.CENTER);
+        statusBar.add(statusLabel, BorderLayout.CENTER);
+        statusBar.add(limitRow, BorderLayout.EAST);
         add(statusBar, BorderLayout.SOUTH);
+    }
+
+    private @org.jetbrains.annotations.Nullable String defaultNamespace(java.sql.Connection connection) {
+        try {
+            return com.segfault03.ideadb.provider.DatabaseProviders.get(config.getType()).metadata().defaultNamespace(connection, config);
+        } catch (Exception ignored) {
+            return null; // the list still loads; the console then starts on its first database
+        }
     }
 
     private void loadDatabases() {
@@ -226,9 +248,12 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
             try (var read = tasks.openRead(config)) {
                 List<String> databases = com.segfault03.ideadb.service.MetadataService.getInstance()
                         .getDatabases(read.connection(), config);
+                // Without a requested database, start where the connection itself starts rather than on the first name.
+                String connectionDefault = activeDatabase.isEmpty() ? defaultNamespace(read.connection()) : null;
                 SwingUtilities.invokeLater(() -> {
                     if (disposed) return;
-                    String selected = activeDatabase;
+                    String selected = activeDatabase.isEmpty() && connectionDefault != null && databases.contains(connectionDefault)
+                            ? connectionDefault : activeDatabase;
                     databaseCombo.removeAllItems();
                     for (String database : databases) databaseCombo.addItem(database);
                     if (!selected.isEmpty()) {
@@ -258,8 +283,30 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     }
 
     public void setSqlText(String sql) {
-        editorArea.setText(sql);
-        editorArea.setCaretPosition(sql.length());
+        input.setText(sql);
+    }
+
+    /** Insert SQL without discarding what the user typed; an empty or identical console is simply set. */
+    public void insertSqlText(String sql) {
+        String existing = input.text();
+        if (existing.isBlank() || existing.equals(sql)) { setSqlText(sql); return; }
+        String separator = existing.endsWith("\n\n") ? "" : existing.endsWith("\n") ? "\n" : "\n\n";
+        int start = existing.length() + separator.length();
+        input.append(separator + sql);
+        input.select(start, start + sql.length());
+    }
+
+    /** Replaces the console's text with {@code sql} and runs it, once databases have loaded and no query is running. */
+    public void runSqlText(String sql) {
+        setSqlText(sql);
+        runWhenReady = true;
+        runPendingIfReady();
+    }
+
+    private void runPendingIfReady() {
+        if (!runWhenReady || running || loadingDatabases || disposed) return;
+        runWhenReady = false;
+        executeCurrentSql();
     }
 
     private void executeCurrentSql() {
@@ -292,7 +339,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
                 // Arbitrary SQL can change other namespaces, return rows from DML, or call procedures.
                 // Read fresh metadata/data after completion rather than guessing targets from SQL text.
                 // A failed/cancelled script may also have committed earlier statements.
-                if (current.hasStartedSql())
+                if (current.mayHaveChangedData())
                     com.segfault03.ideadb.service.DatabaseChangeListener.publish(
                             com.segfault03.ideadb.service.DatabaseChange.connection(config.getId()));
 
@@ -375,6 +422,8 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
 
     private void setRunning(boolean running) {
         this.running = running;
+        // After whatever the caller does next (showing the last results), start a run that was waiting for the console.
+        if (!running && runWhenReady) SwingUtilities.invokeLater(this::runPendingIfReady);
         if (running && resultsModel.getRowCount() > 0) {
             resultsTabs.setTitleAt(0, "Previous results");
             resultsTabs.setToolTipTextAt(0, "These results are from the last successful query");
@@ -386,17 +435,17 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     }
 
     private String currentSql() {
-        String text = editorArea.getText();
+        String text = input.text();
         // Document listeners may run before the caret is clamped after a replacement.
-        int start = Math.min(editorArea.getSelectionStart(), text.length());
-        int end = Math.min(editorArea.getSelectionEnd(), text.length());
+        int start = Math.min(input.selectionStart(), text.length());
+        int end = Math.min(input.selectionEnd(), text.length());
         String selected = text.substring(start, end);
         return selected.isBlank() ? text.trim() : selected.trim();
     }
 
     private void updateRunEnabled() {
         runBtn.setEnabled(!running && !loadingDatabases && !disposed && hasExecutableSql(currentSql()));
-        clearBtn.setEnabled(!running && !disposed && !editorArea.getText().isEmpty());
+        clearBtn.setEnabled(!running && !disposed && !input.text().isEmpty());
     }
 
     /** Introductory comments and empty statement separators are not a query. */
@@ -425,6 +474,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
     }
     @Override public void close() {
         disposed = true; cancelExecution();
+        if (input != null) input.dispose();
         tasks.cancelPending();
         com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(tasks::close);
         com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(session::close);
@@ -451,6 +501,8 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
                     JBUI.Borders.customLine(JBColor.namedColor("Component.focusColor", new JBColor(0x3574F0, 0x548AF7))),
                     JBUI.Borders.empty(0, 7)) : JBUI.Borders.empty(0, 8));
             if (value == null) setText("NULL");
+            else if (value instanceof byte[] bytes) setText(CellValuePresentation.abbreviated(bytes));
+            else if (value instanceof com.segfault03.ideadb.model.TruncatedValue cut) setText(CellValuePresentation.abbreviated(cut));
             return this;
         }
     }

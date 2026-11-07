@@ -38,7 +38,7 @@ final class PostgresMetadataAdapter extends JdbcMetadataAdapter {
                 default -> c.getTypeName();
             };
             boolean unconstrained = detail != null && detail[0].equals("numeric");
-            return new ColumnMetadata(c.getName(), type, c.getDataType(), unconstrained || type.equals("BYTEA") || type.equals("TEXT") ? 0 : c.getColumnSize(), unconstrained ? Integer.MAX_VALUE : c.getDecimalDigits(), c.isNullable(), c.isPrimaryKey(), c.isAutoIncrement() || detail != null && !detail[1].isEmpty(), c.getDefaultValue(), detail != null && !detail[1].isEmpty());
+            return new ColumnMetadata(c.getName(), type, c.getDataType(), unconstrained || type.equals("BYTEA") || type.equals("TEXT") ? 0 : c.getColumnSize(), unconstrained ? Integer.MAX_VALUE : c.getDecimalDigits(), c.isNullable(), c.isPrimaryKey(), c.isAutoIncrement() || detail != null && !detail[1].isEmpty(), c.getDefaultValue(), c.isGenerated() || detail != null && !detail[1].isEmpty());
         });
     }
 }

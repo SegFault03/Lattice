@@ -44,6 +44,7 @@ final class H2Provider implements DatabaseProvider {
     public DatabaseNamespace namespace(String selected) { return new DatabaseNamespace(null, selected); }
     public void selectNamespace(Connection conn, String selected) throws SQLException { conn.setSchema(selected); }
     public int fetchSize(int requested) { return requested; }
+    public List<String> dataTypes() { return List.of("INT", "BIGINT", "SMALLINT", "TINYINT", "VARCHAR", "CHAR", "CLOB", "BOOLEAN", "DECIMAL", "REAL", "DOUBLE PRECISION", "DATE", "TIME", "TIMESTAMP", "TIMESTAMP WITH TIME ZONE", "BINARY VARYING", "BLOB", "JSON", "UUID"); }
     public String sqlLiteral(Object value, String type) {
         String common = SqlLiterals.common(value);
         return common != null ? common : "'" + value.toString().replace("'", "''") + "'";

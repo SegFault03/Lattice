@@ -23,7 +23,7 @@ final class MySqlProvider implements DatabaseProvider {
         String db = config.getDatabaseName() == null ? "" : config.getDatabaseName().trim();
         String host = config.getHost() == null || config.getHost().isBlank() ? "localhost" : config.getHost().trim();
         int port = config.getPort() > 0 ? config.getPort() : defaultPort();
-        return "jdbc:mysql://" + host + ":" + port + "/" + db + "?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&useLegacyDatetimeCode=false&forceConnectionTimeZoneToSession=true&characterEncoding=utf8";
+        return "jdbc:mysql://" + host + ":" + port + "/" + db + "?sslMode=PREFERRED&allowPublicKeyRetrieval=true&serverTimezone=UTC&useLegacyDatetimeCode=false&forceConnectionTimeZoneToSession=true&characterEncoding=utf8&connectTimeout=10000";
     }
     public DatabaseNamespace namespace(String selected) { return new DatabaseNamespace(selected, null); }
     public void selectNamespace(Connection conn, String selected) throws SQLException { if (!selected.equals(conn.getCatalog())) conn.setCatalog(selected); }
@@ -48,6 +48,7 @@ final class MySqlProvider implements DatabaseProvider {
         if (match.group(4) != null && match.group(4).length() > column.getDecimalDigits()) throw new IllegalArgumentException("TIME exceeds fractional precision");
         return text;
     }
+    public List<String> dataTypes() { return List.of("INT", "BIGINT", "SMALLINT", "TINYINT", "MEDIUMINT", "VARCHAR", "CHAR", "TEXT", "MEDIUMTEXT", "LONGTEXT", "BOOLEAN", "DECIMAL", "FLOAT", "DOUBLE", "DATE", "TIME", "DATETIME", "TIMESTAMP", "JSON", "VARBINARY", "BLOB", "LONGBLOB"); }
     public String sqlLiteral(Object value, String type) {
         String common = SqlLiterals.common(value); if (common != null) return common;
         if (value instanceof java.sql.Timestamp timestamp && type.toUpperCase(Locale.ROOT).contains("TIMESTAMP")) {

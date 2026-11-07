@@ -30,7 +30,7 @@ In **GitHub repository Settings → Secrets and variables → Actions**, add rep
 | `LATTICE_SIGNING_PRIVATE_KEY` | Complete contents of `private.pem`, including PEM header/footer and line breaks |
 | `LATTICE_SIGNING_CERTIFICATE_CHAIN` | Complete contents of `chain.crt` |
 | `LATTICE_SIGNING_PRIVATE_KEY_PASSWORD` | Password chosen when generating the encrypted key |
-| `JETBRAINS_MARKETPLACE_TOKEN` | Existing Marketplace publishing token; used by the Marketplace upload job |
+| `JETBRAINS_MARKETPLACE_TOKEN` | Marketplace publishing token; used by the Marketplace upload job |
 
 The signing secrets are scoped to the signing step; the token is scoped to the upload step. Do not paste them into issues, workflow inputs or logs. Local signing uses environment variables with the same `LATTICE_SIGNING_*` names and the committed wrapper:
 

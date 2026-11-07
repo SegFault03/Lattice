@@ -37,7 +37,7 @@ public final class ReleaseNotesAnnouncement implements PersistentStateComponent<
         announceOnce(ReleaseNotesContent.version(), () -> {
             Notification notification = NotificationGroupManager.getInstance().getNotificationGroup("Lattice updates")
                     .createNotification("Lattice " + ReleaseNotesContent.version() + " is ready",
-                            "New data sources, a redesigned alter-table dialog, and clearer value editing.", NotificationType.INFORMATION);
+                            ReleaseNotesContent.summary(), NotificationType.INFORMATION);
             notification.addAction(NotificationAction.createSimpleExpiring("View what's new",
                     () -> { if (!project.isDisposed()) DatabaseEditorManager.getInstance(project).openReleaseNotes(); }));
             notification.addAction(NotificationAction.createSimpleExpiring("Don't show again", this::disable));

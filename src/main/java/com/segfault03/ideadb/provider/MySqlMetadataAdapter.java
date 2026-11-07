@@ -6,6 +6,11 @@ import java.util.*;
 
 final class MySqlMetadataAdapter extends JdbcMetadataAdapter {
     protected DatabaseNamespace namespace(String selected) { return new DatabaseNamespace(selected, null); }
+    @Override protected boolean namespaceIsCatalog() { return true; }
+    /** MySQL views cannot have comments: it reports the word VIEW in their place. */
+    @Override protected String tableComment(String tableType, String remarks) {
+        return "VIEW".equalsIgnoreCase(tableType) ? null : super.tableComment(tableType, remarks);
+    }
     public List<String> getDatabases(Connection conn, ConnectionConfig config) throws Exception {
         List<String> names = new ArrayList<>();
         try (Statement statement = conn.createStatement(); ResultSet rows = statement.executeQuery("SHOW DATABASES;")) {
@@ -16,9 +21,25 @@ final class MySqlMetadataAdapter extends JdbcMetadataAdapter {
         }
         Collections.sort(names); return names;
     }
+    @Override public String defaultNamespace(Connection conn, ConnectionConfig config) throws Exception {
+        String catalog = conn.getCatalog();
+        return catalog != null && !catalog.isBlank() ? catalog : config.getDatabaseName();
+    }
     protected void enrichColumns(Connection conn, ConnectionConfig config, String database, String schema, String table, List<ColumnMetadata> columns) throws Exception {
         DatabaseMetaData meta = conn.getMetaData();
         if (meta.getDatabaseMajorVersion() > 5 || meta.getDatabaseMajorVersion() == 5 && meta.getDatabaseMinorVersion() >= 6)
             enrichTemporalPrecision(conn, database == null ? conn.getCatalog() : database, table, columns);
+        if (meta.getDatabaseMajorVersion() > 5 || meta.getDatabaseMajorVersion() == 5 && meta.getDatabaseMinorVersion() >= 7)
+            enrichGenerated(conn, database == null ? conn.getCatalog() : database, table, columns);
+    }
+    // Connector/J's IS_GENERATEDCOLUMN varies by driver version and also says yes for "DEFAULT_GENERATED", which is only an
+    // expression default such as CURRENT_TIMESTAMP: those columns hold data, so EXTRA decides in both directions.
+    private static void enrichGenerated(Connection conn, String database, String table, List<ColumnMetadata> columns) throws SQLException {
+        Set<String> generated = new HashSet<>();
+        try (var statement = conn.prepareStatement("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=? AND TABLE_NAME=? AND (EXTRA LIKE '%VIRTUAL GENERATED%' OR EXTRA LIKE '%STORED GENERATED%')")) {
+            statement.setString(1, database); statement.setString(2, table);
+            try (ResultSet rows = statement.executeQuery()) { while (rows.next()) generated.add(rows.getString(1)); }
+        }
+        columns.replaceAll(c -> c.isGenerated() == generated.contains(c.getName()) ? c : new ColumnMetadata(c.getName(), c.getTypeName(), c.getDataType(), c.getColumnSize(), c.getDecimalDigits(), c.isNullable(), c.isPrimaryKey(), c.isAutoIncrement(), c.getDefaultValue(), generated.contains(c.getName())));
     }
 }

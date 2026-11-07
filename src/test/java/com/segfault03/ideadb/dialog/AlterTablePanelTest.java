@@ -92,7 +92,7 @@ class AlterTablePanelTest {
             for(int width:new int[]{780,940,1200}) {
                 panel.setSize(width,690); for(int i=0;i<4;i++)layout(panel);
                 assertTrue(panel.applyButton().getWidth()>0);
-                for(JTextField field:find(panel,JTextField.class))if(field.isShowing()||field.getWidth()>0) {
+                for(JTextField field:find(panel,JTextField.class))if((field.isShowing()||field.getWidth()>0)&&!(field.getParent() instanceof JComboBox)) {
                     assertTrue(field.getWidth()>0); assertEquals(com.segfault03.ideadb.ui.DatabaseInputs.height(field),field.getHeight());
                 }
             }

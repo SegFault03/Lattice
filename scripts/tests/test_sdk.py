@@ -57,6 +57,20 @@ class SdkTests(unittest.TestCase):
                 self.assertEqual(sdk, verifier.ide_home(cache, "2025.1"))
                 network.assert_not_called()
 
+    def test_releases_after_community_builds_ended_come_from_the_unified_feed(self):
+        community = {"IIC": [{"version": "2025.3"}]}
+        unified = {"IIU": [{"version": "2026.3", "build": "263"}]}
+        feeds = lambda: [io.BytesIO(json.dumps(community).encode()), io.BytesIO(json.dumps(unified).encode())]
+        with patch.object(verifier.urllib.request, "urlopen", side_effect=feeds()) as network:
+            self.assertEqual("263", verifier.ide_release("2026.3")["build"])
+            self.assertIn("code=IIU", network.call_args.args[0])
+        with patch.object(verifier.urllib.request, "urlopen", side_effect=feeds()) as network:
+            self.assertEqual("2025.3", verifier.ide_release("2025.3")["version"])
+            network.assert_called_once()
+        with patch.object(verifier.urllib.request, "urlopen", side_effect=feeds()):
+            with self.assertRaises(ValueError):
+                verifier.ide_release("1999.1")
+
     def test_sdk_rejects_traversal_and_does_not_mark_partial_complete(self):
         with tempfile.TemporaryDirectory(prefix="lattice-sdk-test-") as directory:
             cache = Path(directory)
@@ -72,7 +86,7 @@ class SdkTests(unittest.TestCase):
             archive = root / "plugin.zip"
             archive.write_bytes(b"placeholder")
             (root / "product-info.json").write_text("{}")
-            jar = root / "tools/verifier/verifier-cli-1.410-all.jar"
+            jar = root / "tools/verifier/verifier-cli-1.411-all.jar"
             jar.parent.mkdir(parents=True)
             jar.write_bytes(b"placeholder")
             report_paths = []

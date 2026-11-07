@@ -88,14 +88,36 @@ class SuiteParityTests(unittest.TestCase):
         context = Namespace(args=Namespace(cleanup=True, binaries_dir=Path('assets'), mysql_port=None),
                             source=Path('checkout'), runner=MagicMock(), java8_home=Path('java8'),
                             probe_classes=Path('probe'), jdbc_cache=Path('assets/jdbc-cache'), native=False)
-        with patch.object(one_shot, 'MYSQL_MATRIX', (('8.4.2', ('26.7.0',)),)), \
+        with patch.object(one_shot, 'MYSQL_MATRIX', (('8.4.2', ('26.10.0',)),)), \
              patch.object(one_shot, 'mysql_server', return_value=nullcontext()), \
              patch.object(one_shot, 'run_gradle') as execute:
             one_shot.run_database_suite(test_suites.suite_by_id('jdbc-mysql'), context)
         properties = execute.call_args.kwargs['properties']
-        self.assertIn('-Plattice.compatibility.drivers=26.7.0', properties)
+        self.assertIn('-Plattice.compatibility.drivers=26.10.0', properties)
         self.assertIn('-Plattice.compatibility.cleanup=false', properties)
         self.assertIn(f'-Plattice.compatibility.cache={context.jdbc_cache}', properties)
+
+    def test_suites_with_their_own_ide_target_build_against_it(self):
+        suite = test_suites.suite_by_id('backend-newest-ide')
+        self.assertIn(suite['ide_version'], one_shot.IDE_VERSIONS, 'The newest IDE target must also be verified')
+        sdk = Path('sdk-newest')
+        context = Namespace(args=Namespace(ide_homes={suite['ide_version']: sdk}, ide_home=Path('sdk-oldest')),
+                            source=Path('checkout'), runner=MagicMock(), deps=MagicMock())
+        context.deps.ide.return_value = sdk
+        with patch.object(one_shot, 'run_gradle') as gradle:
+            one_shot.execute_suite(suite, context)
+        context.deps.ide.assert_called_once_with(sdk, suite['ide_version'])
+        self.assertEqual(sdk, gradle.call_args.kwargs['ide_home'])
+        self.assertEqual(tuple(suite['tasks']), gradle.call_args.args[2:])
+
+    def test_only_gradle_and_ui_suites_can_select_an_ide_target(self):
+        catalog = deepcopy(test_suites.load_catalog())
+        test_suites.suite_by_id('ide-2025.1', catalog)['ide_version'] = '2026.3'
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'catalog.json'
+            path.write_text(json.dumps(catalog), encoding='utf-8')
+            with self.assertRaises(ValueError):
+                test_suites.load_catalog(path)
 
     def test_ui_and_ide_matrix_additions_use_catalog_values_on_every_registered_host(self):
         catalog = deepcopy(test_suites.load_catalog())

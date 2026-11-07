@@ -194,8 +194,19 @@ def vm_properties(argv):
             for arg in argv if arg.startswith("-D") and "=" in arg}
 
 
+# Commands the IDE's launcher runs without opening the IDE: one-off tools, and helpers (such as the stdio MCP server
+# an AI agent inside the IDE starts) that belong to a running IDE rather than being one.
+IDE_TOOL_COMMANDS = {"installPlugins", "inspect", "format"}
+IDE_HELPER_COMMANDS = {"stdioMcpServer"}
+
+
+def is_ide_helper(process, ide):
+    """A launcher process serving the IDE (not the IDE itself); it is useless once the IDE has exited."""
+    return process.executable == ide.launcher and any(arg in IDE_HELPER_COMMANDS for arg in process.argv[1:])
+
+
 def is_idea_process(process, ide):
-    if any(arg in {"installPlugins", "inspect", "format"} for arg in process.argv[1:]):
+    if any(arg in IDE_TOOL_COMMANDS | IDE_HELPER_COMMANDS for arg in process.argv[1:]):
         return False
     if process.executable == ide.launcher:
         return True
@@ -599,6 +610,17 @@ def stop_ide(ide, processes, timeout, progress):
             progress.emit("      Still waiting for IDEA to exit...", 33)
             next_notice = time.monotonic() + 10
         time.sleep(1)
+    stop_helpers(ide, progress)
+
+
+def stop_helpers(ide, progress):
+    """Ends launcher helpers the closed IDE left behind: they are children of its agents, so they outlive it as orphans."""
+    for process in [p for p in scan_processes() if is_ide_helper(p, ide)]:
+        progress.emit(f"      Ending leftover IDEA helper PID {process.pid} ({' '.join(process.argv[1:])}).")
+        try:
+            os.kill(process.pid, signal.SIGTERM)
+        except OSError:
+            pass  # Already gone.
 
 
 def start_ide(ide, project, timeout, progress, expected_paths=None):

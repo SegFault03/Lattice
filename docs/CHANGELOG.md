@@ -4,6 +4,55 @@ Patch notes are selected by the exact release version, including prerelease suff
 
 ## [Unreleased]
 
+## [0.2.0-alpha]
+
+### SQL editor
+
+- Ask for parameter values in the statement's own card instead of a dialog: on Run, Run and Roll Back or Explain the card lifts over the editor with a field in place of each `?`, `:name` or `$1`. What you type is written into the SQL exactly as typed (quotes included), with no type hints; fields start at a fixed width and grow with their value, and the buttons sit at the left. Enter runs, Esc or switching editor tabs cancels. Send to Console copies the statement into the console as written, without asking for values.
+- Show Lattice's state for the file at the editor's top right, beside the error counts (not in the SQL console): a spinner while the schema is read or the SQL is checked, and otherwise whether names can be checked (no connection, schema unreadable, out of date, ready). Click for details, Reload Schema and the connection chooser.
+- Pin a SQL card's toolbar while the caret is in the card: clicking inside the card no longer dismisses it, typing and scrolling keep it (it follows the card), and it appears when the caret enters a card. After an edit its buttons work on the statement at the caret until the card has been read again, and it closes after one of its actions until the caret leaves and re-enters.
+- Color names by what they are once the connection's schema is cached: tables, views and aliases each have a color in one of four families you choose in the SQL editor settings (Periwinkle by default, or Coral, Lime or Neutral, with the choice shown on a light and a dark editor), and columns are gold (primary key), purple (foreign key) or colored by the kind of value they hold. The colors apply in `.sql` files, SQL in strings, the SQL console and filter fields, and the Generated SQL, Create table, Alter table and parameter previews, follow the editor color scheme (Settings | Editor | Color Scheme | Lattice SQL | Schema names), and are the ones the hover cards use.
+- Highlight `.sql` files for the database dialect of the connection you choose (MySQL, PostgreSQL, HSQLDB, H2, or generic SQL), with its own colors, a connection banner, per-file and project defaults, and Settings | Tools | Lattice SQL Editor. This replaces the IDE's highlighting-only SQL file type for `.sql`; a notice offers to turn it off. It starts off with a warning in IntelliJ IDEA Ultimate where the Database plugin is enabled, and stays on with a warning about possible conflicts in the Community edition.
+- Complete keywords, functions, types, tables, views, aliases and columns in `.sql` files for the dialect of the file's connection, with foreign key joins after `JOIN` and join conditions after `ON`, explorer icons with `PK`/`FK` flags, columns of the statement's tables, quoting that follows the dialect's case folding, and an option in Settings | Tools | Lattice SQL Editor.
+- Validate SQL locally, with no database calls: syntax errors, unknown tables and columns (with "did you mean" fixes), ambiguous columns and alias mistakes, as five inspections under Editor | Inspections | Lattice SQL. The schema checks use only the cached schema, stay silent when it may be out of date, and skip queries they cannot fully see.
+- Silence a finding with `-- noinspection <ShortName>` above a statement or at the top of a file, or with the Suppress for statement and Suppress for file fixes. `.sql` files get their own file icon, and data types and functions use colors of their own in the color settings.
+- Finish the SQL editor settings: a keyword case option for completion, a Project Defaults page (default connection, reading the project's configuration files, offers you turned down), and Tools | Lattice: Restore the IDE's Built-in SQL Handling.
+- Keep the SQL editor responsive on large inputs: completion and hover analyze the statement around the caret in files over 100 KB, work is cancelled as you type, and SQL in strings and hover keep working while the IDE indexes.
+- Find the databases a project's configuration files point at (`application*.properties` and `.yml`, `persistence.xml`, `hibernate.cfg.xml`, Tomcat `context.xml`): a saved connection that matches applies to the project's SQL by itself, an unsaved one is offered with the connection dialog pre-filled, and the database type sets the dialect when nothing else does. Passwords and URL parameters are never read; a user name next to the URL pre-fills the new connection.
+- Treat SQL strings in Java and Kotlin code as SQL: highlighting, completion and hover follow the file's connection. Strings are recognized by `@Language("SQL")` or `// language=SQL`, by the call they are passed to (JDBC, Spring `JdbcTemplate`, JPA, Hibernate, jOOQ, Exposed and native `@Query`; the list is editable), or by a strict check of the text. Concatenations, text blocks, raw strings and templates work, with a placeholder for what is only known at run time, and Alt+Enter marks a string as SQL or not.
+- Show tables, columns, aliases and schemas on hover in `.sql` files: comments, types, keys, foreign key targets as links, what references a table, and an Open in Lattice link. Table cards list columns as an aligned table, alias cards show their table's card, and the popup's location bar names the connection and database type. The card reads the cached schema of the file's connection.
+- Give Lattice's own SQL the same support: the SQL console is an editor with dialect highlighting, completion, hover and checks against its connection and chosen database, the table editor's WHERE and ORDER BY fields highlight and complete the table's columns, and the Create and Alter table preview, Generated SQL and parameter preview are highlighted with the editor color scheme. Hover cards are colored the same way, and show which column of the table each reference points at.
+- Send the statement at the caret, or the selection, from a `.sql` file or a Java or Kotlin SQL string to the Lattice console without running it, from the editor's **Lattice SQL** menu or `Alt+Enter`. Parameters (`?`, `:name`, `$1`) are filled in on the statement's card, and values are remembered per file in the workspace.
+- Explain a statement in a **Dry Run** tab without executing it, and Run and Roll Back an `INSERT`, `UPDATE`, `DELETE` or `MERGE` on a connection of its own to see how many rows it affects. Anything that could commit or change the schema is refused before connecting; on MySQL, tables without transactions, triggers, views and calls to non-built-in functions are refused too. A confirmation lists what a rollback does not undo and can be turned off per project.
+- Use the only saved connection for SQL files without a choice, show the file's dialect and connection in the status bar, and forget bindings to deleted connections.
+- Read foreign key targets and table and column comments with the schema metadata, and keep them in the offline metadata cache.
+- Make the Maven plugin an optional dependency so Lattice loads in IDEs without it.
+
+### Data sources and explorer
+
+- Show editing a connection with a pencil in the explorer toolbar, and add a settings button at the end of the toolbar that opens Lattice's settings (Settings | Tools | Lattice SQL Editor).
+- List PostgreSQL partitioned tables, materialized views and foreign tables in the explorer and the SQL editor. Materialized views are read-only like views; foreign tables are dropped with `DROP FOREIGN TABLE` and have no Alter or Truncate.
+- Connect MySQL with TLS when the server offers it, and stop MySQL connects to unreachable hosts after 10 seconds. A slow connect no longer blocks the explorer or the IDE.
+- Check the connection form on Save as well as on Test, and mask passwords in the JDBC URL shown and copied by the connection dialog. Driver origins read Bundled, Downloaded or Local Maven.
+- Report MySQL generated columns as generated rather than auto-increment, so SQL INSERT exports leave them out. Columns with an expression default such as `CURRENT_TIMESTAMP` are ordinary columns: exports keep their values and the Alter table dialog can edit them.
+- Stop showing the word `VIEW` as the comment of a MySQL view.
+- Stop an unresponsive database from freezing the IDE when a table dialog or panel closes its idle connection, and say that a saved driver is no longer available instead of ready to use.
+- Keep a connection's position in the explorer after editing it, and look up table columns without listing the whole schema first.
+- Warn in the connection dialog when the selected JDBC driver has known security vulnerabilities, and name the first patched release. Older drivers stay available for old servers.
+- Bundle H2 2.5.252. On binary values, `LENGTH()`, `CHAR_LENGTH()` and `CHARACTER_LENGTH()` now return bytes, constraints between temporary and permanent tables are refused, and view definitions cannot use session variables in `FETCH` or `OFFSET`.
+
+### Table and SQL tools
+
+- Keep NULL when an untouched NULL cell is committed, and show and edit binary values as hex instead of `[B@…`.
+- Load tables with oversized BLOB or CLOB values: the value shows a truncated, read-only preview with its full size, and page or selection exports refuse it rather than writing it incomplete.
+- Stop auto-refresh after a failed load and report it in the status line instead of opening an error dialog on every tick.
+- Open a console for a connection that names no database (a JDBC URL connection, for example) on the connection's own default schema instead of the first schema in the list.
+- Add SQL to an open console below the existing text instead of replacing it; plain queries in the console no longer reload open table editors and the explorer.
+- Keep the selection and column widths when a table refreshes, reuse an editor's read connection between pages, and keep the page-size control in sync when a reload is refused.
+- Offer each engine's common column types in create and alter dialogs, accept typed types for every engine, quote text defaults such as `42`, and change only the edited clauses when altering a PostgreSQL column.
+- Show the table footer in one row, show key columns by icon alone (auto-increment is listed in the inspector), and use platform selection colors and a dark-theme MySQL logo in the table dialogs.
+- Update What's New in Lattice with illustrated guides to the SQL editor features.
+
 ## [0.1.0-alpha]
 
 ### Data sources and explorer

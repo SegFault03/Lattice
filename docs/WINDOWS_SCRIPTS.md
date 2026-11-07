@@ -47,7 +47,7 @@ Replace the example checkout and asset paths with your own locations. Use `$env:
 
 Temporary Python, shell, Gradle, Java, verifier and fixture command trees are owned by Windows jobs. They are stopped on completion, failure, timeout or interruption, including if the PowerShell parent is killed. File retention with `--no-cleanup` does not retain processes. The IDEA instance deliberately reopened by `dev-deploy` stays open for use.
 
-The reusable asset tree contains ides/<version>/, mysql/<version>/, runtimes/java-8/, runtimes/vc2010/, runtimes/vc2013/, jdbc/mysql/, jdbc/hsqldb/, tools/junit/, tools/flatlaf/, tools/7zip/, tools/verifier/ and sources/. MySQL homes can contain a nested extracted server. Java homes are extracted runtimes/JDKs; IDE homes contain product-info.json. The Java 21 JDK in ides/2025.1/jbr is suitable for compilation; ides/2026.2.3 has a newer JBR and is for additional UI reviews.
+An optional reusable asset tree can contain ides/<version>/, mysql/<version>/, runtimes/java-8/, runtimes/vc2010/, runtimes/vc2013/, jdbc/mysql/, jdbc/hsqldb/, tools/junit/, tools/flatlaf/, tools/7zip/, tools/verifier/ and sources/. MySQL homes can contain a nested extracted server. Java homes are extracted runtimes/JDKs; IDE homes contain product-info.json. The Java 21 JDK in ides/2025.1/jbr is suitable for compilation; newer IDEs can be added for additional UI reviews.
 
 ## test.ps1
 
@@ -146,7 +146,7 @@ Add `--windows-ui` for the Windows-supported UI cases:
 .\scripts\windows\one-shot-test.ps1 --windows-ui @deps
 ```
 
-The three mode flags are mutually exclusive: `--skip-compatibility` runs routine build/live checks; `--compatibility-only` runs packaging, IDE verification and database matrices; `--database-compatibility-only` runs just the database matrices. `--windows-ui` is available only with the full suite and requires an interactive 1440x800+ desktop. It runs editor recovery assertions plus HSQLDB, alter-table, table-dialogs, scaled cell-inspector and search UI scenarios; PostgreSQL and H2 real-IDE flows require Linux fixtures. With `--binaries-dir`, matrix JARs and prepared UI fixtures are retained under `jdbc-cache/` and `ui-maven-repository/` even when `--cleanup` is set. Repeat `--ide-sdk VERSION=PATH` for 2025.1/2025.2/2025.3 and `--mysql-home VERSION=PATH` for 5.5.62/5.6.51/5.7.44/8.4.2. `--jdbc-dir` contains mysql/ and hsqldb/ subfolders; `--java8-home` is the legacy runtime. Failures save logs under build/one-shot-test/. Fixtures choose free loopback ports automatically, including each matrix server. `--mysql-port PORT` / `--hsqldb-port PORT` request fixed free ports for MySQL and the live HSQLDB fixture. Allow at least 10 GiB free workspace space.
+The three mode flags are mutually exclusive: `--skip-compatibility` runs routine build/live checks; `--compatibility-only` runs packaging, IDE verification and database matrices; `--database-compatibility-only` runs just the database matrices. `--windows-ui` is available only with the full suite and requires an interactive 1440x800+ desktop. It runs editor recovery assertions plus HSQLDB, alter-table, table-dialogs, scaled cell-inspector and search UI scenarios; PostgreSQL and H2 real-IDE flows require Linux fixtures. With `--binaries-dir`, matrix JARs and prepared UI fixtures are retained under `jdbc-cache/` and `ui-maven-repository/` even when `--cleanup` is set. Repeat `--ide-sdk VERSION=PATH` for 2025.1/2025.2/2025.3/2026.2.3/2026.3 and `--mysql-home VERSION=PATH` for 5.5.62/5.6.51/5.7.44/8.4.2. `--jdbc-dir` contains mysql/ and hsqldb/ subfolders; `--java8-home` is the legacy runtime. Failures save logs under build/one-shot-test/. Fixtures choose free loopback ports automatically, including each matrix server. `--mysql-port PORT` / `--hsqldb-port PORT` request fixed free ports for MySQL and the live HSQLDB fixture. Allow at least 10 GiB free workspace space.
 
 Complete options (forwarded unchanged to Python):
 
@@ -234,7 +234,7 @@ Render the production Swing UI without opening an IDE; refresh the seven tracked
 .\scripts\windows\ui-preview.ps1 --all-previews @deps
 ```
 
-`--all-previews` renders a light/dark gallery. `--output` defaults to build/ui-preview/; `--compare-with` points to an earlier gallery for comparisons. Gallery HTML/ZIP files are ignored. Every successful run refreshes the seven images under screenshots/; review their Git diff. JUnit 4.13.2, Hamcrest Core 1.3 and FlatLaf 3.7.2 can be supplied individually.
+To refresh the images you commit, render on the [UI baseline](UI_PREVIEW.md#baseline-for-tracked-images) with `--ide-home` and `--java-home`. `--all-previews` renders a light/dark gallery. `--output` defaults to build/ui-preview/; `--compare-with` points to an earlier gallery for comparisons. Gallery HTML/ZIP files are ignored. Every successful run refreshes the seven images under screenshots/; review their Git diff. JUnit 4.13.2, Hamcrest Core 1.3 and FlatLaf 3.8 can be supplied individually.
 
 Complete options (forwarded unchanged to Python):
 
@@ -266,7 +266,7 @@ options:
   --all-previews        Generate the full light/dark preview gallery; by
                         default only the five featured screens are rendered
   --flatlaf-jar FLATLAF_JAR
-                        Existing FlatLaf 3.7.2 JAR
+                        Existing FlatLaf 3.8 JAR
   --junit-jar JUNIT_JAR
                         Existing JUnit 4.13.2 JAR
   --hamcrest-jar HAMCREST_JAR
@@ -357,12 +357,13 @@ Run JetBrains Plugin Verifier against one plugin ZIP and one IntelliJ SDK.
 .\scripts\windows\verify-plugin.ps1 $zip --ide-version 2025.1 @deps
 ```
 
-The ZIP is a required positional argument. `--ide-version` is 2025.1 (default), 2025.2 or 2025.3. `--ide-home` supplies its extracted SDK, and `--verifier-jar` supplies checksum-pinned Verifier 1.410. `--reports` defaults to build/compatibility/verifier-ci/; each invocation gets a unique report directory. `--cache` selects a legacy static SDK/verifier cache; prefer shared dependency flags for new commands.
+The ZIP is a required positional argument. `--ide-version` is 2025.1 (default), 2025.2, 2025.3, 2026.2.3 or 2026.3. `--ide-home` supplies its extracted SDK, and `--verifier-jar` supplies checksum-pinned Verifier 1.411. `--reports` defaults to build/compatibility/verifier-ci/; each invocation gets a unique report directory. `--cache` selects a legacy static SDK/verifier cache; prefer shared dependency flags for new commands.
 
 Complete options (forwarded unchanged to Python):
 
 ```text
-usage: verify-plugin.py [-h] [--ide-version {2025.1,2025.2,2025.3}]
+usage: verify-plugin.py [-h]
+                        [--ide-version {2025.1,2025.2,2025.3,2026.2.3,2026.3}]
                         [--ide-home IDE_HOME] [--java-home JAVA_HOME]
                         [--cache CACHE] [--verifier-jar VERIFIER_JAR]
                         [--download-dir DOWNLOAD_DIR] [--cleanup]
@@ -376,12 +377,12 @@ positional arguments:
 
 options:
   -h, --help            show this help message and exit
-  --ide-version {2025.1,2025.2,2025.3}
+  --ide-version {2025.1,2025.2,2025.3,2026.2.3,2026.3}
   --ide-home IDE_HOME
   --java-home JAVA_HOME
   --cache CACHE
   --verifier-jar VERIFIER_JAR
-                        Local checksum-pinned Plugin Verifier 1.410 JAR
+                        Local checksum-pinned Plugin Verifier 1.411 JAR
   --download-dir DOWNLOAD_DIR
                         Download/cache parent; only directories created by
                         this run are cleaned
@@ -403,7 +404,7 @@ options:
 Validate release ZIP layout, plugin descriptor, licenses and Java 21 bytecode; optionally write SHA256SUMS.
 
 ```powershell
-.\scripts\windows\check-release-archive.ps1 $zip --version $version --source "$assets\sources\mysql-connector-j-26.7.0-source.tar.gz" --checksums build/release/SHA256SUMS
+.\scripts\windows\check-release-archive.ps1 $zip --version $version --source "$assets\sources\mysql-connector-j-26.10.0-source.tar.gz" --checksums build/release/SHA256SUMS
 ```
 
 The ZIP and `--version` are required. `--source` adds the source archive to the checksums list; `--checksums` names the output file. This command uses only Python and input files, so it has no dependency/download/cleanup flags. It does not build the ZIP.
@@ -427,10 +428,10 @@ options:
 
 ## prepare-source-asset.ps1
 
-Retrieve or reuse the checksum-pinned Connector/J 26.7.0 corresponding source archive.
+Retrieve or reuse the checksum-pinned Connector/J 26.10.0 corresponding source archive.
 
 ```powershell
-.\scripts\windows\prepare-source-asset.ps1 --source-archive "$assets\sources\mysql-connector-j-26.7.0-source.tar.gz" @deps
+.\scripts\windows\prepare-source-asset.ps1 --source-archive "$assets\sources\mysql-connector-j-26.10.0-source.tar.gz" @deps
 ```
 
 `--output` defaults to build/release/. `--source-archive` supplies an existing archive; `--cache` selects a legacy source cache. `--github-output` appends its filename to an Actions output file when explicitly requested. The output archive is retained even with cleanup enabled.
@@ -453,7 +454,7 @@ options:
                         Append the prepared filename to this Actions output
                         file
   --source-archive SOURCE_ARCHIVE
-                        Existing checksum-pinned Connector/J 26.7.0 source
+                        Existing checksum-pinned Connector/J 26.10.0 source
                         archive
   --download-dir DOWNLOAD_DIR
                         Download/cache parent; only directories created by
@@ -577,7 +578,7 @@ Build/load the plugin in a real test IDEA and capture its tool window. This uses
 | `-Review` | Exercise complete review flows as well as capture. |
 | `-InputsOnly` | Focus on connection-dialog input alignment; also accepts LATTICE_UI_INPUTS_ONLY=true. |
 | `-StyleOnly` | Focus on styling, toolbar/action glyphs and editing surfaces; also accepts LATTICE_UI_STYLE_ONLY=true. |
-| CI scenario environment | `LATTICE_UI_EXPLORER_SEARCH_ONLY`, `LATTICE_UI_ALTER_TABLE_ONLY`, `LATTICE_UI_CREATE_TABLE_ONLY`, `LATTICE_UI_CELL_DETAILS_ONLY` and `LATTICE_UI_SCALE` select the matching focused test and UI scale. |
+| CI scenario environment | `LATTICE_UI_EXPLORER_SEARCH_ONLY`, `LATTICE_UI_ALTER_TABLE_ONLY`, `LATTICE_UI_CREATE_TABLE_ONLY`, `LATTICE_UI_CELL_DETAILS_ONLY`, `LATTICE_UI_SQL_EDITOR_ONLY` and `LATTICE_UI_SCALE` select the matching focused test and UI scale. |
 | `-GradleArgs @(...)` | Additional individual Gradle arguments, e.g. @("--stacktrace"). |
 | `-BinariesDir PATH` | Reusable asset collection. |
 | `-DownloadDir PATH` | Owned dependency workspace parent. |
@@ -596,7 +597,7 @@ Run real IDE capture/review flows for each selected bundled theme, prepare the J
     -DownloadDir "$assets\downloads" -GradleUserHome "$env:USERPROFILE\.gradle" `
     -Themes @('ExperimentalDark', 'ExperimentalLight') -StyleOnly -Cleanup
 
-# Review the additional supplied IDEA while compiling against the baseline:
+# Review a newer IDEA while compiling against the baseline:
 .\scripts\windows\review-intellij-ui.ps1 -BinariesDir $assets `
     -IdeHome "$assets\ides\2026.2.3" -BuildIdeHome "$assets\ides\2025.1" `
     -Themes @('Islands Light', 'Islands Dark') -StyleOnly -Cleanup
@@ -614,19 +615,19 @@ Run real IDE capture/review flows for each selected bundled theme, prepare the J
 | `-Cleanup` / `-NoCleanup` | Delete/retain owned dependencies; retention is default. Choose one. |
 | `-Python PATH` | Python interpreter; default python. |
 
-Default themes: ExperimentalDark, ExperimentalLight, ExperimentalLightWithLightHeader, JetBrainsHighContrastTheme, Darcula, IntelliJ, JetBrainsLightTheme. Islands Dark, Islands Light and Islands Darcula require an IDEA version that supplies them, such as the supplied 2026.2.3. `-DependenciesReady` is internal. Review does not accept capture's -Theme, -Output, -Review or -GradleArgs options.
+Default themes: ExperimentalDark, ExperimentalLight, ExperimentalLightWithLightHeader, JetBrainsHighContrastTheme, Darcula, IntelliJ, JetBrainsLightTheme. Islands Dark, Islands Light and Islands Darcula require an IDEA version that supplies them, such as 2026.2.3. `-DependenciesReady` is internal. Review does not accept capture's -Theme, -Output, -Review or -GradleArgs options.
 
 ## Internal files and generated outputs
 
-`windows-common.ps1`, `windows-script-dependencies.py` and `native_mysql.py` are internal helpers, not additional public commands. The first serializes native PowerShell arguments; the second prepares the JDK/SDK/JDBC inputs, launches the UI script and owns cleanup; the third initializes and stops portable MySQL fixtures. There are no workstation-specific paths in public scripts.
+`windows-common.ps1`, `windows-script-dependencies.py` and `native_mysql.py` are internal helpers, not additional public commands. The first serializes native PowerShell arguments; the second prepares the JDK/SDK/JDBC inputs, launches the UI script and owns cleanup; the third initializes and stops portable MySQL fixtures.
 
-The five README PNGs under `screenshots/` are the tracked product previews; design-concept renders under `design/` are retained references. Other screenshots, archives, JDBC/server/IDE binaries and validation reports belong under ignored `build/`. Authored branding/plugin icons and the committed Gradle wrapper JAR remain source infrastructure. The fallback-driver test stages Maven-resolved JDBC drivers under build/fallback-drivers/; a checked-in lib/ directory is unnecessary.
+The seven README PNGs under `screenshots/` are the tracked product previews; design-concept renders under `design/` are retained references. Other screenshots, archives, JDBC/server/IDE binaries and validation reports belong under ignored `build/`. Authored branding/plugin icons and the committed Gradle wrapper JAR remain source infrastructure. The fallback-driver test stages Maven-resolved JDBC drivers under build/fallback-drivers/; a checked-in lib/ directory is unnecessary.
 
 ## H2 functional and compatibility checks
 
 ```powershell
-.\scripts\windows\h2-test.ps1 --skip-ui --java-home C:\tools\jdk21
-.\scripts\windows\h2-compatibility.ps1 --java-home C:\tools\jdk21 --java8-home C:\tools\java8
+.\scripts\windows\h2-test.ps1 --skip-ui --java-home C:\path\to\jdk-21
+.\scripts\windows\h2-compatibility.ps1 --java-home C:\path\to\jdk-21 --java8-home C:\path\to\java-8
 ```
 
 The H2 backend flow owns its file/TCP/TLS fixtures and needs no Docker. The full

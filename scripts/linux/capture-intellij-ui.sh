@@ -25,6 +25,9 @@ ui_java_options="-Dsun.java2d.uiScale=1.0 -Dide.ui.scale=1.0 -Djb.consents.confi
 if [[ -n "${LATTICE_UI_MAVEN_REPOSITORY:-}" ]]; then
     ui_java_options+=" -Dlattice.maven.repository=$LATTICE_UI_MAVEN_REPOSITORY"
 fi
+if [[ -n "${LATTICE_UI_MAVEN_CENTRAL:-}" ]]; then
+    ui_java_options+=" -Dlattice.maven.central=$LATTICE_UI_MAVEN_CENTRAL"
+fi
 if [[ -n "$proxy_url" ]]; then
     ui_java_options+=" -Dhttps.proxyHost=$proxy_host -Dhttps.proxyPort=$proxy_port -Dhttp.proxyHost=$proxy_host -Dhttp.proxyPort=$proxy_port -Dhttp.nonProxyHosts=localhost|127.*"
 fi
@@ -79,7 +82,15 @@ if command -v Xvfb >/dev/null 2>&1; then
         xfwm4 --compositor=off > build/ui-window-manager.log 2>&1 &
         window_manager_pid=$!
     elif command -v openbox >/dev/null 2>&1; then
-        openbox > build/ui-window-manager.log 2>&1 &
+        # The IDE's XAWT peer reports dialog locations offset by the openbox frame insets, so
+        # robot clicks miss small targets. Frameless windows keep Swing and X11 coordinates equal.
+        openbox_args=()
+        if [[ -r /etc/xdg/openbox/rc.xml ]]; then
+            sed 's#<applications>#<applications><application class="*"><decor>no</decor></application>#' \
+                /etc/xdg/openbox/rc.xml > build/ui-openbox-rc.xml
+            openbox_args=(--config-file "$repo_root/build/ui-openbox-rc.xml")
+        fi
+        openbox "${openbox_args[@]}" > build/ui-window-manager.log 2>&1 &
         window_manager_pid=$!
     else
         echo "No window manager found; modal title bars and desktop shadows may be absent." >&2

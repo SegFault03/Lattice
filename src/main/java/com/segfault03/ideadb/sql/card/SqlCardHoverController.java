@@ -1,0 +1,464 @@
+package com.segfault03.ideadb.sql.card;
+
+import com.intellij.openapi.Disposable;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.actionSystem.ActionGroup;
+import com.intellij.openapi.actionSystem.AnAction;
+import com.intellij.openapi.actionSystem.AnActionEvent;
+import com.intellij.openapi.actionSystem.AnActionResult;
+import com.intellij.openapi.actionSystem.ex.AnActionListener;
+import com.intellij.openapi.actionSystem.ActionManager;
+import com.intellij.openapi.actionSystem.ActionPlaces;
+import com.intellij.openapi.actionSystem.ActionToolbar;
+import com.intellij.openapi.actionSystem.CommonDataKeys;
+import com.intellij.openapi.actionSystem.DataSink;
+import com.intellij.openapi.actionSystem.UiDataProvider;
+import com.intellij.openapi.actionSystem.toolbarLayout.ToolbarLayoutStrategy;
+import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.editor.event.DocumentEvent;
+import com.intellij.openapi.editor.event.DocumentListener;
+import com.intellij.openapi.editor.event.EditorMouseEvent;
+import com.intellij.openapi.editor.event.CaretEvent;
+import com.intellij.openapi.editor.event.CaretListener;
+import com.intellij.openapi.editor.event.EditorMouseListener;
+import com.intellij.openapi.editor.event.EditorMouseMotionListener;
+import com.intellij.openapi.editor.markup.RangeHighlighter;
+import com.intellij.openapi.fileEditor.FileDocumentManager;
+import com.intellij.openapi.project.Project;
+import com.intellij.openapi.ui.popup.JBPopup;
+import com.intellij.openapi.ui.popup.JBPopupFactory;
+import com.intellij.openapi.ui.popup.JBPopupListener;
+import com.intellij.openapi.ui.popup.LightweightWindowEvent;
+import com.intellij.openapi.util.Key;
+import com.intellij.psi.PsiDocumentManager;
+import com.intellij.ui.awt.RelativePoint;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.TestOnly;
+
+import javax.swing.JPanel;
+import javax.swing.Timer;
+import java.awt.BorderLayout;
+import java.awt.GraphicsEnvironment;
+import java.awt.Point;
+import java.awt.Rectangle;
+import java.awt.event.ContainerAdapter;
+import java.awt.event.ContainerEvent;
+import java.awt.event.FocusAdapter;
+import java.awt.event.HierarchyEvent;
+import java.awt.event.HierarchyListener;
+import java.awt.event.FocusEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.util.Optional;
+
+/**
+ * Shows the card toolbar in a popup above the card that never takes focus: for the card under the mouse (when
+ * {@link SqlCardHoverTimer} says so), else for the card the caret is in. A toolbar shown for the caret's card is pinned: it
+ * stays through clicks, typing and scrolling for as long as the caret is in the card, following the card as it changes
+ * and moves. Typing and scrolling hide a toolbar that is only there because the mouse rests on a card, and the editor
+ * losing focus or an action running hides either.
+ *
+ * <p>While a card's SQL is being read again after an edit, its toolbar offers no card to its actions, so they work on the
+ * statement at the caret (which is the pinned card) and Copy SQL waits, instead of using SQL that has changed.
+ */
+final class SqlCardHoverController implements Disposable {
+    static final String TOOLBAR_GROUP = "com.segfault03.lattice.sql.card.toolbar";
+    static final String PLACE = "LatticeSqlCard";
+    private static final Key<SqlCardHoverController> KEY = Key.create("lattice.sql.card.hover");
+    private static final int TICK_MS = 50;
+    /** How long the editor must stay still after scrolling before the toolbar returns. */
+    private static final int QUIET_MS = 300;
+
+    private final Editor editor;
+    private final SqlCardHoverTimer<RangeHighlighter> timer = new SqlCardHoverTimer<>();
+    private final Timer tick = new Timer(TICK_MS, event -> tick());
+    private final Timer quiet = new Timer(QUIET_MS, event -> refresh());
+    private final FocusAdapter focus = new FocusAdapter() {
+        @Override public void focusLost(FocusEvent event) { if (!overToolbar()) hideNow(); }
+        @Override public void focusGained(FocusEvent event) {
+            suppressed = null;
+            refresh();
+        }
+    };
+    private final HierarchyListener showing = this::showingChanged;
+    private @Nullable RangeHighlighter shown;
+    private @Nullable JBPopup popup;
+    private @Nullable JPanel panel;
+    /** The card whose toolbar an action has just closed; the caret does not bring it back until the caret leaves the card. */
+    private @Nullable RangeHighlighter suppressed;
+    /** Whether the toolbar shown is for the card the caret is in, so edits and scrolling move it instead of closing it. */
+    private boolean pinned;
+    private @Nullable ActionToolbar actionToolbar;
+    private boolean focusedForTests;
+
+    private SqlCardHoverController(@NotNull Editor editor) {
+        this.editor = editor;
+        quiet.setRepeats(false);
+        editor.addEditorMouseMotionListener(new EditorMouseMotionListener() {
+            @Override public void mouseMoved(@NotNull EditorMouseEvent event) {
+                if (shown != null && !shown.isValid()) hideNow();
+                moved(cardAt(editor, event.getMouseEvent().getPoint()));
+            }
+        }, this);
+        editor.addEditorMouseListener(new EditorMouseListener() {
+            @Override public void mouseExited(@NotNull EditorMouseEvent event) { moved(null); }
+        }, this);
+        editor.getScrollingModel().addVisibleAreaListener(event -> scrolled(), this);
+        editor.getCaretModel().addCaretListener(new CaretListener() {
+            @Override public void caretPositionChanged(@NotNull CaretEvent event) { caretMoved(); }
+        }, this);
+        editor.getDocument().addDocumentListener(new DocumentListener() {
+            @Override public void documentChanged(@NotNull DocumentEvent event) { edited(); }
+        }, this);
+        editor.getContentComponent().addFocusListener(focus);
+        editor.getContentComponent().addHierarchyListener(showing);
+        // An action from the toolbar has done its work (it may have opened another tab under the mouse): close the toolbar.
+        ApplicationManager.getApplication().getMessageBus().connect(this).subscribe(AnActionListener.TOPIC, new AnActionListener() {
+            @Override public void afterActionPerformed(@NotNull AnAction action, @NotNull AnActionEvent event, @NotNull AnActionResult result) {
+                if (closesToolbar(action, event.getPlace())) {
+                    suppressed = caretCard();
+                    hideNow();
+                }
+            }
+        });
+    }
+
+    /**
+     * Whether {@code action}, performed in {@code place}, ends the toolbar's use. A group only opens its menu (the
+     * platform reports that as a performed action too), and closing then would take the menu down with the toolbar;
+     * the actions in that menu run in the menu's own place.
+     */
+    static boolean closesToolbar(@NotNull AnAction action, @Nullable String place) {
+        if (action instanceof ActionGroup) return false;
+        return PLACE.equals(place) || ActionPlaces.getActionGroupPopupPlace(PLACE).equals(place);
+    }
+
+    /** Installs the controller on an editor that shows cards, for the editor's lifetime. */
+    static void install(@NotNull Editor editor) {
+        if (editor.getProject() == null || !SqlCardPassFactory.showsCards(editor, FileDocumentManager.getInstance().getFile(editor.getDocument()))) return;
+        SqlCardHoverController controller = new SqlCardHoverController(editor);
+        editor.putUserData(KEY, controller);
+        com.intellij.openapi.editor.ex.util.EditorUtil.disposeWithEditor(editor, controller);
+    }
+
+    static @Nullable SqlCardHoverController of(@NotNull Editor editor) { return editor.getUserData(KEY); }
+
+    /** The card whose painted rectangle holds {@code point}, in the editor content component's coordinates. */
+    static @Nullable RangeHighlighter cardAt(@NotNull Editor editor, @NotNull Point point) {
+        for (RangeHighlighter highlighter : SqlCardPass.highlighters(editor)) {
+            if (SqlCardRenderer.bounds(editor, highlighter).contains(point)) return highlighter;
+        }
+        return null;
+    }
+
+    /** Another tab or window took the editor's place. */
+    private void showingChanged(HierarchyEvent event) {
+        if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0 && !editor.getContentComponent().isShowing()) hideNow();
+    }
+
+    private void moved(@Nullable RangeHighlighter card) {
+        timer.over(card, false, System.currentTimeMillis());
+        if (timer.pending()) tick.start();
+    }
+
+    private void tick() {
+        if (overToolbar()) timer.over(null, true, System.currentTimeMillis());
+        refresh();
+        if (!timer.pending()) tick.stop();
+    }
+
+    /** Shows the toolbar of the card the mouse has rested on, else of the card the caret is in, else none. */
+    private void refresh() {
+        RangeHighlighter caret = anchor();
+        RangeHighlighter target = timer.due(System.currentTimeMillis()).orElse(caret);
+        pinned = target != null && target == caret;
+        show(target);
+    }
+
+    /** The card the caret is in, when the toolbar may show for it: the editor has the focus, the card is in view and no action has just closed it. */
+    private @Nullable RangeHighlighter anchor() {
+        if (!(focusedForTests || editor.getContentComponent().hasFocus())) return null;
+        RangeHighlighter card = caretCard();
+        if (card == null || card == suppressed) return null;
+        Rectangle visible = editor.getScrollingModel().getVisibleArea();
+        return visible.isEmpty() || SqlCardRenderer.bounds(editor, card).intersects(visible) ? card : null;
+    }
+
+    /** The innermost card that holds the caret, ends included. */
+    private @Nullable RangeHighlighter caretCard() {
+        int offset = editor.getCaretModel().getOffset();
+        RangeHighlighter found = null;
+        for (RangeHighlighter highlighter : SqlCardPass.highlighters(editor)) {
+            if (highlighter.getStartOffset() > offset || offset > highlighter.getEndOffset()) continue;
+            if (found == null || highlighter.getEndOffset() - highlighter.getStartOffset() < found.getEndOffset() - found.getStartOffset()) found = highlighter;
+        }
+        return found;
+    }
+
+    private void caretMoved() {
+        // A card an action closed stays closed while the caret stays in it.
+        if (suppressed != null && caretCard() != suppressed) suppressed = null;
+        refresh();
+    }
+
+    /**
+     * The text changed. A toolbar pinned to the caret's card stays and follows the card, which is read again in a moment;
+     * one that is only there for the mouse goes, as the card under it is about to change.
+     */
+    private void edited() {
+        if (pinned && shown != null && shown.isValid()) {
+            reposition();
+            updateActions();
+        } else {
+            hideNow();
+        }
+    }
+
+    /**
+     * A pinned toolbar follows its card as the editor scrolls, and goes while the card is out of view and comes back when it
+     * is in view again. One that is there for the mouse goes, and returns once the editor has been still for a moment.
+     */
+    private void scrolled() {
+        if (shown != null && !pinned) {
+            hideNow();
+            quiet.restart();
+            return;
+        }
+        refresh();
+        reposition();
+    }
+
+    /** The card pass has read the cards again: a pinned toolbar moves to the card that replaced its card, and one for the caret's card can show. */
+    void cardsChanged() {
+        refresh();
+        updateActions();
+    }
+
+    private void updateActions() {
+        ActionToolbar toolbar = actionToolbar;
+        if (toolbar != null) toolbar.updateActionsAsync();
+    }
+
+    /** The mouse is on the toolbar, or one of its menus is open. */
+    private boolean overToolbar() {
+        JPanel current = panel;
+        return current != null && current.isShowing()
+                && (current.getMousePosition(true) != null || !JBPopupFactory.getInstance().getChildPopups(current).isEmpty());
+    }
+
+    /**
+     * A card read before the last edit is not opened: its SQL and its actions' states may no longer hold. One that is
+     * already showing stays while it is read again, with its actions held back; when it is replaced by the card read
+     * from the new text, the toolbar moves to that card instead of closing and opening again.
+     */
+    private void show(@Nullable RangeHighlighter highlighter) {
+        if (highlighter != null && highlighter == shown && highlighter.isValid()) return;
+        if (highlighter != null && !SqlCardPass.isFresh(editor, highlighter)) highlighter = null;
+        if (highlighter == shown) return;
+        if (highlighter != null && shown != null && !shown.isValid() && popup != null && !popup.isDisposed() && pinned) {
+            rebind(highlighter);
+            return;
+        }
+        hidePopup();
+        if (highlighter == null) return;
+        shown = highlighter;
+        highlighter.putUserData(SqlCardPass.HOVERED, Boolean.TRUE);
+        repaint(highlighter);
+        if (!GraphicsEnvironment.isHeadless()) openPopup(highlighter);
+    }
+
+    /** The toolbar that was showing for a card that has been replaced shows for its replacement. */
+    private void rebind(RangeHighlighter next) {
+        RangeHighlighter previous = shown;
+        shown = next;
+        if (previous != null) previous.putUserData(SqlCardPass.HOVERED, null);
+        next.putUserData(SqlCardPass.HOVERED, Boolean.TRUE);
+        repaint(next);
+        if (panel instanceof CardToolbarPanel card) card.highlighter(next);
+        reposition();
+        updateActions();
+    }
+
+    /** Puts the popup above the card it is shown for, as the card is now. */
+    private void reposition() {
+        JBPopup opened = popup;
+        JPanel content = panel;
+        if (opened == null || content == null) return;
+        ApplicationManager.getApplication().invokeLater(() -> {
+            RangeHighlighter card = shown;
+            if (opened != popup || opened.isDisposed() || !opened.isVisible() || card == null || !card.isValid()) return;
+            opened.setLocation(new RelativePoint(editor.getContentComponent(), placement(content, card)).getScreenPoint());
+        });
+    }
+
+    private void openPopup(RangeHighlighter highlighter) {
+        SqlCard card = highlighter.getUserData(SqlCardPass.CARD);
+        Project project = editor.getProject();
+        if (card == null || project == null) return;
+        ActionToolbar toolbar = ActionManager.getInstance().createActionToolbar(PLACE,
+                (ActionGroup) ActionManager.getInstance().getAction(TOOLBAR_GROUP), true);
+        // Laid out at its full width: an auto-layout toolbar sized before its first update folds every button into "more".
+        toolbar.setLayoutStrategy(ToolbarLayoutStrategy.NOWRAP_STRATEGY);
+        toolbar.setReservePlaceAutoPopupIcon(false);
+        actionToolbar = toolbar;
+        JPanel content = new CardToolbarPanel(project, highlighter);
+        toolbar.setTargetComponent(content);
+        content.add(toolbar.getComponent(), BorderLayout.CENTER);
+        content.addMouseListener(new MouseAdapter() {
+            @Override public void mouseExited(MouseEvent event) { moved(null); }
+        });
+        panel = content;
+        JBPopup opened = newPopup(content);
+        opened.addListener(new JBPopupListener() {
+            @Override public void onClosed(@NotNull LightweightWindowEvent event) { if (event.asPopup() == popup) popupClosed(); }
+        });
+        popup = opened;
+        // The toolbar fills itself in the background, inside a popup already sized for an empty toolbar; fit the popup
+        // to the toolbar each time its buttons change.
+        toolbar.getComponent().addContainerListener(new ContainerAdapter() {
+            @Override public void componentAdded(ContainerEvent event) { refit(opened, content); }
+            @Override public void componentRemoved(ContainerEvent event) { refit(opened, content); }
+        });
+        toolbar.updateActionsAsync();
+        opened.show(new RelativePoint(editor.getContentComponent(), placement(content, highlighter)));
+    }
+
+    /**
+     * A click in the editor is a click outside the popup, and the toolbar stays while the caret is in the card, so the popup
+     * does not close itself on one: the controller closes it when the caret leaves the card or the editor loses focus.
+     */
+    static JBPopup newPopup(JPanel content) {
+        return JBPopupFactory.getInstance().createComponentPopupBuilder(content, null)
+                .setFocusable(false).setRequestFocus(false).setCancelOnClickOutside(false).setCancelKeyEnabled(true)
+                .setMovable(false).setResizable(false).setShowShadow(true).createPopup();
+    }
+
+    private Point placement(JPanel content, RangeHighlighter highlighter) {
+        return SqlCardToolbarPlacement.place(SqlCardRenderer.bounds(editor, highlighter), content.getPreferredSize(),
+                editor.getScrollingModel().getVisibleArea());
+    }
+
+    private void refit(JBPopup opened, JPanel content) {
+        ApplicationManager.getApplication().invokeLater(() -> {
+            RangeHighlighter highlighter = shown;
+            if (opened != popup || opened.isDisposed() || !opened.isVisible() || highlighter == null || !highlighter.isValid()) return;
+            opened.pack(true, true);
+            opened.setLocation(new RelativePoint(editor.getContentComponent(), placement(content, highlighter)).getScreenPoint());
+        });
+    }
+
+    /** The platform closed the popup (a click outside, Escape): forget it, so the next hover starts afresh. */
+    private void popupClosed() {
+        popup = null;
+        panel = null;
+        actionToolbar = null;
+        timer.cancel();
+        tick.stop();
+        clearShown();
+    }
+
+    private void hidePopup() {
+        JBPopup closing = popup;
+        popup = null;
+        panel = null;
+        actionToolbar = null;
+        if (closing != null) closing.cancel();
+        clearShown();
+    }
+
+    private void clearShown() {
+        RangeHighlighter previous = shown;
+        shown = null;
+        if (previous != null) {
+            previous.putUserData(SqlCardPass.HOVERED, null);
+            repaint(previous);
+        }
+    }
+
+    private void hideNow() {
+        timer.cancel();
+        tick.stop();
+        hidePopup();
+    }
+
+    private void repaint(RangeHighlighter highlighter) {
+        // The controller is disposed after its editor, which can no longer be measured by then.
+        if (!highlighter.isValid() || editor.isDisposed()) return;
+        Rectangle bounds = SqlCardRenderer.bounds(editor, highlighter);
+        bounds.grow(2, 2);
+        editor.getContentComponent().repaint(bounds);
+    }
+
+    @Override public void dispose() {
+        quiet.stop();
+        hideNow();
+        editor.getContentComponent().removeFocusListener(focus);
+        editor.getContentComponent().removeHierarchyListener(showing);
+        editor.putUserData(KEY, null);
+    }
+
+    @TestOnly void popupClosedForTests() { popupClosed(); }
+
+    /** Headless fixtures have no focused editor; with this set the caret card counts as focused. */
+    @TestOnly void focusedForTests(boolean focused) { focusedForTests = focused; }
+
+    @TestOnly void scrolledForTests() { scrolled(); }
+
+    /** What the end of the quiet period after scrolling does. */
+    @TestOnly void quietElapsedForTests() { quiet.stop(); refresh(); }
+
+    /** The mouse has rested on the card for long enough. */
+    @TestOnly void hoverForTests(@NotNull RangeHighlighter card) {
+        timer.over(card, false, 0);
+        refresh();
+    }
+
+    /** The mouse has been off the card and the toolbar for long enough. */
+    @TestOnly void unhoverForTests() {
+        timer.over(null, false, 0);
+        refresh();
+    }
+
+    @TestOnly void showForTests(@NotNull RangeHighlighter highlighter) { show(highlighter); }
+
+    @TestOnly @Nullable SqlCard shownCard() { return shown == null ? null : shown.getUserData(SqlCardPass.CARD); }
+
+    /** What the toolbar's actions would be given: the shown card, unless its text has changed since it was read. */
+    @TestOnly @Nullable SqlCard actionsCard() {
+        RangeHighlighter current = shown;
+        return current != null && SqlCardPass.isFresh(editor, current) ? current.getUserData(SqlCardPass.CARD) : null;
+    }
+
+    @TestOnly boolean pinnedForTests() { return pinned; }
+
+    /** The toolbar's data: the card, and the editor and file it belongs to, as the run actions expect. */
+    private final class CardToolbarPanel extends JPanel implements UiDataProvider {
+        private final Project project;
+        private volatile RangeHighlighter highlighter;
+
+        CardToolbarPanel(Project project, RangeHighlighter highlighter) {
+            super(new BorderLayout());
+            this.project = project;
+            this.highlighter = highlighter;
+        }
+
+        void highlighter(RangeHighlighter next) { highlighter = next; }
+
+        /** The card the actions work on: the card as last read, unless the text has changed since. */
+        @Nullable SqlCard card() {
+            RangeHighlighter current = highlighter;
+            return current != null && SqlCardPass.isFresh(editor, current) ? current.getUserData(SqlCardPass.CARD) : null;
+        }
+
+        @Override public void uiDataSnapshot(@NotNull DataSink sink) {
+            SqlCard card = card();
+            if (card != null) sink.set(SqlCardDataKeys.SQL_CARD, card);
+            sink.set(CommonDataKeys.PROJECT, project);
+            sink.set(CommonDataKeys.EDITOR, editor);
+            sink.set(CommonDataKeys.VIRTUAL_FILE, FileDocumentManager.getInstance().getFile(editor.getDocument()));
+            // PSI may only be handed out lazily: the platform reads it off the EDT, under a read action.
+            sink.lazy(CommonDataKeys.PSI_FILE, () -> PsiDocumentManager.getInstance(project).getPsiFile(editor.getDocument()));
+        }
+    }
+}

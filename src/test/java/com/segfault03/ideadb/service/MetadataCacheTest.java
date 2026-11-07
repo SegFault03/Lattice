@@ -106,4 +106,21 @@ class MetadataCacheTest {
         cache.getState().sources.clear();
         assertTrue(cache.snapshot(config).namespaces().getFirst().tables().getFirst().metadata().getColumns().isEmpty());
     }
+
+    @Test void revisionsArePerConnectionAndInvalidatedColumnsAreNoLongerTrusted() {
+        var cache = new MetadataCacheState();
+        var first = new ConnectionConfig(DatabaseType.HSQLDB, "First");
+        var second = new ConnectionConfig(DatabaseType.HSQLDB, "Second");
+        cache.tablesRefreshed(first, "PUBLIC", List.of(new TableMetadata(null, "PUBLIC", "T", "TABLE")));
+        cache.columnsRefreshed(first, "PUBLIC", "T", List.of());
+        long before = cache.revision(first.getId());
+
+        cache.tablesRefreshed(second, "PUBLIC", List.of());
+        assertEquals(before, cache.revision(first.getId()), "A change to another connection is not a change to this one");
+        assertTrue(cache.revision(second.getId()) > 0);
+
+        cache.columnsInvalidated(first, "PUBLIC", List.of("T"));
+        assertTrue(cache.revision(first.getId()) > before);
+        assertFalse(cache.snapshot(first).namespaces().getFirst().tables().getFirst().columnsLoaded());
+    }
 }

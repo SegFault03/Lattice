@@ -4,22 +4,47 @@
 
 Open **Tools → What's New in Lattice**, search for that action with
 **Ctrl+Shift+A**, or use the link on Lattice's welcome screen. The native editor
-tab contains three short feature guides, bundled screenshots that can be enlarged,
-and an expandable list of changes from the packaged changelog. It works offline.
+tab contains short feature guides, bundled images that can be enlarged, and an
+expandable list of changes from the packaged changelog. It works offline.
 
 After opening a project, an informational **Lattice updates** notification offers
 **View what's new**. Each version is announced once per IDE installation across
 projects. **Don't show again** disables future notices; the page stays available.
 The announcement state is stored separately from the welcome-screen preference,
-does not roam through Settings Sync, and survives restarts. The first rollout
-shows the 0.1.0-alpha recap since 0.0.2-alpha because previous builds did not
-record which release notes a user had seen.
+does not roam through Settings Sync, and survives restarts.
 The page's **Notify me about new Lattice releases** checkbox can re-enable notices.
 
 For a local installation, build the plugin ZIP, use **Settings → Plugins → gear →
 Install Plugin from Disk**, select the ZIP, restart if requested, and invoke the
 action above. The native page follows the current IDE theme; screenshots retain
 the theme of their captured sample UI. This feature does not require JCEF.
+
+### Baseline for tracked images
+
+Render every tracked image, the seven README screenshots and the What's New guide
+images, headlessly on IntelliJ IDEA 2026.2.3 in the Islands Light theme, with the
+default Periwinkle schema colors. Neither render opens a window or uses the desktop.
+The IDE version here is separate from the plugin's compile baseline, IntelliJ 2025.1.
+
+### What's New guide images
+
+The guide images under `src/main/resources/release-notes/images/` are rendered
+by `WhatsNewRendersJavaFixtureTest`. It paints the real editor, schema, highlighting,
+cards and panels. Popups cannot open without a display, so they are composed around
+the editor from what the features return. The scenes simulate the Database plugin
+being disabled, because cards and dry runs need that.
+
+Supply an extracted IDEA 2026.2.3 directory, and use JDK 21 to run Gradle. In PowerShell:
+
+```powershell
+$env:LATTICE_WHATS_NEW_OUTPUT = "$PWD\src\main\resources\release-notes\images"
+.\gradlew.bat javaPlatformTest --tests "*WhatsNewRendersJavaFixtureTest" --rerun "-Plattice.ide.home=C:/path/to/idea-2026.2.3"
+Remove-Item Env:LATTICE_WHATS_NEW_OUTPUT
+```
+
+On Linux or macOS, set the same variable and use `./gradlew`. Review the images
+before committing them. Without the variable, ordinary `javaPlatformTest` runs
+render the scenes on the compile baseline to keep them working, and write nothing.
 
 ## Welcome screen
 
@@ -135,6 +160,16 @@ Run the preview helper from the repository root on Windows, Linux or macOS:
 python scripts/ui-preview.py
 ```
 
+That renders on the IntelliJ 2025.1 compile baseline, where FlatLaf approximates the IDE themes. It is enough for checking a layout. To refresh the images you commit, use the [baseline](#baseline-for-tracked-images):
+
+```sh
+python scripts/ui-preview.py --ide-home /path/to/idea-2026.2.3 --java-home /path/to/jdk-25
+```
+
+On an IDE that has the Islands themes the helper installs the real theme, its editor scheme and the Inter UI font. The JDK must be at least as new as the IDE's own runtime, which is Java 25 for 2026.2.3; the plugin code still targets Java 21. Run the [What's New render](#whats-new-guide-images) first, because the helper reuses the platform test framework that Gradle caches for that IDE. If the helper's Gradle step runs out of memory in the Kotlin daemon, run `./gradlew compileKotlin -Pkotlin.daemon.jvmargs=-Xmx4g` once and try again.
+
+Without a project the SQL console falls back to a plain text area, so the featured image shows its text in a pane colored by `SqlSwingHighlighter` over a sample schema.
+
 It paints the plugin's production Swing screens with fixture data and a headless IntelliJ test application for platform services such as the Action System. It does not open an IDE window or recreate the screens in separate UI code. The default run uses a light look and feel and refreshes these seven tracked README images:
 
 - `screenshots/side-panel.png`
@@ -151,7 +186,7 @@ It also writes `build/ui-preview/index.html` and a ZIP of the generated preview 
 
 Explorer previews use the production native action toolbar. The helper waits for action expansion before painting and fails if a toolbar has no visible actions.
 
-Use JDK 21 and run `./gradlew test` on Linux/macOS or `.\gradlew.bat test` on Windows once to cache the IntelliJ SDK and UI-test runtime dependencies. Missing inputs and checksum-verified FlatLaf are downloaded into the selected `--download-dir` (the OS development cache by default). In this headless Linux environment the preview selects an installed regular sans-serif font to avoid the host's italic logical-font fallback.
+Use JDK 21 and run `./gradlew test` on Linux/macOS or `.\gradlew.bat test` on Windows once to cache the IntelliJ SDK and UI-test runtime dependencies. Missing inputs and checksum-verified FlatLaf are downloaded into the selected `--download-dir` (the OS development cache by default). On headless Linux the preview selects an installed regular sans-serif font to avoid an italic logical-font fallback.
 
 On Windows, pass the local Java 21 and IntelliJ SDK paths if they are not already discoverable. The renderer uses Java argument files so SDK and workspace paths with spaces work:
 
@@ -171,11 +206,11 @@ python scripts/ui-preview.py --java-home /path/to/jdk-21 --ide-home /path/to/int
 
 These previews show component layout and Swing painting with fixture data. For IDE chrome, live plugin loading, tool-window behavior and database-backed flows, Linux users can use [`capture-intellij-ui.sh`](../scripts/linux/capture-intellij-ui.sh) or [`review-intellij-ui.sh`](../scripts/linux/review-intellij-ui.sh). Windows users can use [`capture-intellij-ui.ps1`](../scripts/windows/capture-intellij-ui.ps1) or [`review-intellij-ui.ps1`](../scripts/windows/review-intellij-ui.ps1) from an interactive desktop session; captures use the primary display, which must be at least 1440×800. Windows capture automatically restores the newly launched `lattice-ui-test` IDE when another application takes the foreground, preserving focus in IDE dialogs and popups. Allow the capture script to use the desktop while it runs; a locked desktop still prevents capture. Their setup and output paths are documented in the [script reference](SCRIPTS.md).
 
-Windows PowerShell examples:
-
 The test applies 100% scaling directly to the IDE VM options as well as the Driver JVM, so Windows display scaling does not offset automated clicks. The fixture Maven project imports offline from its prepared JDBC repository.
 
 For a focused palette review, pass `-StyleOnly -GradleArgs @('-Plattice.ui.lightThemes=true')` to Windows capture. It switches the running IDE through the bundled light themes (including Islands Light when available) and checks the SQL export submenu against the table palette, saving table and console captures for each theme.
+
+Windows PowerShell examples:
 
 ```powershell
 .\scripts\windows\capture-intellij-ui.ps1 -JavaHome 'C:/path/to/jdk-21' -IdeHome 'C:/path/to/IntelliJ IDEA 2025.1' -InputsOnly
@@ -200,13 +235,12 @@ Main PR CI uses this mode instead of the full light/dark gallery.
 
 The native inspector case runs once at 125%, switches through both themes, and
 checks selection following, explicit editing and unconfirmed draft recovery.
-The standalone 100% duplicate and styling-only CI case have been removed. H2 and
-search each run once in dark mode. Create/alter and partial-DDL recovery retain
+H2 and search each run once in dark mode. Create/alter and partial-DDL recovery retain
 separate cases because they exercise different destructive-operation paths.
 
 ### Column Composer
 
-The create-table dialog uses the selected Column Composer design: a persistent
+The create-table dialog is the Column Composer: a persistent
 column navigator, table name, properties and a complete SQL preview. Add/remove
 and move controls update the same definition, including composite primary keys,
 identity columns, nullability, defaults and decimal precision/scale. Filtering
@@ -308,7 +342,7 @@ renderer and widget unit tests also run in the standard test task on every OS.
 
 The live IDE reviews verify source switching and provider-specific default
 ports. Composite key and alias metadata contracts are covered by backend/JDBC
-tests; native badge colors and exact icon dimensions are no longer release gates.
+tests; native badge colors and exact icon dimensions are not release gates.
 
 Busy-state checks hold a real JDBC response at the fixture gate, require visible
 operation feedback and verify that grid mutation controls are disabled until the
@@ -332,7 +366,7 @@ and requires both the backend's failure status and its error dialog.
 
 For pull requests targeting `main`, Linux CI runs the dark functional review,
 search review, PostgreSQL review, mixed alter/recovery,
-a 125% create/alter flow, and one cell-inspector review at 125%
+a 125% create/alter flow, one cell-inspector review at 125%, and a light-theme SQL editor review
 as separate checks
 after their shared prerequisites pass. Each suite can
 fail the job independently, and a failure does not suppress the other suites'
@@ -347,6 +381,27 @@ Reproduce the inspector job with:
 
 ```bash
 LATTICE_UI_CELL_DETAILS_ONLY=true LATTICE_UI_SCALE=1.25 LATTICE_UI_REVIEW_OUTPUT=build/ui-review/cell-inspector-scaled ./scripts/linux/review-intellij-ui.sh ExperimentalDark
+```
+
+The SQL editor job sets `LATTICE_UI_SQL_EDITOR_ONLY=true`. It writes `orders.sql`
+into the test project, adds the owned HSQLDB fixture as the only connection, and
+drives the installed plugin's actions from the editor:
+
+| Screenshot | Checked |
+|---|---|
+| `sql-editor-context-menu.png` | The editor popup's **Lattice SQL** group with its three actions |
+| `sql-editor-status.png` | Lattice's status icon in the editor's inspection widget, with its details popup (connection, schema, Reload Schema) |
+| `sql-editor-parameters.png` | The statement's card lifted over the editor, with fields in place of `:status` and `:customer` and their type chips |
+| `sql-editor-send-to-console.png` | The console holds the literal SQL; nothing ran |
+| `sql-editor-explain.png` | Remembered values fill the fields; the Dry Run tab shows HSQLDB's plan |
+| `sql-editor-rollback-confirm.png` | The confirmation lists the three caveats |
+| `sql-editor-rolled-back.png` | **Rolled back** with one row; JDBC confirms the table is unchanged |
+| `sql-editor-rollback-refused.png` | `CREATE TABLE` is refused before connecting |
+
+Reproduce it with:
+
+```bash
+LATTICE_UI_SQL_EDITOR_ONLY=true LATTICE_UI_REVIEW_OUTPUT=build/ui-review/sql-editor ./scripts/linux/review-intellij-ui.sh ExperimentalLight ExperimentalDark
 ```
 
 ## PostgreSQL end-to-end review

@@ -13,6 +13,7 @@ Lattice is a database client for IntelliJ IDEA. Connect to MySQL, PostgreSQL, HS
 
 - Explorer groups connections by database type, with search and filters for sources, schemas, tables and columns.
 - SQL console with results, history, row limits, timeouts and cancellation.
+- SQL editor for `.sql` files and SQL in Java and Kotlin strings: dialect highlighting, completion, hover, validation, Send to Console with parameter values, Explain and Run and Roll Back ([details](docs/SQL_EDITOR.md)).
 - Value Workspace for formatted/raw inspection, column details, editing and explicit change staging.
 - Editable table grids with pagination, filtering, batch saves, explicit NULL/default values and draft recovery.
 - Create/alter table dialogs with a full SQL preview, batched changes and recovery after partial DDL failures.
@@ -22,21 +23,23 @@ Lattice is a database client for IntelliJ IDEA. Connect to MySQL, PostgreSQL, HS
 - Offline schema browsing from cached metadata; changes refresh the explorer and affected editors.
 - Passwords and custom JDBC URLs stored through IntelliJ PasswordSafe.
 
-## 0.1.0-alpha highlights
+## 0.2.0-alpha highlights
 
-**0.1.0-alpha** is a minor alpha release, with the following changes since
-**0.0.2-alpha**. Open **Tools → What's New in Lattice**
+**0.2.0-alpha** is a minor alpha release, with the following changes since
+**0.1.0-alpha**. Open **Tools → What's New in Lattice**
 or use the link on Lattice's welcome screen for illustrated, offline feature guides.
 A dismissible update notice appears once per version across projects; **Don't show
 again** disables future notices without hiding the guide.
 
-- **PostgreSQL and H2:** PostgreSQL adds schema browsing and transactional DDL. H2 supports memory, file and TCP connections, with service workflows for MySQL/PostgreSQL compatibility modes.
-- **Explorer:** Group and filter connections by engine, search across sources and database objects, identify key columns, and browse cached metadata offline. Startup and later refreshes preserve the current explorer view.
-- **Table work:** Inspect formatted or raw values and column definitions, stage edits explicitly, recover drafts, and apply create/alter batches with SQL previews.
-- **Drivers and sessions:** Reuse verified downloads, discover Maven-cached and project-default drivers in the background, and safely retire connections when sessions change.
-- **Welcome screen:** A refreshed starting point now reflects all four supported databases and current query, edit and export workflows.
+- **Schema-aware SQL:** Dialect highlighting, schema colors, completion with foreign key joins, and hover cards in `.sql` files and in SQL strings in Java and Kotlin.
+- **SQL cards and dry runs:** Run, Explain, Send to Console or Run and Roll Back a statement from the card behind it, with parameter values typed in place.
+- **Validation:** Syntax errors and unknown tables and columns are underlined as you type, with no calls to the database.
+- **Project connections:** Lattice reads the databases your configuration files point at and applies a saved connection that matches.
+- **Everywhere SQL is shown:** The console, filter fields and table dialogs use the same highlighting and colors.
 
-See the [changelog](docs/CHANGELOG.md) and [commits since the last release](https://github.com/SegFault03/Lattice/compare/v0.0.2-alpha...main) for details.
+In IntelliJ IDEA Ultimate, Lattice's SQL support starts off, and SQL cards and dry runs need the Database plugin disabled. In the Community edition it stays on, with a warning that you may notice conflicts if that plugin is enabled; see [SQL editor support](docs/SQL_EDITOR.md#the-database-plugin).
+
+See the [changelog](docs/CHANGELOG.md) and [commits since the last release](https://github.com/SegFault03/Lattice/compare/v0.1.0-alpha...main) for details.
 
 ## Screenshots
 
@@ -77,10 +80,10 @@ IntelliJ IDEA **2025.1 or later**, Community or Ultimate/unified editions, using
 |---|---|
 | MySQL | 5.5.62, 5.6.51, 5.7.44 and 8.4.2 |
 | HSQLDB | 2.2.9 through 2.7.4; file, memory and server modes |
-| H2 | 2.1.214, 2.2.224 and 2.3.232; memory/file and TCP matrix, plus bundled-driver TLS workflows |
+| H2 | 2.1.214, 2.2.224, 2.3.232 and 2.5.252; memory/file and TCP matrix, plus bundled-driver TLS workflows |
 | PostgreSQL | 8.4 through 18; select a Java 8 compatible pgJDBC (42.7.3 or 42.2.27 for servers older than 9.1) |
 
-Choose a JDBC driver compatible with your server. HSQLDB requires a matching server/file format; some releases offer a `-jdk8` classifier. Java 8 coverage applies to matrix-selected drivers and runtimes; H2 2.3 requires Java 11+. MySQL and PostgreSQL are native servers. The plugin requires Java 21. See the [compatibility report](docs/compatibility.md) for tested combinations and limits.
+Choose a JDBC driver compatible with your server. HSQLDB requires a matching server/file format; some releases offer a `-jdk8` classifier. Java 8 coverage applies to matrix-selected drivers and runtimes; H2 2.3 and later require Java 11+. MySQL and PostgreSQL are native servers. The plugin requires Java 21. See the [compatibility report](docs/compatibility.md) for tested combinations and limits.
 
 ## Install and connect
 
@@ -97,13 +100,15 @@ Choose a JDBC driver compatible with your server. HSQLDB requires a matching ser
 
 Select MySQL, HSQLDB, PostgreSQL or H2, enter connection details, and choose a driver:
 
-- **Bundled driver**: the plugin includes Connector/J 26.7.0, HSQLDB 2.7.4, pgJDBC 42.7.14 and H2 2.3.232, plus every version you have downloaded. Pick one from the list to reuse it without downloading again.
+- **Bundled driver**: the plugin includes Connector/J 26.10.0, HSQLDB 2.7.4, pgJDBC 42.7.14 and H2 2.5.252, plus every version you have downloaded. Pick one from the list to reuse it without downloading again.
 - **Download a version**: choose or enter a version and click **Download**. Downloads are explicit and checksum-verified, and a release is fetched at most once. Afterwards it appears in the bundled list.
 - **Local JAR**: select an existing JDBC driver.
 
+Older releases with known security vulnerabilities stay available for old servers and show a warning when selected.
+
 **Test Connection** reports the server product/version after authentication and the driver's version. Failed authentication or negotiation can prevent detection. Downloaded drivers are kept in the IDE system cache and are reused across restarts.
 
-For H2, select Memory for a named database that lasts until its last connection closes, File for a persistent database path, or Server for TCP (default port 9092). File mode accepts the database base path or an existing `.mv.db` file. The bundled driver is H2 2.3.232 (Java 11+ bytecode, tested on Java 21); H2 2.1.214 and 2.2.224 also pass Java 8 probes. Custom URLs preserve options such as `IFEXISTS` and SSL settings. Service workflows also run in H2 MySQL/PostgreSQL compatibility modes; this does not establish complete SQL emulation. H2 1.x file migration is not validated. H2 DDL can commit an open transaction, so finish console transactions before schema changes.
+For H2, select Memory for a named database that lasts until its last connection closes, File for a persistent database path, or Server for TCP (default port 9092). File mode accepts the database base path or an existing `.mv.db` file. The bundled driver is H2 2.5.252 (Java 11+ bytecode, tested on Java 21); H2 2.1.214 and 2.2.224 also pass Java 8 probes. Custom URLs preserve options such as `IFEXISTS` and SSL settings. Service workflows also run in H2 MySQL/PostgreSQL compatibility modes; this does not establish complete SQL emulation. H2 1.x file migration is not validated. H2 DDL can commit an open transaction, so finish console transactions before schema changes.
 
 Generated MySQL URLs currently disable TLS and use UTC for the driver/server session. For remote or TLS-required servers, use a custom JDBC URL with your required security options. Custom URLs retain your options.
 
@@ -142,7 +147,7 @@ python scripts/test.py --build
 python -m unittest discover -s scripts/tests -v
 ```
 
-Use `python3` if that is your system's Python command. All optional development/release helpers live in `scripts/`; see the [script reference](docs/SCRIPTS.md). Only the conventional Gradle launchers remain in the repository root.
+Use `python3` if that is your system's Python command. All optional development/release helpers live in `scripts/`; see the [script reference](docs/SCRIPTS.md).
 
 ### Quick local UI testing
 
@@ -166,7 +171,7 @@ On Linux or Windows, run the full disposable validation flow with [the one-shot 
 python scripts/one-shot-test.py
 ```
 
-The default run builds and tests the plugin, checks the ZIP, runs live database functional tests (including PostgreSQL on Linux), verifies IntelliJ 2025.1–2025.3, and exercises the complete JDBC/Java 8 matrix. It does not render screenshots; use `python scripts/ui-preview.py` for standalone Swing previews or `./scripts/linux/review-intellij-ui.sh` on Linux/X11 and `.\scripts\windows\review-intellij-ui.ps1` on Windows for real-IDE UI flows.
+The default run builds and tests the plugin, checks the ZIP, runs live database functional tests (including PostgreSQL on Linux), verifies IntelliJ 2025.1–2025.3, 2026.2.3 and 2026.3, and exercises the complete JDBC/Java 8 matrix. It does not render screenshots; use `python scripts/ui-preview.py` for standalone Swing previews or `./scripts/linux/review-intellij-ui.sh` on Linux/X11 and `.\scripts\windows\review-intellij-ui.ps1` on Windows for real-IDE UI flows.
 
 Use `--skip-compatibility` for the build and live functional checks, `--compatibility-only` for the IDE and JDBC matrices, or `--database-compatibility-only` for just the JDBC matrix when Plugin Verifier runs separately. Actions uses the isolated compatibility modes only for PRs targeting `main`; routine checks use the Gradle cache.
 
@@ -189,18 +194,18 @@ focused commands, prerequisites and report paths.
 |---|---|
 | `src/` | Plugin source, resources and Java tests |
 | [docs/](docs/README.md) | Development, release, support and compatibility guides |
-| `design/` | Create/alter table concept galleries and presentation prototypes |
+| [design/](design/README.md) | Design study instructions, plus create/alter table concept galleries and presentation prototypes |
 | `scripts/` | Portable development and release helpers; tooling tests in `scripts/tests/` |
 | `.github/` | GitHub issue forms, pull request template and workflows |
 | `assets/`, `licenses/` | Branding and dependency license texts |
 | `build/` | Ignored build output, distribution ZIPs and validation reports |
 | `screenshots/` | The seven tracked README preview images |
 
-The seven README screenshots are the featured product previews. Concept renders under `design/` are retained design references; validation output and other generated files belong under ignored `build/`.
+The seven README screenshots are the featured product previews. Concept renders under `design/` are tracked with their design studies; validation output and other generated files belong under ignored `build/`.
 
 ## Releases and support
 
-Every branch push and PR runs embedded functional checks and plugin build/archive validation on Linux, Windows and macOS. PRs targeting `main` additionally run grouped tooling, regression/integration, production Swing and real-IDE UI, JDBC/Java and IntelliJ 2025.1–2025.3 compatibility checks. PRs targeting `staging` run the commit tier. See [CI test groups](docs/CI_TESTING.md) for scope and commands.
+Code is compiled and tested against the oldest supported IDE, IntelliJ 2025.1, and the newest stable, IntelliJ 2026.3 (on PRs targeting `main`). Every branch push and PR runs embedded functional checks and plugin build/archive validation on Linux, Windows and macOS. PRs targeting `main` additionally run grouped tooling, regression/integration, production Swing and real-IDE UI, JDBC/Java and IntelliJ 2025.1–2025.3, 2026.2.3 and 2026.3 compatibility checks. PRs targeting `staging` run the commit tier. See [CI test groups](docs/CI_TESTING.md) for scope and commands.
 
 A new tag such as `v0.1.0-alpha` triggers the [release workflow](.github/workflows/release.yml) only after its commit is verified as reachable from `main`. Tags have no branch of their own; a tag on an unmerged feature commit is rejected before any build, signing or publication job. The tag pipeline runs release functional/build checks, ZIP validation, signing and signature verification, then publishes a GitHub Release and submits the same signed ZIP to JetBrains Marketplace. Compatibility matrices are confined to PRs. GitHub Releases include patch notes, commit history, checksums and corresponding MySQL sources. Prereleases are not designated latest; Marketplace submissions use the public Stable channel and become available after JetBrains approval. There is no manual release trigger; use the local dry-run commands in [Releasing](docs/RELEASING.md).
 
@@ -212,7 +217,7 @@ Planned work includes:
 
 1. Broader database compatibility coverage and support for more relational databases.
 2. More SQL and schema actions, including generating POJOs, DTOs and JavaBeans from tables and query results.
-3. SQL syntax highlighting and inline suggestions informed by connected database schemas, subject to feasibility within the IntelliJ Platform.
+3. Running a whole SQL file in the Lattice console. Sending one statement to the console, parameter preview and dry runs are described in [SQL editor support](docs/SQL_EDITOR.md#running-statements).
 4. Relationship graphs and dependency trees to explore how tables connect through foreign keys.
 
 More improvements are planned as Lattice evolves. These features are not available yet, and priorities may change based on feedback and technical feasibility.

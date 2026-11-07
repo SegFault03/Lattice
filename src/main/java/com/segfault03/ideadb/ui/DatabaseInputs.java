@@ -26,6 +26,8 @@ public final class DatabaseInputs {
     public static JBTextField textField(String text) { return new InputTextField(text, 0); }
     public static JBTextField textField(int columns) { return new InputTextField("", columns); }
     public static JPasswordField passwordField() { return new InputPasswordField(); }
+    /** An embedded one-line editor, framed and sized like the other single-line inputs. */
+    public static JComponent editorField(JComponent editor, int columns) { return new InputEditorField(editor, columns); }
     public static <E> JComboBox<E> comboBox() { return new InputComboBox<>(); }
     public static <E> JComboBox<E> comboBox(E[] items) { return new InputComboBox<>(items); }
     /** Share the real selection model with a native overflow popup, detaching when it closes. */
@@ -190,6 +192,54 @@ public final class DatabaseInputs {
         @Override public void paint(Graphics graphics) { paintRounded(this, graphics, super::paint); }
     }
 
+    /** The frame of a text field around an IDE editor, which paints its own text and background. */
+    private static final class InputEditorField extends JPanel implements SizedInput {
+        private final JComponent editor;
+        private final int columns;
+        private final java.beans.PropertyChangeListener repaintOnFocus = event -> repaint();
+
+        InputEditorField(JComponent editor, int columns) {
+            super(new BorderLayout());
+            this.editor = editor;
+            this.columns = columns;
+            setOpaque(false);
+            setBorder(new InputBorder());
+            add(editor, BorderLayout.CENTER);
+        }
+
+        @Override public void addNotify() {
+            super.addNotify();
+            KeyboardFocusManager.getCurrentKeyboardFocusManager().addPropertyChangeListener("permanentFocusOwner", repaintOnFocus);
+        }
+
+        @Override public void removeNotify() {
+            KeyboardFocusManager.getCurrentKeyboardFocusManager().removePropertyChangeListener("permanentFocusOwner", repaintOnFocus);
+            super.removeNotify();
+        }
+
+        @Override public void setEnabled(boolean enabled) {
+            super.setEnabled(enabled);
+            editor.setEnabled(enabled);
+        }
+
+        private Dimension sized() {
+            Insets insets = getInsets();
+            Font font = editor.getFont() != null ? editor.getFont() : getFont();
+            int width = columns * getFontMetrics(font).charWidth('m') + insets.left + insets.right;
+            return new Dimension(width, fitted());
+        }
+
+        /** At least the usual input height, and tall enough for a line of the editor's own font. */
+        private int fitted() {
+            Insets insets = getInsets();
+            return Math.max(height(this), editor.getPreferredSize().height + insets.top + insets.bottom);
+        }
+
+        @Override public Dimension getPreferredSize() { return sized(); }
+        @Override public Dimension getMinimumSize() { return new Dimension(JBUI.scale(40), fitted()); }
+        @Override public void paint(Graphics graphics) { paintRounded(this, graphics, super::paint); }
+    }
+
     private static final class InputPasswordField extends JPasswordField implements SizedInput {
         private boolean initialized;
         InputPasswordField() { style(this); initialized = true; }
@@ -308,14 +358,21 @@ public final class DatabaseInputs {
                 if (value == com.segfault03.ideadb.model.RowDefaults.Value.USE_DEFAULT) {
                     if (rendered instanceof JLabel label) field.setText(label.getText());
                     initialText = field.getText();
+                } else if (value instanceof byte[] bytes) {
+                    // Binary values edit as 0x hex, which the cell converter parses back.
+                    field.setText(CellValuePresentation.raw(bytes));
+                    initialText = field.getText();
                 }
             } else input = null;
             return component;
         }
         @Override public Object getCellEditorValue() {
             Object value = delegate.getCellEditorValue();
-            return initialValue == com.segfault03.ideadb.model.RowDefaults.Value.USE_DEFAULT
-                    && java.util.Objects.equals(initialText, value) ? initialValue : value;
+            // An untouched NULL cell opens with empty text; committing must not turn it into ''.
+            if (initialValue == null && "".equals(value)) return null;
+            boolean sentinel = initialValue == com.segfault03.ideadb.model.RowDefaults.Value.USE_DEFAULT
+                    || initialValue instanceof byte[];
+            return sentinel && java.util.Objects.equals(initialText, value) ? initialValue : value;
         }
         @Override public boolean isCellEditable(EventObject event) { return delegate.isCellEditable(event); }
         @Override public boolean shouldSelectCell(EventObject event) { return delegate.shouldSelectCell(event); }

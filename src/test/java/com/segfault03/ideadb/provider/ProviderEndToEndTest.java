@@ -70,6 +70,12 @@ public class ProviderEndToEndTest {
                             .map(ColumnMetadata::getName).collect(java.util.stream.Collectors.toSet()));
                     assertEquals(Set.of("TENANT", "PARENT_ID"), columns.stream().filter(ColumnMetadata::isForeignKey)
                             .map(ColumnMetadata::getName).collect(java.util.stream.Collectors.toSet()));
+                    // A composite key reports each column's own target, in the parent's key order.
+                    var targets = columns.stream().filter(c -> c.getReference() != null)
+                            .collect(java.util.stream.Collectors.toMap(ColumnMetadata::getName, ColumnMetadata::getReference));
+                    assertEquals(Set.of("TENANT", "PARENT_ID"), targets.keySet());
+                    assertTrue(targets.get("TENANT").table().equalsIgnoreCase("KEY_PARENT") && targets.get("TENANT").column().equalsIgnoreCase("TENANT"), targets::toString);
+                    assertTrue(targets.get("PARENT_ID").table().equalsIgnoreCase("KEY_PARENT") && targets.get("PARENT_ID").column().equalsIgnoreCase("ID"), targets::toString);
                     String alias = dialect.quoteIdentifier("shown");
                     var result = DataService.getInstance().executeQuery(connection, namespace,
                             "SELECT C." + tenant + " AS " + alias + ", C." + parentId + " AS " + alias

@@ -11,6 +11,7 @@ final class HsqlDriverDescriptor implements DriverDescriptor {
     public List<String> driverClasses() { return List.of("org.hsqldb.jdbc.JDBCDriver", "org.hsqldb.jdbcDriver"); }
     public List<String> isolatedPackages() { return List.of("org.hsqldb."); }
     public List<String> suggestedVersions() { return List.of("2.7.4-jdk8", "2.7.3-jdk8", "2.6.1-jdk8", "2.5.2", "2.4.1", "2.3.6", "2.3.0", "2.2.9"); }
+    public String firstPatchedVersion() { return "2.7.1"; }
     public String artifactPath(String selection) {
         if (selection == null || !selection.matches("\\d+\\.\\d+\\.\\d+(-jdk8)?")) throw new IllegalArgumentException("Enter a release version such as 2.7.4-jdk8");
         String version = selection.replaceFirst("-jdk8$", "");

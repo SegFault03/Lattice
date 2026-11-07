@@ -10,17 +10,18 @@ change.
 
 Enable Actions and configure signing secrets before tagged releases; see [signing and Marketplace publishing](MARKETPLACE.md). The publish job uses the repository's `GITHUB_TOKEN` with `contents: write`.
 
-Validate the change through a PR targeting `main`. That workflow runs the database/Java 8 and IDEA 2025.1–2025.3 compatibility matrices on the PR merge build. Every branch push runs functional/build/archive checks. The main-targeted PR additionally runs tooling, regression/integration, UI and compatibility suites; inspect its retained evidence. Merge the release commit into `main` before creating its tag. There is no manual release or hosted smoke-upload trigger; use local dry runs below.
+Validate the change through a PR targeting `main`. That workflow runs the database/Java 8 and IDEA 2025.1–2025.3, 2026.2.3 and 2026.3 compatibility matrices on the PR merge build. Every branch push runs functional/build/archive checks. The main-targeted PR additionally runs tooling, regression/integration, UI and compatibility suites; inspect its retained evidence. Merge the release commit into `main` before creating its tag. There is no manual release or hosted smoke-upload trigger; use local dry runs below.
 
 ## Prepare a version
 
 1. Update `pluginVersion` in `gradle.properties` for ordinary local builds.
 2. Move relevant `docs/CHANGELOG.md` entries into a matching version section, including any prerelease suffix, and keep an Unreleased section for future changes.
    For a release with new workflows, also update `src/main/resources/release-notes/release.properties`:
-   set its `edition` and `since` versions and curate the illustrated guides. Keep
-   the three referenced README screenshots current. Gradle packages those PNGs and
-   the changelog, and replaces the guide's version with the actual build version,
-   including tag overrides. Keep the concise descriptor change notes aligned.
+   set its `edition` and `since` versions and curate the illustrated guides. Refresh
+   their images as described in [UI previews](UI_PREVIEW.md#whats-new-guide-images).
+   Gradle packages those PNGs and the changelog, and replaces the guide's version
+   with the actual build version, including tag overrides. Keep the concise
+   descriptor change notes aligned.
 3. Commit the preparation to `staging`, then open a PR from `staging` to `main`.
    Branch pushes run functional/build/archive checks; the main-targeted PR runs
    the full validation gate, including tooling, regression/integration, UI and
@@ -35,13 +36,12 @@ git push origin v0.1.0-alpha
 
 These are release commands for the maintainer; no tag is created by the preparation scripts. Tags use `vX.Y.Z` or a SemVer prerelease such as `vX.Y.Z-alpha` / `vX.Y.Z-rc.1`, without numeric leading zeroes. Build metadata suffixes are not supported. Release builds derive the plugin/ZIP version from the tag, overriding the default property. Prerelease suffixes set GitHub's prerelease flag and disable latest designation. Do not reuse a published tag.
 
-The next release is **0.1.0-alpha**, a minor alpha release following
-**0.0.2-alpha**. Keep `gradle.properties`, the source plugin descriptor, the
-changelog heading and the illustrated guide's `edition` aligned. Its `since`
-remains `0.0.2-alpha`, the previous release, and its `version=${version}` is
-resolved by Gradle. Do not advance to a later development version before this
-release is tagged. A staging push or main PR does not publish the plugin;
-create the tag only after the main PR is merged and release is approved.
+Keep `gradle.properties`, the source plugin descriptor, the changelog heading
+and the illustrated guide's `edition` aligned. Its `since` names the previous
+release, and its `version=${version}` is resolved by Gradle. Do not advance to a
+later development version before the release is tagged. A staging push or main
+PR does not publish the plugin; create the tag only after the main PR is merged
+and release is approved.
 
 ## Automatic pipeline
 
@@ -54,7 +54,7 @@ The tag workflow:
 5. Publishes a GitHub Release only when the main-ancestry guard, build/tests and Windows/macOS baseline checks succeed. Tooling, regression/integration, UI and compatibility suites run exclusively on PRs targeting `main`, rather than again on tags.
 6. After GitHub publication succeeds, submits the same signed ZIP to Marketplace's public Stable channel with `isHidden=false`. Alpha/RC tags remain GitHub prereleases; Marketplace visibility follows JetBrains approval.
 
-Release assets are the plugin ZIP, the unmodified MySQL Connector/J 26.7.0 corresponding-source archive and `SHA256SUMS`. The GitHub description combines the matching changelog section (or populated Unreleased notes) with all commits since the preceding reachable lower-version release tag. Marketplace What's New uses the same patch notes rendered as HTML headings, bullet lists and paragraphs; inline code is supported and raw HTML is escaped. The first release includes the reachable commit history.
+Release assets are the plugin ZIP, the unmodified MySQL Connector/J 26.10.0 corresponding-source archive and `SHA256SUMS`. The GitHub description combines the matching changelog section (or populated Unreleased notes) with all commits since the preceding reachable lower-version release tag. Marketplace What's New uses the same patch notes rendered as HTML headings, bullet lists and paragraphs; inline code is supported and raw HTML is escaped. The first release includes the reachable commit history.
 
 Build/test/verification failures publish no release. The publish job uploads assets to a draft, then makes it public after successful upload. A failed GitHub publish can leave a draft; remove that failed draft before retrying. Diagnostics and candidate artifacts are retained for seven days. A GitHub publish retry fails if a release already exists; it does not overwrite published assets. Use a new version for changed published artifacts. A failed Marketplace submission leaves the GitHub Release intact: check whether Marketplace accepted the version, then rerun only the Marketplace job if it is absent. Do not rerun a successful GitHub publish job. The workflow does not perform project-close/dynamic-unload UI tests.
 
@@ -66,7 +66,7 @@ Python 3.11+ is required (3.12 recommended for SDK archive extraction).
 python scripts/release.py --version 0.1.0-alpha
 python scripts/test.py --live --mysql --hsqldb --postgres --build --version 0.1.0-alpha --notes-file build/release/patch-notes.html
 python scripts/prepare-source-asset.py
-python scripts/check-release-archive.py build/distributions/Lattice-0.1.0-alpha.zip --version 0.1.0-alpha --source build/release/mysql-connector-j-26.7.0-source.tar.gz --checksums build/release/SHA256SUMS
+python scripts/check-release-archive.py build/distributions/Lattice-0.1.0-alpha.zip --version 0.1.0-alpha --source build/release/mysql-connector-j-26.10.0-source.tar.gz --checksums build/release/SHA256SUMS
 python scripts/verify-plugin.py build/distributions/Lattice-0.1.0-alpha.zip --ide-version 2025.1
 ```
 

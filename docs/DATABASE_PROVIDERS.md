@@ -23,9 +23,8 @@ lives in `JdbcMetadataAdapter`. Engine-specific DDL, compatibility workarounds,
 metadata enrichment, streaming rules and SQL literal encoding stay in their
 implementations. Shared services remain facades to preserve existing callers.
 
-`ConnectionConfig` and `DatabaseType` retain their persisted field/enum identities.
-This refactor requires no settings migration and keeps secrets in PasswordSafe.
-A custom JDBC URL must match the selected provider. The connection manager rejects
+`ConnectionConfig` and `DatabaseType` keep stable persisted field/enum identities,
+and secrets stay in PasswordSafe. A custom JDBC URL must match the selected provider. The connection manager rejects
 a mismatch before loading a driver; provider type is part of cached connection
 identity so a type change retires existing sessions; the connection dialog infers the selection
 from recognized URL prefixes.
@@ -89,11 +88,10 @@ and longer identifiers are not treated as transaction-end commands.
 
 Spring Data JDBC/JPA target mapped aggregates/entities and do not solve dynamic
 metadata, SQL dialect differences, selected driver versions or session ownership.
-Spring JDBC can reduce boilerplate but is optional. Consider bounded, lazy HikariCP
-pools for short operations only after measuring connection costs; pools would need
-an adapter around the selected driver and explicit disposal/configuration retirement.
-Console sessions must retain their pinning semantics. No pooling dependency is
-introduced here.
+Spring JDBC can reduce boilerplate but is optional. Lattice has no pooling
+dependency; a pool would need an adapter around the selected driver and explicit
+disposal/configuration retirement, and console sessions must retain their pinning
+semantics.
 
 ## Validation
 
@@ -117,7 +115,7 @@ and support for non-JDBC sources are outside the provider contract.
 
 ## H2 validation scope
 
-The bundled H2 2.3.232 runs in ordinary `test`: the shared end-to-end service
+The bundled H2 2.5.252 runs in ordinary `test`: the shared end-to-end service
 workflow covers schema/table DDL, browsing, grid mutations and rollback,
 pagination, export/reimport, console namespace selection and table alterations.
 `H2FeatureTest` covers file persistence, generated columns, identity and timestamp
@@ -129,9 +127,9 @@ accepts H2 2.x; older 1.x databases require an external migration.
 and recovery checks. `H2RegressionTest` also covers typed export replay, native
 view DDL, identity state, failed batches/alterations, transaction ownership,
 cancellation races and timeouts. The compatibility matrix tests H2 2.1.214,
-2.2.224 and 2.3.232 across memory/file, all TCP driver/server pairs and MySQL/
-PostgreSQL compatibility-mode service workflows. Java 8 runs 2.1/2.2; 2.3 requires
-Java 11+ bytecode and is exercised on Java 21 with an expected Java 8 rejection.
+2.2.224, 2.3.232 and 2.5.252 across memory/file, all TCP driver/server pairs and MySQL/
+PostgreSQL compatibility-mode service workflows. Java 8 runs 2.1/2.2; 2.3 and 2.5 require
+Java 11+ bytecode and are exercised on Java 21 with an expected Java 8 rejection.
 
 The real IntelliJ UI scenario supports an H2 TCP fixture with full dark/light
 functional checks. See [H2 validation](H2_TESTING.md) for suite boundaries,

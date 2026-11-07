@@ -9,6 +9,9 @@ public interface SqlDialect {
     void dropDatabase(Connection conn, ConnectionConfig config, String dbName) throws Exception;
     void createTable(Connection conn, ConnectionConfig config, String dbName, String tableName, List<ColumnDefinition> columns) throws Exception;
     void dropTable(Connection conn, ConnectionConfig config, String dbName, String tableName) throws Exception;
+    default void dropForeignTable(Connection conn, ConnectionConfig config, String dbName, String tableName) throws Exception {
+        throw new UnsupportedOperationException("Foreign tables are not supported by " + config.getType().getDisplayName());
+    }
     void truncateTable(Connection conn, ConnectionConfig config, String dbName, String tableName) throws Exception;
     void alterTableAddColumn(Connection conn, ConnectionConfig config, String dbName, String tableName, ColumnDefinition col) throws Exception;
     void alterTableDropColumn(Connection conn, ConnectionConfig config, String dbName, String tableName, String colName) throws Exception;

@@ -3,6 +3,7 @@ package com.segfault03.ideadb.editor;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.fileEditor.FileEditorManagerListener;
+import com.intellij.openapi.fileEditor.OpenFileDescriptor;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.segfault03.ideadb.model.ConnectionConfig;
@@ -54,26 +55,34 @@ public class DatabaseEditorManager implements com.intellij.openapi.Disposable {
                 vf = new TableDataVirtualFile(config, databaseName, tableMetadata);
                 openFiles.put(key, vf);
             }
-            FileEditorManager.getInstance(project).openFile(vf, true);
+            new OpenFileDescriptor(project, vf).navigate(true);
         });
     }
 
-    public void openConsole(ConnectionConfig config, String initialDb, String initialSql) {
+    public void openConsole(ConnectionConfig config, String initialDb, String initialSql) { openConsole(config, initialDb, initialSql, false); }
+
+    /** With {@code run}, the console also runs {@code initialSql} as soon as it can. */
+    public void openConsole(ConnectionConfig config, String initialDb, String initialSql, boolean run) {
         String key = "console:" + config.getId() + ":" + (initialDb != null ? initialDb : "");
         ApplicationManager.getApplication().invokeLater(() -> {
             if (disposed || project.isDisposed()) return;
             DatabaseVirtualFile vf = openFiles.get(key);
             if (vf instanceof SqlConsoleVirtualFile console && FileEditorManager.getInstance(project).isFileOpen(vf)) {
-                FileEditorManager.getInstance(project).openFile(vf, true);
-                if (initialSql != null && console.getPanel() != null) console.getPanel().setSqlText(initialSql);
+                new OpenFileDescriptor(project, vf).navigate(true);
+                if (initialSql != null && console.getPanel() != null) {
+                    if (run) console.getPanel().runSqlText(initialSql);
+                    else console.getPanel().setSqlText(initialSql);
+                }
                 return;
             }
             // Open immediately. The production panel loads its database picker with visible feedback.
             SqlConsoleVirtualFile console = new SqlConsoleVirtualFile(config, initialDb, null);
             openFiles.put(key, console);
-            FileEditorManager.getInstance(project).openFile(console, true);
+            new OpenFileDescriptor(project, console).navigate(true);
             if (initialSql != null) ApplicationManager.getApplication().invokeLater(() -> {
-                if (!disposed && !project.isDisposed() && console.getPanel() != null) console.getPanel().setSqlText(initialSql);
+                if (disposed || project.isDisposed() || console.getPanel() == null) return;
+                console.getPanel().setSqlText(initialSql);
+                if (run) console.getPanel().runSqlText(initialSql);
             });
         });
     }
@@ -92,7 +101,7 @@ public class DatabaseEditorManager implements com.intellij.openapi.Disposable {
                 vf = new WelcomeVirtualFile();
                 openFiles.put(key, vf);
             }
-            FileEditorManager.getInstance(project).openFile(vf, true);
+            new OpenFileDescriptor(project, vf).navigate(true);
         });
     }
 
@@ -104,7 +113,7 @@ public class DatabaseEditorManager implements com.intellij.openapi.Disposable {
             if (file == null || !FileEditorManager.getInstance(project).isFileOpen(file)) {
                 file = new ReleaseNotesVirtualFile(); openFiles.put(key, file);
             }
-            FileEditorManager.getInstance(project).openFile(file, true);
+            new OpenFileDescriptor(project, file).navigate(true);
         });
     }
 }

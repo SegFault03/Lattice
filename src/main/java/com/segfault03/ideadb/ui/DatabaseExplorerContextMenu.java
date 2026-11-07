@@ -57,9 +57,12 @@ final class DatabaseExplorerContextMenu {
                 add(menu, "Open in SQL console", Icons.CONSOLE, Action.CONSOLE, true, connected, guarded);
                 if (!data.getTableMetadata().isView()) {
                     menu.addSeparator();
-                    add(menu, "Alter table…", AllIcons.Actions.Edit, Action.ALTER_TABLE, features.contains(DatabaseFeature.MODIFY_COLUMN), connected, guarded);
-                    add(menu, "Truncate table…", AllIcons.General.Remove, Action.TRUNCATE_TABLE, features.contains(DatabaseFeature.TRUNCATE_TABLE), connected, guarded);
-                    add(menu, "Drop table…", AllIcons.General.Remove, Action.DROP_TABLE, features.contains(DatabaseFeature.DROP_TABLE), connected, guarded);
+                    boolean foreign = data.getTableMetadata().isForeignTable();
+                    if (!foreign) {
+                        add(menu, "Alter table…", AllIcons.Actions.Edit, Action.ALTER_TABLE, features.contains(DatabaseFeature.MODIFY_COLUMN), connected, guarded);
+                        add(menu, "Truncate table…", AllIcons.General.Remove, Action.TRUNCATE_TABLE, features.contains(DatabaseFeature.TRUNCATE_TABLE), connected, guarded);
+                    }
+                    add(menu, foreign ? "Drop foreign table…" : "Drop table…", AllIcons.General.Remove, Action.DROP_TABLE, features.contains(DatabaseFeature.DROP_TABLE), connected, guarded);
                 }
                 menu.addSeparator();
                 var generate = DatabaseUi.submenu("Generate SQL");

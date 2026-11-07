@@ -1,0 +1,9 @@
+<!-- Loaded only when the Kotlin plugin is present. This code reads Kotlin PSI only, which both Kotlin plugin modes provide. -->
+<idea-plugin>
+    <extensions defaultExtensionNs="com.intellij">
+        <multiHostInjector implementation="com.segfault03.ideadb.sql.inject.kotlin.KotlinSqlInjector"/>
+    </extensions>
+    <extensions defaultExtensionNs="com.segfault03.lattice">
+        <sqlHostAdapter language="kotlin" implementationClass="com.segfault03.ideadb.sql.inject.kotlin.KotlinSqlHostAdapter"/>
+    </extensions>
+</idea-plugin>

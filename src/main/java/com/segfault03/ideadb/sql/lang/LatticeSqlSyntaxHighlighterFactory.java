@@ -1,0 +1,16 @@
+package com.segfault03.ideadb.sql.lang;
+
+import com.intellij.openapi.fileTypes.SyntaxHighlighter;
+import com.intellij.openapi.fileTypes.SyntaxHighlighterFactory;
+import com.intellij.openapi.project.Project;
+import com.intellij.openapi.vfs.VirtualFile;
+import com.segfault03.ideadb.sql.binding.SqlDialectResolver;
+import com.segfault03.ideadb.sql.settings.SqlEditorSettings;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+public final class LatticeSqlSyntaxHighlighterFactory extends SyntaxHighlighterFactory {
+    @Override public @NotNull SyntaxHighlighter getSyntaxHighlighter(@Nullable Project project, @Nullable VirtualFile file) {
+        return new LatticeSqlSyntaxHighlighter(SqlDialectResolver.resolve(project, file), SqlEditorSettings.getInstance().isHighlightingEffective());
+    }
+}

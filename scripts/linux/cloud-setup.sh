@@ -14,15 +14,25 @@ apt-get install -y -qq --no-install-recommends x11-utils openbox
 mkdir -p "$HOME/.gradle/init.d"
 cat > "$HOME/.gradle/init.d/mirror.gradle.kts" <<'EOF'
 val centralMirror = "https://maven-central.storage-download.googleapis.com/maven2"
+val huaweiMirror = "https://repo.huaweicloud.com/repository/maven"
 val jetbrainsDeps = "https://cache-redirector.jetbrains.com/intellij-dependencies"
+val jetbrainsReleases = "https://cache-redirector.jetbrains.com/www.jetbrains.com/intellij-repository/releases"
 
 fun org.gradle.api.artifacts.dsl.RepositoryHandler.prependMirror() {
     val deps = maven { name = "jetbrainsDepsMirror"; url = uri(jetbrainsDeps) }
     remove(deps)
     add(0, deps)
+    val releases = maven { name = "jetbrainsReleasesMirror"; url = uri(jetbrainsReleases) }
+    remove(releases)
+    add(0, releases)
     val mirror = maven { name = "centralMirror"; url = uri(centralMirror) }
     remove(mirror)
     add(0, mirror)
+    val huawei = maven { name = "huaweiMirror"; url = uri(huaweiMirror) }
+    remove(huawei)
+    add(1, huawei)
+    // Dynamic versions query every repository for metadata, so one 429 from Central fails the build: drop Central.
+    removeAll { it is org.gradle.api.artifacts.repositories.MavenArtifactRepository && it.url.host in setOf("repo.maven.apache.org", "repo1.maven.org") }
 }
 
 beforeSettings {
@@ -33,6 +43,12 @@ beforeSettings {
 beforeProject {
     buildscript.repositories.prependMirror()
     repositories.prependMirror()
+}
+
+// The build script declares Central after beforeProject has run, so drop it again once the project is evaluated.
+afterProject {
+    buildscript.repositories.removeAll { it is org.gradle.api.artifacts.repositories.MavenArtifactRepository && it.url.host in setOf("repo.maven.apache.org", "repo1.maven.org") }
+    repositories.removeAll { it is org.gradle.api.artifacts.repositories.MavenArtifactRepository && it.url.host in setOf("repo.maven.apache.org", "repo1.maven.org") }
 }
 EOF
 

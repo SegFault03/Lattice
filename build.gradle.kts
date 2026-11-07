@@ -3,8 +3,8 @@ import org.jetbrains.intellij.platform.gradle.tasks.RunIdeTask
 
 plugins {
     id("java")
-    id("org.jetbrains.intellij.platform") version "2.19.0"
-    id("org.jetbrains.kotlin.jvm") version "2.0.21"
+    id("org.jetbrains.intellij.platform") version "2.20.0"
+    id("org.jetbrains.kotlin.jvm") version "2.4.21"
 }
 
 group = "com.segfault03.lattice"
@@ -27,6 +27,12 @@ sourceSets {
         compileClasspath += sourceSets.main.get().output
         runtimeClasspath += sourceSets.main.get().output
     }
+    // IDE fixture tests (BasePlatformTestCase) live apart from the JUnit 5 tiers: they need the platform
+    // test framework at runtime and must not be discovered by tasks that replace the test classpath.
+    create("platformTest") {
+        compileClasspath += sourceSets.main.get().output
+        runtimeClasspath += sourceSets.main.get().output
+    }
 }
 
 val uiTestImplementation = configurations.getByName("uiTestImplementation") {
@@ -35,37 +41,74 @@ val uiTestImplementation = configurations.getByName("uiTestImplementation") {
 val uiTestRuntimeOnly = configurations.getByName("uiTestRuntimeOnly") {
     extendsFrom(configurations.testRuntimeOnly.get())
 }
+configurations.getByName("platformTestImplementation") { extendsFrom(configurations.testImplementation.get()) }
+configurations.getByName("platformTestRuntimeOnly") { extendsFrom(configurations.testRuntimeOnly.get()) }
+// The platform plugin attaches the IDE classes to the standard source sets only: through testCompileOnly,
+// and by tagging the resolvable classpath so its archive transforms run. Reproduce both for this source set.
+configurations.getByName("platformTestCompileOnly") { extendsFrom(configurations.testCompileOnly.get()) }
+configurations.getByName("platformTestCompileClasspath") {
+    listOf("intellijPlatformCollected", "intellijPlatformExtracted", "intellijPlatformPluginLibrariesFiltered").forEach { name ->
+        attributes.attribute(Attribute.of(name, Boolean::class.javaObjectType), true)
+    }
+}
+
+// Java and Kotlin PSI come from the IDE's own plugins, which bundledPlugin() does not expose for this layout. Compile
+// against the jars in the resolved SDK; the optional plugin descriptors load that code only where the plugins exist.
+fun sdkPluginJars(directory: String) =
+    files(provider { fileTree(intellijPlatform.platformPath.resolve(directory)) { include("**/*.jar") } })
+val javaPluginJars = sdkPluginJars("plugins/java/lib")
+val kotlinPluginJars = sdkPluginJars("plugins/Kotlin/lib")
+
+// The baseline of the SDK selected with lattice.ide.home; the default SDK is the oldest IDE target.
+val localIde: String? = providers.gradleProperty("lattice.ide.home").orNull
+val sdkBaseline = localIde?.let {
+    (groovy.json.JsonSlurper().parse(file("$it/product-info.json")) as Map<*, *>)["buildNumber"].toString().substringBefore('.').toInt()
+} ?: 251
 
 dependencies {
+    compileOnly(javaPluginJars)
+    compileOnly(kotlinPluginJars)
+    testCompileOnly(javaPluginJars)
+    testCompileOnly(kotlinPluginJars)
     intellijPlatform {
-        val localIde = providers.gradleProperty("lattice.ide.home").orNull
         if (localIde == null) intellijIdeaCommunity("2025.1") else local(localIde)
         bundledPlugins()
-        pluginVerifier("1.410")
-        zipSigner("0.1.24")
+        pluginVerifier("1.411")
+        zipSigner("0.1.45")
         testFramework(TestFrameworkType.Starter, configurationName = "uiTestImplementation")
+        testFramework(TestFrameworkType.Platform, configurationName = "platformTestImplementation")
     }
 
     implementation("org.postgresql:postgresql:42.7.14") { exclude(group = "org.checkerframework", module = "checker-qual") }
-    implementation("com.h2database:h2:2.3.232")
+    implementation("com.h2database:h2:2.5.252")
     implementation("org.hsqldb:hsqldb:2.7.4")
-    implementation("com.mysql:mysql-connector-j:26.7.0")
+    implementation("com.mysql:mysql-connector-j:26.10.0")
     constraints {
         implementation("com.google.protobuf:protobuf-java:4.36.2") {
             because("Use the current patched protobuf runtime required by Connector/J")
         }
     }
 
-    testImplementation("org.junit.jupiter:junit-jupiter-api:5.14.4")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.14.4")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.14.4")
+    testImplementation("org.junit.jupiter:junit-jupiter-api:6.1.3")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:6.1.3")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.1.3")
     // IntelliJ 2025 test logging still references JUnit 4 runtime types.
     testRuntimeOnly("junit:junit:4.13.2")
 
+    // BasePlatformTestCase is JUnit 3/4 style; the vintage engine runs it on the JUnit Platform.
+    "platformTestImplementation"("junit:junit:4.13.2")
+    "platformTestRuntimeOnly"("org.junit.vintage:junit-vintage-engine:6.1.3")
+
     uiTestImplementation(kotlin("stdlib"))
     uiTestRuntimeOnly(kotlin("reflect"))
-    uiTestImplementation("org.kodein.di:kodein-di-jvm:7.20.2")
-    uiTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.10.1")
+    // The platform plugin removes coroutines from Starter's dependencies. Starter on newer SDKs needs JetBrains' patched
+    // build, which the SDK itself carries, and brings its own Kodein; the older pins would shadow both.
+    if (sdkBaseline < 260) {
+        uiTestImplementation("org.kodein.di:kodein-di-jvm:7.33.0")
+        uiTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.11.0")
+    } else {
+        uiTestRuntimeOnly(files("$localIde/lib/intellij.libraries.kotlinx.coroutines.core.jar"))
+    }
 }
 
 java {
@@ -73,14 +116,20 @@ java {
     targetCompatibility = JavaVersion.VERSION_21
 }
 
+// The IDE supplies the Kotlin runtime, so whichever SDK is on the classpath, compile for the oldest target's Java and
+// Kotlin. These are set per task because the platform plugin otherwise derives them from the SDK's own runtime.
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile>().configureEach {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
+        apiVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_1)
+        languageVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_1)
+    }
+}
+
 tasks.processResources {
     inputs.property("releaseVersion", project.version.toString())
     filesMatching("release-notes/release.properties") {
         expand("version" to project.version.toString())
-    }
-    from("screenshots") {
-        include("side-panel.png", "alter-table-dialog.png", "connection-dialog.png")
-        into("release-notes/images")
     }
     from("docs/CHANGELOG.md") { into("release-notes") }
 }
@@ -109,6 +158,45 @@ intellijPlatformTesting.testIde.register("regressionTest") {
         classpath = sourceSets["test"].runtimeClasspath + sourceSets["main"].compileClasspath
         useJUnitPlatform { excludeTags("functional", "integration") }
         systemProperty("junit.jupiter.extensions.autodetection.enabled", "false")
+    }
+}
+
+// The SDK's test framework chooses the JUnit version of the fixture source set; the inherited test classpath must not shadow it.
+fun withoutInheritedJUnit(inherited: FileCollection) =
+    inherited.filter { !it.name.startsWith("junit-platform-") && !it.name.startsWith("junit-jupiter-") && !it.name.startsWith("junit-vintage-") }
+
+intellijPlatformTesting.testIde.register("platformTest") {
+    // The Maven plugin is an optional dependency; this fixture proves Lattice loads and works without it.
+    plugins { disablePlugin("org.jetbrains.idea.maven") }
+    task {
+        description = "Run IDE fixture tests for editor features (language, completion, injection, documentation)"
+        group = "verification"
+        testClassesDirs = sourceSets["platformTest"].output.classesDirs
+        // Append, never replace: the IDE test runtime (platform test framework, sandbox) is already on the classpath.
+        classpath = withoutInheritedJUnit(classpath) + sourceSets["platformTest"].runtimeClasspath
+        useJUnitPlatform { includeEngines("junit-vintage") }
+        systemProperty("junit.jupiter.extensions.autodetection.enabled", "false")
+        // Fixtures that need the Java or Kotlin plugin run in their own JVMs below: the two cannot share one.
+        filter { excludeTestsMatching("*JavaFixtureTest"); excludeTestsMatching("*KotlinFixtureTest") }
+    }
+}
+
+// Java and Kotlin fixtures load their plugin from the SDK jars (see sdkPluginJars); Kotlin needs Java's jars as well.
+for ((taskName, pluginJars, pattern) in listOf(
+    Triple("javaPlatformTest", listOf(javaPluginJars), "*JavaFixtureTest"),
+    Triple("kotlinPlatformTest", listOf(javaPluginJars, kotlinPluginJars), "*KotlinFixtureTest"),
+)) {
+    intellijPlatformTesting.testIde.register(taskName) {
+        task {
+            description = "Run IDE fixture tests that need the ${pattern.removePrefix("*").removeSuffix("FixtureTest")} plugin"
+            group = "verification"
+            testClassesDirs = sourceSets["platformTest"].output.classesDirs
+            classpath = withoutInheritedJUnit(classpath) + sourceSets["platformTest"].runtimeClasspath
+            pluginJars.forEach { classpath += it }
+            useJUnitPlatform { includeEngines("junit-vintage") }
+            systemProperty("junit.jupiter.extensions.autodetection.enabled", "false")
+            filter { includeTestsMatching(pattern); isFailOnNoMatchingTests = false }
+        }
     }
 }
 
@@ -312,6 +400,7 @@ intellijPlatformTesting.testIdeUi.register("uiScreenshotTest") {
         systemProperty("ui.alterTable.only", providers.gradleProperty("lattice.ui.alterTableOnly").orElse("false").get())
         systemProperty("ui.createTable.only", providers.gradleProperty("lattice.ui.createTableOnly").orElse("false").get())
         systemProperty("ui.cellDetails.only", providers.gradleProperty("lattice.ui.cellDetailsOnly").orElse("false").get())
+        systemProperty("ui.sqlEditor.only", providers.gradleProperty("lattice.ui.sqlEditorOnly").orElse("false").get())
         systemProperty("ui.skip.remote.downloads", providers.environmentVariable("LATTICE_UI_SKIP_REMOTE_DOWNLOADS").orElse("false").get())
         systemProperty("ui.h2.enabled", providers.gradleProperty("lattice.ui.h2").orElse(providers.environmentVariable("LATTICE_UI_H2")).orElse("false").get())
         systemProperty("ui.postgres.port", providers.gradleProperty("lattice.ui.postgres.port").orElse(providers.environmentVariable("LATTICE_UI_POSTGRES_PORT")).orElse("0").get())

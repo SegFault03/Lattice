@@ -2,14 +2,26 @@
 
 ## Requirements
 
-Use JDK 21, Git and the committed Gradle wrapper. Python 3.11+ supports the optional helper scripts; Python 3.12+ is recommended for SDK extraction. Linux/macOS MySQL fixtures require Docker; Windows defaults to portable native MySQL. No maintainer-specific folders or installed IDEs are required.
+Use JDK 21, Git and the committed Gradle wrapper. Python 3.11+ supports the optional helper scripts; Python 3.12+ is recommended for SDK extraction. Linux/macOS MySQL fixtures require Docker; Windows defaults to portable native MySQL. No particular folder layout or installed IDE is required.
 
 ```text
 python scripts/test.py --build
 python -m unittest discover -s scripts/tests -v
 ```
 
-On Linux/macOS you can also use `./gradlew test buildPlugin`; on Windows use `.\gradlew.bat test buildPlugin`. Set `JAVA_HOME` to JDK 21 or put Java on PATH, or pass `--java-home /path/to/jdk-21` to `scripts/test.py`. Gradle downloads the configured SDK. `--ide-home` / `-Plattice.ide.home` optionally select your own IntelliJ 2025.1 SDK.
+On Linux/macOS you can also use `./gradlew test buildPlugin`; on Windows use `.\gradlew.bat test buildPlugin`. Set `JAVA_HOME` to JDK 21 or put Java on PATH, or pass `--java-home /path/to/jdk-21` to `scripts/test.py`. Gradle downloads the configured SDK. `--ide-home` / `-Plattice.ide.home` optionally select your own IntelliJ SDK. Changes must compile and pass on both [IDE targets](CI_TESTING.md#ide-targets), so use only API present on both.
+
+## SQL editor fixture tests
+
+Editor features (language, completion, hover, injection, validation) have IDE fixture tests, which run a headless IDE and are not part of `./gradlew test`. They run in three separate JVMs because the Java and Kotlin plugins cannot share one:
+
+```text
+./gradlew platformTest         # .sql files, completion, hover, bindings
+./gradlew javaPlatformTest     # SQL in Java strings (tests named *JavaFixtureTest)
+./gradlew kotlinPlatformTest   # SQL in Kotlin strings (tests named *KotlinFixtureTest)
+```
+
+Java and Kotlin PSI are compiled against the jars in the resolved IntelliJ SDK (`plugins/java/lib`, `plugins/Kotlin/lib`), and the plugin loads its Java and Kotlin parts through optional descriptors (`lattice-java.xml`, `lattice-kotlin.xml`).
 
 ## Database tests
 

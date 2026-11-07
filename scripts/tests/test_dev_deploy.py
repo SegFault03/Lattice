@@ -59,17 +59,17 @@ class DeploymentTests(unittest.TestCase):
         contents = io.BytesIO()
         with zipfile.ZipFile(contents, "w") as jar:
             jar.writestr("META-INF/plugin.xml", f"<idea-plugin><id>{deploy.PLUGIN_ID}</id><version>{version}</version><idea-version since-build='251'/></idea-plugin>")
-            for name in ("LICENSE", "THIRD_PARTY_NOTICES.md", "licenses/mysql-connector-j-26.7.0-LICENSE.txt",
+            for name in ("LICENSE", "THIRD_PARTY_NOTICES.md", "licenses/mysql-connector-j-26.10.0-LICENSE.txt",
                          "licenses/hsqldb-LICENSE.txt", "licenses/postgresql-LICENSE.txt", "licenses/h2-LICENSE.txt", "licenses/protobuf-LICENSE.txt"):
                 jar.writestr(name, "notice")
             jar.writestr("sample.class", b"\xca\xfe\xba\xbe\x00\x00\x00\x41")
         path = self.root / "new plugin.zip"
         with zipfile.ZipFile(path, "w") as archive:
             archive.writestr("Lattice/lib/Lattice.jar", contents.getvalue())
-            archive.writestr("Lattice/lib/mysql-connector-j-26.7.0.jar", "driver")
+            archive.writestr("Lattice/lib/mysql-connector-j-26.10.0.jar", "driver")
             archive.writestr("Lattice/lib/hsqldb-2.7.4.jar", "driver")
             archive.writestr("Lattice/lib/postgresql-42.7.14.jar", "driver")
-            archive.writestr("Lattice/lib/h2-2.3.232.jar", "driver")
+            archive.writestr("Lattice/lib/h2-2.5.252.jar", "driver")
             archive.writestr("Lattice/lib/protobuf-java-4.36.2.jar", "runtime")
             if extra:
                 archive.writestr(extra, "bad")
@@ -135,6 +135,8 @@ class DeploymentTests(unittest.TestCase):
         self.assertFalse(deploy.is_idea_process(deploy.Process(3, java, ("java", f"-Didea.home.path={ide.home}", "org.jetbrains.jps.cmdline.Launcher")), ide))
         self.assertFalse(deploy.is_idea_process(deploy.Process(4, java, ("java", f"-Didea.home.path={ide.home}-other", "com.intellij.idea.Main")), ide))
         self.assertFalse(deploy.is_idea_process(deploy.Process(5, ide.launcher, (str(ide.launcher), "installPlugins", "plugin-id")), ide))
+        # An AI agent's MCP helper runs from the same launcher but is not the IDE.
+        self.assertFalse(deploy.is_idea_process(deploy.Process(6, ide.launcher, (str(ide.launcher), "stdioMcpServer")), ide))
 
     @unittest.skipUnless(os.name == "nt", "Windows native argument parser")
     def test_windows_command_line_preserves_paths_with_spaces(self):
@@ -315,6 +317,20 @@ class DeploymentTests(unittest.TestCase):
                  redirect_stdout(io.StringIO()):
                 self.assertEqual(1 if fails else 0, deploy.main(self.cli_args(ide)))
             self.assertEqual(["stop", "deploy", "start"], events)
+
+    def test_helpers_left_by_the_closed_ide_are_ended_but_the_ide_never_is(self):
+        ide = self.ide()
+        helper = deploy.Process(777, ide.launcher, (str(ide.launcher), "stdioMcpServer"))
+        other = deploy.Process(888, self.root / "other" / "idea64.exe", ("other", "stdioMcpServer"))
+        with patch.object(deploy, "scan_processes", return_value=[helper, other]), \
+             patch.object(deploy.os, "kill") as kill:
+            deploy.stop_helpers(ide, self.quiet_progress())
+        kill.assert_called_once_with(777, deploy.signal.SIGTERM)
+
+    def test_helper_alone_does_not_count_as_a_running_ide(self):
+        ide = self.ide()
+        helper = deploy.Process(777, ide.launcher, (str(ide.launcher), "stdioMcpServer"))
+        self.assertEqual([], deploy.matching_processes(ide, [helper]))
 
     def test_shutdown_timeout_aborts_without_force_kill(self):
         ide = self.ide()

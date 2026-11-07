@@ -1,6 +1,7 @@
 package com.segfault03.ideadb.provider;
 
 import com.segfault03.ideadb.model.ColumnMetadata;
+import com.segfault03.ideadb.model.ColumnReference;
 import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.model.TableMetadata;
 
@@ -12,6 +13,8 @@ import java.util.*;
 
 abstract class JdbcMetadataAdapter implements MetadataAdapter {
     protected abstract DatabaseNamespace namespace(String selected);
+    /** Whether the selected namespace is the JDBC catalog (MySQL); otherwise it is the schema. */
+    protected boolean namespaceIsCatalog() { return false; }
     protected abstract void enrichColumns(Connection conn, ConnectionConfig config, String database, String schema, String table, List<ColumnMetadata> columns) throws Exception;
     public String currentSchema(Connection conn) throws java.sql.SQLException { return conn.getSchema(); }
     public List<TableMetadata> getTables(Connection conn, ConnectionConfig config, String database) throws Exception {
@@ -21,11 +24,11 @@ abstract class JdbcMetadataAdapter implements MetadataAdapter {
         String catalog = namespace(database).catalog();
         String schema = resolveSchema(meta, namespace(database).schema());
 
-        try (ResultSet rs = meta.getTables(catalog, literalPattern(meta, schema), "%", new String[]{"TABLE", "VIEW"})) {
+        try (ResultSet rs = meta.getTables(catalog, literalPattern(meta, schema), "%", TableTypes.select(reportedTableTypes(meta)))) {
             while (rs.next()) {
                 String tableName = rs.getString("TABLE_NAME");
                 String tableType = rs.getString("TABLE_TYPE");
-                TableMetadata tm = new TableMetadata(catalog, schema, tableName, tableType);
+                TableMetadata tm = new TableMetadata(catalog, schema, tableName, tableType, tableComment(tableType, rs.getString("REMARKS")));
                 tables.add(tm);
             }
         }
@@ -34,32 +37,52 @@ abstract class JdbcMetadataAdapter implements MetadataAdapter {
         return tables;
     }
 
+    protected String tableComment(String tableType, String remarks) { return blankToNull(remarks); }
+
+    private static List<String> reportedTableTypes(DatabaseMetaData meta) {
+        List<String> types = new ArrayList<>();
+        try (ResultSet rs = meta.getTableTypes()) {
+            while (rs.next()) types.add(rs.getString("TABLE_TYPE"));
+        } catch (java.sql.SQLException unavailable) {
+            // A driver that cannot list its table types is asked for tables and views.
+        }
+        return types;
+    }
+
     public List<ColumnMetadata> getColumns(Connection conn, ConnectionConfig config, String database, String tableName) throws Exception {
         List<ColumnMetadata> columns = new ArrayList<>();
         DatabaseMetaData meta = conn.getMetaData();
 
         String catalog = namespace(database).catalog();
         String schema = resolveSchema(meta, namespace(database).schema());
-        String lookupTable = schema == null ? tableName : resolveTable(meta, schema, tableName);
+        String lookupTable = schema == null ? tableName : resolveTable(meta, catalog, schema, tableName);
         Set<String> pkNames = new HashSet<>();
         try (ResultSet rs = meta.getPrimaryKeys(catalog, schema, lookupTable)) {
             while (rs.next()) pkNames.add(rs.getString("COLUMN_NAME"));
         }
-        fetchColumnsInto(meta, catalog, schema, lookupTable, pkNames, columns);
+        Map<String, String> comments = new HashMap<>();
+        fetchColumnsInto(meta, catalog, schema, lookupTable, pkNames, columns, comments);
         enrichColumns(conn, config, database, schema, lookupTable, columns);
-        Set<String> foreignKeys = new HashSet<>();
+        // The enrichers rebuild columns from the basics, so comments and relationships are applied last.
+        Map<String, ColumnReference> foreignKeys = new HashMap<>();
+        boolean namespaceIsCatalog = namespaceIsCatalog();
         try (ResultSet rs = meta.getImportedKeys(catalog, schema, lookupTable)) {
-            if (rs != null) while (rs.next()) foreignKeys.add(rs.getString("FKCOLUMN_NAME"));
+            if (rs != null) while (rs.next()) {
+                String target = namespaceIsCatalog ? rs.getString("PKTABLE_CAT") : rs.getString("PKTABLE_SCHEM");
+                foreignKeys.putIfAbsent(rs.getString("FKCOLUMN_NAME"),
+                        new ColumnReference(target, rs.getString("PKTABLE_NAME"), rs.getString("PKCOLUMN_NAME")));
+            }
         } catch (java.sql.SQLException unavailable) {
             // Foreign-key badges are optional when a driver cannot provide relationship metadata.
         }
-        columns.replaceAll(column -> column.withForeignKey(foreignKeys.contains(column.getName())));
+        columns.replaceAll(column -> column.withForeignKey(foreignKeys.containsKey(column.getName()))
+                .withReference(foreignKeys.get(column.getName())).withComment(comments.get(column.getName())));
 
         return columns;
     }
 
     private void fetchColumnsInto(DatabaseMetaData meta, String catalog, String schema, String tablePattern,
-                                  Set<String> pkNames, List<ColumnMetadata> columns) throws java.sql.SQLException {
+                                  Set<String> pkNames, List<ColumnMetadata> columns, Map<String, String> comments) throws java.sql.SQLException {
         try (ResultSet rs = meta.getColumns(catalog, literalPattern(meta, schema), literalPattern(meta, tablePattern), "%")) {
             while (rs.next()) {
                 if (!tablePattern.equals(rs.getString("TABLE_NAME")) && !(meta.storesLowerCaseIdentifiers() && tablePattern.equalsIgnoreCase(rs.getString("TABLE_NAME")))) continue;
@@ -72,21 +95,16 @@ abstract class JdbcMetadataAdapter implements MetadataAdapter {
                 boolean nullable = "YES".equalsIgnoreCase(isNullableStr);
                 String defVal = rs.getString("COLUMN_DEF");
 
-                boolean autoInc = false;
+                boolean autoInc = false, generated = false;
                 try {
                     String isAutoInc = rs.getString("IS_AUTOINCREMENT");
                     autoInc = "YES".equalsIgnoreCase(isAutoInc);
                 } catch (Exception ignored) {
                 }
 
-                if (!autoInc) {
-                    try {
-                        String isGen = rs.getString("IS_GENERATEDCOLUMN");
-                        if ("YES".equalsIgnoreCase(isGen)) {
-                            autoInc = true;
-                        }
-                    } catch (Exception ignored) {
-                    }
+                try {
+                    generated = "YES".equalsIgnoreCase(rs.getString("IS_GENERATEDCOLUMN"));
+                } catch (Exception ignored) {
                 }
 
                 if (!autoInc && defVal != null) {
@@ -108,11 +126,14 @@ abstract class JdbcMetadataAdapter implements MetadataAdapter {
                 boolean isPk = pkNames.contains(colName);
 
                 ColumnMetadata col = new ColumnMetadata(colName, typeName, dataType, colSize, decDigits,
-                        nullable, isPk, autoInc, defVal);
+                        nullable, isPk, autoInc, defVal, generated);
                 columns.add(col);
+                String remarks = blankToNull(rs.getString("REMARKS"));
+                if (remarks != null) comments.put(colName, remarks);
             }
         }
     }
+    private static String blankToNull(String value) { return value == null || value.isBlank() ? null : value.strip(); }
     private static String literalPattern(DatabaseMetaData meta, String value) throws java.sql.SQLException {
         if (value == null) return null;
         String escape = meta.getSearchStringEscape();
@@ -121,19 +142,24 @@ abstract class JdbcMetadataAdapter implements MetadataAdapter {
     }
     private static String resolveSchema(DatabaseMetaData meta, String requested) throws java.sql.SQLException {
         if (requested == null) return null;
+        try (ResultSet rs = meta.getSchemas(null, literalPattern(meta, requested))) {
+            while (rs.next()) if (requested.equals(rs.getString("TABLE_SCHEM"))) return requested;
+        }
         String folded = meta.storesLowerCaseIdentifiers() ? requested.toLowerCase(Locale.ROOT) : requested.toUpperCase(Locale.ROOT), fallback = null;
         try (ResultSet rs = meta.getSchemas()) {
             while (rs.next()) {
                 String name = rs.getString("TABLE_SCHEM");
-                if (requested.equals(name)) return name;
                 if (folded.equals(name)) fallback = name;
             }
         }
         return fallback == null ? requested : fallback;
     }
-    private static String resolveTable(DatabaseMetaData meta, String schema, String requested) throws java.sql.SQLException {
+    private static String resolveTable(DatabaseMetaData meta, String catalog, String schema, String requested) throws java.sql.SQLException {
+        try (ResultSet rs = meta.getTables(catalog, literalPattern(meta, schema), literalPattern(meta, requested), null)) {
+            while (rs.next()) if (requested.equals(rs.getString("TABLE_NAME"))) return requested;
+        }
         String folded = meta.storesLowerCaseIdentifiers() ? requested.toLowerCase(Locale.ROOT) : requested.toUpperCase(Locale.ROOT), fallback = null;
-        try (ResultSet rs = meta.getTables(null, literalPattern(meta,schema), "%", null)) {
+        try (ResultSet rs = meta.getTables(null, literalPattern(meta, schema), "%", null)) {
             while (rs.next()) {
                 String name = rs.getString("TABLE_NAME");
                 if (requested.equals(name)) return name;
@@ -149,6 +175,6 @@ abstract class JdbcMetadataAdapter implements MetadataAdapter {
             statement.setString(1, schema); statement.setString(2, table);
             try (ResultSet result = statement.executeQuery()) { while (result.next()) precision.put(result.getString(1), result.getInt(2)); }
         }
-        columns.replaceAll(c -> precision.containsKey(c.getName()) ? new ColumnMetadata(c.getName(), c.getTypeName(), c.getDataType(), c.getColumnSize(), precision.get(c.getName()), c.isNullable(), c.isPrimaryKey(), c.isAutoIncrement(), c.getDefaultValue()) : c);
+        columns.replaceAll(c -> precision.containsKey(c.getName()) ? new ColumnMetadata(c.getName(), c.getTypeName(), c.getDataType(), c.getColumnSize(), precision.get(c.getName()), c.isNullable(), c.isPrimaryKey(), c.isAutoIncrement(), c.getDefaultValue(), c.isGenerated()) : c);
     }
 }

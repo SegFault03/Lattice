@@ -232,8 +232,10 @@ abstract class AbstractSqlDialect implements SqlDialect {
         if (kind==ColumnDefinition.DefaultKind.AUTO) {
             String type=column.getType().toUpperCase(java.util.Locale.ROOT);
             if ((type.contains("TIME") || type.equals("DATE")) && value.matches("(?i)CURRENT_(TIMESTAMP|TIME|DATE)(\\(\\d*\\))?")) return value;
-            if (value.equalsIgnoreCase("NULL") || value.equalsIgnoreCase("TRUE") || value.equalsIgnoreCase("FALSE") || value.matches("[+-]?\\d+(\\.\\d+)?")) return value;
-            if (value.startsWith("'") && value.endsWith("'")) raw=value.substring(1,value.length()-1).replace("''","'");
+            String base=type.replaceFirst("\\(.*$","").trim();
+            boolean bool=base.equals("BOOLEAN") || base.equals("BOOL"), numeric=bool || base.matches("(?:TINY|SMALL|MEDIUM|BIG)?INT(?:EGER)?|DEC(?:IMAL)?|NUMERIC|FLOAT\\d*|REAL|DOUBLE(?: PRECISION)?|SERIAL\\d*|BIGSERIAL|SMALLSERIAL");
+            if (value.equalsIgnoreCase("NULL") || numeric && (value.equalsIgnoreCase("TRUE") || value.equalsIgnoreCase("FALSE")) || numeric && value.matches("[+-]?\\d+(\\.\\d+)?")) return value;
+            if (value.length()>=2 && value.startsWith("'") && value.endsWith("'")) raw=value.substring(1,value.length()-1).replace("''","'");
         }
         return literalDefault(raw);
     }

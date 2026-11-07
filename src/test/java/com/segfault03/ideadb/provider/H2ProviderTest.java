@@ -28,8 +28,8 @@ class H2ProviderTest {
 
     @Test void driverSelectionAndSqlStayIndependentFromHsql() {
         var provider = DatabaseProviders.get(DatabaseType.H2);
-        assertEquals("com/h2database/h2/2.3.232/h2-2.3.232.jar", provider.driver().artifactPath("2.3.232"));
-        for (String invalid : new String[]{"1.4.200", "2.3.232-jdk8", "../2.3.232", ""})
+        assertEquals("com/h2database/h2/2.5.252/h2-2.5.252.jar", provider.driver().artifactPath("2.5.252"));
+        for (String invalid : new String[]{"1.4.200", "2.5.252-jdk8", "../2.5.252", ""})
             assertFalse(provider.driver().acceptsVersion(invalid));
         assertTrue(provider.driver().isolatesClass("org.h2.Driver"));
         assertFalse(provider.driver().isolatesClass("org.hsqldb.jdbc.JDBCDriver"));
