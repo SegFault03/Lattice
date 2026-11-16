@@ -47,9 +47,8 @@ run, an isolated YAML comment or a helper's default command.
 
 ## Documentation maintenance
 
-- Before every release and after each task, update docs to reflect the current
-  state and remove audits, progress plans, historical QA reports, dated
-  validation narratives and associated review evidence. Keep maintained docs,
-  instructions and guides.
+- Before every release, update docs to reflect the current state and remove
+  audits, progress plans, historical QA reports, dated validation narratives and
+  associated review evidence. Keep maintained docs, instructions and guides.
 
 Explicit task instructions take precedence over these repository conventions.

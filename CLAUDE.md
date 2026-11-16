@@ -46,7 +46,7 @@ Live database suites need owned fixtures; see `docs/CONTRIBUTING.md`. Do not run
 
 | Path | Contents |
 |---|---|
-| `src/main/java/com/segfault03/ideadb/` | Plugin implementation: `provider`, `service`, `model`, `ui`, `editor`, `dialog`, `state`, `release` |
+| `src/main/java/com/segfault03/ideadb/` | Plugin implementation: `provider`, `service`, `model`, `ui`, `editor`, `dialog`, `sql`, `state`, `release` |
 | `src/test/java/` | Unit and UI-component tests |
 | `src/uiTest/kotlin/` | Real-IDE screenshot tests (`uiScreenshotTest`) |
 | `scripts/` | Python helpers; `scripts/linux/` and `scripts/windows/` launchers |
