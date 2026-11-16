@@ -2163,7 +2163,8 @@ class IntellijUiScreenshotTest {
         check(status(dialog) == "Choose a .sql file to check and run") { status(dialog) }
         crop(dialog, "sql-script-empty.png")
         dialog.x(JTextFieldUI::class.java) { byAccessibleName("SQL script file") }.waitFound().text = script.toString()
-        waitUntil("script checked against the schema", 60_000) { status(dialog).contains("1 error") }
+        try { waitUntil("script checked against the schema", 60_000) { status(dialog).contains("1 error") } }
+        catch (failure: Throwable) { crop(dialog, "sql-script-check-timeout.png"); throw AssertionError("Status: ${status(dialog)}", failure) }
         check(status(dialog).startsWith("5 statements")) { status(dialog) }
         assertNothingClipped(dialog)
         crop(dialog, "sql-script-checked.png")

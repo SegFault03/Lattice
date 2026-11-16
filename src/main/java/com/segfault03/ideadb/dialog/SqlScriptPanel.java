@@ -116,8 +116,8 @@ public final class SqlScriptPanel extends JPanel implements Disposable {
         showSummary();
         if (ApplicationManager.getApplication() != null) {
             ApplicationManager.getApplication().getMessageBus().connect(this).subscribe(SqlSchemaListener.TOPIC, (SqlSchemaListener) id -> {
-                // the schema arrived after the file was checked: check its names now
-                if (id.equals(config.getId()) && script != null && !namesChecked && phase == Phase.READY) check();
+                // more of the schema was read after the file was checked: check its names again
+                if (id.equals(config.getId()) && script != null && phase == Phase.READY) check();
             });
         }
     }
@@ -313,9 +313,11 @@ public final class SqlScriptPanel extends JPanel implements Disposable {
         SqlSchema schema = null;
         if (ApplicationManager.getApplication() != null) {
             SqlSchemaService service = SqlSchemaService.getInstance();
+            // Reads what is missing (the explorer may have listed tables without their columns); a no-op when ready.
+            service.ensureLoaded(config);
             schema = service.schema(config);
             if (schema != null && !service.isStale(config.getId())) schema = schema.withDefaultNamespace(selectedNamespace());
-            else { schema = null; service.ensureLoaded(config); }
+            else schema = null;
         }
         namesChecked = schema != null;
         highlight(); // the schema or the database may have changed since the text was colored
@@ -723,6 +725,7 @@ public final class SqlScriptPanel extends JPanel implements Disposable {
                 FontMetrics metrics = g.getFontMetrics();
                 Element root = preview.getDocument().getDefaultRootElement();
                 Rectangle clip = g.getClipBounds();
+                if (preview.getDocument().getLength() == 0) return; // no script: no line numbers
                 for (int i = 0; i < root.getElementCount(); i++) {
                     Rectangle2D line;
                     try { line = preview.modelToView2D(root.getElement(i).getStartOffset()); }
