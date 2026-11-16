@@ -74,7 +74,7 @@ class SqlScriptPanelTest {
             panel.log.finished(statements.get(0), new SqlScriptRunner.Outcome(SqlScriptRunner.Status.OK, "1 row affected", 4));
             panel.log.finished(statements.get(1), new SqlScriptRunner.Outcome(SqlScriptRunner.Status.FAILED, "Table 'shop.b' doesn't exist (1146)", 2));
             panel.log.finished(statements.get(2), new SqlScriptRunner.Outcome(SqlScriptRunner.Status.NOT_RUN, "not run", 0));
-            panel.finish(new SqlScriptRunner.Summary(1, 1, 1, false, false, 840, null));
+            panel.finish(new SqlScriptRunner.Summary(1, 1, 1, false, false, 0, 840, null));
             assertEquals("Stopped at statement 2 of 3: 1 succeeded, 1 failed, 1 not run  ·  0.84 s", panel.summary.getText());
             assertEquals("Run log (3)", panel.tabs.getTitleAt(1));
             assertEquals("", panel.log.getValueAt(2, 5), "a statement that did not run has no time");

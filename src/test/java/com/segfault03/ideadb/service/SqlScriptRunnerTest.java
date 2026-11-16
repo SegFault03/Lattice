@@ -54,7 +54,7 @@ class SqlScriptRunnerTest {
         assertEquals(List.of(SqlScriptRunner.Status.OK, SqlScriptRunner.Status.OK, SqlScriptRunner.Status.FAILED, SqlScriptRunner.Status.NOT_RUN),
                 run.outcomes().stream().map(SqlScriptRunner.Outcome::status).toList());
         assertTrue(run.outcomes().get(2).result().contains("MISSING"), run.outcomes().get(2).result());
-        assertEquals(new SqlScriptRunner.Summary(2, 1, 1, false, false, run.summary().millis(), null), run.summary());
+        assertEquals(new SqlScriptRunner.Summary(2, 1, 1, false, false, 0, run.summary().millis(), null), run.summary());
         assertEquals(1, count("t"));
     }
 
@@ -73,6 +73,21 @@ class SqlScriptRunnerTest {
         assertEquals(List.of(1, 2), run.rolledBack());
         assertEquals(1, run.summary().notRun(), "an error in a transaction stops the run even when continuing was asked");
         assertEquals(0, count("t"));
+    }
+
+    @Test void ddlCommitsWhatRanBeforeItSoOnlyTheRestRollsBack() throws Exception {
+        var run = run("create table t (a int); insert into t values (1); create table u (b int); insert into t values (2); insert into missing values (3)", true, true);
+        assertEquals(3, run.summary().committedImplicitly());
+        assertEquals(List.of(4), run.rolledBack());
+        assertTrue(run.summary().changedSomething());
+        assertEquals(1, count("t"), "the insert before the second CREATE was committed by it");
+    }
+
+    @Test void recognisesDdl() {
+        assertTrue(SqlScriptRunner.isDdl("  create table t (a int)"));
+        assertTrue(SqlScriptRunner.isDdl("DROP VIEW v"));
+        assertFalse(SqlScriptRunner.isDdl("insert into created values (1)"));
+        assertFalse(SqlScriptRunner.isDdl("select 1"));
     }
 
     @Test void oneTransactionCommitsWhenEverythingSucceeds() throws Exception {

@@ -378,6 +378,9 @@ public final class SqlScriptPanel extends JPanel implements Disposable {
             @Override public void rolledBack(@NotNull List<SqlScript.Statement> statements) {
                 SwingUtilities.invokeLater(() -> log.rolledBack(statements));
             }
+            @Override public void committedImplicitly(@NotNull List<SqlScript.Statement> statements) {
+                SwingUtilities.invokeLater(() -> log.committedImplicitly(statements));
+            }
         };
         Runnable work = () -> {
             SqlScriptRunner.Summary result = current.run(config, namespace, running.statements(), options, listener);
@@ -479,7 +482,9 @@ public final class SqlScriptPanel extends JPanel implements Disposable {
                 else if (run.failed() == 0) { text = "Ran " + plural(total, "statement"); tone = DatabaseUi.Tone.SUCCESS; }
                 else if (run.notRun() > 0) { text = "Stopped at statement " + log.firstFailure() + " of " + total + ": " + counts; tone = DatabaseUi.Tone.ERROR; }
                 else { text = "Finished with errors: " + counts; tone = DatabaseUi.Tone.ERROR; }
-                if (run.rolledBack()) text += "; rolled back";
+                if (run.rolledBack() && run.committedImplicitly() > 0) text += "; rolled back after the last DDL, which committed " + plural(run.committedImplicitly(), "statement");
+                else if (run.rolledBack()) text += "; rolled back";
+                else if (run.committedImplicitly() > 0) text += "; nothing to roll back, DDL committed " + plural(run.committedImplicitly(), "statement");
                 DatabaseUi.status(summary, text + "  ·  " + time, tone);
             }
         }
@@ -580,6 +585,10 @@ public final class SqlScriptPanel extends JPanel implements Disposable {
         table.setRowHeight(JBUI.scale(24));
         table.setIntercellSpacing(new Dimension(0, 0));
         table.getTableHeader().setReorderingAllowed(false);
+        // numbers sit centered in their narrow columns, so they never run into the text beside them
+        DefaultTableCellRenderer centered = new DefaultTableCellRenderer();
+        centered.setHorizontalAlignment(SwingConstants.CENTER);
+        table.setDefaultRenderer(Integer.class, centered);
         table.setDefaultRenderer(Icon.class, new DefaultTableCellRenderer() {
             @Override protected void setValue(Object value) { setIcon((Icon) value); setText(""); setHorizontalAlignment(CENTER); }
         });
@@ -656,6 +665,13 @@ public final class SqlScriptPanel extends JPanel implements Disposable {
                 if (row.status != SqlScriptRunner.Status.OK) continue;
                 row.status = SqlScriptRunner.Status.ROLLED_BACK;
                 row.result = row.result + ", rolled back";
+            }
+            fireTableDataChanged();
+        }
+        void committedImplicitly(List<SqlScript.Statement> statements) {
+            for (SqlScript.Statement statement : statements) {
+                LogRow row = rows.get(statement.index() - 1);
+                if (row.status == SqlScriptRunner.Status.OK) row.result = row.result + ", committed by DDL";
             }
             fireTableDataChanged();
         }

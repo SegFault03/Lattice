@@ -136,7 +136,7 @@ Create/alter table dialogs retain changes across the column navigator and show t
 Right-click a connection, schema or table and choose **Run SQL script…**, or use **Script…** in the SQL console toolbar or **Run SQL script…** in a table's options menu. Choose a `.sql` file. Lattice checks it offline against the cached schema (syntax, unknown tables and columns) and shows a read-only, highlighted preview with each problem marked on its line. **Execute** runs the statements in order on a connection of their own, in the selected database or schema. The run log shows each statement's result: rows affected or returned, or the server's error with its code. Clicking a row in the log or the problem list scrolls the preview to that line.
 
 - **On error:** **Stop** (default) skips the remaining statements; **Continue** runs them anyway.
-- **Run in one transaction, roll back on error:** commits only if every statement succeeds. MySQL, HSQLDB and H2 commit `CREATE`, `ALTER` and `DROP` immediately, so those cannot be rolled back; PostgreSQL DDL can.
+- **Run in one transaction, roll back on error:** commits only if every statement succeeds. MySQL, HSQLDB and H2 commit DDL (`CREATE`, `ALTER`, `DROP`...) immediately, together with everything that ran before it, so after an error only the statements after the last DDL are rolled back; the run log marks the others **committed by DDL**. PostgreSQL rolls back DDL too.
 - A script with check errors asks for confirmation before it runs, since the check cannot see tables the script itself creates.
 - MySQL `DELIMITER` lines are handled as the `mysql` client does, so stored routines run as one statement.
 - Statements that return rows are only counted. Files larger than 5 MB are refused.
