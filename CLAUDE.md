@@ -41,6 +41,8 @@ Live database suites need owned fixtures; see `docs/CONTRIBUTING.md`. Do not run
 - Branches: do not create or push a new branch on your own. Ask the user which branch to work on. If the user names no branch, use `main`. Do not push to any branch other than the one the user chose.
 - Permissions and approvals the user gives during a session take precedence over the pre-defined rules above, for the scope the user stated (for example, standing permission to push a named branch at checkpoints). Outside that scope, the rules still apply.
 - Documentation is current-state. Do not add dated validation narratives or progress logs to `docs/`.
+- While a plan or task is in progress, keep hand-off notes in `HANDOFF.md` at the repository root: update it as the work moves, and thoroughly at each checkpoint (goal, decisions, what is done, what remains, open questions), so a later session can continue without losing context. Commit it with the work. Delete it, and any other progress, plan or note files, before a release; only guides and docs remain.
+- Add a test only when it guards behavior that could realistically break. Do not add tautological tests, tests that assert what the code trivially does, or tests that check very little. When a check is needed only to verify a change, write it, run it and remove it. Trim redundant or low-value tests whenever you touch a suite.
 
 ## Key locations
 
