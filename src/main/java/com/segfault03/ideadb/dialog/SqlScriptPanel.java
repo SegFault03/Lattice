@@ -216,6 +216,7 @@ public final class SqlScriptPanel extends JPanel implements Disposable {
         options.add(singleTransaction);
         JPanel rows = new JPanel(new BorderLayout(0, JBUI.scale(6)));
         rows.setOpaque(false);
+        rows.setBorder(JBUI.Borders.emptyBottom(4)); // keeps the last row off the dialog's buttons
         rows.add(options, BorderLayout.NORTH);
         String implicit = implicitDdlCommit(config.getType());
         if (implicit != null) {
