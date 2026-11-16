@@ -1,6 +1,7 @@
 package com.segfault03.ideadb.sql.validate;
 
 import com.segfault03.ideadb.sql.completion.SqlToken;
+import com.segfault03.ideadb.sql.completion.SqlUseStatements;
 import com.segfault03.ideadb.sql.dialect.SqlDialectProfile;
 import com.segfault03.ideadb.sql.lang.LatticeSqlTokens;
 import com.segfault03.ideadb.sql.schema.SqlSchema;
@@ -16,7 +17,8 @@ final class SqlScriptFacts {
 
     final CharSequence text;
     final SqlDialectProfile profile;
-    final @Nullable SqlSchema schema;
+    /** The schema seen by the statement being checked; a USE that names a known database moves its default there. */
+    @Nullable SqlSchema schema;
     /** Tables and views the script creates, and tables it alters: their shape is the script's, not the schema's. */
     final Set<String> created = new HashSet<>();
     final Set<String> altered = new HashSet<>();
@@ -35,7 +37,8 @@ final class SqlScriptFacts {
     private void collect(List<SqlToken> s) {
         if (s.isEmpty()) return;
         String first = up(s.get(0));
-        if (first.equals("USE")) changesDefaultSchema = true;
+        // a USE of a database the schema knows is followed statement by statement; any other is not
+        if (first.equals("USE") && followedUse(s) == null) changesDefaultSchema = true;
         if (first.equals("SET") && s.size() > 1) {
             String second = up(s.get(1));
             if (second.equals("SCHEMA") || second.equals("SEARCH_PATH") || second.equals("SESSION") || second.equals("LOCAL")
@@ -60,6 +63,12 @@ final class SqlScriptFacts {
                 if (name != null) created.add(name.toLowerCase(Locale.ROOT));
             }
         }
+    }
+
+    /** The database a USE statement selects, when the schema knows it; null otherwise. */
+    @Nullable String followedUse(List<SqlToken> s) {
+        String target = SqlUseStatements.target(s, text, profile);
+        return target == null || schema == null || schema.namespace(target) == null ? null : target;
     }
 
     /** The last part of the dotted name starting at {@code at}, unquoted. */

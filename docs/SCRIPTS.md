@@ -145,6 +145,8 @@ For a focused native cell inspector capture, set `LATTICE_UI_CELL_DETAILS_ONLY=t
 
 For the SQL editor actions, set `LATTICE_UI_SQL_EDITOR_ONLY=true` (direct Gradle: `-Plattice.ui.review=true -Plattice.ui.sqlEditorOnly=true`). It binds a project `orders.sql` to the owned HSQLDB fixture and runs Send to Console with parameter values, Explain Statement and Run and Roll Back, checking the console text, the Dry Run tab and the unchanged table over JDBC. Main PR CI runs it once in the light theme; see [UI review](UI_PREVIEW.md).
 
+For the Execute SQL Script dialog, set `LATTICE_UI_SQL_SCRIPT_ONLY=true` (direct Gradle: `-Plattice.ui.review=true -Plattice.ui.sqlScriptOnly=true`). It opens the dialog from the explorer's schema menu on the owned HSQLDB fixture, checks a project `db/seed.sql` with a misspelled column, runs it after confirmation (it stops at the failing statement) and again in one transaction (rolled back), checking the tables over JDBC and that no dialog label is clipped. It writes crops of the live dialog (`sql-script-*.png`) and `runtime-evidence.txt`. It is not registered as a CI suite.
+
 Direct Gradle/capture reviews accept `-Plattice.ui.scale=1.25` or `1.5` for
 larger IDE UI sizes. The default remains 100%; this changes IDE UI scaling
 without changing Driver/desktop device coordinates. The Linux review wrapper accepts

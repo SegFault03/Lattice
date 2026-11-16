@@ -111,8 +111,10 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         resultLimit.setToolTipText("Maximum rows returned by the next query");
         clearBtn = DatabaseUi.action("Clear", Icons.CLEAR, "Clear query text");
         clearBtn.addActionListener(e -> input.setText(""));
+        JButton scriptBtn = DatabaseUi.action("Script…", Icons.SQL_FILE, "Run a SQL script file against this database");
+        scriptBtn.addActionListener(e -> com.segfault03.ideadb.dialog.SqlScriptDialog.show(project, config, activeDatabase));
         JComponent toolbar = DatabaseActionToolbar.create(this, "SQL actions", runBtn, cancelBtn, null,
-                clearBtn, null, DatabaseActionToolbar.picker("Database", databaseCombo));
+                clearBtn, scriptBtn, null, DatabaseActionToolbar.picker("Database", databaseCombo));
         heading.add(toolbar, BorderLayout.NORTH);
 
         JPanel recall = new JPanel(new WrapLayout(FlowLayout.LEFT, JBUI.scale(4), JBUI.scale(4)));

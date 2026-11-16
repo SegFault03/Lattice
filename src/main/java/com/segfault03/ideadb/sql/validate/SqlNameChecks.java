@@ -175,6 +175,7 @@ final class SqlNameChecks {
         SqlSchema schema = script.schema;
         String lower = ref.name().toLowerCase(Locale.ROOT);
         if (lower.equals("dual") || lower.startsWith("pg_") || lower.startsWith("sqlite_") || lower.startsWith("sys")) return null;
+        if (ref.namespace() == null && schema.searchesAllNamespaces()) return lookupEverywhere(ref);
         ExplorerMetadataSnapshot.Namespace namespace = schema.namespace(ref.namespace());
         if (namespace == null || !namespace.tablesLoaded()) return null;
         if (ref.namespace() == null && script.changesDefaultSchema) return null;
@@ -190,6 +191,40 @@ final class SqlNameChecks {
                     "Unknown table '" + ref.name() + "'" + where + (suggestion == null ? "" : ". Did you mean '" + suggestion + "'?"),
                     suggestion == null ? null : requote(suggestion, startToken));
         }
+        return null;
+    }
+
+    /**
+     * An unqualified table on a connection with no default namespace: found when exactly one namespace holds it,
+     * ambiguous when several do, unknown when none does and every namespace's table list is known.
+     */
+    @Nullable ExplorerMetadataSnapshot.Table lookupEverywhere(TableRef ref) {
+        SqlSchema schema = script.schema;
+        var matches = schema.unqualifiedMatches(ref.name());
+        if (matches.size() == 1) return matches.get(0);
+        int startToken = nameToken(ref);
+        if (startToken < 0) return null;
+        if (matches.size() > 1) {
+            List<String> owners = new ArrayList<>();
+            for (var match : matches) {
+                var owner = schema.namespaceOf(match);
+                if (owner != null) owners.add(owner.name());
+            }
+            c.report(Kind.UNKNOWN_TABLE, startToken, startToken,
+                    "Table '" + ref.name() + "' exists in " + String.join(", ", owners) + "; qualify it with a database or add a USE statement");
+            return null;
+        }
+        var searched = schema.searched();
+        if (script.changesDefaultSchema || searched.isEmpty() || !searched.stream().allMatch(ExplorerMetadataSnapshot.Namespace::tablesLoaded)) return null;
+        for (var namespace : searched) if (schema.index(namespace).ambiguousCase(ref.name())) return null;
+        String suggestion = null;
+        for (var namespace : searched) {
+            suggestion = suggestion(namespace, ref.name(), () -> schema.index(namespace).nearest(ref.name(), editLimit(ref.name())));
+            if (suggestion != null) break;
+        }
+        c.report(Kind.UNKNOWN_TABLE, startToken, startToken,
+                "Unknown table '" + ref.name() + "' in any database" + (suggestion == null ? "" : ". Did you mean '" + suggestion + "'?"),
+                suggestion == null ? null : requote(suggestion, startToken));
         return null;
     }
 

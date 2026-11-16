@@ -18,6 +18,8 @@ public final class MetadataCacheState implements PersistentStateComponent<Metada
         public String identity = "";
         /** The namespace unqualified names resolve to on this connection; empty until it has been read. */
         public String defaultNamespace = "";
+        /** The connection was read and has no default namespace (a MySQL URL without a database), so every namespace is searched. */
+        public boolean noDefaultNamespace;
         public Map<String, Namespace> namespaces = new LinkedHashMap<>();
     }
     public static final class Namespace {
@@ -104,9 +106,25 @@ public final class MetadataCacheState implements PersistentStateComponent<Metada
     public synchronized void defaultNamespaceResolved(ConnectionConfig config, String namespace) {
         if (namespace == null) return;
         var source = source(config);
-        if (namespace.equals(source.defaultNamespace)) return;
+        if (namespace.equals(source.defaultNamespace) && !source.noDefaultNamespace) return;
         changed(config.getId());
         source.defaultNamespace = namespace;
+        source.noDefaultNamespace = false;
+    }
+
+    /** Records that the connection has no default namespace, so unqualified names are looked up in every namespace. */
+    public synchronized void defaultNamespaceAbsent(ConnectionConfig config) {
+        var source = source(config);
+        if (source.noDefaultNamespace && source.defaultNamespace.isEmpty()) return;
+        changed(config.getId());
+        source.defaultNamespace = "";
+        source.noDefaultNamespace = true;
+    }
+
+    /** Whether the connection was read and found to have no default namespace. */
+    public synchronized boolean hasNoDefaultNamespace(ConnectionConfig config) {
+        var source = state.sources.get(config.getId());
+        return source != null && source.identity.equals(identity(config)) && source.noDefaultNamespace;
     }
 
     /** Whether the cache holds metadata read for this exact connection (same engine, URL and user). */
@@ -195,6 +213,7 @@ public final class MetadataCacheState implements PersistentStateComponent<Metada
         var copy = new State();
         original.sources.forEach((id, source) -> {
             var sourceCopy = new Source(); sourceCopy.identity = source.identity; sourceCopy.defaultNamespace = source.defaultNamespace;
+            sourceCopy.noDefaultNamespace = source.noDefaultNamespace;
             source.namespaces.forEach((name, namespace) -> {
                 var namespaceCopy = new Namespace(); namespaceCopy.tablesLoaded = namespace.tablesLoaded;
                 namespace.tables.forEach((tableName, table) -> {

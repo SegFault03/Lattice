@@ -4,6 +4,14 @@ Patch notes are selected by the exact release version, including prerelease suff
 
 ## [Unreleased]
 
+### Explorer and console
+
+- Run SQL script files from a connection, schema or table's context menu, the SQL console toolbar or a table's options menu. The dialog checks the script offline against the cached schema, previews it with problems marked on their lines, and runs it statement by statement with a run log of each result. Choose to stop or continue after an error, or run everything in one transaction that rolls back on error. MySQL `DELIMITER` lines are supported.
+
+### SQL editor
+
+- Complete, color and check SQL for a MySQL connection whose URL names no database: every user database is read, an unqualified table resolves when only one database holds it (several are reported as ambiguous), completion inserts `database.table`, and `USE database;` switches the database for the statements after it.
+
 ## [0.2.0-alpha]
 
 ### SQL editor

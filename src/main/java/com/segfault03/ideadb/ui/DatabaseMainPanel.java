@@ -435,6 +435,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
             case DISCONNECT -> { DatabaseConnectionManager.getInstance().closeConnection(cfg.getId()); restoreCachedConnection(node); }
             case CONSOLE -> DatabaseEditorManager.getInstance(project).openConsole(cfg, db,
                     table == null ? null : DdlService.getInstance().buildSelectSql(cfg, db, table.getName(), List.of()));
+            case RUN_SCRIPT -> com.segfault03.ideadb.dialog.SqlScriptDialog.show(project, cfg, db);
             case CREATE_NAMESPACE -> doCreateDatabase(cfg);
             case EDIT_CONNECTION -> editConnection(cfg);
             case REMOVE_CONNECTION -> removeConnection(cfg);

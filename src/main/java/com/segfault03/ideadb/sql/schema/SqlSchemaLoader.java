@@ -30,6 +30,8 @@ final class SqlSchemaLoader {
     static final int EAGER_TABLE_LIMIT = 300;
     /** A refresh re-reads at most this many tables' columns. */
     static final int REFRESH_TABLE_CAP = 1_000;
+    /** With no default namespace, columns are read eagerly for at most this many tables across all namespaces. */
+    static final int ALL_NAMESPACES_TABLE_LIMIT = 1_000;
     /** Runs before each table's columns are read; tests make it throw or wait to simulate a failing or slow read. */
     static volatile Consumer<String> columnReadHook = table -> {};
     private static final Logger LOG = Logger.getInstance(SqlSchemaLoader.class);
@@ -58,12 +60,43 @@ final class SqlSchemaLoader {
         String target = namespace;
         if (target == null) {
             target = connections.executeBrowser(config, connection -> provider.metadata().defaultNamespace(connection, config));
-            if (target == null || target.isBlank()) throw new IllegalStateException("The connection reports no default " + provider.namespaceLabel());
+            if (target == null || target.isBlank()) {
+                // No database in the URL: unqualified names are looked up in every database, so read them all.
+                cache.defaultNamespaceAbsent(config);
+                loadEveryNamespace(config, refresh, tableLimit, cancelled, outcomes);
+                return;
+            }
             cache.defaultNamespaceResolved(config, target);
         }
         String name = target;
         checkCancelled(cancelled);
         connections.executeBrowser(config, connection -> metadata.getDatabases(connection, config));
+        readNamespace(config, name, refresh, tableLimit, cancelled, outcomes);
+    }
+
+    /**
+     * Reads every user namespace of a connection that has no default one. Columns are read eagerly for at most
+     * {@code tableLimit} tables per namespace and {@link #ALL_NAMESPACES_TABLE_LIMIT} in all, first namespaces first.
+     */
+    static void loadEveryNamespace(@NotNull ConnectionConfig config, boolean refresh, int tableLimit,
+                                   @NotNull BooleanSupplier cancelled, @NotNull ColumnOutcomes outcomes) throws Exception {
+        checkCancelled(cancelled);
+        List<String> names = DatabaseConnectionManager.getInstance().executeBrowser(config,
+                connection -> MetadataService.getInstance().getDatabases(connection, config));
+        int remaining = ALL_NAMESPACES_TABLE_LIMIT;
+        for (String name : names) {
+            if (SqlSchema.isSystemNamespace(config.getType(), name)) continue;
+            checkCancelled(cancelled);
+            remaining -= readNamespace(config, name, refresh, Math.min(tableLimit, remaining), cancelled, outcomes);
+        }
+    }
+
+    /** Reads one namespace's table list and the columns of its first {@code tableLimit} tables; returns how many those are. */
+    private static int readNamespace(ConnectionConfig config, String name, boolean refresh, int tableLimit,
+                                     BooleanSupplier cancelled, ColumnOutcomes outcomes) throws Exception {
+        DatabaseConnectionManager connections = DatabaseConnectionManager.getInstance();
+        MetadataService metadata = MetadataService.getInstance();
+        MetadataCacheState cache = MetadataCacheState.getInstance();
         List<TableMetadata> tables = connections.executeBrowser(config, connection -> metadata.getTables(connection, config, name));
         Set<String> cached = tablesWithColumns(cache.snapshot(config), name);
         int reads = 0;
@@ -81,6 +114,7 @@ final class SqlSchemaLoader {
             readColumns(config, name, table, outcomes);
         }
         if (!dropped.isEmpty()) cache.columnsInvalidated(config, name, dropped);
+        return Math.min(tables.size(), Math.max(tableLimit, 0));
     }
 
     /** Re-reads tables after they changed: the table list once (they may be new or gone), then the columns of those that still exist. */

@@ -401,6 +401,7 @@ intellijPlatformTesting.testIdeUi.register("uiScreenshotTest") {
         systemProperty("ui.createTable.only", providers.gradleProperty("lattice.ui.createTableOnly").orElse("false").get())
         systemProperty("ui.cellDetails.only", providers.gradleProperty("lattice.ui.cellDetailsOnly").orElse("false").get())
         systemProperty("ui.sqlEditor.only", providers.gradleProperty("lattice.ui.sqlEditorOnly").orElse("false").get())
+        systemProperty("ui.sqlScript.only", providers.gradleProperty("lattice.ui.sqlScriptOnly").orElse("false").get())
         systemProperty("ui.skip.remote.downloads", providers.environmentVariable("LATTICE_UI_SKIP_REMOTE_DOWNLOADS").orElse("false").get())
         systemProperty("ui.h2.enabled", providers.gradleProperty("lattice.ui.h2").orElse(providers.environmentVariable("LATTICE_UI_H2")).orElse("false").get())
         systemProperty("ui.postgres.port", providers.gradleProperty("lattice.ui.postgres.port").orElse(providers.environmentVariable("LATTICE_UI_POSTGRES_PORT")).orElse("0").get())

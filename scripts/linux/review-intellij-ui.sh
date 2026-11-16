@@ -73,6 +73,9 @@ for theme in "${themes[@]}"; do
     if [[ "${LATTICE_UI_SQL_EDITOR_ONLY:-false}" == true ]]; then
         version_args+=("-Plattice.ui.sqlEditorOnly=true")
     fi
+    if [[ "${LATTICE_UI_SQL_SCRIPT_ONLY:-false}" == true ]]; then
+        version_args+=("-Plattice.ui.sqlScriptOnly=true")
+    fi
     if [[ "${LATTICE_UI_DIALOG_AUDIT:-false}" == true ]]; then
         version_args+=("-Plattice.ui.dialogAudit=true")
     fi

@@ -229,10 +229,11 @@ public final class SqlDocRenderer {
     private static String referenceLink(ColumnReference reference, SqlSchema schema, String connection) {
         String namespace = reference.namespace() != null ? reference.namespace() : schema.defaultNamespace();
         String label = (reference.namespace() != null ? reference.namespace() + "." : "") + reference.table() + "." + reference.column();
-        if (namespace == null) return esc(label);
+        if (namespace == null && !schema.searchesAllNamespaces()) return esc(label);
         var table = schema.table(namespace, reference.table());
-        if (table == null) return esc(label);
-        var to = new SqlTarget.Column(schema.namespace(namespace).name(), table.metadata().getName(), reference.column());
+        var owner = table == null ? null : namespace != null ? schema.namespace(namespace) : schema.namespaceOf(table);
+        if (owner == null) return esc(label);
+        var to = new SqlTarget.Column(owner.name(), table.metadata().getName(), reference.column());
         return link(SqlDocLinks.show(connection, to), label);
     }
 

@@ -11,6 +11,7 @@ import com.segfault03.ideadb.sql.dialect.SqlDialectProfile;
 import com.segfault03.ideadb.sql.doc.SqlReferenceResolver;
 import com.segfault03.ideadb.sql.doc.SqlTarget;
 import com.segfault03.ideadb.sql.lang.SqlSemanticColors.Role;
+import com.segfault03.ideadb.sql.completion.SqlUseStatements;
 import com.segfault03.ideadb.sql.schema.SqlSchema;
 import com.segfault03.ideadb.sql.schema.SqlSchemaService;
 import org.jetbrains.annotations.NotNull;
@@ -52,6 +53,7 @@ public final class SqlSemanticColoring {
         var lexer = new LatticeSqlLexer(profile);
         lexer.start(text, 0, text.length(), 0);
         int statementStart = 0;
+        SqlSchema seen = schema;
         List<int[]> names = new ArrayList<>();
         for (IElementType type = lexer.getTokenType(); ; lexer.advance(), type = lexer.getTokenType()) {
             boolean end = type == null;
@@ -59,7 +61,10 @@ public final class SqlSemanticColoring {
             boolean semicolon = !end && type == LatticeSqlTokens.PUNCTUATION && text.charAt(lexer.getTokenStart()) == ';';
             if (end || semicolon) {
                 int statementEnd = end ? text.length() : lexer.getTokenEnd();
-                if (!names.isEmpty()) colorStatement(text.subSequence(statementStart, statementEnd), statementStart, names, profile, schema, found);
+                CharSequence statement = text.subSequence(statementStart, statementEnd);
+                String used = names.size() == 1 ? SqlUseStatements.namespaceAt(statement + ";", statement.length() + 1, profile) : null;
+                if (used != null) seen = schema.withDefaultNamespace(used);
+                else if (!names.isEmpty()) colorStatement(statement, statementStart, names, profile, seen, found);
                 names.clear();
                 statementStart = statementEnd;
             }

@@ -14,6 +14,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -111,6 +112,18 @@ public final class SqlCompletionEngine {
             }
         }
         if (namespace != null) return;
+        if (resolved == null && schema.searchesAllNamespaces()) {
+            // no default database: offer every database's tables, written qualified so they run without a USE
+            for (var each : schema.searched()) {
+                for (var table : each.tables()) {
+                    ProgressManager.checkCanceled();
+                    String name = table.metadata().getName();
+                    boolean view = table.metadata().isView();
+                    out.add(new SqlSuggestion(view ? Kind.VIEW : Kind.TABLE, name, tableInsertion(each, name, context, profile, schema),
+                            view ? "view" : "table", each.name(), TABLE));
+                }
+            }
+        }
         for (var other : schema.namespaces()) {
             out.add(new SqlSuggestion(Kind.NAMESPACE, other.name(), insertion(other.name(), context, profile) + ".", "schema", null, ALIAS));
         }
@@ -124,11 +137,12 @@ public final class SqlCompletionEngine {
     private static void tablesHoldingSelectedColumns(SqlContext context, SqlDialectProfile profile, @Nullable SqlSchema schema,
                                                      List<SqlSuggestion> out) {
         if (schema == null || context.usedNames().isEmpty() || !context.joinPrior().isEmpty()) return;
-        var namespace = schema.namespace(null);
-        if (namespace == null) return;
+        var searched = schema.searched();
+        if (searched.isEmpty()) return;
         Map<ExplorerMetadataSnapshot.Table, List<String>> held = new LinkedHashMap<>();
+        Map<ExplorerMetadataSnapshot.Table, ExplorerMetadataSnapshot.Namespace> owners = new HashMap<>();
         Set<String> known = new HashSet<>();
-        for (var table : namespace.tables()) {
+        for (var namespace : searched) for (var table : namespace.tables()) {
             ProgressManager.checkCanceled();
             List<String> matches = new ArrayList<>();
             for (ColumnMetadata column : table.columns()) {
@@ -136,6 +150,7 @@ public final class SqlCompletionEngine {
             }
             if (matches.isEmpty()) continue;
             held.put(table, matches);
+            owners.put(table, namespace);
             for (String match : matches) known.add(match.toUpperCase(Locale.ROOT));
         }
         for (var entry : held.entrySet()) {
@@ -143,7 +158,7 @@ public final class SqlCompletionEngine {
             String name = table.metadata().getName();
             boolean view = table.metadata().isView();
             double share = (double) entry.getValue().size() / known.size();
-            out.add(new SqlSuggestion(view ? Kind.VIEW : Kind.TABLE, name, insertion(name, context, profile),
+            out.add(new SqlSuggestion(view ? Kind.VIEW : Kind.TABLE, name, tableInsertion(owners.get(table), name, context, profile, schema),
                     view ? "view" : "table", "has " + String.join(", ", entry.getValue()), TABLE + 5 + 20 * share));
         }
     }
@@ -159,11 +174,11 @@ public final class SqlCompletionEngine {
      */
     private static void schemaColumns(SqlContext context, SqlDialectProfile profile, @Nullable SqlSchema schema, List<SqlSuggestion> out) {
         if (schema == null) return;
-        var namespace = schema.namespace(null);
-        if (namespace == null) return;
+        var searched = schema.searched();
+        if (searched.isEmpty()) return;
         Map<String, ColumnMetadata> first = new LinkedHashMap<>();
         Map<String, List<String>> owners = new LinkedHashMap<>();
-        for (var table : namespace.tables()) {
+        for (var namespace : searched) for (var table : namespace.tables()) {
             ProgressManager.checkCanceled();
             for (ColumnMetadata column : table.columns()) {
                 String key = column.getName();
@@ -274,6 +289,14 @@ public final class SqlCompletionEngine {
         }
     }
 
+    /** A table's name as completion writes it: qualified by its namespace when the connection has no default one. */
+    private static String tableInsertion(ExplorerMetadataSnapshot.Namespace namespace, String name, SqlContext context,
+                                         SqlDialectProfile profile, SqlSchema schema) {
+        String table = insertion(name, context, profile);
+        if (!schema.searchesAllNamespaces() || context.openQuote() != 0) return table;
+        return insertion(namespace.name(), context, profile) + "." + table;
+    }
+
     private static List<ColumnMetadata> columnsOfNamed(@Nullable String namespace, String table, SqlSchema schema) {
         var found = schema.table(namespace, table);
         return found == null ? List.of() : found.columns();
@@ -305,6 +328,11 @@ public final class SqlCompletionEngine {
         if (reference == null || reference.table() == null || table.name() == null) return false;
         if (!reference.table().equalsIgnoreCase(table.name())) return false;
         String wanted = table.namespace() != null ? table.namespace() : schema.defaultNamespace();
+        if (wanted == null && schema.searchesAllNamespaces()) {
+            var found = schema.table(null, table.name());
+            var owner = found == null ? null : schema.namespaceOf(found);
+            if (owner != null) wanted = owner.name();
+        }
         return reference.namespace() == null || wanted == null || reference.namespace().equalsIgnoreCase(wanted);
     }
 
