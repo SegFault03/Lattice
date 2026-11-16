@@ -192,7 +192,7 @@ public final class SqlScriptPanel extends JPanel implements Disposable {
         tabs.addTab("Run log", new JBScrollPane(logTable));
         updateTabTitles();
 
-        OnePixelSplitter split = new OnePixelSplitter(true, 0.62f);
+        OnePixelSplitter split = new OnePixelSplitter(true, 0.58f);
         split.setFirstComponent(previewPanel);
         split.setSecondComponent(tabs);
         return split;
@@ -480,7 +480,7 @@ public final class SqlScriptPanel extends JPanel implements Disposable {
                 else if (run.failed() == 0) { text = "Ran " + plural(total, "statement"); tone = DatabaseUi.Tone.SUCCESS; }
                 else if (run.notRun() > 0) { text = "Stopped at statement " + log.firstFailure() + " of " + total + ": " + counts; tone = DatabaseUi.Tone.ERROR; }
                 else { text = "Finished with errors: " + counts; tone = DatabaseUi.Tone.ERROR; }
-                if (run.rolledBack() && run.committedImplicitly() > 0) text += "; rolled back after the last DDL, which committed " + plural(run.committedImplicitly(), "statement");
+                if (run.rolledBack() && run.committedImplicitly() > 0) text += "; rolled back except " + plural(run.committedImplicitly(), "statement") + " committed by DDL";
                 else if (run.rolledBack()) text += "; rolled back";
                 else if (run.committedImplicitly() > 0) text += "; nothing to roll back, DDL committed " + plural(run.committedImplicitly(), "statement");
                 DatabaseUi.status(summary, text + "  ·  " + time, tone);

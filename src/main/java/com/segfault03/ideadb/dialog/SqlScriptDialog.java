@@ -47,7 +47,7 @@ public final class SqlScriptDialog extends DialogWrapper {
     }
 
     @Override protected @Nullable JComponent createCenterPanel() {
-        panel.setPreferredSize(JBUI.size(860, 640));
+        panel.setPreferredSize(JBUI.size(860, 700));
         return panel;
     }
 
