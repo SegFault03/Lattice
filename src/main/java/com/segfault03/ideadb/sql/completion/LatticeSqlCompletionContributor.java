@@ -69,6 +69,7 @@ public final class LatticeSqlCompletionContributor extends CompletionContributor
         if (connection != null) {
             SqlSchemaService service = SqlSchemaService.getInstance();
             schema = SqlDialectResolver.schema(connection, virtual);
+            if (schema != null) schema = schema.withDefaultNamespace(SqlUseStatements.namespaceAt(text, offset, profile));
             service.ensureLoaded(connection);
         }
         boolean closed = context.openQuote() != 0 && offset < text.length() && text.charAt(offset) == context.openQuote();
@@ -88,7 +89,7 @@ public final class LatticeSqlCompletionContributor extends CompletionContributor
                     ? "Add a connection in Lattice to complete table and column names"
                     : "Choose a connection for this file to complete table and column names";
         }
-        if (schema == null || schema.namespace(null) == null) return "Reading the schema of " + connection.getName() + "...";
+        if (schema == null || schema.searched().isEmpty()) return "Reading the schema of " + connection.getName() + "...";
         return null;
     }
 

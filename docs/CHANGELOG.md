@@ -4,6 +4,10 @@ Patch notes are selected by the exact release version, including prerelease suff
 
 ## [Unreleased]
 
+### SQL editor
+
+- Complete, color and check SQL for a MySQL connection whose URL names no database: every user database is read, an unqualified table resolves when only one database holds it (several are reported as ambiguous), completion inserts `database.table`, and `USE database;` switches the database for the statements after it.
+
 ## [0.2.0-alpha]
 
 ### SQL editor

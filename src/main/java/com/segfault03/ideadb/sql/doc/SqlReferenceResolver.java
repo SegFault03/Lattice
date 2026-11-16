@@ -58,7 +58,7 @@ public final class SqlReferenceResolver {
             if (ref.derived() || ref.name() == null) return null;
             var found = schema.table(ref.namespace(), ref.name());
             if (found == null) return null;
-            String namespace = namespaceOf(schema, ref.namespace());
+            String namespace = namespaceOf(schema, ref.namespace(), found);
             return ref.alias() != null
                     ? new SqlTarget.Alias(ref.alias(), namespace, found.metadata().getName())
                     : new SqlTarget.Table(namespace, found.metadata().getName());
@@ -92,20 +92,21 @@ public final class SqlReferenceResolver {
 
     private static @Nullable SqlTarget table(SqlSchema schema, @Nullable String namespace, String name) {
         var found = schema.table(namespace, name);
-        return found == null ? null : new SqlTarget.Table(namespaceOf(schema, namespace), found.metadata().getName());
+        return found == null ? null : new SqlTarget.Table(namespaceOf(schema, namespace, found), found.metadata().getName());
     }
 
     private static @Nullable SqlTarget column(SqlSchema schema, @Nullable String namespace, String table, String name) {
         ExplorerMetadataSnapshot.Table found = schema.table(namespace, table);
         if (found == null) return null;
         for (ColumnMetadata column : found.columns()) {
-            if (column.getName().equalsIgnoreCase(name)) return new SqlTarget.Column(namespaceOf(schema, namespace), found.metadata().getName(), column.getName());
+            if (column.getName().equalsIgnoreCase(name)) return new SqlTarget.Column(namespaceOf(schema, namespace, found), found.metadata().getName(), column.getName());
         }
         return null;
     }
 
-    private static String namespaceOf(SqlSchema schema, @Nullable String namespace) {
+    private static String namespaceOf(SqlSchema schema, @Nullable String namespace, ExplorerMetadataSnapshot.Table table) {
         var found = schema.namespace(namespace);
+        if (found == null && namespace == null) found = schema.namespaceOf(table); // no default: the one database that holds it
         return found == null ? String.valueOf(namespace) : found.name();
     }
 

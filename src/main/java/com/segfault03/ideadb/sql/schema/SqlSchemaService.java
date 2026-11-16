@@ -98,13 +98,13 @@ public final class SqlSchemaService implements Disposable {
             views.remove(config.getId());
             return null;
         }
-        SqlSchema built = SqlSchema.of(config, snapshot, cache.defaultNamespace(config), revision);
+        SqlSchema built = SqlSchema.of(config, snapshot, cache.defaultNamespace(config), cache.hasNoDefaultNamespace(config), revision);
         views.put(config.getId(), new View(built, settings));
         return built;
     }
 
     /**
-     * Starts reading the default namespace if it is missing, incomplete or stale. Returns immediately. A stale
+     * Starts reading the default namespace (every namespace, when the connection has none) if it is missing, incomplete or stale. Returns immediately. A stale
      * schema stays stale until a read that began after the last change has finished, so a request made while another
      * read is running is answered by the next call, not lost.
      */
@@ -141,7 +141,7 @@ public final class SqlSchemaService implements Disposable {
     /** Whether the last read for this connection failed and the next one waits out the retry interval. */
     public boolean hasFailed(@NotNull String connectionId) { return backoff.blocked(connectionId); }
 
-    /** Reads the default namespace again now, whatever the cache says, even right after a failure. */
+    /** Reads the default namespace (or every namespace) again now, whatever the cache says, even right after a failure. */
     public void reload(@NotNull ConnectionConfig config) {
         if (disposed) return;
         String id = config.getId();
@@ -153,12 +153,28 @@ public final class SqlSchemaService implements Disposable {
     }
 
     private boolean isReady(String connectionId, @Nullable SqlSchema schema) {
+        if (schema != null && schema.searchesAllNamespaces()) return everyNamespaceReady(connectionId, schema);
         if (schema == null || schema.defaultNamespace() == null) return false;
         var namespace = schema.namespace(null);
         if (namespace == null || !namespace.tablesLoaded()) return false;
         // A table whose columns could not be read was attempted; asking again for every completion would never end.
         return namespace.tables().stream().limit(SqlSchemaLoader.EAGER_TABLE_LIMIT)
                 .allMatch(table -> table.columnsLoaded() || recentlyFailed(connectionId, table.metadata().getName()));
+    }
+
+    /** As {@link #isReady} for a connection with no default namespace, following the loader's eager-read budget. */
+    private boolean everyNamespaceReady(String connectionId, SqlSchema schema) {
+        var searched = schema.searched();
+        if (searched.isEmpty() || !searched.stream().allMatch(ExplorerMetadataSnapshot.Namespace::tablesLoaded)) return false;
+        int remaining = SqlSchemaLoader.ALL_NAMESPACES_TABLE_LIMIT;
+        for (var namespace : searched) {
+            int eager = Math.min(SqlSchemaLoader.EAGER_TABLE_LIMIT, remaining);
+            boolean read = namespace.tables().stream().limit(eager)
+                    .allMatch(table -> table.columnsLoaded() || recentlyFailed(connectionId, table.metadata().getName()));
+            if (!read) return false;
+            remaining -= Math.min(namespace.tables().size(), eager);
+        }
+        return true;
     }
 
     private boolean recentlyFailed(String connectionId, String table) {

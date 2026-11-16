@@ -63,6 +63,11 @@ public final class SqlScriptValidator {
             List<SqlToken> statement = statements.get(i);
             ProgressManager.checkCanceled();
             if (statement.isEmpty()) continue;
+            String used = script.followedUse(statement);
+            if (used != null) {
+                script.schema = schema.withDefaultNamespace(used);
+                continue;
+            }
             if (script.opaque(statement)) break;
             if (script.templated(statement)) continue;
             // the last statement has no ';' after it: it may be what the user is typing
