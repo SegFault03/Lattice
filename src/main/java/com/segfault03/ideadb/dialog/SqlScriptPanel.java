@@ -214,21 +214,23 @@ public final class SqlScriptPanel extends JPanel implements Disposable {
         options.add(DatabaseUi.separator());
         options.add(Box.createHorizontalStrut(JBUI.scale(12)));
         options.add(singleTransaction);
+        JPanel rows = new JPanel(new BorderLayout(0, JBUI.scale(6)));
+        rows.setOpaque(false);
+        rows.add(options, BorderLayout.NORTH);
         String implicit = implicitDdlCommit(config.getType());
         if (implicit != null) {
-            transactionNote.setText(implicit);
-            transactionNote.setIcon(AllIcons.General.Information);
-            transactionNote.setForeground(UIUtil.getContextHelpForeground());
-            transactionNote.setBorder(JBUI.Borders.emptyLeft(8));
+            // a warning, on a line of its own under the options it qualifies
+            DatabaseUi.status(transactionNote, implicit + "; those statements cannot be rolled back", DatabaseUi.Tone.WARNING);
+            transactionNote.getAccessibleContext().setAccessibleName("Transaction warning");
             singleTransaction.setToolTipText(implicit + "; those statements cannot be rolled back");
-            options.add(transactionNote);
+            rows.add(transactionNote, BorderLayout.CENTER);
         }
         singleTransaction.addItemListener(event -> {
             // in one transaction the first error rolls everything back, so running on makes no sense
             if (singleTransaction.isSelected()) stopOnError.setSelected(true);
             continueOnError.setEnabled(!singleTransaction.isSelected() && phase != Phase.RUNNING);
         });
-        return options;
+        return rows;
     }
 
     /** What the engine does with DDL inside a transaction, when it commits it; null when DDL is transactional. */
