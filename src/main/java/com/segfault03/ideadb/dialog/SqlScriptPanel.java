@@ -142,20 +142,16 @@ public final class SqlScriptPanel extends JPanel implements Disposable {
         if (namespace != null && !namespace.isBlank()) database.setSelectedItem(namespace);
         database.setToolTipText("Unqualified names in the script resolve in this " + label);
         database.addActionListener(event -> { if (script != null && phase != Phase.RUNNING) check(); });
-        JPanel target = new JPanel(new GridBagLayout());
-        target.setOpaque(false);
-        GridBagConstraints t = new GridBagConstraints();
-        t.anchor = GridBagConstraints.WEST;
-        target.add(connection, t);
-        t.insets = JBUI.insetsLeft(16);
-        target.add(databaseLabel, t);
-        t.insets = JBUI.insetsLeft(6);
-        t.weightx = 1; t.fill = GridBagConstraints.HORIZONTAL;
-        target.add(database, t);
         c.gridx = 1; c.weightx = 1; c.fill = GridBagConstraints.HORIZONTAL; c.insets = JBUI.insetsBottom(6);
-        form.add(target, c);
+        form.add(connection, c);
 
+        // the schema on a row of its own, its label aligned with Connection and Script
         c.gridx = 0; c.gridy = 1; c.weightx = 0; c.fill = GridBagConstraints.NONE; c.insets = JBUI.insets(0, 0, 6, 8);
+        form.add(databaseLabel, c);
+        c.gridx = 1; c.weightx = 1; c.fill = GridBagConstraints.HORIZONTAL; c.insets = JBUI.insetsBottom(6);
+        form.add(database, c);
+
+        c.gridx = 0; c.gridy = 2; c.weightx = 0; c.fill = GridBagConstraints.NONE; c.insets = JBUI.insets(0, 0, 6, 8);
         JBLabel scriptLabel = new JBLabel("Script:");
         scriptLabel.setLabelFor(path.getTextField());
         form.add(scriptLabel, c);
@@ -167,7 +163,7 @@ public final class SqlScriptPanel extends JPanel implements Disposable {
         c.gridx = 1; c.weightx = 1; c.fill = GridBagConstraints.HORIZONTAL; c.insets = JBUI.insetsBottom(6);
         form.add(path, c);
 
-        c.gridx = 1; c.gridy = 2; c.insets = JBUI.emptyInsets();
+        c.gridx = 1; c.gridy = 3; c.insets = JBUI.emptyInsets();
         summary.getAccessibleContext().setAccessibleName("Script status");
         form.add(summary, c);
         return form;
