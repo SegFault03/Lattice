@@ -131,6 +131,16 @@ Choose **Edit value**, then change the text or choose **Set default** or **Set N
 
 Create/alter table dialogs retain changes across the column navigator and show the complete SQL before applying. Batched alterations can rename the table and add, modify, rename or drop columns. PostgreSQL batches use a transaction; MySQL, HSQLDB and H2 may commit DDL incrementally. After a failure, review the refreshed schema and remaining changes before retrying.
 
+### Run a SQL script
+
+Right-click a connection, schema or table and choose **Run SQL script…**, or use **Script…** in the SQL console toolbar or **Run SQL script…** in a table's options menu. Choose a `.sql` file. Lattice checks it offline against the cached schema (syntax, unknown tables and columns) and shows a read-only, highlighted preview with each problem marked on its line. **Execute** runs the statements in order on a connection of their own, in the selected database or schema. The run log shows each statement's result: rows affected or returned, or the server's error with its code. Clicking a row in the log or the problem list scrolls the preview to that line.
+
+- **On error:** **Stop** (default) skips the remaining statements; **Continue** runs them anyway.
+- **Run in one transaction, roll back on error:** commits only if every statement succeeds. MySQL, HSQLDB and H2 commit `CREATE`, `ALTER` and `DROP` immediately, so those cannot be rolled back; PostgreSQL DDL can.
+- A script with check errors asks for confirmation before it runs, since the check cannot see tables the script itself creates.
+- MySQL `DELIMITER` lines are handled as the `mysql` client does, so stored routines run as one statement.
+- Statements that return rows are only counted. Files larger than 5 MB are refused.
+
 Database changes automatically refresh the explorer and affected editors. Explorer refreshes preserve expanded and collapsed branches, selection and scroll position, including changes made while a refresh runs. Pending edits defer a grid reload until Commit or Revert. When Lattice first opens in each IDE project session, it attempts to refresh every saved connection in the background, including cached connections. Unavailable servers retain their cached metadata and show a retry status without startup error dialogs. The explorer also retains the last successful metadata for offline browsing and SQL generation; cached metadata can be stale and contains no table rows. Connect or refresh for current definitions and live operations. Generating an INSERT on a connected table loads its columns when needed.
 
 ## Build from source

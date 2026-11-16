@@ -81,6 +81,7 @@ class ScriptLayoutTests(unittest.TestCase):
             ('LATTICE_UI_CREATE_TABLE_ONLY', 'createTableOnly'),
             ('LATTICE_UI_CELL_DETAILS_ONLY', 'cellDetailsOnly'),
             ('LATTICE_UI_SQL_EDITOR_ONLY', 'sqlEditorOnly'),
+            ('LATTICE_UI_SQL_SCRIPT_ONLY', 'sqlScriptOnly'),
         ):
             with self.subTest(variable=variable):
                 self.assertIn(f'$env:{variable} -eq \'true\'', capture)

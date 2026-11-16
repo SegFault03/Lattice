@@ -292,6 +292,10 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         JMenuItem countItem = new JMenuItem("Count rows");
         countItem.addActionListener(e -> countRows());
         options.add(countItem);
+        JMenuItem scriptItem = new JMenuItem("Run SQL script…", Icons.SQL_FILE);
+        scriptItem.setToolTipText("Run a SQL script file against " + (databaseName != null ? databaseName : "this database"));
+        scriptItem.addActionListener(e -> com.segfault03.ideadb.dialog.SqlScriptDialog.show(project, config, databaseName));
+        options.add(scriptItem);
         options.addSeparator();
         options.add(truncateBtn);
         optionsBtn.addActionListener(e -> {

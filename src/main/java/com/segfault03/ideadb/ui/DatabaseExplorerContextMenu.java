@@ -14,7 +14,7 @@ final class DatabaseExplorerContextMenu {
         CONNECT(false), DISCONNECT(true), CONSOLE(true), CREATE_NAMESPACE(true),
         EDIT_CONNECTION(false), REMOVE_CONNECTION(false), CREATE_TABLE(true), DROP_NAMESPACE(true),
         REFRESH_TABLES(false), OPEN_TABLE(true), ALTER_TABLE(true), TRUNCATE_TABLE(true), DROP_TABLE(true),
-        GENERATE_SELECT(false), GENERATE_INSERT(false);
+        GENERATE_SELECT(false), GENERATE_INSERT(false), RUN_SCRIPT(true);
 
         private final boolean requiresConnection;
         Action(boolean requiresConnection) { this.requiresConnection = requiresConnection; }
@@ -37,6 +37,7 @@ final class DatabaseExplorerContextMenu {
                 add(menu, "Disconnect", null, Action.DISCONNECT, true, connected, guarded);
                 menu.addSeparator();
                 add(menu, "Open SQL console", Icons.CONSOLE, Action.CONSOLE, true, connected, guarded);
+                add(menu, "Run SQL script…", Icons.SQL_FILE, Action.RUN_SCRIPT, true, connected, guarded);
                 add(menu, "Create " + provider.namespaceLabel() + "…", null, Action.CREATE_NAMESPACE,
                         features.contains(DatabaseFeature.CREATE_NAMESPACE), connected, guarded);
                 menu.addSeparator();
@@ -45,6 +46,7 @@ final class DatabaseExplorerContextMenu {
             }
             case DATABASE -> {
                 add(menu, "Open SQL console", Icons.CONSOLE, Action.CONSOLE, true, connected, guarded);
+                add(menu, "Run SQL script…", Icons.SQL_FILE, Action.RUN_SCRIPT, true, connected, guarded);
                 add(menu, "Create table…", Icons.TABLE, Action.CREATE_TABLE, features.contains(DatabaseFeature.CREATE_TABLE), connected, guarded);
                 add(menu, "Drop " + provider.namespaceLabel() + "…", null, Action.DROP_NAMESPACE,
                         features.contains(DatabaseFeature.DROP_NAMESPACE), connected, guarded);
@@ -55,6 +57,7 @@ final class DatabaseExplorerContextMenu {
                 var open = add(menu, "Open data editor", AllIcons.Actions.Preview, Action.OPEN_TABLE, true, connected, guarded);
                 open.setFont(open.getFont().deriveFont(Font.BOLD));
                 add(menu, "Open in SQL console", Icons.CONSOLE, Action.CONSOLE, true, connected, guarded);
+                add(menu, "Run SQL script…", Icons.SQL_FILE, Action.RUN_SCRIPT, true, connected, guarded);
                 if (!data.getTableMetadata().isView()) {
                     menu.addSeparator();
                     boolean foreign = data.getTableMetadata().isForeignTable();
