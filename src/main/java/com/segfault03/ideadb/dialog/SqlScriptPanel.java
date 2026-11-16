@@ -148,7 +148,9 @@ public final class SqlScriptPanel extends JPanel implements Disposable {
         // the schema on a row of its own, its label aligned with Connection and Script
         c.gridx = 0; c.gridy = 1; c.weightx = 0; c.fill = GridBagConstraints.NONE; c.insets = JBUI.insets(0, 0, 6, 8);
         form.add(databaseLabel, c);
-        c.gridx = 1; c.weightx = 1; c.fill = GridBagConstraints.HORIZONTAL; c.insets = JBUI.insetsBottom(6);
+        // sized for an ordinary schema name, as in the console, rather than stretched across the dialog
+        database.setPrototypeDisplayValue("database_name_123");
+        c.gridx = 1; c.weightx = 1; c.fill = GridBagConstraints.NONE; c.insets = JBUI.insetsBottom(6);
         form.add(database, c);
 
         c.gridx = 0; c.gridy = 2; c.weightx = 0; c.fill = GridBagConstraints.NONE; c.insets = JBUI.insets(0, 0, 6, 8);
