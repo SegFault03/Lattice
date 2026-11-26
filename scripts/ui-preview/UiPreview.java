@@ -1119,6 +1119,9 @@ public final class UiPreview {
         var list = (javax.swing.JList<?>)invokeResult(section, "recentList");
         list.setSelectedIndex(1);
         render(selected, theme + "-home-selected-340", 340, 620);
+        render(searchEverywhere("ord"), theme + "-home-search-everywhere-640", 640, 300);
+        render(searchEverywhere(""), theme + "-home-search-everywhere-empty-640", 640, 300);
+        render(searchEverywhereFirstRun(), theme + "-home-search-everywhere-first-run-640", 640, 300);
         Map<Object, Font> original = new HashMap<>();
         // Font scale 2.0 at UI scale 1.0, as the design concepts render it: one doubled text font, icons unchanged.
         Font base = UIManager.getFont("Label.font");
@@ -1134,6 +1137,47 @@ public final class UiPreview {
         } finally {
             original.forEach((key, font) -> UIManager.put(key, font));
         }
+    }
+
+    /** The Lattice tab's result list: production search and renderer over fixture connections, recents and cached tables. */
+    static JComponent searchEverywhere(String query) {
+        ConnectionConfig local = new ConnectionConfig(DatabaseType.HSQLDB, "Local development");
+        ConnectionConfig staging = new ConnectionConfig(DatabaseType.POSTGRESQL, "Staging");
+        ConnectionConfig orders = new ConnectionConfig(DatabaseType.H2, "Orders fixture");
+        var recents = List.of(
+                com.segfault03.ideadb.state.RecentItemsState.Item.table(orders.getId(), "PUBLIC", null, null, "ORDERS", "TABLE"),
+                com.segfault03.ideadb.state.RecentItemsState.Item.table(local.getId(), "PUBLIC", null, "PUBLIC", "CUSTOMERS", "TABLE"),
+                com.segfault03.ideadb.state.RecentItemsState.Item.console(staging.getId(), "app"));
+        java.util.function.Function<ConnectionConfig, List<com.segfault03.ideadb.state.MetadataCacheState.CachedTable>> tables = config ->
+                config == staging ? List.of(cached("app", "public", "orders"), cached("app", "public", "order_items"), cached("app", "public", "invoices"))
+                : config == local ? List.of(cached("PUBLIC", "PUBLIC", "ORDER_ITEMS"), cached("PUBLIC", "PUBLIC", "CUSTOMERS"))
+                : List.of(cached("PUBLIC", null, "ORDERS"));
+        return searchList(com.segfault03.ideadb.search.LatticeSearch.search(query, List.of(local, staging, orders), recents, tables), query);
+    }
+
+    static JComponent searchEverywhereFirstRun() {
+        return searchList(com.segfault03.ideadb.search.LatticeSearch.search("", List.of(), List.of(), config -> List.of()), "");
+    }
+
+    private static com.segfault03.ideadb.state.MetadataCacheState.CachedTable cached(String namespace, String schema, String name) {
+        return new com.segfault03.ideadb.state.MetadataCacheState.CachedTable(namespace, new TableMetadata(null, schema, name, "TABLE"));
+    }
+
+    private static JComponent searchList(List<com.segfault03.ideadb.search.LatticeSearch.Item> items, String query) {
+        var list = new JList<>(items.toArray(new com.segfault03.ideadb.search.LatticeSearch.Item[0]));
+        list.setCellRenderer(com.segfault03.ideadb.search.LatticeSearchContributor.renderer(() -> query));
+        list.setSelectedIndex(0);
+        JPanel panel = new JPanel(new BorderLayout());
+        // The query field belongs to the platform popup; a label stands in for it.
+        JLabel field = new JLabel(query.isEmpty() ? " " : query, com.intellij.icons.AllIcons.Actions.Search, SwingConstants.LEFT);
+        field.setBorder(com.intellij.util.ui.JBUI.Borders.empty(8));
+        panel.add(field, BorderLayout.NORTH);
+        panel.add(list, BorderLayout.CENTER);
+        JLabel advertisement = new JLabel("Enter opens · Alt+Enter opens a SQL console · searches loaded schemas only");
+        advertisement.setBorder(com.intellij.util.ui.JBUI.Borders.empty(4, 8));
+        advertisement.setForeground(com.segfault03.ideadb.ui.DatabaseUi.SECONDARY_TEXT);
+        panel.add(advertisement, BorderLayout.SOUTH);
+        return panel;
     }
 
     static void connectionMenuPreview(JComponent content, String buttonText, String name, int width, int height) throws Exception {

@@ -745,8 +745,11 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         DatabaseUi.connectionMenu(this::showAddConnectionDialog).show(invoker, 0, invoker.getHeight());
     }
 
-    private void showAddConnectionDialog(DatabaseType defaultType) {
-        ConnectionConfig newCfg = new ConnectionConfig(defaultType, "New " + defaultType.getDisplayName());
+    private void showAddConnectionDialog(DatabaseType defaultType) { addConnection(project, defaultType); }
+
+    /** Opens the connection dialog for a new connection of {@code type} and saves it on OK. */
+    public static void addConnection(Project project, DatabaseType type) {
+        ConnectionConfig newCfg = new ConnectionConfig(type, "New " + type.getDisplayName());
         newCfg.setDatabaseName("");
         newCfg.setUser("");
         ConnectionDialog dlg = new ConnectionDialog(project, newCfg, true);
@@ -754,6 +757,32 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
             ConnectionConfig result = dlg.getResultConfig();
             DatabaseSettingsState.getInstance().saveConnection(project, result);
         }
+    }
+
+    /** Shows the Lattice tool window and selects the connection, clearing a source filter that hides it. */
+    public static void revealConnection(Project project, String connectionId) {
+        var toolWindow = com.intellij.openapi.wm.ToolWindowManager.getInstance(project).getToolWindow("Lattice");
+        if (toolWindow == null) return;
+        toolWindow.activate(() -> {
+            for (var content : toolWindow.getContentManager().getContents())
+                if (content.getComponent() instanceof DatabaseMainPanel panel) panel.selectConnection(connectionId);
+        });
+    }
+
+    private void selectConnection(String connectionId) {
+        if (disposed) return;
+        DefaultMutableTreeNode target = null;
+        for (var node : treeModel.connectionNodes())
+            if (((TreeNodeData) node.getUserObject()).getConnectionConfig().getId().equals(connectionId)) target = node;
+        if (target == null) return;
+        TreeNodeData data = (TreeNodeData) target.getUserObject();
+        if (!treeModel.getVisibleTypes().contains(data.getDatabaseType())) applySourceFilter(java.util.EnumSet.allOf(DatabaseType.class));
+        if (searchBar.isVisible()) setSearchVisible(false);
+        TreePath path = new TreePath(target.getPath());
+        databaseTree.expandPath(path.getParentPath());
+        databaseTree.setSelectionPath(path);
+        databaseTree.scrollPathToVisible(path);
+        databaseTree.requestFocusInWindow();
     }
 
     private void editSelectedConnection() {

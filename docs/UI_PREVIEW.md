@@ -58,8 +58,16 @@ above the tree shows the last four, with a link to the rest; double-click or
 Enter reopens an item, Delete removes it. Recent items are stored per project in
 the workspace file and never shared.
 
+Search Everywhere has a **Lattice** tab (Double Shift, then Tab to it). With an
+empty query it lists recent items; a query matches recent items, tables and views
+in schemas Lattice has already loaded, connections, and data source names. Enter
+opens the item (a connection is selected in the explorer, a data source opens the
+connection dialog); Alt+Enter opens a SQL console instead, with a sample `SELECT`
+for a table. It reads only local state and never contacts a database.
+
 `--home-only` renders the first run, returning, few and long lists, collapsed,
-selected and 280 px narrow states in both themes, plus first run and returning at
+selected and 280 px narrow states in both themes, the Lattice tab's result list
+(query, empty query, first run), plus first run and returning at
 font scale 2.0 (one doubled text font, icons unchanged). `--all-previews` includes them.
 
 ## Explorer refresh behavior

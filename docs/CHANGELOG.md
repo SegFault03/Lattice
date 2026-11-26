@@ -24,6 +24,7 @@ Patch notes are selected by the exact release version, including prerelease suff
 ### Explorer and console
 
 - Lattice no longer opens a welcome tab. The explorer is home: with no connections it links each data source to its connection dialog, and a collapsible **Recent** section above the tree reopens the last tables, views and consoles of the project. The explorer's help button opens What's New.
+- Search Everywhere has a **Lattice** tab for recent items, tables in loaded schemas and connections. Enter opens; Alt+Enter opens a SQL console.
 - Run SQL script files from a connection, schema or table's context menu, the SQL console toolbar or a table's options menu. The dialog checks the script offline against the cached schema, previews it with problems marked on their lines, and runs it statement by statement with a run log of each result. Choose to stop or continue after an error, or run everything in one transaction that rolls back on error. MySQL `DELIMITER` lines are supported.
 
 ### SQL editor

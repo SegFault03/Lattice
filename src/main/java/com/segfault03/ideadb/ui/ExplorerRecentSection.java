@@ -37,10 +37,7 @@ final class ExplorerRecentSection extends JPanel {
 
     /** A recent item whose connection still exists. */
     record Entry(RecentItemsState.Item item, ConnectionConfig connection) {
-        String title() {
-            if (item.kind == RecentItemsState.Kind.CONSOLE) return "Console";
-            return item.schema == null || item.schema.isBlank() ? item.name : item.schema + "." + item.name;
-        }
+        String title() { return com.segfault03.ideadb.search.LatticeSearch.recentTitle(item); }
         Icon icon() {
             if (item.kind == RecentItemsState.Kind.CONSOLE) return Icons.CONSOLE;
             return new TableMetadata(null, null, item.name, item.tableType).isView() ? Icons.VIEW : Icons.TABLE;

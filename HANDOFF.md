@@ -32,16 +32,18 @@ Done (A+B):
 - `RecentItemsState` (project service, workspace file, newest first, 50 max), recorded in `DatabaseEditorManager.openTableData`/`openConsole`; `ExplorerRecentSection` above the tree: last 4, "N more…" popup with speed search, collapsible header (persisted), double-click/Enter opens, Delete or context menu removes, Clear Recent. Hidden while explorer search is open and when empty.
 - Previews: `python scripts/ui-preview.py --home-only --output .temp/ui-preview-home` renders every state in both themes and first run/returning at font 2.0 (2025.1 SDK, headless; not the tracked-image baseline).
 
+Done (C): `search/LatticeSearch` (pure ranking: recents, then cached tables by match degree capped at 50 and never repeating a recent table, then connections with an "Open SQL console" action, then data source names) and `LatticeSearchContributor` (separate Lattice tab; Enter opens, Alt+Enter console; connection selects it via `DatabaseMainPanel.revealConnection`). Previewed with the production renderer; the real popup is not captured yet.
+
 Deviations from concept 04 (tell the owner):
+- Search Everywhere puts the muted context right after the title (platform convention), not right-aligned.
 - Recent is fixed above the tree and does not scroll with it (matches the concept's long-list note, not a single scroll).
-- First-run hint says "Recent tables and consoles will appear here."; Search Everywhere and scripts are added to the copy when C lands and scripts are recorded.
+- Scripts are not recorded as recent items yet (the concept lists them).
 - Only the four existing engines; MariaDB and SQLite appear when their providers exist.
 - The tree keeps its visible "Data Sources" root; tags and status in tree rows are part of D.
 - The arrival motion (new connection rises into the tree) waits for the owner to confirm the motion defaults.
 
 Remaining for R7:
 - `screenshots/explorer-home.png` is the old welcome image renamed; re-render the featured images on IntelliJ 2026.2.3 Islands Light (`python scripts/ui-preview.py --ide-home <idea-2026.2.3>`).
-- C: Search Everywhere contributor (Lattice tab: recents, tables in loaded schemas, connections; Enter opens, Alt+Enter console).
 - D: environment tag connection setting and inline status/tag in tree rows (known state only).
 
 ## Waiting for the owner

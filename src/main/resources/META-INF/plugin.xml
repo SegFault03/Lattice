@@ -145,6 +145,7 @@
         <applicationService serviceImplementation="com.segfault03.ideadb.state.MetadataCacheState"/>
         <projectService serviceImplementation="com.segfault03.ideadb.state.TableDraftState"/>
         <projectService serviceImplementation="com.segfault03.ideadb.state.RecentItemsState"/>
+        <searchEverywhereContributor implementation="com.segfault03.ideadb.search.LatticeSearchContributor$Factory"/>
         <applicationService serviceImplementation="com.segfault03.ideadb.service.DatabaseTaskService"/>
         <applicationService serviceImplementation="com.segfault03.ideadb.service.DatabaseConnectionManager"/>
         <applicationService serviceImplementation="com.segfault03.ideadb.service.DriverRegistry"/>

@@ -200,6 +200,19 @@ public final class MetadataCacheState implements PersistentStateComponent<Metada
         return new ExplorerMetadataSnapshot(List.copyOf(namespaces), List.of(), 3);
     }
 
+    /** A cached table or view, without columns. */
+    public record CachedTable(String namespace, TableMetadata metadata) {}
+
+    /** Every table and view in the namespaces cached for {@code config}, without copying columns; empty when nothing is cached. */
+    public synchronized List<CachedTable> tables(ConnectionConfig config) {
+        var source = state.sources.get(config.getId());
+        if (source == null || !source.identity.equals(identity(config))) return List.of();
+        var tables = new ArrayList<CachedTable>();
+        source.namespaces.forEach((name, namespace) -> namespace.tables.values().forEach(table -> tables.add(
+                new CachedTable(name, new TableMetadata(table.catalog, table.schema, table.name, table.type, table.comment)))));
+        return tables;
+    }
+
     public synchronized void remove(String connectionId) { changed(connectionId); state.sources.remove(connectionId); }
 
     @Override public synchronized State getState() { return copy(state); }
