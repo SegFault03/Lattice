@@ -26,7 +26,7 @@ Take Lattice from 0.2.0-alpha to 1.0 as the data tools layer for IntelliJ IDEA w
 
 ## Design workflow
 - UI work follows `DESIGN.md` and the `design-primer` skill (`anthropic-skills:design-primer`; the repo has no `.claude/skills/` copy). Concepts: every state, light and dark, font 1.0 and 2.0, motion rows, the skill's concept viewer, renders only in `.temp/`.
-- Findings from the rebuild: `DatabaseUi.SECONDARY_TEXT` measures about 4.4:1 on the light panel (below 4.5:1); MariaDB and SQLite need icons; environment tags would be a new connection setting.
+- Findings from the rebuild: `DatabaseUi.SECONDARY_TEXT` may fall below 4.5:1 on the light panel (estimated from an assumed gray, not measured; check on a render); MariaDB and SQLite need icons; environment tags would be a new connection setting.
 
 ## Next
 - Milestone 0.3 data editor, starting with the T1.1 grid model spike.
