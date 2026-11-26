@@ -64,6 +64,7 @@
     </extensions>
 
     <extensions defaultExtensionNs="com.intellij">
+        <errorHandler implementation="com.segfault03.ideadb.release.GitHubErrorReporter"/>
         <postStartupActivity implementation="com.segfault03.ideadb.release.ReleaseNotesStartupActivity"/>
         <notificationGroup id="Lattice updates" displayType="BALLOON"/>
         <notificationGroup id="Lattice SQL editor" displayType="BALLOON"/>

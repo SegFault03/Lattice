@@ -263,6 +263,7 @@ public final class SqlScriptPanel extends JPanel implements Disposable {
         String text = path.getText().strip();
         if (text.equals(loadedPath) || phase == Phase.RUNNING) return;
         loadedPath = text;
+        resumeIndex = -1; // a different file never resumes another file's run
         fileFacts = "";
         if (text.isEmpty()) { setScript(null, null); return; }
         File file = new File(text.startsWith("~" + File.separator) ? System.getProperty("user.home") + text.substring(1) : text);
@@ -349,9 +350,24 @@ public final class SqlScriptPanel extends JPanel implements Disposable {
     public @Nullable SqlScript script() { return script; }
 
     /** Runs every statement of the script; the outcome of each arrives in the run log as it finishes. */
-    public void execute() {
-        if (script == null || script.statements().isEmpty() || phase == Phase.RUNNING) return;
-        SqlScript running = script;
+    public void execute() { execute(0); }
+
+    /**
+     * The 0-based statement a stopped run can resume from, or -1. Offered only when a run stopped on an error without a
+     * rollback, so every statement before it committed, and only while those statements are unchanged in the file.
+     */
+    public int resumeFrom() {
+        if (resumeIndex < 0 || script == null || phase == Phase.RUNNING || resumeIndex >= script.statements().size()) return -1;
+        for (int i = 0; i < resumeIndex; i++) if (!script.statements().get(i).sql().equals(resumePrefix.get(i))) return -1;
+        return resumeIndex;
+    }
+
+    /** Runs the statements from {@code from} (0-based) to the end. */
+    public void execute(int from) {
+        if (script == null || from < 0 || from >= script.statements().size() || phase == Phase.RUNNING) return;
+        SqlScript full = script;
+        SqlScript running = new SqlScript(full.text(), full.statements().subList(from, full.statements().size()));
+        runStart = from;
         String namespace = selectedNamespace();
         var options = new SqlScriptRunner.Options(stopOnError.isSelected(), singleTransaction.isSelected());
         SqlScriptRunner current = new SqlScriptRunner();
@@ -403,9 +419,20 @@ public final class SqlScriptPanel extends JPanel implements Disposable {
     }
 
     private @Nullable String summaryOverride;
+    private int runStart;
+    private int resumeIndex = -1;
+    private List<String> resumePrefix = List.of();
 
     void finish(SqlScriptRunner.Summary result) {
         lastRun = result;
+        resumeIndex = -1;
+        if (script != null && !result.rolledBack() && !result.cancelled() && result.connectionError() == null
+                && result.failed() == 1 && result.notRun() > 0) {
+            // Stopped at its first failure: the statements before it all succeeded and stay committed.
+            resumeIndex = runStart + result.succeeded();
+            resumePrefix = script.statements().subList(0, Math.min(resumeIndex, script.statements().size())).stream()
+                    .map(SqlScript.Statement::sql).toList();
+        }
         runner = null;
         summaryOverride = null;
         phase = Phase.DONE;

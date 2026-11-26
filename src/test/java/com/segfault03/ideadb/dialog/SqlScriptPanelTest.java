@@ -83,6 +83,22 @@ class SqlScriptPanelTest {
         });
     }
 
+    @Test void aStoppedRunResumesAtTheFailedStatementOnlyWhileEarlierStatementsAreUnchanged() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            var panel = new SqlScriptPanel(null, config(), "shop", () -> {});
+            panel.setScript("insert into a values (1);\ninsert into b values (2);\ninsert into c values (3)", null);
+            panel.finish(new SqlScriptRunner.Summary(1, 1, 1, false, false, 0, 10, null));
+            assertEquals(1, panel.resumeFrom());
+            panel.setScript("insert into a values (1);\ninsert into bb values (2);\ninsert into c values (3)", null);
+            assertEquals(1, panel.resumeFrom(), "fixing the failed statement keeps the resume point");
+            panel.setScript("insert into a values (9);\ninsert into bb values (2);\ninsert into c values (3)", null);
+            assertEquals(-1, panel.resumeFrom(), "an edited committed statement must not be skipped");
+            panel.finish(new SqlScriptRunner.Summary(1, 1, 1, false, true, 0, 10, null));
+            assertEquals(-1, panel.resumeFrom(), "a rolled-back run starts over");
+            panel.dispose();
+        });
+    }
+
     @Test void postgresDdlIsTransactional() {
         assertNull(SqlScriptPanel.implicitDdlCommit(DatabaseType.POSTGRESQL));
         assertEquals("MySQL commits CREATE, ALTER and DROP immediately", SqlScriptPanel.implicitDdlCommit(DatabaseType.MYSQL));

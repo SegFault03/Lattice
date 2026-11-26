@@ -54,7 +54,11 @@ public final class SqlScriptDialog extends DialogWrapper {
     @Override public @Nullable JComponent getPreferredFocusedComponent() { return panel.path.getTextField(); }
     @Override protected @Nullable String getDimensionServiceKey() { return "Lattice.SqlScriptDialog"; }
     @Override protected Action @NotNull [] createLeftSideActions() { return new Action[]{copyLog}; }
-    @Override protected Action @NotNull [] createActions() { return new Action[]{recheck, getOKAction(), getCancelAction()}; }
+    /** After a stopped run, the default resumes at the failed statement; this reruns the whole script on purpose. */
+    private final DialogWrapperAction runAll = new DialogWrapperAction("Run All") {
+        @Override protected void doAction(ActionEvent event) { panel.execute(0); }
+    };
+    @Override protected Action @NotNull [] createActions() { return new Action[]{recheck, runAll, getOKAction(), getCancelAction()}; }
 
     @Override protected void doOKAction() {
         if (panel.phase() == SqlScriptPanel.Phase.RUNNING) { panel.stop(); return; }
@@ -63,7 +67,8 @@ public final class SqlScriptDialog extends DialogWrapper {
                         "The check found " + errors + (errors == 1 ? " error" : " errors") + " in this script. The database may reject those statements, "
                                 + "and the check can be wrong about tables the script itself creates.\n\nRun the script anyway?")
                 .yesText("Run Anyway").noText("Cancel").icon(Messages.getWarningIcon()).ask(getRootPane())) return;
-        panel.execute();
+        int resume = panel.resumeFrom();
+        panel.execute(Math.max(resume, 0));
     }
 
     @Override public void doCancelAction() {
@@ -75,7 +80,12 @@ public final class SqlScriptDialog extends DialogWrapper {
         boolean running = panel.phase() == SqlScriptPanel.Phase.RUNNING;
         var script = panel.script();
         boolean runnable = script != null && !script.statements().isEmpty();
-        getOKAction().putValue(Action.NAME, running ? "Stop" : "Execute");
+        int resume = running ? -1 : panel.resumeFrom();
+        getOKAction().putValue(Action.NAME, running ? "Stop" : resume >= 0 ? "Run from Statement " + (resume + 1) : "Execute");
+        runAll.setEnabled(resume >= 0);
+        JButton runAllButton = getButton(runAll);
+        if (runAllButton != null) runAllButton.setVisible(resume >= 0);
+        runAll.putValue(Action.SMALL_ICON, AllIcons.Actions.Execute);
         getOKAction().putValue(Action.SMALL_ICON, running ? Icons.STOP : AllIcons.Actions.Execute);
         getOKAction().setEnabled(running || runnable);
         getCancelAction().putValue(Action.NAME, "Close");

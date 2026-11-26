@@ -4,6 +4,23 @@ Patch notes are selected by the exact release version, including prerelease suff
 
 ## [Unreleased]
 
+### Safety and data
+
+- Drop, truncate and delete confirmations default to Cancel, so Enter never runs them.
+- SQL NULL and DEFAULT keep their italic marker in selected, modified and new rows, so they never read as the text `NULL`.
+- CSV export writes NULL as an empty field and an empty string as `""`.
+- A script run that stops at an error can resume at the failed statement.
+- The cell context menu adds Copy value, Inspect and Delete row.
+- Errors in Lattice offer **Report to Lattice on GitHub**, which opens a prefilled issue to review before submitting.
+
+### Responsiveness and accessibility
+
+- Saving or removing a connection no longer blocks the IDE while the system keychain responds.
+- Closing the script dialog during a run no longer waits for the driver's cancel.
+- Grid columns fit their values once rows first load into a table that opened empty.
+- Hints and secondary text meet 4.5:1 contrast in light and dark themes; the welcome screen follows the IDE font size and keeps its text column in narrow editors.
+- A disabled **Stage change** no longer looks like an available action.
+
 ### Explorer and console
 
 - Run SQL script files from a connection, schema or table's context menu, the SQL console toolbar or a table's options menu. The dialog checks the script offline against the cached schema, previews it with problems marked on their lines, and runs it statement by statement with a run log of each result. Choose to stop or continue after an error, or run everything in one transaction that rolls back on error. MySQL `DELIMITER` lines are supported.

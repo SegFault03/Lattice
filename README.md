@@ -19,7 +19,7 @@ Lattice is in alpha; the current release is **0.2.0-alpha**. Expect changes betw
 - Value Workspace for formatted/raw inspection, column details, editing and explicit change staging.
 - Editable table grids with pagination, filtering, batch saves, explicit NULL/default values and draft recovery.
 - Create/alter table dialogs with a full SQL preview, batched changes and recovery after partial DDL failures.
-- CSV, JSON, SQL INSERT and CREATE TABLE exports.
+- CSV, JSON, SQL INSERT and CREATE TABLE exports. CSV writes SQL NULL as an empty field and an empty string as `""`.
 - Bundled, checksum-verified downloadable and local JAR drivers, with cached driver reuse.
 - Server and driver version information through **Test Connection**.
 - Offline schema browsing from cached metadata; changes refresh the explorer and affected editors.
@@ -140,6 +140,7 @@ Right-click a connection, schema or table and choose **Run SQL script…**, or u
 - A script with check errors asks for confirmation before it runs, since the check cannot see tables the script itself creates.
 - MySQL `DELIMITER` lines are handled as the `mysql` client does, so stored routines run as one statement.
 - Statements that return rows are only counted. Files larger than 5 MB are refused.
+- After a run stops at an error without a rollback, **Run from Statement N** resumes at the failed statement, so the statements that already committed do not run twice; **Run All** starts over. Editing a statement before the failed one in the file removes the resume option.
 
 Database changes automatically refresh the explorer and affected editors. Explorer refreshes preserve expanded and collapsed branches, selection and scroll position, including changes made while a refresh runs. Pending edits defer a grid reload until Commit or Revert. When Lattice first opens in each IDE project session, it attempts to refresh every saved connection in the background, including cached connections. Unavailable servers retain their cached metadata and show a retry status without startup error dialogs. The explorer also retains the last successful metadata for offline browsing and SQL generation; cached metadata can be stale and contains no table rows. Connect or refresh for current definitions and live operations. Generating an INSERT on a connected table loads its columns when needed.
 
