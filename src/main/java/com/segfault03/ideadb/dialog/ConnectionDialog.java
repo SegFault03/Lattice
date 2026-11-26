@@ -22,6 +22,7 @@ import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.model.ConnectionTestResult;
 import com.segfault03.ideadb.model.DatabaseType;
 import com.segfault03.ideadb.model.HsqlMode;
+import com.segfault03.ideadb.model.Environment;
 import com.segfault03.ideadb.model.DriverSource;
 import com.segfault03.ideadb.model.InstalledDriver;
 import com.segfault03.ideadb.service.DriverCatalog;
@@ -104,6 +105,7 @@ public class ConnectionDialog extends DialogWrapper {
 
     // HSQLDB fields
     private JComboBox<HsqlMode> hsqlModeCombo;
+    private JComboBox<Environment> environmentCombo;
     private TextFieldWithBrowseButton hsqlFileField;
     private JBTextField hsqlMemNameField;
     private JBTextField hsqlServerHostField;
@@ -173,6 +175,9 @@ public class ConnectionDialog extends DialogWrapper {
         topPanel.addSection(0, "Data source");
         nameField = ConnectionFormPanel.width(DatabaseInputs.textField(), 360);
         topPanel.addRow(1, "Name:", nameField, false);
+        environmentCombo = ConnectionFormPanel.width(DatabaseInputs.comboBox(Environment.values()), 220);
+        environmentCombo.setToolTipText("Shown beside the connection in the explorer and in Search Everywhere");
+        topPanel.addRow(2, "Environment:", environmentCombo, false);
         typeCombo = ConnectionFormPanel.width(DatabaseInputs.comboBox(DatabaseType.values()), 220);
         // Keep one selection model for saved values, URL detection, and provider switching.
         // The visible selector lives in the left-hand source panel.
@@ -665,6 +670,7 @@ public class ConnectionDialog extends DialogWrapper {
         ConnectionConfig c = new ConnectionConfig();
         c.setId(config.getId());
         c.setName(nameField != null ? nameField.getText().trim() : config.getName());
+        c.setEnvironment(environmentCombo != null ? (Environment) environmentCombo.getSelectedItem() : config.getEnvironment());
         DatabaseType type = (DatabaseType) typeCombo.getSelectedItem();
         c.setType(type);
         DriverSource driverSource = (DriverSource) driverSourceCombo.getSelectedItem();
@@ -1090,6 +1096,7 @@ public class ConnectionDialog extends DialogWrapper {
 
     private void loadValues() {
         nameField.setText(config.getName());
+        environmentCombo.setSelectedItem(config.getEnvironment());
         typeCombo.setSelectedItem(config.getType());
         dbTypeCardLayout.show(dbTypeCardPanel, DatabaseProviders.get(config.getType()).connectionForm().name());
 
@@ -1144,6 +1151,7 @@ public class ConnectionDialog extends DialogWrapper {
     private void saveValues() {
         ConnectionConfig temp = createTempConfig();
         config.setName(temp.getName());
+        config.setEnvironment(temp.getEnvironment());
         config.setType(temp.getType());
         config.setHsqlMode(temp.getHsqlMode());
         config.setHost(temp.getHost());

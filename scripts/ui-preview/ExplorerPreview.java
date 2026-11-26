@@ -198,6 +198,32 @@ public final class ExplorerPreview {
         for (int i = entries.size(); i < recents; i++)
             entries.add(entry(reporting, com.segfault03.ideadb.state.RecentItemsState.Item.table(reporting.getId(), "reporting", null,
                     "tenant_" + String.format("%02d", i % 8 + 1), "invoices_" + i, "TABLE")));
+        // Environment tags and the one status Lattice knows without contacting a server: the last open failed.
+        JTree tree = (JTree) panel.getClientProperty("lattice.preview.explorer.tree");
+        DefaultTreeModel model = (DefaultTreeModel) tree.getModel();
+        java.util.List<TreePath> expanded = new java.util.ArrayList<>();
+        for (int row = 0; row < tree.getRowCount(); row++) if (tree.isExpanded(row)) expanded.add(tree.getPathForRow(row));
+        DefaultMutableTreeNode failed = null;
+        java.util.Enumeration<?> nodes = ((DefaultMutableTreeNode) model.getRoot()).depthFirstEnumeration();
+        while (nodes.hasMoreElements()) {
+            DefaultMutableTreeNode node = (DefaultMutableTreeNode) nodes.nextElement();
+            if (!(node.getUserObject() instanceof TreeNodeData data) || data.getType() != TreeNodeData.NodeType.CONNECTION) continue;
+            ConnectionConfig connection = data.getConnectionConfig();
+            switch (connection.getName()) {
+                case "Reporting cluster" -> connection.setEnvironment(Environment.PRODUCTION);
+                case "Local H2 database" -> {
+                    connection.setEnvironment(Environment.DEVELOPMENT);
+                    node.removeAllChildren();
+                    node.add(new DefaultMutableTreeNode(TreeNodeData.error("Connection failed · Refresh to retry", "Timed out after 10 s")));
+                    failed = node;
+                }
+                case "Scratch database" -> connection.setEnvironment(Environment.LOCAL);
+                default -> connection.setEnvironment(Environment.STAGING);
+            }
+        }
+        model.reload();
+        for (TreePath path : expanded) tree.expandPath(path);
+        if (failed != null) tree.expandPath(new TreePath(failed.getPath()));
         ExplorerRecentSection section = ExplorerRecentSection.preview(entries.subList(0, Math.min(recents, entries.size())), collapsed);
         panel.putClientProperty("lattice.preview.explorer.recent", section);
         JPanel home = new JPanel(new BorderLayout());

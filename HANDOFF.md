@@ -34,7 +34,10 @@ Done (A+B):
 
 Done (C): `search/LatticeSearch` (pure ranking: recents, then cached tables by match degree capped at 50 and never repeating a recent table, then connections with an "Open SQL console" action, then data source names) and `LatticeSearchContributor` (separate Lattice tab; Enter opens, Alt+Enter console; connection selects it via `DatabaseMainPanel.revealConnection`). Previewed with the production renderer; the real popup is not captured yet.
 
+Done (D): `model/Environment` and `ConnectionConfig.environment` (Environment row in the connection dialog); the tree row appends "Unreachable" (error color) when the connection's first child is an error node and it is not connected, then the tag in `DatabaseUi.environmentColor` (local omitted); tooltip carries both. Search Everywhere connection context adds the tag.
+
 Deviations from concept 04 (tell the owner):
+- At narrow widths tree rows clip the tag at the edge (the concept flagged this); the tooltip carries it. No connected/checking word is shown: the plug icon and bold name already say connected, and Lattice never pings.
 - Search Everywhere puts the muted context right after the title (platform convention), not right-aligned.
 - Recent is fixed above the tree and does not scroll with it (matches the concept's long-list note, not a single scroll).
 - Scripts are not recorded as recent items yet (the concept lists them).
@@ -44,7 +47,6 @@ Deviations from concept 04 (tell the owner):
 
 Remaining for R7:
 - `screenshots/explorer-home.png` is the old welcome image renamed; re-render the featured images on IntelliJ 2026.2.3 Islands Light (`python scripts/ui-preview.py --ide-home <idea-2026.2.3>`).
-- D: environment tag connection setting and inline status/tag in tree rows (known state only).
 
 ## Waiting for the owner
 - Motion defaults proposed in the viewer (quiet, ease-out-quart, 150 ms state changes, one focal moment when the first connection arrives); record in `DESIGN.md` once the owner confirms.

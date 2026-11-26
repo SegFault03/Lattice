@@ -18,6 +18,15 @@ public final class DatabaseUi {
     public static final Color POSITIVE_ACTION_COLOR = new JBColor(new Color(0x2E7D32), new Color(0x238636));
     /** The platform's default-button blue, for the one action a dialog or editor is for. */
     public static final Color PRIMARY_ACTION_COLOR = JBColor.namedColor("Button.default.startBackground", new JBColor(0x3574F0, 0x3574F0));
+    /** Environment tag text; each pair keeps 4.5:1 on the light and dark panel backgrounds. */
+    public static Color environmentColor(com.segfault03.ideadb.model.Environment environment) {
+        return switch (environment) {
+            case PRODUCTION -> new JBColor(0xAD241D, 0xF2B8B5);
+            case STAGING -> new JBColor(0x855000, 0xF0BE6E);
+            case DEVELOPMENT -> new JBColor(0x2A56A3, 0xB4CEFB);
+            case LOCAL, NONE -> new JBColor(0x3D6829, 0xB4D9A3);
+        };
+    }
     public static final Color DESTRUCTIVE_ACTION_COLOR = new JBColor(new Color(0xC62828), new Color(0xC43D3D));
     // The new UI's toggled tool button fill; a theme's pressed color can be its light default under a dark theme.
     /**

@@ -20,6 +20,7 @@ public class ConnectionConfig {
     private DriverSource driverSource = DriverSource.BUNDLED;
     private String driverVersion = "";
     private String driverJarPath = "";
+    private Environment environment = Environment.NONE;
 
     public ConnectionConfig() {
     }
@@ -55,8 +56,12 @@ public class ConnectionConfig {
         c.driverSource = this.driverSource;
         c.driverVersion = this.driverVersion;
         c.driverJarPath = this.driverJarPath;
+        c.environment = this.environment;
         return c;
     }
+
+    public Environment getEnvironment() { return environment == null ? Environment.NONE : environment; }
+    public void setEnvironment(Environment environment) { this.environment = environment; }
 
     public DriverSource getDriverSource() { return driverSource == null ? DriverSource.BUNDLED : driverSource; }
     public void setDriverSource(DriverSource source) { driverSource = source; }

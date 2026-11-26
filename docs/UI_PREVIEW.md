@@ -58,6 +58,13 @@ above the tree shows the last four, with a link to the rest; double-click or
 Enter reopens an item, Delete removes it. Recent items are stored per project in
 the workspace file and never shared.
 
+Each connection can name its environment (none, local, development, staging or
+production) in the connection dialog. The explorer shows the tag beside the
+connection in its own color, except for local, and in its tooltip; Search
+Everywhere adds it to the connection's context. When the last attempt to open a
+connection failed, its row also says **Unreachable**. Lattice never checks a
+server on its own to show status.
+
 Search Everywhere has a **Lattice** tab (Double Shift, then Tab to it). With an
 empty query it lists recent items; a query matches recent items, tables and views
 in schemas Lattice has already loaded, connections, and data source names. Enter

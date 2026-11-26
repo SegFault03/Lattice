@@ -95,7 +95,9 @@ public final class LatticeSearch {
     }
 
     private static Item connectionItem(ConnectionConfig connection) {
-        return new Item(Kind.CONNECTION, connection.getName(), connection.getType().getDisplayName() + " connection", connection,
+        String tag = connection.getEnvironment().tag();
+        return new Item(Kind.CONNECTION, connection.getName(), connection.getType().getDisplayName() + " connection"
+                + (tag.isEmpty() ? "" : " · " + tag), connection,
                 null, null, null, connection.getType());
     }
 

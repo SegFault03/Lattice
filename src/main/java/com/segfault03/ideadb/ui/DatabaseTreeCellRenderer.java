@@ -4,6 +4,8 @@ import com.intellij.icons.AllIcons;
 import com.intellij.ui.ColoredTreeCellRenderer;
 import com.intellij.ui.SimpleTextAttributes;
 import com.intellij.ui.RowIcon;
+import com.segfault03.ideadb.model.ConnectionConfig;
+import com.segfault03.ideadb.model.Environment;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
@@ -43,12 +45,24 @@ public class DatabaseTreeCellRenderer extends ColoredTreeCellRenderer {
                 break;
 
             case CONNECTION:
-                String product = data.getConnectionConfig() == null ? "" : " · " + data.getConnectionConfig().getType().getDisplayName();
-                setToolTipText(data.getName() + product + (data.isConnected()
-                        ? " · Connected · Expand to browse databases" : data.isLoaded()
+                ConnectionConfig config = data.getConnectionConfig();
+                Environment environment = config == null ? Environment.NONE : config.getEnvironment();
+                // Status comes only from what Lattice already knows: an open session, or the last open having failed.
+                boolean unreachable = !data.isConnected() && node.getChildCount() > 0
+                        && ((DefaultMutableTreeNode) node.getFirstChild()).getUserObject() instanceof TreeNodeData child
+                        && child.getType() == TreeNodeData.NodeType.ERROR;
+                String product = config == null ? "" : " · " + config.getType().getDisplayName();
+                String place = environment == Environment.NONE ? "" : " · " + environment.getDisplayName();
+                setToolTipText(data.getName() + product + place + (data.isConnected()
+                        ? " · Connected · Expand to browse databases" : unreachable
+                        ? " · Unreachable · Refresh to retry" : data.isLoaded()
                         ? " · Disconnected · Cached metadata · Refresh to connect" : " · Disconnected · Expand to connect"));
                 setIcon(new RowIcon(Icons.DATABASE, data.isConnected() ? Icons.PLUG_CONNECTED : Icons.PLUG_DISCONNECTED));
                 appendName(tree, data, data.getName(), data.isConnected() ? SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES : SimpleTextAttributes.REGULAR_ATTRIBUTES);
+                if (unreachable) append("  Unreachable", SimpleTextAttributes.ERROR_ATTRIBUTES);
+                // Local is the quiet default; every other environment is named beside the connection.
+                if (environment != Environment.NONE && environment != Environment.LOCAL)
+                    append("  " + environment.tag(), new SimpleTextAttributes(SimpleTextAttributes.STYLE_PLAIN, DatabaseUi.environmentColor(environment)));
                 getAccessibleContext().setAccessibleDescription(getToolTipText());
                 break;
 
