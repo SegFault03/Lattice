@@ -67,18 +67,18 @@ These replace parts of the current design; each starts with a spike or concept r
 Each milestone is a release. Sizes: S ≤ 1 day, M 2–4 days, L 1–2 weeks, XL 2+ weeks.
 
 ### 0.2.x: stabilize (now)
-- [ ] T0.1 Destructive prompts default to Cancel; typed name for DROP TABLE/SCHEMA (S)
-- [ ] T0.2 NULL/DEFAULT marker in every grid state (S)
-- [ ] T0.3 CSV: NULL as empty unquoted, empty string as `""` (S)
-- [ ] T0.4 Script dialog cancel off the EDT (S)
-- [ ] T0.5 PasswordSafe off the EDT and outside the settings lock (M)
-- [ ] T0.6 Refit grid columns when data first arrives; keep user-resized widths (S)
-- [ ] T0.7 Secondary text contrast; `JBFont` for welcome type; welcome narrow layout (S)
-- [ ] T0.8 Inspector: one disabled style; neutral Cancel (S)
-- [ ] T0.9 Cell context menu: Copy, Copy as SQL literal, Edit, Inspect, Delete row (S)
-- [ ] T0.10 Script dialog: "Run from statement N" after a stopped run; full error visible (M)
+- [x] T0.1 Destructive prompts default to Cancel (S); typed-name confirmation moved to T3.5
+- [x] T0.2 NULL/DEFAULT marker in every grid state (S)
+- [x] T0.3 CSV: NULL as empty unquoted, empty string as `""` (S)
+- [x] T0.4 Script dialog cancel off the EDT (S)
+- [x] T0.5 PasswordSafe off the EDT and outside the settings lock (M)
+- [x] T0.6 Refit grid columns when data first arrives; keep user-resized widths (S)
+- [x] T0.7 Secondary text contrast; `JBFont` for welcome type; welcome narrow layout (S)
+- [~] T0.8 Inspector: one disabled style (done); neutral Cancel waits for the owner (documented design choice) (S)
+- [x] T0.9 Cell context menu: Copy value, Inspect, Delete row; menu now targets the clicked cell (S). Copy as SQL literal moves to T1.4
+- [x] T0.10 Script dialog: "Run from Statement N" after a stopped run; full statement and error text in a tooltip (M)
 - [ ] T0.11 Investigate the failed `sourceFilterOnly` and UI-scale-2.0 capture runs (S)
-- [ ] T0.12 Error reporter: `ErrorReportSubmitter` that opens a prefilled GitHub issue (S)
+- [x] T0.12 Error reporter: `ErrorReportSubmitter` that opens a prefilled GitHub issue (S)
 
 ### 0.3: data editor (R2, R1, R3)
 - [ ] T1.1 Spike: `GridModel`/`ChangeSet`/`GridView` split behind the current UI (M)
@@ -110,7 +110,7 @@ Each milestone is a release. Sizes: S ≤ 1 day, M 2–4 days, L 1–2 weeks, XL
 - [ ] T3.2 MariaDB provider: driver, dialect differences, version detection, tests (L)
 - [ ] T3.3 SSH tunnel (key, agent, password; jump host) (L)
 - [ ] T3.4 SSL/TLS settings UI per engine (CA, client cert, verify mode) (M)
-- [ ] T3.5 Production guard: connection color and label, read-only mode, confirm all writes on tagged connections (M)
+- [ ] T3.5 Production guard: connection color and label, read-only mode, confirm all writes on tagged connections, typed-name confirmation for DROP on tagged connections (M)
 - [ ] T3.6 Keep-alive, auto-reconnect, per-connection init SQL and timeouts (M, R6)
 - [ ] T3.7 Async credentials service (M, R6)
 - [ ] T3.8 Spike R4: read IDE free-tier data sources on 2025.3+ (S), then build (L)
@@ -125,7 +125,7 @@ Each milestone is a release. Sizes: S ≤ 1 day, M 2–4 days, L 1–2 weeks, XL
 - [ ] T4.6 Create/alter: indexes and foreign keys (M)
 
 ### 0.9: beta
-- [ ] T5.1 Welcome as home (R7, concept pick first) (M)
+- [ ] T5.1 Welcome as home (R7): concepts in `design/welcome-home/`, waiting for the owner's pick (M)
 - [ ] T5.2 Accessibility pass: keyboard-only walk, screen reader names, high contrast theme, font scale 2.0 (M)
 - [ ] T5.3 Performance budget: 100k-row tables, 500-table schemas, cold start under 200 ms of plugin time (M)
 - [ ] T5.4 Docs: getting started, keyboard reference, migration notes; Marketplace listing, screenshots, video (M)

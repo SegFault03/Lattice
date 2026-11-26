@@ -607,7 +607,15 @@ public final class SqlScriptPanel extends JPanel implements Disposable {
     // ---- tables -----------------------------------------------------------------------------------------------------
 
     private static JBTable table(AbstractTableModel model, int[] widths) {
-        JBTable table = new JBTable(model);
+        JBTable table = new JBTable(model) {
+            /** Long statements and server errors are cut to the column; the tooltip shows the whole text (Copy Log has it too). */
+            @Override public String getToolTipText(java.awt.event.MouseEvent event) {
+                int row = rowAtPoint(event.getPoint()), column = columnAtPoint(event.getPoint());
+                if (row < 0 || column < 0) return null;
+                Object value = getValueAt(row, column);
+                return value instanceof String text && !text.isBlank() ? text : null;
+            }
+        };
         table.setShowGrid(false);
         table.setStriped(false);
         table.setRowHeight(JBUI.scale(24));
