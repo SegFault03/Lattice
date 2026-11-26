@@ -239,6 +239,17 @@ public final class ExplorerPreview {
         return new ExplorerRecentSection.Entry(item, connection);
     }
 
+    /** One moment of a newly added connection arriving in the tree, {@code elapsedMs} after it was added. */
+    public static JPanel arrival(ConnectionConfig config, long elapsedMs) {
+        JPanel panel = create(config, false);
+        JTree tree = (JTree) panel.getClientProperty("lattice.preview.explorer.tree");
+        // A frozen clock: the arrival starts at 0 and is painted at elapsedMs, whatever the render takes.
+        long[] now = {0};
+        new ConnectionArrival(tree, () -> now[0]).start(config.getId());
+        now[0] = elapsedMs * 1_000_000;
+        return panel;
+    }
+
     public static JPanel error(ConnectionConfig config) {
         JPanel panel = create(config, false);
         JTree tree = (JTree)((JScrollPane)((BorderLayout)panel.getLayout()).getLayoutComponent(BorderLayout.CENTER)).getViewport().getView();

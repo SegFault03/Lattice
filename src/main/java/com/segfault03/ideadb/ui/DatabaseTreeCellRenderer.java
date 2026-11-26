@@ -12,12 +12,14 @@ import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
 
 public class DatabaseTreeCellRenderer extends ColoredTreeCellRenderer {
+    private ConnectionArrival.Frame arrival;
 
     @Override
     public void customizeCellRenderer(@NotNull JTree tree, Object value, boolean selected, boolean expanded,
                                       boolean leaf, int row, boolean hasFocus) {
         setToolTipText(null);
         getAccessibleContext().setAccessibleDescription(null);
+        arrival = null;
         if (!(value instanceof DefaultMutableTreeNode)) {
             return;
         }
@@ -64,6 +66,8 @@ public class DatabaseTreeCellRenderer extends ColoredTreeCellRenderer {
                 if (environment != Environment.NONE && environment != Environment.LOCAL)
                     append("  " + environment.tag(), new SimpleTextAttributes(SimpleTextAttributes.STYLE_PLAIN, DatabaseUi.environmentColor(environment)));
                 getAccessibleContext().setAccessibleDescription(getToolTipText());
+                if (config != null && tree.getClientProperty(ConnectionArrival.PROPERTY) instanceof ConnectionArrival arrivals)
+                    arrival = arrivals.frame(config.getId());
                 break;
 
             case DATABASE:
@@ -138,6 +142,25 @@ public class DatabaseTreeCellRenderer extends ColoredTreeCellRenderer {
                     + " · Cached metadata · Disconnected · Refresh to reconnect");
             getAccessibleContext().setAccessibleDescription(getToolTipText());
             if (getIcon() != null) setIcon(com.intellij.openapi.util.IconLoader.getTransparentIcon(getIcon(), 0.4f));
+        }
+    }
+
+    /** A newly added connection paints over a fading accent tint, rising into place as it fades in. */
+    @Override protected void paintComponent(java.awt.Graphics graphics) {
+        if (arrival == null) { super.paintComponent(graphics); return; }
+        java.awt.Graphics2D g = (java.awt.Graphics2D) graphics.create();
+        try {
+            java.awt.Color accent = ConnectionArrival.ACCENT;
+            g.setColor(new java.awt.Color(accent.getRed(), accent.getGreen(), accent.getBlue(), Math.round(255 * arrival.tint())));
+            g.fillRect(0, 0, getWidth(), getHeight());
+            g.translate(0, com.intellij.util.ui.JBUI.scale(arrival.dy()));
+            g.setComposite(java.awt.AlphaComposite.SrcOver.derive(arrival.alpha()));
+            // The renderer's own background would cover the tint; the tree has already painted the row beneath.
+            boolean opaque = isOpaque();
+            setOpaque(false);
+            try { super.paintComponent(g); } finally { setOpaque(opaque); }
+        } finally {
+            g.dispose();
         }
     }
 

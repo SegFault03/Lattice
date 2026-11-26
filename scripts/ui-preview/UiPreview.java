@@ -1122,6 +1122,10 @@ public final class UiPreview {
         render(searchEverywhere("ord"), theme + "-home-search-everywhere-640", 640, 300);
         render(searchEverywhere(""), theme + "-home-search-everywhere-empty-640", 640, 300);
         render(searchEverywhereFirstRun(), theme + "-home-search-everywhere-first-run-640", 640, 300);
+        // The arrival of a new connection: start, mid-rise, settled under the tint, tint fading, tint gone.
+        // Reduced motion paints the 240 ms frame from the start.
+        for (long ms : new long[]{0, 80, 240, 400, 700})
+            render(com.segfault03.ideadb.ui.ExplorerPreview.arrival(mysql, ms), theme + "-home-arrival-" + ms + "ms-340", 340, 420);
         Map<Object, Font> original = new HashMap<>();
         // Font scale 2.0 at UI scale 1.0, as the design concepts render it: one doubled text font, icons unchanged.
         Font base = UIManager.getFont("Label.font");

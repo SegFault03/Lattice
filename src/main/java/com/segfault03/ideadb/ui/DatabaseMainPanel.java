@@ -56,6 +56,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     private final CardLayout explorerLayout = new CardLayout();
     private final JPanel explorerCards = new JPanel(explorerLayout);
     private ExplorerRecentSection recentSection;
+    private ConnectionArrival arrival;
 
     public DatabaseMainPanel(Project project) {
         super(new BorderLayout(0, 0));
@@ -88,6 +89,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     @Override public void dispose() {
         if (searchController != null) searchController.close();
         disposed=true; tasks.cancelPending();
+        if (arrival != null) arrival.stop();
         ToolTipManager.sharedInstance().unregisterComponent(databaseTree);
         com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread(tasks::close);
     }
@@ -111,6 +113,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         treeModel = new DatabaseSourceTreeModel(rootNode);
         databaseTree = new Tree(treeModel);
         databaseTree.setCellRenderer(new DatabaseTreeCellRenderer());
+        arrival = new ConnectionArrival(databaseTree);
         databaseTree.putClientProperty(com.intellij.ui.AnimatedIcon.ANIMATION_IN_RENDERER_ALLOWED, Boolean.TRUE);
         databaseTree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
         databaseTree.setRootVisible(true);
@@ -216,6 +219,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 TreePath path = new TreePath(node.getPath());
                 databaseTree.expandPath(path.getParentPath());
                 databaseTree.scrollPathToVisible(path);
+                arrival.start(id);
             }
         }
         updateSelectionActions();

@@ -59,7 +59,10 @@ Always: real renders with real data, the skill's coverage matrix, motion designe
 
 ## Motion scheme
 - No animation framework found. Timers exist only for delays: hover cards (`SqlCardHoverController`), alter-table preview (300 ms), copied hint (1800 ms), copy hover (120 ms).
-- Explorer home ships without animation: lists, filtering, selection and collapse are instant (platform behavior). Proposed default, not yet confirmed by the owner: quiet and IDE-native, feedback 100-150 ms, state changes 150 ms, ease-out-quart, one authored moment per surface (a new connection rising 8 px into the tree), reduced motion keeps opacity and color only. Record it here once confirmed.
+- Personality (owner, 2026-11-26): quiet and IDE-native. Feedback 100-150 ms, state changes 150 ms, ease-out-quart (cubic-bezier(0.25, 1, 0.5, 1)), exits about 2/3 of entrances, no bounce, one authored moment per surface.
+- Instant by design (platform list behavior): filtering, moving the selection, expanding and collapsing, opening an item.
+- Explorer's authored moment (`ConnectionArrival`, painted by `DatabaseTreeCellRenderer`): a newly added connection's row rises 8 px and fades in over 240 ms on an accent tint (`ConnectionArrival.ACCENT`, 22%) that holds 200 ms and fades over 400 ms. The tint covers the row's icon and text, not the full tree width.
+- Reduced motion: the IDE has no reduced-motion setting, so Lattice reduces motion when a screen reader is active or in a remote desktop session: nothing moves, the tint shows at once and fades the same way. Feedback that carries meaning (opacity, color) is never removed.
 
 ## Banned in this project
 - A plugin-owned editor tab as a home or marketing page; marketing heroes and card grids on Operate surfaces.
@@ -93,3 +96,4 @@ Always: real renders with real data, the skill's coverage matrix, motion designe
 | 2026-11-26 | Created by `init`; UI rules moved from CLAUDE.md | One home for UI rules |
 | 2026-11-26 | `init` re-run against design-primer 2.0.0: shared block, artifact-based concepts, pointer line | Match the updated skill |
 | 2026-11-26 | Welcome as home: built and accepted 04 Explorer home with 03's ranked search as the Search Everywhere tab and 02's tags and status; welcome tab removed | A data tools layer should not compete with code for the editor area. Rejected: 02 Connection board (longest page, recents split per connection), 03 Command home as a tab (fallback). Deviations approved: Recent fixed above the tree, platform SE rendering, known-status only, four engines, no motion yet. Artifact: https://claude.ai/artifact/SzpE9pCdFyDxAyewLuDbnK |
+| 2026-11-26 | Motion confirmed by the owner as proposed in the welcome concepts; built the explorer's arrival moment | One quiet moment confirms where a new connection landed. Rejected: no motion; tint only |

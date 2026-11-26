@@ -48,10 +48,9 @@ Deviations from concept 04 (approved by the owner at accept):
 
 Remaining for R7: none.
 - Accepted; `accept` ran: `design/welcome-home/` deleted, direction, tokens, motion status, bans and decision recorded in `DESIGN.md`, artifact republished with a Chosen banner.
-- Follow-ups: confirm the motion defaults (then build the arrival motion); replace the failed-open modal (R3).
+- Motion confirmed and the arrival moment built (`ConnectionArrival`). Next: R3 for the explorer (owner chose explorer first): replace its 4 modals, including the failed open, with a banner at the top of the tool window.
 
 ## Waiting for the owner
-- Motion defaults proposed in the viewer (quiet, ease-out-quart, 150 ms state changes, one focal moment when the first connection arrives); record in `DESIGN.md` once the owner confirms.
 - T0.8 red inspector Cancel: documented design choice in `docs/UI_PREVIEW.md`; change only on the owner's word.
 
 ## Design workflow
