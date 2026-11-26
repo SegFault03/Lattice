@@ -1,18 +1,16 @@
 # Welcome as home: Swing concepts
 
-Concepts for turning the welcome editor tab from a marketing page into a home screen (roadmap R7). See [design studies](../README.md) for the rules.
+Concepts for turning the welcome editor tab from a marketing page into a home screen (roadmap R7), made with the `design-primer` skill's `create` command. See [design studies](../README.md) for the study rules.
 
-Renders are not tracked (the repository ignores PNGs). Render them locally and open the gallery from the output folder.
-
-| Concept | Layout | Best for | Trade-off |
+| Concept | Thesis | Best for | Trade-off |
 | --- | --- | --- | --- |
-| 01 · Launchpad | Start actions beside Recent items | Smallest change from today | Still a page of links; connection health not visible |
-| 02 · Connection board | One row per connection with environment tag, status and last objects | Many connections, production safety | Recents are split per connection; longest page |
-| 03 · Command home | One filter field, ranked recents and connections, Enter opens | Fast return to work, narrow editors | Discoverability relies on the field's prompt text |
+| 02 · Connection board | Home is the health of your connections | Many connections, production safety | Longest page; recents split per connection |
+| 03 · Command home | Home is one field with ranked results | Fast return to work, narrow editors | Discoverability rests on the prompt; health shows only on failure |
+| 04 · Explorer home (radical) | No welcome tab: home is the tool window plus a Search Everywhere tab | Keeping the editor area for code | Needs a Search Everywhere contributor; no large first-run surface |
 
-Every concept shows the same synthetic fixture: four connections (HSQLDB, H2, MySQL, PostgreSQL) and four recent items. Each renders returning and first-run states and a 520 px narrow width, in light and dark. `00-` renders the production `WelcomePanel` as the baseline.
+`00-` renders the production [`WelcomePanel`](../../src/main/java/com/segfault03/ideadb/ui/WelcomePanel.java) as the baseline. Concept 01 (Launchpad) was dropped: it restated the incumbent Start/Recent pattern.
 
-The production screen is [`WelcomePanel`](../../src/main/java/com/segfault03/ideadb/ui/WelcomePanel.java).
+Every concept renders the same synthetic fixture (7 connections across the six 1.0 engines, 6 recent items) in eight states (returning, first run, filtered, no match, loading, error, long list, narrow), light and dark, at font 1.0 and 2.0, plus motion frames. `concepts.json` holds the viewer text; `viewer.html` is the skill's concept-viewer template.
 
 ## Render
 
@@ -22,4 +20,4 @@ From the repository root:
 python design/welcome-home/render.py --output .temp/concepts/welcome-home
 ```
 
-Unlike the older studies, this renderer compiles only `WelcomeConcepts.java` and runs it against the classes Gradle builds, so the Java and Kotlin SQL injectors (which need language plugins) are never recompiled.
+It writes full-size PNGs to `raw/`, WebP frames to `frames/` and the concept viewer to `index.html`, all in the git-ignored output folder. It needs the IntelliJ test runtime cached by `./gradlew test` and Pillow. It compiles only `WelcomeConcepts.java` against the classes Gradle builds.

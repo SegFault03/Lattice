@@ -52,6 +52,6 @@ run, an isolated YAML comment or a helper's default command.
   dated validation narratives and associated review evidence. Keep maintained
   docs, instructions and guides.
 
-For any UI/UX work, read DESIGN.md, then .claude/skills/design-primer/SKILL.md, and follow them.
+For any UI/UX work, read DESIGN.md, then the `design-primer` skill (`anthropic-skills:design-primer`; in a local checkout that has it, `.claude/skills/design-primer/SKILL.md`), and follow them. If neither is available, stop and tell the owner.
 
 Explicit task instructions take precedence over these repository conventions.

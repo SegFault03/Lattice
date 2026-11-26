@@ -7,7 +7,9 @@ application and FlatLaf setup as scripts/ui-preview.py. It changes no production
 """
 import argparse
 import importlib.util
+import json
 import os
+import re
 from pathlib import Path
 import sys
 import tempfile
@@ -35,7 +37,8 @@ def main():
     build.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault('XDG_CACHE_HOME', str(build / 'runtime-cache'))
     output = args.output.resolve()
-    output.mkdir(parents=True, exist_ok=True)
+    raw = output / 'raw'
+    raw.mkdir(parents=True, exist_ok=True)
     subprocess.run([preview.gradle_wrapper(), '--quiet', 'classes'], check=True, cwd=ROOT, timeout=900)
     plugin_classes = [ROOT / 'build/classes/java/main', ROOT / 'build/classes/kotlin/main', ROOT / 'src/main/resources']
     with Dependencies(args) as deps:
@@ -59,7 +62,8 @@ def main():
         opens = ['java.base/java.lang', 'java.base/java.io', 'java.base/java.nio', 'java.base/java.util',
                  'java.base/java.util.concurrent', 'java.desktop/java.awt', 'java.desktop/java.awt.event',
                  'java.desktop/javax.swing', 'java.desktop/javax.swing.plaf.basic', 'java.desktop/sun.awt',
-                 'java.desktop/sun.font', 'java.desktop/sun.java2d', 'java.desktop/sun.swing']
+                 'java.desktop/sun.font', 'java.desktop/sun.java2d', 'java.desktop/sun.swing',
+                 'java.desktop/javax.swing.text.html']
         for theme in ('light', 'dark'):
             with tempfile.TemporaryDirectory(prefix=f'idea-{theme}-', dir=build) as temporary:
                 flags = ['--add-exports=java.desktop/sun.awt=ALL-UNNAMED']
@@ -68,9 +72,44 @@ def main():
                           f'-Didea.platform.prefix={preview.platform_prefix(sdk)}', '-Didea.force.use.core.classloader=true',
                           f'-Didea.home.path={sdk}', f'-Didea.config.path={temporary}/config',
                           f'-Didea.system.path={temporary}/system', '-cp', runtime,
-                          'WelcomeConcepts', str(output), theme]
+                          'WelcomeConcepts', str(raw), theme]
                 preview.java_args(java, flags, build / f'{theme}.args')
-    print(f'Gallery: {HERE / "index.html"}')
+    print(f'Viewer: {viewer(output)}')
+
+
+def viewer(output):
+    """Downscale raw/ PNGs into frames/ (long edge <= 1280 px, WebP) and fill the design-primer concept viewer."""
+    from PIL import Image
+    frames = output / 'frames'
+    frames.mkdir(exist_ok=True)
+    for source in sorted((output / 'raw').glob('*.png')):
+        image = Image.open(source)
+        image.thumbnail((1280, 1280))
+        image.save(frames / (source.stem + '.webp'), quality=82)
+    spec = json.loads((HERE / 'concepts.json').read_text(encoding='utf-8'))
+    variants = [('light', 1, 'Light'), ('dark', 1, 'Dark'), ('light', 2, 'Light, font 2.0'), ('dark', 2, 'Dark, font 2.0')]
+    concepts = []
+    for concept in spec['concepts']:
+        built = {key: value for key, value in concept.items() if key not in ('states', 'motionRows')}
+        built['frames'] = []
+        for theme, scale, group in variants:
+            for number, (key, caption, text) in enumerate(concept['states'], 1):
+                name = f'{concept["id"]}-{key}-{theme}-f{scale}.webp'
+                if (frames / name).exists():
+                    built['frames'].append({'key': f'{key} · {group.lower()}', 'cap': f'{number} · {caption}', 'text': text,
+                                            'src': f'frames/{name}', 'group': group})
+        built['motion'] = [{'title': row['title'], 'spec': row['spec'],
+                            'frames': [f'frames/{concept["id"]}-{row["id"]}-{i}-light-f1.webp' for i in range(3)]}
+                           for row in concept.get('motionRows', [])]
+        concepts.append(built)
+    data = {key: spec[key] for key in ('task', 'title', 'frameWidth', 'shared', 'recommendation')}
+    data['concepts'] = concepts
+    template = (HERE / 'viewer.html').read_text(encoding='utf-8')
+    filled = re.sub(r'const DATA = \{.*?\n\};\n', lambda _: 'const DATA = ' + json.dumps(data, indent=1, ensure_ascii=False) + ';\n',
+                    template, count=1, flags=re.S)
+    target = output / 'index.html'
+    target.write_text(filled, encoding='utf-8')
+    return target
 
 
 if __name__ == '__main__':

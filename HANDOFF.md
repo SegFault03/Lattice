@@ -20,8 +20,13 @@ Take Lattice from 0.2.0-alpha to 1.0 as the data tools layer for IntelliJ IDEA w
 - Fixed along the way: cell context menu acted on the previous selection; newly added connections stayed hidden in a collapsed type group; `SqlColorConsistencyTest` did not know `SqlScriptPanel`; the create/alter-table study renderers no longer compiled.
 
 ## Waiting for the owner
-- Welcome concepts (R7, T5.1): `design/welcome-home/`; render with `python design/welcome-home/render.py --output .temp/concepts/welcome-home` and open `.temp/concepts/welcome-home/index.html`. Recommendation: 03 Command home with 02's connection status.
+- Welcome concepts (R7, T5.1), rebuilt per the `design-primer` skill: `design/welcome-home/`; render with `python design/welcome-home/render.py --output .temp/concepts/welcome-home` and open `.temp/concepts/welcome-home/index.html`. Concepts 02 Board, 03 Command, 04 Explorer home (radical; no welcome tab). Recommendation: 04 with 03's ranked search as its Search Everywhere tab and 02's tags and status in the tree; fallback 03 with 02's status.
+- Motion defaults proposed in the viewer (quiet, ease-out-quart, 150 ms state changes, one focal moment when the first connection arrives); record in `DESIGN.md` once the owner confirms.
 - T0.8 red inspector Cancel: documented design choice in `docs/UI_PREVIEW.md`; change only on the owner's word.
+
+## Design workflow
+- UI work follows `DESIGN.md` and the `design-primer` skill (`anthropic-skills:design-primer`; the repo has no `.claude/skills/` copy). Concepts: every state, light and dark, font 1.0 and 2.0, motion rows, the skill's concept viewer, renders only in `.temp/`.
+- Findings from the rebuild: `DatabaseUi.SECONDARY_TEXT` measures about 4.4:1 on the light panel (below 4.5:1); MariaDB and SQLite need icons; environment tags would be a new connection setting.
 
 ## Next
 - Milestone 0.3 data editor, starting with the T1.1 grid model spike.

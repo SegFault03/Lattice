@@ -37,7 +37,7 @@ Live database suites need owned fixtures; see `docs/CONTRIBUTING.md`. Do not run
 - Do not create a pull request unless asked.
 - Screenshots and preview output may hold private content: keep them in git-ignored `.temp/` or `build/`, never commit or upload them. Never enter credentials or sign in for the owner (ask them to), and never print secrets.
 - Working style: use a subagent only for bulky read-only work whose raw output is not needed later; search before reading and cap long output; report only checks that actually ran, with their result.
-- For any UI/UX work, read DESIGN.md, then .claude/skills/design-primer/SKILL.md, and follow them.
+- For any UI/UX work, read DESIGN.md, then the `design-primer` skill (`anthropic-skills:design-primer`; in a local checkout that has it, `.claude/skills/design-primer/SKILL.md`), and follow them. If neither is available, stop and tell the owner.
 - Never push to a remote without the user's request or explicit approval. Commit locally and ask first.
 - Branches: do not create or push a new branch on your own. Ask the user which branch to work on. If the user names no branch, use `main`. Do not push to any branch other than the one the user chose.
 - Permissions and approvals the user gives during a session take precedence over the pre-defined rules above, for the scope the user stated (for example, standing permission to push a named branch at checkpoints). Outside that scope, the rules still apply.

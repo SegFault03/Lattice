@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Concepts</title>
+<!--
+  Concept viewer skeleton. Fill ONLY the DATA object below (see references/concept-sheets.md).
+  Self-contained: no external requests, so it works as a local file and as a published artifact.
+  Image src: relative paths (local file) or data: URIs (artifact / single-file sharing).
+-->
+<style>
+:root{--bg:#f6f6f4;--fg:#1a1a1a;--mut:#6b6b6b;--card:#fff;--line:#dcdcd6;--acc:#2b59ff}
+@media (prefers-color-scheme:dark){:root{--bg:#141414;--fg:#ececec;--mut:#9a9a9a;--card:#1d1d1d;--line:#333;--acc:#8aa4ff}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding:10px 20px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+header h1{font-size:15px;margin:0;font-weight:600}
+nav{display:flex;gap:6px;flex-wrap:wrap}
+button{font:inherit;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer}
+button[aria-selected=true]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+main{max-width:1280px;margin:0 auto;padding:24px 20px 80px}
+h2{font-size:22px;margin:0 0 4px}h3{font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--mut);margin:32px 0 10px}
+.thesis{color:var(--mut);margin:0 0 16px}
+.box{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin:12px 0}
+.box ul{margin:6px 0 0;padding-left:20px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--fw,210px),1fr));gap:20px}
+figure{margin:0}figure img{display:block;width:100%;height:auto;border-radius:10px;border:1px solid var(--line);cursor:zoom-in;background:var(--card)}
+figcaption{margin-top:8px;font-size:13px}figcaption b{display:block}figcaption span{color:var(--mut)}
+.motion{display:grid;grid-template-columns:minmax(0,3fr) minmax(220px,1fr);gap:20px;align-items:start;margin:14px 0}
+.strip{display:flex;align-items:center;gap:10px}.strip figure{flex:1;min-width:0}.strip i{font-style:normal;color:var(--mut)}
+.spec{font-size:13px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px}.spec dt{color:var(--mut)}.spec dd{margin:0 0 6px}
+.cmp{display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+select{font:inherit;padding:6px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:inherit}
+#lb{position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;z-index:9}
+#lb[hidden]{display:none}#lb img{max-width:94vw;max-height:94vh;object-fit:contain;border-radius:6px}
+@media (max-width:760px){.motion{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header><h1 id="title"></h1><nav id="tabs" role="tablist"></nav></header>
+<main id="main"></main>
+<div id="lb" hidden><img alt=""></div>
+<script>
+// ---- FILL THIS OBJECT ONLY ----
+const DATA = {
+  task: "TASK-ID",
+  title: "Task title",
+  frameWidth: 210,            // px per frame in the grid; use ~210 for phones, ~420 for tablet/web
+  shared: { bullets: ["What every concept has in common"] },
+  concepts: [{
+    id: "a", name: "Concept A", thesis: "One-line thesis", radical: false,
+    intro: "Plain-language paragraph.",
+    how: ["Data: 148 items from fixtures/feed.json", "Tap X: does Y"],
+    frames: [   // one image per state frame; key links the same state across concepts
+      { key: "first-open", cap: "1 · First open", text: "What the user sees and what to tap.", src: "frames/a-01.webp", group: "Main" }
+    ],
+    motion: [   // three images per transition
+      { title: "Motion · Grid → Dynamic (tap the layout button)", frames: ["frames/a-m1-0.webp", "frames/a-m1-1.webp", "frames/a-m1-2.webp"],
+        spec: { moves: "what moves", curve: "easing or spring", ms: "300", reduced: "crossfade 150 ms" } }
+    ],
+    limits: "What real data could not show; placeholders used and why."
+  }],
+  recommendation: "Recommended concept and the reason; what to mix."
+};
+// ---- END DATA ----
+const $=(s,r=document)=>r.querySelector(s), el=(t,p={},...k)=>{const e=document.createElement(t);for(const[a,v]of Object.entries(p))a==='text'?e.textContent=v:e.setAttribute(a,v);k.flat().forEach(c=>e.append(c));return e};
+const main=$('#main'),tabs=$('#tabs'),lb=$('#lb');let cur=0;
+document.title=DATA.title;$('#title').textContent=DATA.task+' · '+DATA.title;
+document.documentElement.style.setProperty('--fw',(DATA.frameWidth||210)+'px');
+const views=[...DATA.concepts.map(c=>({id:c.id,label:c.name+(c.radical?' (radical)':'')})),{id:'cmp',label:'Compare'},{id:'rec',label:'Recommendation'}];
+const fig=f=>el('figure',{},el('img',{src:f.src,alt:f.cap,loading:'lazy'}),el('figcaption',{},el('b',{text:f.cap||''}),el('span',{text:f.text||''})));
+const box=(t,items)=>el('div',{class:'box'},el('b',{text:t}),el('ul',{},items.map(i=>el('li',{text:i}))));
+function concept(c){const out=[el('h2',{text:c.name}),el('p',{class:'thesis',text:c.thesis}),el('p',{text:c.intro}),box('How it works',c.how)];
+  if(cur===0&&DATA.shared)out.splice(2,0,box('Shared by all concepts',DATA.shared.bullets));
+  const groups=[...new Set(c.frames.map(f=>f.group||'States'))];
+  groups.forEach(g=>{out.push(el('h3',{text:g}),el('div',{class:'grid'},c.frames.filter(f=>(f.group||'States')===g).map(fig)))});
+  if(c.motion?.length){out.push(el('h3',{text:'Motion'}));c.motion.forEach(m=>{const s=m.spec||{};out.push(el('p',{text:m.title}),el('div',{class:'motion'},
+    el('div',{class:'strip'},m.frames.flatMap((src,i)=>[fig({src,cap:['Start','Mid','End'][i]||''}),i<m.frames.length-1?el('i',{text:'→'}):null].filter(Boolean))),
+    el('dl',{class:'spec'},...[['Moves',s.moves],['Curve',s.curve],['Duration (ms)',s.ms],['Reduced motion',s.reduced]].flatMap(([k,v])=>[el('dt',{text:k}),el('dd',{text:v||'-'})]))))})}
+  out.push(el('h3',{text:'Data limits'}),el('p',{text:c.limits||'None.'}));return out}
+function compare(){const keys=[...new Set(DATA.concepts.flatMap(c=>c.frames.map(f=>f.key).filter(Boolean)))];
+  const sel=el('select',{},keys.map(k=>el('option',{value:k,text:k})));const host=el('div',{class:'cmp'});
+  const draw=()=>{host.replaceChildren(...DATA.concepts.map(c=>{const f=c.frames.find(x=>x.key===sel.value);return f?el('div',{},el('b',{text:c.name}),fig(f)):el('div',{},el('b',{text:c.name}),el('p',{text:'No frame for this state.'}))}))};
+  sel.onchange=draw;draw();return [el('h2',{text:'Compare the same state'}),sel,el('div',{style:'height:16px'}),host]}
+function show(i){cur=i;[...tabs.children].forEach((b,j)=>b.setAttribute('aria-selected',j===i));const v=views[i];
+  main.replaceChildren(...(v.id==='cmp'?compare():v.id==='rec'?[el('h2',{text:'Recommendation'}),el('p',{text:DATA.recommendation})]:concept(DATA.concepts[i])));scrollTo(0,0)}
+views.forEach((v,i)=>tabs.append(el('button',{role:'tab',text:v.label,'aria-selected':'false'})));
+[...tabs.children].forEach((b,i)=>b.onclick=()=>show(i));
+main.addEventListener('click',e=>{if(e.target.tagName==='IMG'){$('img',lb).src=e.target.src;lb.hidden=false}});
+lb.onclick=()=>lb.hidden=true;
+addEventListener('keydown',e=>{if(e.key==='Escape')lb.hidden=true;if(!lb.hidden)return;if(e.key==='ArrowRight')show(Math.min(cur+1,views.length-1));if(e.key==='ArrowLeft')show(Math.max(cur-1,0))});
+show(0);
+</script>
+</body>
+</html>

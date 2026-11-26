@@ -3,7 +3,7 @@
 <!-- Created by `init`, kept by `create`, `refine` and `accept`. This is the one place for this project's UI/UX rules. Project facts: under 120 lines. Write from what is built, not from intent. Every line is read from the repo or stated by the owner. -->
 
 ## How to work on UI here
-For any UI/UX task, read this file, then `.claude/skills/design-primer/SKILL.md` (paths in the skill are relative to its folder). Project rules in this file override the skill.
+For any UI/UX task, read this file, then the `design-primer` skill: `anthropic-skills:design-primer`, or `.claude/skills/design-primer/SKILL.md` in a checkout that has it (paths in the skill are relative to its folder). If neither is available, stop and tell the owner rather than working without it. Project rules in this file override the skill.
 
 | Task | Command (file in the skill folder) | Reads |
 |---|---|---|
@@ -72,7 +72,7 @@ Always: real data, every surface and state, light and dark, font scale 2.0, moti
 - Private content: renders go in `.temp/` (git-ignored).
 
 ## Concepts
-- Render pipeline: `design/<screen>/render.py` compiles the plugin and `<Screen>Concepts.java`, paints light and dark, writes `renders/` and `index.html`.
+- Render pipeline: `design/<screen>/render.py` compiles the plugin and `<Screen>Concepts.java` and paints every frame in light and dark. `design/welcome-home/` also writes the primer's concept viewer (`index.html`) into its git-ignored output folder; older studies keep their tracked `renders/` gallery.
 - Existing studies: `design/alter-table/`, `design/create-table/` (with `final/` native captures).
 - New concept tasks: `design/<screen>/` per `design/README.md`; images may also go in `.temp/concepts/<task>/`. Delete after `accept`.
 
