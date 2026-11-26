@@ -37,11 +37,14 @@ Live database suites need owned fixtures; see `docs/CONTRIBUTING.md`. Do not run
 - Downloadable drivers are only the known Maven Central coordinates in `DriverCatalog`; the base URL can be overridden with `-Dlattice.maven.central` for isolated runs only.
 - Pin GitHub Actions to commit SHAs with version comments, and keep permissions least-privilege.
 - Do not create a pull request unless asked.
+- Screenshots and preview output may hold private content: keep them in git-ignored `.temp/` or `build/`, never commit or upload them. Never enter credentials or sign in for the owner (ask them to), and never print secrets.
+- Working style: use a subagent only for bulky read-only work whose raw output is not needed later; search before reading and cap long output; report only checks that actually ran, with their result.
+- UI changes: produce one to three concepts and get the owner's opinion before wiring; verify with the headless previews in `docs/UI_PREVIEW.md` and say so (no emulator or device in cloud sessions).
 - Never push to a remote without the user's request or explicit approval. Commit locally and ask first.
 - Branches: do not create or push a new branch on your own. Ask the user which branch to work on. If the user names no branch, use `main`. Do not push to any branch other than the one the user chose.
 - Permissions and approvals the user gives during a session take precedence over the pre-defined rules above, for the scope the user stated (for example, standing permission to push a named branch at checkpoints). Outside that scope, the rules still apply.
 - Documentation is current-state. Do not add dated validation narratives or progress logs to `docs/`.
-- While a plan or task is in progress, keep hand-off notes in `HANDOFF.md` at the repository root: update it as the work moves, and thoroughly at each checkpoint (goal, decisions, what is done, what remains, open questions), so a later session can continue without losing context. Commit it with the work. Delete it, and any other progress, plan or note files, before a release; only guides and docs remain.
+- While a plan or task is in progress, keep hand-off notes in `HANDOFF.md` at the repository root: update it as the work moves, and thoroughly at each checkpoint (goal, decisions, what is done, what remains, open questions), so a later session can continue without losing context. Commit it with the work. Delete it, and any other progress, plan or note files, before a release; only guides and docs remain. Before tagging, confirm the repo holds only source, guides and lasting docs (no scratch files, task logs or findings); `docs/RELEASING.md` covers signing and the Marketplace upload that `release.yml` performs.
 - Add a test only when it guards behavior that could realistically break. Do not add tautological tests, tests that assert what the code trivially does, or tests that check very little. When a check is needed only to verify a change, write it, run it and remove it. Trim redundant or low-value tests whenever you touch a suite.
 
 ## Key locations

@@ -37,6 +37,7 @@ Thumbs.db
 # Temporary & Log files
 *.log
 *.tmp
+.temp/
 
 # IntelliJ Platform Gradle cache
 .intellijPlatform/
