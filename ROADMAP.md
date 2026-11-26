@@ -60,7 +60,7 @@ These replace parts of the current design; each starts with a spike or concept r
 
 **R6. Async credentials and one executor per connection.** `ConnectionSecrets` service with an in-memory cache and pooled-thread PasswordSafe access; a per-connection executor that owns statement cancel, timeouts, keep-alive and reconnect. Cost: M.
 
-**R7. Welcome becomes home.** Replace the marketing page with a recent connections and recent tables list (open console, open table, run script), falling back to the source picker on first run. Concept round first. Cost: M.
+**R7. Welcome becomes home.** Done (T5.1): explorer home and a Search Everywhere tab; see `DESIGN.md`. Planned as: replace the marketing page with a recent connections and recent tables list (open console, open table, run script), falling back to the source picker on first run. Concept round first. Cost: M.
 
 ## Roadmap
 
@@ -125,7 +125,7 @@ Each milestone is a release. Sizes: S ≤ 1 day, M 2–4 days, L 1–2 weeks, XL
 - [ ] T4.6 Create/alter: indexes and foreign keys (M)
 
 ### 0.9: beta
-- [ ] T5.1 Welcome as home (R7): concepts in `design/welcome-home/`, waiting for the owner's pick (M)
+- [x] T5.1 Welcome as home (R7): explorer home, Recent, Search Everywhere tab, environment tags; accepted (M)
 - [ ] T5.2 Accessibility pass: keyboard-only walk, screen reader names, high contrast theme, font scale 2.0 (M)
 - [ ] T5.3 Performance budget: 100k-row tables, 500-table schemas, cold start under 200 ms of plugin time (M)
 - [ ] T5.4 Docs: getting started, keyboard reference, migration notes; Marketplace listing, screenshots, video (M)

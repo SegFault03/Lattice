@@ -19,7 +19,7 @@ Take Lattice from 0.2.0-alpha to 1.0 as the data tools layer for IntelliJ IDEA w
 - T0.1–T0.7, T0.9–T0.12 (see `ROADMAP.md`). Verified on the real IDE (dark, full run, 100 captures): Cancel default on Drop table, NULL italic in new rows, refit columns, 4.84:1 welcome subline, cell menu targets the clicked cell, source filter run passes.
 - Fixed along the way: cell context menu acted on the previous selection; newly added connections stayed hidden in a collapsed type group; `SqlColorConsistencyTest` did not know `SqlScriptPanel`; the create/alter-table study renderers no longer compiled.
 
-## In progress: welcome as home (R7, T5.1)
+## Done: welcome as home (R7, T5.1), accepted 2026-11-26
 Owner picked concept 04 Explorer home (artifact https://claude.ai/artifact/SzpE9pCdFyDxAyewLuDbnK; source `design/welcome-home/`), with 03's ranked search as a Search Everywhere tab and 02's environment tags and status in the tree. Owner answers (2026-11-26):
 - Order: A+B (remove the welcome tab; first-run empty state; Recent section in the tool window), then C (Search Everywhere tab), then D (tags and status).
 - Welcome tab removed completely: `WelcomePanel`, `WelcomeVirtualFile`, the `showWelcomeScreen` setting. The explorer's help button opens What's New.
@@ -38,7 +38,7 @@ Done: SQL scripts become recent items when a run starts (`SqlScriptPanel.execute
 
 Done (D): `model/Environment` and `ConnectionConfig.environment` (Environment row in the connection dialog); the tree row appends "Unreachable" (error color) when the connection's first child is an error node and it is not connected, then the tag in `DatabaseUi.environmentColor` (local omitted); tooltip carries both. Search Everywhere connection context adds the tag.
 
-Deviations from concept 04 (tell the owner):
+Deviations from concept 04 (approved by the owner at accept):
 - At narrow widths tree rows clip the tag at the edge (the concept flagged this); the tooltip carries it. No connected/checking word is shown: the plug icon and bold name already say connected, and Lattice never pings.
 - Search Everywhere puts the muted context right after the title (platform convention), not right-aligned.
 - Recent is fixed above the tree and does not scroll with it (matches the concept's long-list note, not a single scroll).
@@ -46,8 +46,9 @@ Deviations from concept 04 (tell the owner):
 - The tree keeps its visible "Data Sources" root; tags and status in tree rows are part of D.
 - The arrival motion (new connection rises into the tree) waits for the owner to confirm the motion defaults.
 
-Remaining for R7:
-- Owner review of the built home (then the design-primer `accept` step: delete `design/welcome-home/`, record the direction and motion in `DESIGN.md`).
+Remaining for R7: none.
+- Accepted; `accept` ran: `design/welcome-home/` deleted, direction, tokens, motion status, bans and decision recorded in `DESIGN.md`, artifact republished with a Chosen banner.
+- Follow-ups: confirm the motion defaults (then build the arrival motion); replace the failed-open modal (R3).
 
 ## Waiting for the owner
 - Motion defaults proposed in the viewer (quiet, ease-out-quart, 150 ms state changes, one focal moment when the first connection arrives); record in `DESIGN.md` once the owner confirms.
@@ -55,7 +56,7 @@ Remaining for R7:
 
 ## Design workflow
 - UI work follows `DESIGN.md` and the `design-primer` skill (`anthropic-skills:design-primer`; the repo has no `.claude/skills/` copy). Concepts: every state, light and dark, font 1.0 and 2.0, motion rows, the skill's concept viewer, renders only in `.temp/`.
-- Findings from the rebuild: `DatabaseUi.SECONDARY_TEXT` may fall below 4.5:1 on the light panel (estimated from an assumed gray, not measured; check on a render); MariaDB and SQLite need icons; environment tags would be a new connection setting.
+- Findings from the rebuild: `DatabaseUi.SECONDARY_TEXT` may fall below 4.5:1 on the light panel (estimated from an assumed gray, not measured; check on a render); MariaDB and SQLite need icons.
 
 ## Next
 - Milestone 0.3 data editor, starting with the T1.1 grid model spike.

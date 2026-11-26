@@ -39,16 +39,19 @@ Always: real renders with real data, the skill's coverage matrix, motion designe
 | SQL console and SQL editor (cards, dry run, run actions, status widget) | Operate |
 | Connection dialog, create/alter table, create database, SQL script dialogs | Operate |
 | Explorer home (`EmptyConnectionPanel` first run, `ExplorerRecentSection`) | Operate |
+| Search Everywhere Lattice tab (`LatticeSearchContributor`) | Operate |
 | What's New page (`ReleaseNotesPanel`) | Read |
 | Plugin icon, Marketplace assets | Persuade |
 
 ## Chosen direction
 - Established world in code: the IDE's own look. Colors come from `JBColor` pairs and named IDE keys (for example `Button.default.startBackground` in `DatabaseUi.java`), sizes go through `JBUI.scale`, the What's New page follows the current IDE theme.
-- TODO(owner): direction chosen via `create`. No direction is recorded here.
+- Explorer home (chosen 2026-11-26): Lattice owns no editor tab. Home is the tool window (first-run links per data source; a collapsible Recent section of the last four tables, views, consoles and scripts above the tree) plus a Lattice tab in Search Everywhere (recents, tables in loaded schemas, connections; Enter opens, Alt+Enter opens a console). Thesis: the editor area belongs to the user's code; the IDE already has a home for tools (tool windows) and for jumping (Search Everywhere).
+- Status shows only what Lattice already knows (open session, last open failed); it never contacts a server to show status. Environment tags (local, development, staging, production) sit beside the connection name in their own color; local stays unmarked.
 
 ## Tokens
 - Location in code: `src/main/java/com/segfault03/ideadb/ui/DatabaseUi.java` (action colors `POSITIVE_ACTION_COLOR`, `PRIMARY_ACTION_COLOR`, button metrics, rounded fills of 10 and 6 scaled px).
-- Spacing scale, radii, elevation: TODO(owner), no token file found; values are inline in `DatabaseUi`.
+- Environment tag colors: `DatabaseUi.environmentColor(Environment)`, light/dark pairs with at least 4.5:1 on the panel backgrounds (production 0xAD241D/0xF2B8B5, staging 0x855000/0xF0BE6E, development 0x2A56A3/0xB4CEFB, local 0x3D6829/0xB4D9A3).
+- Spacing in the explorer home: 4-based (4, 8, 12, 16, 24), inline in `EmptyConnectionPanel` and `ExplorerRecentSection`. Radii, elevation: no token file; values are inline in `DatabaseUi`.
 - Dark theme: `JBColor` light/dark pairs and `_dark` SVG variants. Dynamic color: not applicable.
 
 ## Fonts and licenses
@@ -56,10 +59,13 @@ Always: real renders with real data, the skill's coverage matrix, motion designe
 
 ## Motion scheme
 - No animation framework found. Timers exist only for delays: hover cards (`SqlCardHoverController`), alter-table preview (300 ms), copied hint (1800 ms), copy hover (120 ms).
-- TODO(owner): personality, easing, reduced-motion behavior.
+- Explorer home ships without animation: lists, filtering, selection and collapse are instant (platform behavior). Proposed default, not yet confirmed by the owner: quiet and IDE-native, feedback 100-150 ms, state changes 150 ms, ease-out-quart, one authored moment per surface (a new connection rising 8 px into the tree), reduced motion keeps opacity and color only. Record it here once confirmed.
 
 ## Banned in this project
-- None recorded.
+- A plugin-owned editor tab as a home or marketing page; marketing heroes and card grids on Operate surfaces.
+- Status by color alone (every status has its word: Unreachable, tag text); gray text on tinted surfaces; colored bars along one side of a row.
+- Pinging servers just to show status.
+- Modals for routine failures such as a failed open (the explorer still raises one; roadmap R3 replaces it with an inline banner).
 
 ## Other consolidated UI rules
 - Preview and screenshot output may hold private content: keep it in git-ignored `.temp/` or `build/` and never commit or upload it (the line also covers credentials and stays in CLAUDE.md). [from CLAUDE.md]
@@ -72,10 +78,10 @@ Always: real renders with real data, the skill's coverage matrix, motion designe
 - Private content: renders go in `.temp/` (git-ignored).
 
 ## Concepts
-- Render pipeline: `design/<screen>/render.py` compiles the plugin and `<Screen>Concepts.java` and paints every frame in light and dark. `design/welcome-home/` also writes the primer's concept viewer (`index.html`) into its git-ignored output folder; older studies keep their tracked `renders/` gallery.
+- Render pipeline: `design/<screen>/render.py` compiles the plugin and `<Screen>Concepts.java` and paints every frame in light and dark. Studies keep their tracked `renders/` gallery; new studies write the primer's concept viewer into a git-ignored output folder and publish it as an artifact.
 - Existing studies: `design/alter-table/`, `design/create-table/` (with `final/` native captures).
 - New concept tasks: `design/<screen>/` per `design/README.md`; images may also go in `.temp/concepts/<task>/`. Publish each as a private concept-viewer artifact; delete local code and images after `accept`, the artifact stays.
-- Concept artifacts: none recorded.
+- Concept artifacts: welcome as home (R7), https://claude.ai/artifact/SzpE9pCdFyDxAyewLuDbnK (chosen 04 Explorer home; concept code deleted after accept).
 
 ## Verification setup
 - Headless Swing: `python scripts/ui-preview.py` (light, nine README images). Real IDE: Xvfb capture script above.
@@ -86,3 +92,4 @@ Always: real renders with real data, the skill's coverage matrix, motion designe
 |---|---|---|
 | 2026-11-26 | Created by `init`; UI rules moved from CLAUDE.md | One home for UI rules |
 | 2026-11-26 | `init` re-run against design-primer 2.0.0: shared block, artifact-based concepts, pointer line | Match the updated skill |
+| 2026-11-26 | Welcome as home: built and accepted 04 Explorer home with 03's ranked search as the Search Everywhere tab and 02's tags and status; welcome tab removed | A data tools layer should not compete with code for the editor area. Rejected: 02 Connection board (longest page, recents split per connection), 03 Command home as a tab (fallback). Deviations approved: Recent fixed above the tree, platform SE rendering, known-status only, four engines, no motion yet. Artifact: https://claude.ai/artifact/SzpE9pCdFyDxAyewLuDbnK |
