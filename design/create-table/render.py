@@ -49,10 +49,16 @@ def main():
         flatlaf = deps.file('tools/flatlaf/flatlaf-3.8.jar',
                            'https://repo.maven.apache.org/maven2/com/formdev/flatlaf/3.8/flatlaf-3.8.jar',
                            '8d8489dee6b9512a669be7670fd2d010f6a7dcfb23b622329ce3c61f8529e76b', args.flatlaf_jar)
-        cp = os.pathsep.join(map(str, [flatlaf] + jars + test_jars))
+        # Kotlin settings classes come from Gradle.
+        import processes
+        processes.run([preview.gradle_wrapper(), '--quiet', 'compileKotlin'], check=True, cwd=ROOT, timeout=900)
+        cp = os.pathsep.join(map(str, [flatlaf] + jars + test_jars + [ROOT / 'build/classes/kotlin/main']))
         classes = build / 'classes'
         classes.mkdir(exist_ok=True)
-        sources = sorted((ROOT / 'src/main/java').rglob('*.java'))
+        # The Java/Kotlin SQL injectors need language plugins the headless platform lacks; no concept uses them.
+        injectors = [ROOT / 'src/main/java/com/segfault03/ideadb/sql/inject' / language for language in ('java', 'kotlin')]
+        sources = sorted(path for path in (ROOT / 'src/main/java').rglob('*.java')
+                         if not any(root in path.parents for root in injectors))
         preview.java_args(javac, ['--release', '21', '-encoding', 'UTF-8', '-cp', cp,
                                  '-d', str(classes)] + list(map(str, sources)), build / 'compile.args')
         presentation = build / 'presentation-classes'

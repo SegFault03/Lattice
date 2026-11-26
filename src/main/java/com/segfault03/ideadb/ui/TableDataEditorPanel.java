@@ -363,6 +363,16 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         });
         cellMenu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
             @Override public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent event) {
+                // The platform opens a component popup before the table's mouse listeners run, so the clicked cell
+                // is selected here; otherwise the menu would act on the previous selection.
+                Point pointer = dataTable.getMousePosition();
+                if (pointer != null && finishCellEditing()) {
+                    int clickedRow = dataTable.rowAtPoint(pointer), clickedColumn = dataTable.columnAtPoint(pointer);
+                    if (clickedRow >= 0 && clickedColumn >= 0) {
+                        if (!dataTable.isRowSelected(clickedRow)) dataTable.setRowSelectionInterval(clickedRow, clickedRow);
+                        dataTable.setColumnSelectionInterval(clickedColumn, clickedColumn);
+                    }
+                }
                 int row = dataTable.getSelectedRow();
                 int col = dataTable.getSelectedColumn();
                 boolean editable = row >= 0 && col >= 0 && !isBusy() && !disposed;
