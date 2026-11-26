@@ -52,7 +52,7 @@ These replace parts of the current design; each starts with a spike or concept r
 
 **R2. Grid rewrite around an explicit change model.** Split `TableDataEditorPanel` (1,729 lines) into `GridModel` (rows, columns, server-side sort and filter state), `ChangeSet` (immutable: cell edits, inserts, deletes, each with value kind TEXT / NULL / DEFAULT and validation), `GridView` (one renderer that styles by state, so NULL and DEFAULT keep their marker in every state) and `GridActions`. Enables multi-row selection, sorting, paste, undo/redo of staged edits and record view. The same `GridView` renders console results (read-only `ChangeSet`). Cost: XL.
 
-**R3. Inline error and status banners.** One `EditorNotificationPanel`-style banner per editor tab (filter error, commit failure, connection lost, read-only) with Retry/Details, replacing 22 modal `Messages.showErrorDialog` calls and stale status lines. Cost: M.
+**R3. Inline error and status banners.** One `EditorNotificationPanel`-style banner per editor tab (filter error, commit failure, connection lost, read-only) with Retry/Details, replacing 22 modal `Messages.showErrorDialog` calls and stale status lines. Cost: M. Explorer done (`ExplorerBanner`); table editor (T1.13), dry runs and dialogs remain.
 
 **R4. Connection sources.** Introduce `ConnectionSource` with two implementations: Lattice's own connections, and the IDE's free data sources through an optional dependency on `com.intellij.database` (2025.3+). One connection model for the explorer, console and grid. Cost: spike S, build L. Risk: the Database plugin API is not a published stable API; isolate it behind the interface and verify per IDE release.
 

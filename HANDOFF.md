@@ -48,7 +48,8 @@ Deviations from concept 04 (approved by the owner at accept):
 
 Remaining for R7: none.
 - Accepted; `accept` ran: `design/welcome-home/` deleted, direction, tokens, motion status, bans and decision recorded in `DESIGN.md`, artifact republished with a Chosen banner.
-- Motion confirmed and the arrival moment built (`ConnectionArrival`). Next: R3 for the explorer (owner chose explorer first): replace its 4 modals, including the failed open, with a banner at the top of the tool window.
+- Motion confirmed and the arrival moment built (`ConnectionArrival`).
+- R3 for the explorer (owner chose explorer first): its 4 error modals now go to `ExplorerBanner`. Left as modals on purpose: the Remove confirmation (destructive). Still modal and next in line: the explorer's success messages (Created/Dropped/Table created/truncated; UI tests press OK on them), then the table editor's 10 errors (T1.13).
 
 ## Waiting for the owner
 - T0.8 red inspector Cancel: documented design choice in `docs/UI_PREVIEW.md`; change only on the owner's word.

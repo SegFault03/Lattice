@@ -68,7 +68,7 @@ Always: real renders with real data, the skill's coverage matrix, motion designe
 - A plugin-owned editor tab as a home or marketing page; marketing heroes and card grids on Operate surfaces.
 - Status by color alone (every status has its word: Unreachable, tag text); gray text on tinted surfaces; colored bars along one side of a row.
 - Pinging servers just to show status.
-- Modals for routine failures such as a failed open (the explorer still raises one; roadmap R3 replaces it with an inline banner).
+- Modals for routine failures. The explorer reports them in `ExplorerBanner` (platform `InlineBanner`, one at a time, Retry/Edit connection/Details); the table editor and dry runs still raise modals until roadmap R3 reaches them.
 
 ## Other consolidated UI rules
 - Preview and screenshot output may hold private content: keep it in git-ignored `.temp/` or `build/` and never commit or upload it (the line also covers credentials and stays in CLAUDE.md). [from CLAUDE.md]

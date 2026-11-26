@@ -26,6 +26,8 @@ Patch notes are selected by the exact release version, including prerelease suff
 - Lattice no longer opens a welcome tab. The explorer is home: with no connections it links each data source to its connection dialog, and a collapsible **Recent** section above the tree reopens the last tables, views, consoles and SQL scripts of the project. The explorer's help button opens What's New.
 - Search Everywhere has a **Lattice** tab for recent items, tables in loaded schemas and connections. Enter opens; Alt+Enter opens a SQL console.
 - Connections can be tagged local, development, staging or production; the explorer shows the tag beside the connection, and marks a connection whose last open failed as Unreachable.
+- Explorer errors (a failed connection, SQL that could not be generated, a failed create or drop) appear in a banner above the tree with Retry, Edit connection and Details instead of a modal dialog.
+- A newly added connection rises into the explorer under a brief accent tint; nothing moves with a screen reader or in a remote desktop session.
 - Run SQL script files from a connection, schema or table's context menu, the SQL console toolbar or a table's options menu. The dialog checks the script offline against the cached schema, previews it with problems marked on their lines, and runs it statement by statement with a run log of each result. Choose to stop or continue after an error, or run everything in one transaction that rolls back on error. MySQL `DELIMITER` lines are supported.
 
 ### SQL editor

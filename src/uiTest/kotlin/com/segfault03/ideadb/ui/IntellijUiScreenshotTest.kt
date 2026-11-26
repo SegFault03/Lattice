@@ -430,8 +430,13 @@ class IntellijUiScreenshotTest {
                 waitUntil("failed open shown", 60_000) {
                     tree.collectExpandedPaths().any { it.path.last().startsWith("Connection failed") }
                 }
-                // Routine failures still raise a modal (roadmap R3 replaces it with a banner).
-                frame.x(DialogUiComponent::class.java) { byTitle("Connection Error") }.waitFound().pressButton("OK")
+                // The failure is reported in the explorer's banner, never in a modal.
+                // The banner wraps its message, so look for the component and its recovery link rather than the full sentence.
+                waitUntil("unreachable banner") {
+                    pluginRoot.xx { byJavaClass("com.intellij.ui.InlineBanner") }.list().any { it.hasSubtext("Analytics offline") && it.hasSubtext("Retry") }
+                }
+                check(frame.xx(DialogUiComponent::class.java) { byTitle("Connection Error") }.list().isEmpty()) { "A failed open must not raise a modal" }
+                crop(pluginRoot, "home-banner.png")
                 ideFrame { waitForNoOpenedDialogs() }
                 for ((name, environment) in listOf("Local development" to "Staging", "Analytics offline" to "Production")) {
                     tree.fixture.clickRow(connectionRow(tree, name))
@@ -469,7 +474,7 @@ class IntellijUiScreenshotTest {
                 screenshotsDirectory.resolve("runtime-evidence.txt").writeText("""
                     Running IDE: ${actualTheme.getName()} ($themeId)
                     Explorer home in the installed plugin: first-run links; an in-memory HSQLDB connection with two tables opened and a console, listed in Recent;
-                    a MySQL connection to a server that is not running, shown as Unreachable after its open failed; environments set through Edit connection.
+                    a MySQL connection to a server that is not running, shown as Unreachable with an explorer banner (Retry, Edit connection, Details) and no modal; environments set through Edit connection.
                     Search Everywhere's Lattice tab with an empty query, "home" and "analytics". Captures are actual desktop pixels; home-*.png crops of the tool window and the popup.
                 """.trimIndent())
                 return@useDriverAndCloseIde

@@ -57,6 +57,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     private final JPanel explorerCards = new JPanel(explorerLayout);
     private ExplorerRecentSection recentSection;
     private ConnectionArrival arrival;
+    private ExplorerBanner banner;
 
     public DatabaseMainPanel(Project project) {
         super(new BorderLayout(0, 0));
@@ -150,7 +151,12 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         showAll.addActionListener(event -> applySourceFilter(java.util.EnumSet.allOf(DatabaseType.class)));
         filteredEmpty.add(showAll, prompt);
         explorerCards.add(filteredEmpty, "filtered-empty");
-        add(explorerCards, BorderLayout.CENTER);
+        banner = new ExplorerBanner(project);
+        JPanel body = new JPanel(new BorderLayout());
+        body.setOpaque(false);
+        body.add(banner, BorderLayout.NORTH);
+        body.add(explorerCards, BorderLayout.CENTER);
+        add(body, BorderLayout.CENTER);
 
         JPanel footer = new JPanel(new BorderLayout(0, JBUI.scale(4)));
         operationStatus.getAccessibleContext().setAccessibleName("Database explorer status");
@@ -404,7 +410,9 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 SwingUtilities.invokeLater(() -> {
                     if (!finishNodeLoad(node, data, "Could not connect · Showing cached metadata", DatabaseUi.Tone.ERROR)) return;
                     restoreCachedConnection(node);
-                    Messages.showErrorDialog(project, "Failed to connect: " + failure.getMessage(), "Connection Error");
+                    ConnectionConfig cfg = data.getConnectionConfig();
+                    banner.error(cfg.getId(), cfg.getName() + " is unreachable", failure.getMessage(),
+                            links("Retry", () -> openTableData(node, data), "Edit connection", () -> editConnection(cfg)));
                 });
             }
         });
@@ -497,7 +505,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
             else new GeneratedSqlDialog(project, data.getConnectionConfig(), data.getDatabaseName(), sql).show();
         } catch (IllegalStateException error) {
             updateExplorerStatus("Could not generate SQL · Refresh the table", DatabaseUi.Tone.ERROR);
-            Messages.showErrorDialog(project, error.getMessage(), "Could not generate SQL");
+            banner.error(null, "Could not generate SQL", error.getMessage(), links());
         }
     }
 
@@ -587,6 +595,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
 
                 SwingUtilities.invokeLater(() -> {
                     if (!finishNodeLoad(connNode, data, "Loaded databases", DatabaseUi.Tone.NORMAL)) return;
+                    banner.clear(cfg.getId());
                     ExplorerTreeViewState.preserving(databaseTree, () -> {
                         connNode.removeAllChildren();
                         data.setConnected(true);
@@ -622,7 +631,8 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                         });
                     }
                     if (showErrorDialog)
-                        Messages.showErrorDialog(project, "Failed to connect: " + ex.getMessage(), "Connection Error");
+                        banner.error(cfg.getId(), cfg.getName() + " is unreachable", ex.getMessage(),
+                                links("Retry", () -> loadDatabasesForConnectionNode(connNode, data, true), "Edit connection", () -> editConnection(cfg)));
                 });
             }
         });
@@ -862,6 +872,16 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         DatabaseEditorManager.getInstance(project).openConsole(data.getConnectionConfig(), data.getDatabaseName(), null);
     }
 
+    /** Recovery links for the banner, in the order given. */
+    private static java.util.Map<String, Runnable> links() { return java.util.Map.of(); }
+
+    private static java.util.Map<String, Runnable> links(String first, Runnable firstAction, String second, Runnable secondAction) {
+        var links = new java.util.LinkedHashMap<String, Runnable>();
+        links.put(first, firstAction);
+        links.put(second, secondAction);
+        return links;
+    }
+
     @FunctionalInterface private interface DdlOperation { void execute(Connection connection) throws Exception; }
 
     private void runMutation(ConnectionConfig config, String message, String failure, DdlOperation operation,
@@ -888,8 +908,8 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                     if (disposed || project.isDisposed()) return;
                     mutationRunning = false;
                     databaseTree.setEnabled(true);
-                    updateExplorerStatus(failure + " · See error details", DatabaseUi.Tone.ERROR);
-                    Messages.showErrorDialog(project, error.getMessage(), failure);
+                    updateExplorerStatus(failure + " · See the banner above", DatabaseUi.Tone.ERROR);
+                    banner.error(null, failure, error.getMessage(), links());
                     drainRefreshes();
                 });
             }
