@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-/** Tables, views and consoles recently opened in this project, newest first. Local workspace state, never shared. */
+/** Tables, views, consoles and SQL scripts recently opened in this project, newest first. Local workspace state, never shared. */
 @State(name = "LatticeRecentItems", storages = @Storage(StoragePathMacros.WORKSPACE_FILE))
 public final class RecentItemsState implements PersistentStateComponent<RecentItemsState.State> {
     public static final int LIMIT = 50;
@@ -16,7 +16,7 @@ public final class RecentItemsState implements PersistentStateComponent<RecentIt
 
     public interface Listener { void recentItemsChanged(); }
 
-    public enum Kind { TABLE, CONSOLE }
+    public enum Kind { TABLE, CONSOLE, SCRIPT }
 
     public static final class Item {
         public Kind kind = Kind.TABLE;
@@ -28,6 +28,8 @@ public final class RecentItemsState implements PersistentStateComponent<RecentIt
         public String name;
         /** The table type the database reported, for example TABLE or VIEW. */
         public String tableType;
+        /** Absolute path of a script file; null otherwise. */
+        public String path;
 
         public Item() {}
 
@@ -44,10 +46,16 @@ public final class RecentItemsState implements PersistentStateComponent<RecentIt
             return item;
         }
 
+        public static Item script(String connectionId, String database, String path) {
+            Item item = new Item();
+            item.kind = Kind.SCRIPT; item.connectionId = connectionId; item.database = database; item.path = path;
+            return item;
+        }
+
         /** Two entries are the same place regardless of the table type reported when each was opened. */
         boolean samePlace(Item other) {
             return kind == other.kind && Objects.equals(connectionId, other.connectionId) && Objects.equals(database, other.database)
-                    && Objects.equals(catalog, other.catalog) && Objects.equals(schema, other.schema) && Objects.equals(name, other.name);
+                    && Objects.equals(catalog, other.catalog) && Objects.equals(schema, other.schema) && Objects.equals(name, other.name) && Objects.equals(path, other.path);
         }
     }
 

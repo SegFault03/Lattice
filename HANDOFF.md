@@ -34,19 +34,21 @@ Done (A+B):
 
 Done (C): `search/LatticeSearch` (pure ranking: recents, then cached tables by match degree capped at 50 and never repeating a recent table, then connections with an "Open SQL console" action, then data source names) and `LatticeSearchContributor` (separate Lattice tab; Enter opens, Alt+Enter console; connection selects it via `DatabaseMainPanel.revealConnection`). Previewed with the production renderer; the real popup is not captured yet.
 
+Done: SQL scripts become recent items when a run starts (`SqlScriptPanel.execute`); reopening shows `SqlScriptDialog` with the file chosen.
+
 Done (D): `model/Environment` and `ConnectionConfig.environment` (Environment row in the connection dialog); the tree row appends "Unreachable" (error color) when the connection's first child is an error node and it is not connected, then the tag in `DatabaseUi.environmentColor` (local omitted); tooltip carries both. Search Everywhere connection context adds the tag.
 
 Deviations from concept 04 (tell the owner):
 - At narrow widths tree rows clip the tag at the edge (the concept flagged this); the tooltip carries it. No connected/checking word is shown: the plug icon and bold name already say connected, and Lattice never pings.
 - Search Everywhere puts the muted context right after the title (platform convention), not right-aligned.
 - Recent is fixed above the tree and does not scroll with it (matches the concept's long-list note, not a single scroll).
-- Scripts are not recorded as recent items yet (the concept lists them).
 - Only the four existing engines; MariaDB and SQLite appear when their providers exist.
 - The tree keeps its visible "Data Sources" root; tags and status in tree rows are part of D.
 - The arrival motion (new connection rises into the tree) waits for the owner to confirm the motion defaults.
 
 Remaining for R7:
-- `screenshots/explorer-home.png` is the old welcome image renamed; re-render the featured images on IntelliJ 2026.2.3 Islands Light (`python scripts/ui-preview.py --ide-home <idea-2026.2.3>`).
+- Owner review of the built home (then the design-primer `accept` step: delete `design/welcome-home/`, record the direction and motion in `DESIGN.md`).
+- Real-IDE capture of the Search Everywhere tab and the Recent section (`uiScreenshotTest`); only headless renders exist.
 
 ## Waiting for the owner
 - Motion defaults proposed in the viewer (quiet, ease-out-quart, 150 ms state changes, one focal moment when the first connection arrives); record in `DESIGN.md` once the owner confirms.
@@ -66,6 +68,7 @@ Remaining for R7:
 See `ROADMAP.md` → Open questions (Settings Sync roaming, minimum IDE, licensing).
 
 ## Notes for the next session
+- Baseline renders in a cloud session: the IDE and JDK 25 download with `Dependencies.ide(version='2026.2.3')` / `java(major=25)` into `~/.cache/lattice-development`; Gradle needs `org.gradle.java.installations.paths=<jdk-25>` in `~/.gradle/gradle.properties` (a `-P` flag also works; `GRADLE_OPTS` and `ORG_GRADLE_PROJECT_` do not). Re-rendering unchanged screens here shifts glyphs by a pixel; commit only the images whose screens changed.
 - Real-IDE captures: `LATTICE_UI_SKIP_REMOTE_DOWNLOADS=true LATTICE_UI_MAVEN_REPOSITORY="$PWD/build/ui-test-maven/repository" ./scripts/linux/capture-intellij-ui.sh -Plattice.ui.review=true -Plattice.ui.output=$PWD/.temp/reviews/<name>`; add `-Plattice.ui.theme=ExperimentalLight`, `-Plattice.ui.scale=2.0` or a focused flag (`-Plattice.ui.cellDetailsOnly=true`, `sqlEditorOnly`, `sqlScriptOnly`, `explorerSearchOnly`, `sourceFilterOnly`). Remote driver downloads fail from cloud sessions (Maven Central).
 - `ide.ui.scale=2.0` in the harness scales components but not IDE fonts; font scale 2.0 is still untested.
 - The UI-scale-2.0 full run fails at an "Available drivers" combo wait: at 2x the 1920x1080 Xvfb screen is only 960x540 logical, so popups open off-screen. `scripts/linux/capture-intellij-ui.sh` fixes the Xvfb screen at 1920x1080; scaled runs need it enlarged (for example 3840x2160).

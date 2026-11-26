@@ -46,6 +46,13 @@ public final class SqlScriptDialog extends DialogWrapper {
         new SqlScriptDialog(project, config, namespace).show();
     }
 
+    /** Opens the dialog with {@code scriptPath} already chosen, as when reopening a recent script. */
+    public static void show(@Nullable Project project, @NotNull ConnectionConfig config, @Nullable String namespace, @NotNull String scriptPath) {
+        SqlScriptDialog dialog = new SqlScriptDialog(project, config, namespace);
+        dialog.panel.path.setText(scriptPath);
+        dialog.show();
+    }
+
     @Override protected @Nullable JComponent createCenterPanel() {
         panel.setPreferredSize(JBUI.size(860, 700));
         return panel;

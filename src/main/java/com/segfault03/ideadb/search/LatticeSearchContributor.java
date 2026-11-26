@@ -68,7 +68,11 @@ public final class LatticeSearchContributor implements SearchEverywhereContribut
         DatabaseEditorManager editors = DatabaseEditorManager.getInstance(project);
         switch (item.kind()) {
             case RECENT -> {
-                if (item.table() == null || console) editors.openConsole(item.connection(), item.database(), null);
+                RecentItemsState.Item recent = item.recent();
+                if (recent.kind == RecentItemsState.Kind.SCRIPT && !console) SwingUtilities.invokeLater(() -> {
+                    if (!project.isDisposed()) com.segfault03.ideadb.dialog.SqlScriptDialog.show(project, item.connection(), item.database(), recent.path);
+                });
+                else if (item.table() == null || console) editors.openConsole(item.connection(), item.database(), null);
                 else editors.openTableData(item.connection(), item.database(), copy(item.table()));
             }
             case TABLE -> {
@@ -114,7 +118,8 @@ public final class LatticeSearchContributor implements SearchEverywhereContribut
 
     private static Icon icon(LatticeSearch.Item item) {
         return switch (item.kind()) {
-            case RECENT -> item.table() == null ? Icons.CONSOLE : item.isView() ? Icons.VIEW : Icons.TABLE;
+            case RECENT -> item.recent().kind == RecentItemsState.Kind.SCRIPT ? Icons.SQL_FILE
+                    : item.table() == null ? Icons.CONSOLE : item.isView() ? Icons.VIEW : Icons.TABLE;
             case TABLE -> item.isView() ? Icons.VIEW : Icons.TABLE;
             case CONNECTION -> Icons.dataSource(item.type(), 16);
             case CONSOLE -> Icons.CONSOLE;

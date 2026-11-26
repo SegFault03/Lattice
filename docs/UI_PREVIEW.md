@@ -53,10 +53,11 @@ render the scenes on the compile baseline to keep them working, and write nothin
 
 Lattice opens no editor tab of its own. With no connections, the explorer lists
 one link per data source, each opening the connection dialog for that source.
-Once tables, views or consoles have been opened, a collapsible **Recent** section
-above the tree shows the last four, with a link to the rest; double-click or
-Enter reopens an item, Delete removes it. Recent items are stored per project in
-the workspace file and never shared.
+Once tables, views or consoles have been opened, or SQL scripts run, a
+collapsible **Recent** section above the tree shows the last four, with a link
+to the rest; double-click or Enter reopens an item (a script reopens the script
+dialog with that file), Delete removes it. Recent items are stored per project
+in the workspace file and never shared.
 
 Each connection can name its environment (none, local, development, staging or
 production) in the connection dialog. The explorer shows the tag beside the

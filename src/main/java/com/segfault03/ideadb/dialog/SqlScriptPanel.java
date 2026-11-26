@@ -258,6 +258,8 @@ public final class SqlScriptPanel extends JPanel implements Disposable {
     // ---- loading and checking ---------------------------------------------------------------------------------------
 
     private String loadedPath = "";
+    /** The absolute path of the loaded script, recorded as a recent item when it runs. */
+    private String loadedFile;
 
     private void loadIfChanged() {
         String text = path.getText().strip();
@@ -265,6 +267,7 @@ public final class SqlScriptPanel extends JPanel implements Disposable {
         loadedPath = text;
         resumeIndex = -1; // a different file never resumes another file's run
         fileFacts = "";
+        loadedFile = null;
         if (text.isEmpty()) { setScript(null, null); return; }
         File file = new File(text.startsWith("~" + File.separator) ? System.getProperty("user.home") + text.substring(1) : text);
         if (!file.isFile()) { setScript(null, "No file at this path"); return; }
@@ -281,6 +284,7 @@ public final class SqlScriptPanel extends JPanel implements Disposable {
                 charset = java.nio.charset.StandardCharsets.UTF_8;
             }
             fileFacts = size(file.length()) + ", " + charset.displayName();
+            loadedFile = file.getAbsolutePath();
             setScript(content.replace("\r\n", "\n"), null);
         } catch (IOException failure) {
             setScript(null, "Could not read the file: " + failure.getMessage());
@@ -369,6 +373,9 @@ public final class SqlScriptPanel extends JPanel implements Disposable {
         SqlScript running = new SqlScript(full.text(), full.statements().subList(from, full.statements().size()));
         runStart = from;
         String namespace = selectedNamespace();
+        if (project != null && !project.isDisposed() && loadedFile != null)
+            com.segfault03.ideadb.state.RecentItemsState.getInstance(project).record(
+                    com.segfault03.ideadb.state.RecentItemsState.Item.script(config.getId(), namespace, loadedFile));
         var options = new SqlScriptRunner.Options(stopOnError.isSelected(), singleTransaction.isSelected());
         SqlScriptRunner current = new SqlScriptRunner();
         runner = current;

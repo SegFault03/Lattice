@@ -28,9 +28,10 @@ public final class LatticeSearch {
 
     private LatticeSearch() {}
 
-    /** Title of a recent item: the schema-qualified table name, or Console. */
+    /** Title of a recent item: the schema-qualified table name, the script's file name, or Console. */
     public static String recentTitle(RecentItemsState.Item item) {
         if (item.kind == RecentItemsState.Kind.CONSOLE) return "Console";
+        if (item.kind == RecentItemsState.Kind.SCRIPT) return java.nio.file.Path.of(item.path).getFileName().toString();
         return item.schema == null || item.schema.isBlank() ? item.name : item.schema + "." + item.name;
     }
 

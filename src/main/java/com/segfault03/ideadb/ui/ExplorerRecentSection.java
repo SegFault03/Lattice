@@ -30,7 +30,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/** The explorer's Recent section: the last tables, views and consoles opened in this project, above the connection tree. */
+/** The explorer's Recent section: the last tables, views, consoles and scripts opened in this project, above the connection tree. */
 final class ExplorerRecentSection extends JPanel {
     static final int VISIBLE = 4;
     private static final String COLLAPSED = "lattice.explorer.recentCollapsed";
@@ -40,11 +40,12 @@ final class ExplorerRecentSection extends JPanel {
         String title() { return com.segfault03.ideadb.search.LatticeSearch.recentTitle(item); }
         Icon icon() {
             if (item.kind == RecentItemsState.Kind.CONSOLE) return Icons.CONSOLE;
+            if (item.kind == RecentItemsState.Kind.SCRIPT) return Icons.SQL_FILE;
             return new TableMetadata(null, null, item.name, item.tableType).isView() ? Icons.VIEW : Icons.TABLE;
         }
         String detail() {
             String where = item.database == null || item.database.isBlank() ? connection.getName() : connection.getName() + " · " + item.database;
-            return title() + " in " + where;
+            return item.kind == RecentItemsState.Kind.SCRIPT ? item.path + " on " + where : title() + " in " + where;
         }
     }
 
@@ -190,6 +191,8 @@ final class ExplorerRecentSection extends JPanel {
         RecentItemsState.Item item = entry.item();
         DatabaseEditorManager editors = DatabaseEditorManager.getInstance(project);
         if (item.kind == RecentItemsState.Kind.CONSOLE) editors.openConsole(entry.connection(), item.database, null);
+        else if (item.kind == RecentItemsState.Kind.SCRIPT)
+            SwingUtilities.invokeLater(() -> com.segfault03.ideadb.dialog.SqlScriptDialog.show(project, entry.connection(), item.database, item.path));
         else editors.openTableData(entry.connection(), item.database, new TableMetadata(item.catalog, item.schema, item.name, item.tableType));
     }
 

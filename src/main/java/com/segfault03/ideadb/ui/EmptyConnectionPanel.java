@@ -27,7 +27,7 @@ final class EmptyConnectionPanel extends JPanel {
         heading.setFont(JBFont.label().asBold());
         stack(content, heading);
         content.add(Box.createVerticalStrut(JBUI.scale(4)));
-        WrappingLabel hint = new WrappingLabel("Recent tables and consoles will appear here and in Search Everywhere.");
+        WrappingLabel hint = new WrappingLabel("Recent tables, consoles and scripts will appear here and in Search Everywhere.");
         hint.setForeground(DatabaseUi.SECONDARY_TEXT);
         stack(content, hint);
         content.add(Box.createVerticalStrut(JBUI.scale(12)));
