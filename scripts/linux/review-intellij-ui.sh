@@ -61,6 +61,9 @@ for theme in "${themes[@]}"; do
     if [[ "${LATTICE_UI_EXPLORER_SEARCH_ONLY:-false}" == true ]]; then
         version_args+=("-Plattice.ui.explorerSearchOnly=true")
     fi
+    if [[ "${LATTICE_UI_HOME_ONLY:-false}" == true ]]; then
+        version_args+=("-Plattice.ui.homeOnly=true")
+    fi
     if [[ "${LATTICE_UI_ALTER_TABLE_ONLY:-false}" == true ]]; then
         version_args+=("-Plattice.ui.alterTableOnly=true")
     fi

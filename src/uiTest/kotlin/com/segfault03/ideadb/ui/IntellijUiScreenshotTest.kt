@@ -75,6 +75,7 @@ class IntellijUiScreenshotTest {
         val styleOnly = System.getProperty("ui.style.only").toBoolean()
         val sourceFilterOnly = System.getProperty("ui.sourceFilter.only").toBoolean()
         val explorerSearchOnly = System.getProperty("ui.explorerSearch.only").toBoolean()
+        val homeOnly = System.getProperty("ui.home.only").toBoolean()
         val alterTableOnly = System.getProperty("ui.alterTable.only").toBoolean()
         val createTableOnly = System.getProperty("ui.createTable.only").toBoolean()
         val cellDetailsOnly = System.getProperty("ui.cellDetails.only").toBoolean()
@@ -147,7 +148,7 @@ class IntellijUiScreenshotTest {
         // IDEA's own ProxySelector supersedes JVM proxy flags. Configure the real
         // HTTP Proxy settings in this isolated profile, preserving cloud routing.
         val proxyAddress = System.getenv("HTTPS_PROXY") ?: System.getenv("HTTP_PROXY")
-        val downloadFixture = if (!sourceFilterOnly && !explorerSearchOnly && !alterTableOnly && !createTableOnly && !sqlEditorOnly && !sqlScriptOnly && !postgres && !System.getProperty("ui.skip.remote.downloads", "false").toBoolean())
+        val downloadFixture = if (!sourceFilterOnly && !explorerSearchOnly && !homeOnly && !alterTableOnly && !createTableOnly && !sqlEditorOnly && !sqlScriptOnly && !postgres && !System.getProperty("ui.skip.remote.downloads", "false").toBoolean())
             DriverDownloadUiFixture(proxyAddress) else null
         try {
         val configuredProxy = downloadFixture?.let { "http://127.0.0.1:${it.port}" } ?: proxyAddress
@@ -274,9 +275,12 @@ class IntellijUiScreenshotTest {
             ideFrame {
                 pluginRoot = x { byJavaClass("com.segfault03.ideadb.ui.DatabaseMainPanel") }.waitFound()
             }
-            val jetBrainsActionLink = pluginRoot.x {
-                byJavaClass("com.intellij.ui.components.ActionLink")
-            }.waitFound()
+            // The first-run explorer has one link per data source; measure the first.
+            lateinit var jetBrainsActionLink: UiComponent
+            waitUntil("first-run data source links") {
+                pluginRoot.xx { byJavaClass("com.intellij.ui.components.ActionLink") }.list().firstOrNull()
+                    ?.also { jetBrainsActionLink = it } != null
+            }
             val jetBrainsActionLinkBounds = Rectangle(jetBrainsActionLink.component.getBounds())
 
             Thread.sleep(1000)
@@ -350,6 +354,123 @@ class IntellijUiScreenshotTest {
                     Real HSQLDB fixture; a mixed batch combines add, modify, rename column, drop and rename table, verified with JDBC metadata.
                     Checked retained drafts, invalid hidden input, filtering, full SQL preview, busy animation, partial-success recovery, retry and destructive confirmation.
                     Captures are actual desktop pixels; alter-inspector-dialog.png is a crop of the live modal.
+                """.trimIndent())
+                return@useDriverAndCloseIde
+            }
+            if (homeOnly) {
+                fun crop(component: UiComponent, name: String) {
+                    robot.mouseMove(10, 10); repaintIdeBeforeCapture?.invoke(); Thread.sleep(600)
+                    val point = component.component.getLocationOnScreen()
+                    savePng(screenshotsDirectory.resolve(name), robot.createScreenCapture(
+                        Rectangle(point.x, point.y, component.component.width, component.component.height)))
+                }
+                fun connectionRow(tree: JTreeUiComponent, name: String): Int {
+                    var row: Int? = null
+                    waitUntil("connection row $name") {
+                        row = tree.collectExpandedPaths().firstOrNull { it.path.size == 3 && it.path[2].startsWith(name) }?.row
+                        row != null
+                    }
+                    return requireNotNull(row)
+                }
+                // First run: the explorer itself is home, with one link per data source.
+                waitUntil("first-run explorer") { pluginRoot.hasSubtext("No connections yet") }
+                crop(pluginRoot, "home-first-run.png")
+                openConnectionMenu(pluginRoot, frame, "HSQLDB…")
+                frame.x(DialogUiComponent::class.java) { byTitle("New connection") }.waitFound().also { dialog ->
+                    dialog.x(JComboBoxUiComponent::class.java) {
+                        and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"), byAccessibleName("Mode:"))
+                    }.waitFound().selectItem("In-Memory (mem)")
+                    for ((name, value) in listOf("Name:" to "Local development", "Database name:" to "lattice_home", "User:" to "SA")) {
+                        dialog.x(JTextFieldUI::class.java) {
+                            and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputTextField"), byAccessibleName(name))
+                        }.waitFound().text = value
+                    }
+                    dialog.pressButton("Add connection")
+                }
+                ideFrame { waitForNoOpenedDialogs() }
+                val tree = pluginRoot.x(JTreeUiComponent::class.java) { byJavaClass("com.intellij.ui.treeStructure.Tree") }.waitFound()
+                val schema = arrayOf("Data Sources", "HSQLDB", "Local development", "PUBLIC")
+                expandExplorerPath(tree, schema.take(3).joinToString(tree.fixture.separator()))
+                waitUntil("home fixture schema connected") { tree.pathExists(*schema) }
+                expandExplorerPath(tree, schema.joinToString(tree.fixture.separator()))
+                waitUntil("home fixture tables loaded") { tree.pathExists(*(schema + "Tables (0)")) }
+                val tables = listOf("HOME_CUSTOMERS", "HOME_ORDERS")
+                for ((index, name) in tables.withIndex()) {
+                    rightClickExplorerPath(tree, schema.joinToString(tree.fixture.separator()))
+                    frame.x { byVisibleText("Create table…") }.waitFound().click()
+                    frame.x(DialogUiComponent::class.java) { byTitle("Create table in PUBLIC") }.waitFound().also { dialog ->
+                        inspectorInput(dialog, "Table name").text = name
+                        addScenarioColumns(dialog)
+                        dialog.x { byAccessibleName("Create new table") }.waitFound().click()
+                    }
+                    frame.x(DialogUiComponent::class.java) { byTitle("Table created") }.waitFound().pressButton("OK")
+                    ideFrame { waitForNoOpenedDialogs() }
+                    waitUntil("$name in the explorer") { tree.pathExists(*(schema + "Tables (${index + 1})")) }
+                }
+                // Opening tables and a console fills the Recent section, newest first.
+                val tablesFolder = (schema + "Tables (2)").joinToString(tree.fixture.separator())
+                expandExplorerPath(tree, tablesFolder)
+                for (name in tables) {
+                    rightClickExplorerPath(tree, tablesFolder + tree.fixture.separator() + name)
+                    frame.x { byVisibleText("Open data editor") }.waitFound().click()
+                    waitUntil("$name editor open") { frame.xx { byJavaClass("com.segfault03.ideadb.ui.DatabaseTable") }.list().isNotEmpty() }
+                }
+                rightClickExplorerPath(tree, schema.joinToString(tree.fixture.separator()))
+                frame.x { byVisibleText("Open SQL console") }.waitFound().click()
+                val recent = pluginRoot.x { byAccessibleName("Recent tables and consoles") }.waitFound()
+                waitUntil("three recent items") { cast(recent.component, LiveList::class).getModel().getSize() == 3 }
+                // A server that is not running: the failed open is the only status Lattice shows without contacting anyone.
+                openConnectionMenu(pluginRoot, frame, "MySQL…")
+                frame.x(DialogUiComponent::class.java) { byTitle("New connection") }.waitFound().also { dialog ->
+                    fillNewConnection(dialog, "Analytics offline", user = "root")
+                    dialog.pressButton("Add connection")
+                }
+                ideFrame { waitForNoOpenedDialogs() }
+                expandExplorerPath(tree, listOf("Data Sources", "MySQL", "Analytics offline").joinToString(tree.fixture.separator()))
+                waitUntil("failed open shown", 60_000) {
+                    tree.collectExpandedPaths().any { it.path.last().startsWith("Connection failed") }
+                }
+                // Routine failures still raise a modal (roadmap R3 replaces it with a banner).
+                frame.x(DialogUiComponent::class.java) { byTitle("Connection Error") }.waitFound().pressButton("OK")
+                ideFrame { waitForNoOpenedDialogs() }
+                for ((name, environment) in listOf("Local development" to "Staging", "Analytics offline" to "Production")) {
+                    tree.fixture.clickRow(connectionRow(tree, name))
+                    pluginRoot.x { byAccessibleName("Edit connection…") }.waitFound().click()
+                    frame.x(DialogUiComponent::class.java) { byTitle("Edit connection") }.waitFound().also { dialog ->
+                        dialog.x(JComboBoxUiComponent::class.java) {
+                            and(byJavaClass("com.segfault03.ideadb.ui.DatabaseInputs\$InputComboBox"), byAccessibleName("Environment:"))
+                        }.waitFound().selectItem(environment)
+                        dialog.pressButton("Save")
+                    }
+                    ideFrame { waitForNoOpenedDialogs() }
+                }
+                waitUntil("tagged rows") {
+                    val rows = tree.collectExpandedPaths().filter { it.path.size == 3 }.map { it.path[2] }
+                    rows.any { it.contains("staging") } && rows.any { it.contains("Unreachable") && it.contains("production") }
+                }
+                crop(pluginRoot, "home-recent.png")
+                captureScreen(screenshotsDirectory.resolve("home-full-ide.png"))
+
+                // Search Everywhere: the Lattice tab, first with an empty query, then with one.
+                ideFrame { invokeAction("SearchEverywhere", now = false) }
+                val searchEverywhere = ui.x { byJavaClass("com.intellij.ide.actions.searcheverywhere.SearchEverywhereUI") }.waitFound()
+                searchEverywhere.x { byVisibleText("Lattice") }.waitFound().click()
+                Thread.sleep(1500)
+                crop(searchEverywhere, "home-search-everywhere-empty.png")
+                val field = searchEverywhere.xx(JTextFieldUI::class.java) { byType("javax.swing.JTextField") }.list().first { it.component.isShowing() }
+                field.text = "home"
+                waitUntil("Lattice tab results") { searchEverywhere.hasSubtext("HOME_ORDERS") || searchEverywhere.hasSubtext("PUBLIC.HOME_ORDERS") }
+                Thread.sleep(800)
+                crop(searchEverywhere, "home-search-everywhere-query.png")
+                field.text = "analytics"
+                Thread.sleep(1500)
+                crop(searchEverywhere, "home-search-everywhere-connection.png")
+                pressEscape()
+                screenshotsDirectory.resolve("runtime-evidence.txt").writeText("""
+                    Running IDE: ${actualTheme.getName()} ($themeId)
+                    Explorer home in the installed plugin: first-run links; an in-memory HSQLDB connection with two tables opened and a console, listed in Recent;
+                    a MySQL connection to a server that is not running, shown as Unreachable after its open failed; environments set through Edit connection.
+                    Search Everywhere's Lattice tab with an empty query, "home" and "analytics". Captures are actual desktop pixels; home-*.png crops of the tool window and the popup.
                 """.trimIndent())
                 return@useDriverAndCloseIde
             }
@@ -3163,6 +3284,11 @@ interface LiveSearchMatches { fun size(): Int }
 
 @Remote("javax.swing.JList")
 interface LiveColumnList { fun ensureIndexIsVisible(index: Int) }
+
+@Remote("javax.swing.JList")
+interface LiveList { fun getModel(): LiveListModel }
+@Remote("javax.swing.ListModel")
+interface LiveListModel { fun getSize(): Int }
 
 @Remote("javax.swing.JTextPane")
 interface LiveStyledSql {

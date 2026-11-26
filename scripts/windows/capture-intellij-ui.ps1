@@ -130,6 +130,7 @@ try {
     if ($InputsOnly -or $env:LATTICE_UI_INPUTS_ONLY -eq 'true') { $gradleArguments += '-Plattice.ui.inputsOnly=true' }
     if ($StyleOnly -or $env:LATTICE_UI_STYLE_ONLY -eq 'true') { $gradleArguments += '-Plattice.ui.styleOnly=true' }
     if ($env:LATTICE_UI_EXPLORER_SEARCH_ONLY -eq 'true') { $gradleArguments += '-Plattice.ui.explorerSearchOnly=true' }
+    if ($env:LATTICE_UI_HOME_ONLY -eq 'true') { $gradleArguments += '-Plattice.ui.homeOnly=true' }
     if ($env:LATTICE_UI_ALTER_TABLE_ONLY -eq 'true') { $gradleArguments += '-Plattice.ui.alterTableOnly=true' }
     if ($env:LATTICE_UI_CREATE_TABLE_ONLY -eq 'true') { $gradleArguments += '-Plattice.ui.createTableOnly=true' }
     if ($env:LATTICE_UI_CELL_DETAILS_ONLY -eq 'true') { $gradleArguments += '-Plattice.ui.cellDetailsOnly=true' }

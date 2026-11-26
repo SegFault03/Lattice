@@ -32,7 +32,7 @@ Done (A+B):
 - `RecentItemsState` (project service, workspace file, newest first, 50 max), recorded in `DatabaseEditorManager.openTableData`/`openConsole`; `ExplorerRecentSection` above the tree: last 4, "N more…" popup with speed search, collapsible header (persisted), double-click/Enter opens, Delete or context menu removes, Clear Recent. Hidden while explorer search is open and when empty.
 - Previews: `python scripts/ui-preview.py --home-only --output .temp/ui-preview-home` renders every state in both themes and first run/returning at font 2.0 (2025.1 SDK, headless; not the tracked-image baseline).
 
-Done (C): `search/LatticeSearch` (pure ranking: recents, then cached tables by match degree capped at 50 and never repeating a recent table, then connections with an "Open SQL console" action, then data source names) and `LatticeSearchContributor` (separate Lattice tab; Enter opens, Alt+Enter console; connection selects it via `DatabaseMainPanel.revealConnection`). Previewed with the production renderer; the real popup is not captured yet.
+Done (C): `search/LatticeSearch` (pure ranking: recents, then cached tables by match degree capped at 50 and never repeating a recent table, then connections with an "Open SQL console" action, then data source names) and `LatticeSearchContributor` (separate Lattice tab; Enter opens, Alt+Enter console; connection selects it via `DatabaseMainPanel.revealConnection`). Captured in the real IDE (`-Plattice.ui.homeOnly=true`, light and dark). Matches are highlighted on the selected row only, the platform's convention (`ide.highlight.match.in.selected.only`).
 
 Done: SQL scripts become recent items when a run starts (`SqlScriptPanel.execute`); reopening shows `SqlScriptDialog` with the file chosen.
 
@@ -48,7 +48,6 @@ Deviations from concept 04 (tell the owner):
 
 Remaining for R7:
 - Owner review of the built home (then the design-primer `accept` step: delete `design/welcome-home/`, record the direction and motion in `DESIGN.md`).
-- Real-IDE capture of the Search Everywhere tab and the Recent section (`uiScreenshotTest`); only headless renders exist.
 
 ## Waiting for the owner
 - Motion defaults proposed in the viewer (quiet, ease-out-quart, 150 ms state changes, one focal moment when the first connection arrives); record in `DESIGN.md` once the owner confirms.
@@ -69,6 +68,6 @@ See `ROADMAP.md` → Open questions (Settings Sync roaming, minimum IDE, licensi
 
 ## Notes for the next session
 - Baseline renders in a cloud session: the IDE and JDK 25 download with `Dependencies.ide(version='2026.2.3')` / `java(major=25)` into `~/.cache/lattice-development`; Gradle needs `org.gradle.java.installations.paths=<jdk-25>` in `~/.gradle/gradle.properties` (a `-P` flag also works; `GRADLE_OPTS` and `ORG_GRADLE_PROJECT_` do not). Re-rendering unchanged screens here shifts glyphs by a pixel; commit only the images whose screens changed.
-- Real-IDE captures: `LATTICE_UI_SKIP_REMOTE_DOWNLOADS=true LATTICE_UI_MAVEN_REPOSITORY="$PWD/build/ui-test-maven/repository" ./scripts/linux/capture-intellij-ui.sh -Plattice.ui.review=true -Plattice.ui.output=$PWD/.temp/reviews/<name>`; add `-Plattice.ui.theme=ExperimentalLight`, `-Plattice.ui.scale=2.0` or a focused flag (`-Plattice.ui.cellDetailsOnly=true`, `sqlEditorOnly`, `sqlScriptOnly`, `explorerSearchOnly`, `sourceFilterOnly`). Remote driver downloads fail from cloud sessions (Maven Central).
+- Real-IDE captures: `LATTICE_UI_SKIP_REMOTE_DOWNLOADS=true LATTICE_UI_MAVEN_REPOSITORY="$PWD/build/ui-test-maven/repository" ./scripts/linux/capture-intellij-ui.sh -Plattice.ui.review=true -Plattice.ui.output=$PWD/.temp/reviews/<name>`; add `-Plattice.ui.theme=ExperimentalLight`, `-Plattice.ui.scale=2.0` or a focused flag (`-Plattice.ui.cellDetailsOnly=true`, `sqlEditorOnly`, `sqlScriptOnly`, `explorerSearchOnly`, `sourceFilterOnly`, `homeOnly`). Remote driver downloads fail from cloud sessions (Maven Central).
 - `ide.ui.scale=2.0` in the harness scales components but not IDE fonts; font scale 2.0 is still untested.
 - The UI-scale-2.0 full run fails at an "Available drivers" combo wait: at 2x the 1920x1080 Xvfb screen is only 960x540 logical, so popups open off-screen. `scripts/linux/capture-intellij-ui.sh` fixes the Xvfb screen at 1920x1080; scaled runs need it enlarged (for example 3840x2160).

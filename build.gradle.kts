@@ -397,6 +397,7 @@ intellijPlatformTesting.testIdeUi.register("uiScreenshotTest") {
         systemProperty("ui.inputs.only", providers.gradleProperty("lattice.ui.inputsOnly").orElse("false").get())
         systemProperty("ui.sourceFilter.only", providers.gradleProperty("lattice.ui.sourceFilterOnly").orElse("false").get())
         systemProperty("ui.explorerSearch.only", providers.gradleProperty("lattice.ui.explorerSearchOnly").orElse("false").get())
+        systemProperty("ui.home.only", providers.gradleProperty("lattice.ui.homeOnly").orElse("false").get())
         systemProperty("ui.alterTable.only", providers.gradleProperty("lattice.ui.alterTableOnly").orElse("false").get())
         systemProperty("ui.createTable.only", providers.gradleProperty("lattice.ui.createTableOnly").orElse("false").get())
         systemProperty("ui.cellDetails.only", providers.gradleProperty("lattice.ui.cellDetailsOnly").orElse("false").get())
