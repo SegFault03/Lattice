@@ -178,7 +178,7 @@ class DatabaseExplorerToolbarTest {
             JButton last = buttons.get(buttons.size() - 1);
             assertEquals("Lattice settings…", last.getToolTipText());
             assertSame(com.intellij.icons.AllIcons.General.Settings, last.getIcon());
-            assertEquals("Welcome to Lattice", buttons.get(buttons.size() - 2).getToolTipText(), "the settings button follows the help button");
+            assertEquals("What's New in Lattice", buttons.get(buttons.size() - 2).getToolTipText(), "the settings button follows the help button");
             for (boolean connections : new boolean[] {false, true}) {
                 toolbar.setHasConnections(connections);
                 toolbar.setBusy(!connections);

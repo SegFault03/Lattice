@@ -18,11 +18,12 @@ Patch notes are selected by the exact release version, including prerelease suff
 - Saving or removing a connection no longer blocks the IDE while the system keychain responds.
 - Closing the script dialog during a run no longer waits for the driver's cancel.
 - Grid columns fit their values once rows first load into a table that opened empty.
-- Hints and secondary text meet 4.5:1 contrast in light and dark themes; the welcome screen follows the IDE font size and keeps its text column in narrow editors.
+- Hints and secondary text meet 4.5:1 contrast in light and dark themes.
 - A disabled **Stage change** no longer looks like an available action.
 
 ### Explorer and console
 
+- Lattice no longer opens a welcome tab. The explorer is home: with no connections it links each data source to its connection dialog, and a collapsible **Recent** section above the tree reopens the last tables, views and consoles of the project. The explorer's help button opens What's New.
 - Run SQL script files from a connection, schema or table's context menu, the SQL console toolbar or a table's options menu. The dialog checks the script offline against the cached schema, previews it with problems marked on their lines, and runs it statement by statement with a run log of each result. Choose to stop or continue after an error, or run everything in one transaction that rolls back on error. MySQL `DELIMITER` lines are supported.
 
 ### SQL editor

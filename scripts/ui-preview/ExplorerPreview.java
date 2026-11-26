@@ -179,6 +179,40 @@ public final class ExplorerPreview {
         return layer;
     }
 
+    /** Explorer home: the Recent section above the fixture tree. {@code recents} beyond four show as a More link. */
+    public static JPanel home(ConnectionConfig config, int recents, boolean collapsed) {
+        JPanel panel = create(config, false);
+        JScrollPane scroll = (JScrollPane)((BorderLayout)panel.getLayout()).getLayoutComponent(BorderLayout.CENTER);
+        panel.remove(scroll);
+        ConnectionConfig local = new ConnectionConfig(DatabaseType.HSQLDB, "Local development");
+        ConnectionConfig orders = new ConnectionConfig(DatabaseType.H2, "Orders fixture");
+        ConnectionConfig analytics = new ConnectionConfig(DatabaseType.MYSQL, "Analytics server");
+        ConnectionConfig reporting = new ConnectionConfig(DatabaseType.POSTGRESQL, "Reporting replica");
+        java.util.List<ExplorerRecentSection.Entry> entries = new java.util.ArrayList<>(java.util.List.of(
+                entry(local, com.segfault03.ideadb.state.RecentItemsState.Item.table(local.getId(), "PUBLIC", null, "PUBLIC", "CUSTOMERS", "TABLE")),
+                entry(config, com.segfault03.ideadb.state.RecentItemsState.Item.table(config.getId(), "shop", "shop", null, "orders", "TABLE")),
+                entry(analytics, com.segfault03.ideadb.state.RecentItemsState.Item.console(analytics.getId(), "analytics")),
+                entry(reporting, com.segfault03.ideadb.state.RecentItemsState.Item.table(reporting.getId(), "reporting", null, "public", "daily_revenue", "VIEW")),
+                entry(orders, com.segfault03.ideadb.state.RecentItemsState.Item.table(orders.getId(), "ORDERS", null, "PUBLIC", "ORDER_ITEMS", "TABLE")),
+                entry(local, com.segfault03.ideadb.state.RecentItemsState.Item.console(local.getId(), "PUBLIC"))));
+        for (int i = entries.size(); i < recents; i++)
+            entries.add(entry(reporting, com.segfault03.ideadb.state.RecentItemsState.Item.table(reporting.getId(), "reporting", null,
+                    "tenant_" + String.format("%02d", i % 8 + 1), "invoices_" + i, "TABLE")));
+        ExplorerRecentSection section = ExplorerRecentSection.preview(entries.subList(0, Math.min(recents, entries.size())), collapsed);
+        panel.putClientProperty("lattice.preview.explorer.recent", section);
+        JPanel home = new JPanel(new BorderLayout());
+        home.setOpaque(false);
+        home.add(section, BorderLayout.NORTH);
+        home.add(scroll, BorderLayout.CENTER);
+        panel.add(home, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private static ExplorerRecentSection.Entry entry(ConnectionConfig connection, com.segfault03.ideadb.state.RecentItemsState.Item item) {
+        item.connectionId = connection.getId();
+        return new ExplorerRecentSection.Entry(item, connection);
+    }
+
     public static JPanel error(ConnectionConfig config) {
         JPanel panel = create(config, false);
         JTree tree = (JTree)((JScrollPane)((BorderLayout)panel.getLayout()).getLayoutComponent(BorderLayout.CENTER)).getViewport().getView();

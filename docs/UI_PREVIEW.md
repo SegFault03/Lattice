@@ -3,15 +3,14 @@
 ## In-IDE release guide
 
 Open **Tools → What's New in Lattice**, search for that action with
-**Ctrl+Shift+A**, or use the link on Lattice's welcome screen. The native editor
+**Ctrl+Shift+A**, or use the help button in Lattice's explorer toolbar. The native editor
 tab contains short feature guides, bundled images that can be enlarged, and an
 expandable list of changes from the packaged changelog. It works offline.
 
 After opening a project, an informational **Lattice updates** notification offers
 **View what's new**. Each version is announced once per IDE installation across
 projects. **Don't show again** disables future notices; the page stays available.
-The announcement state is stored separately from the welcome-screen preference,
-does not roam through Settings Sync, and survives restarts.
+The announcement state does not roam through Settings Sync, and survives restarts.
 The page's **Notify me about new Lattice releases** checkbox can re-enable notices.
 
 For a local installation, build the plugin ZIP, use **Settings → Plugins → gear →
@@ -50,14 +49,18 @@ On Linux or macOS, set the same variable and use `./gradlew`. Review the images
 before committing them. Without the variable, ordinary `javaPlatformTest` runs
 render the scenes on the compile baseline to keep them working, and write nothing.
 
-## Welcome screen
+## Explorer home
 
-The welcome screen lists MySQL, PostgreSQL, H2 and HSQLDB, and summarizes the
-current browse, edit, query and export workflows. **Add connection** retains
-the source picker; **Open SQL console** becomes available when a saved
-connection exists. The startup preference is still available below the source
-list. `--all-previews` captures the screen in both themes and at wide and narrow
-editor widths.
+Lattice opens no editor tab of its own. With no connections, the explorer lists
+one link per data source, each opening the connection dialog for that source.
+Once tables, views or consoles have been opened, a collapsible **Recent** section
+above the tree shows the last four, with a link to the rest; double-click or
+Enter reopens an item, Delete removes it. Recent items are stored per project in
+the workspace file and never shared.
+
+`--home-only` renders the first run, returning, few and long lists, collapsed,
+selected and 280 px narrow states in both themes, plus first run and returning at
+font scale 2.0 (one doubled text font, icons unchanged). `--all-previews` includes them.
 
 ## Explorer refresh behavior
 
@@ -177,7 +180,7 @@ Without a project the SQL console falls back to a plain text area, so the featur
 It paints the plugin's production Swing screens with fixture data and a headless IntelliJ test application for platform services such as the Action System. It does not open an IDE window or recreate the screens in separate UI code. The default run uses a light look and feel and refreshes these nine tracked README images:
 
 - `screenshots/side-panel.png`
-- `screenshots/welcome.png`
+- `screenshots/explorer-home.png`
 - `screenshots/connection-dialog.png`
 - `screenshots/alter-table-dialog.png`
 - `screenshots/table-view.png`

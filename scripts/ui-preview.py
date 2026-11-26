@@ -25,7 +25,7 @@ from dependencies import Dependencies, add_dependency_options, executable
 
 FEATURED_SCREENSHOTS = {
     'side-panel.png': 'light-cell-details-1440.png',
-    'welcome.png': 'light-welcome-900.png',
+    'explorer-home.png': 'light-home-returning-340.png',
     'connection-dialog.png': 'light-connection-mysql-740.png',
     'alter-table-dialog.png': 'light-schema-alter-table-800.png',
     'table-view.png': 'light-table-1100.png',
@@ -132,6 +132,8 @@ def run():
                         help='Render the explorer search in light/dark themes, without updating screenshots/')
     parser.add_argument('--tab-icons-only', action='store_true',
                         help='Render table tab source badges in light/dark themes, without updating screenshots/')
+    parser.add_argument('--home-only', action='store_true',
+                        help='Render the explorer home (first run, Recent section) in both themes, without updating tracked screenshots')
     parser.add_argument('--cell-details-only', action='store_true',
                         help='Render focused cell and column details in both themes, without updating tracked screenshots')
     parser.add_argument('--flatlaf-jar', type=Path, help='Existing FlatLaf 3.8 JAR')
@@ -206,8 +208,8 @@ def render(args, deps, parser):
         manifest = output / f'{theme}-manifest.txt'
         if manifest.exists():
             manifest.unlink()
-    mode = 'checks' if args.checks_only else 'cell-details' if args.cell_details_only else 'tab-icons' if args.tab_icons_only else 'search' if args.search_only else 'source-filter' if args.source_filter_only else 'all' if args.all_previews else 'featured'
-    themes = ('light', 'dark') if args.all_previews or args.source_filter_only or args.search_only or args.tab_icons_only or args.cell_details_only else ('light',)
+    mode = 'checks' if args.checks_only else 'home' if args.home_only else 'cell-details' if args.cell_details_only else 'tab-icons' if args.tab_icons_only else 'search' if args.search_only else 'source-filter' if args.source_filter_only else 'all' if args.all_previews else 'featured'
+    themes = ('light', 'dark') if args.all_previews or args.home_only or args.source_filter_only or args.search_only or args.tab_icons_only or args.cell_details_only else ('light',)
     for theme in themes:
         system_path = output / f'idea-system-{os.getpid()}-{theme}'
         config_path = output / f'idea-config-{os.getpid()}-{theme}'
@@ -241,7 +243,7 @@ def render(args, deps, parser):
         return
     if len(themes) == 1:
         (output / 'dark-manifest.txt').write_text('', encoding='utf-8')
-    if not args.source_filter_only and not args.search_only and not args.tab_icons_only and not args.cell_details_only:
+    if not args.source_filter_only and not args.search_only and not args.tab_icons_only and not args.cell_details_only and not args.home_only:
         if not args.skip_sql_editor:
             render_sql_editor_images(sdk, output)
         publish_screenshots(output, screenshots)
@@ -290,7 +292,7 @@ def render_gallery(output, baseline=None):
     for filename in light:
         path = output / filename
         name = path.stem.removeprefix('light-')
-        screen = 'side-panel' if name.startswith('explorer-search') else next((kind for kind in ('connection', 'side-panel', 'sql-console', 'schema', 'inputs', 'welcome') if name.startswith(kind)), 'table')
+        screen = 'side-panel' if name.startswith('explorer-search') else next((kind for kind in ('connection', 'side-panel', 'sql-console', 'schema', 'inputs', 'home') if name.startswith(kind)), 'table')
         shots = []
         if baseline and (baseline / filename).is_file() and (baseline / filename.replace('light-', 'dark-', 1)).is_file():
             (output / 'before').mkdir(exist_ok=True)

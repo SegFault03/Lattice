@@ -53,12 +53,6 @@ public class EditorIntegrationTest {
         if (!c1.equals(c2)) {
             throw new AssertionError("Console files should be equal");
         }
-
-        WelcomeVirtualFile w1 = new WelcomeVirtualFile();
-        WelcomeVirtualFile w2 = new WelcomeVirtualFile();
-        if (!w1.equals(w2)) {
-            throw new AssertionError("Welcome files should be equal");
-        }
         System.out.println("PASSED!");
     }
 
@@ -73,12 +67,12 @@ public class EditorIntegrationTest {
 
         TableDataVirtualFile tableFile = new TableDataVirtualFile(cfg, "PUBLIC", tm);
         SqlConsoleVirtualFile consoleFile = new SqlConsoleVirtualFile(cfg, "PUBLIC", List.of("PUBLIC"));
-        WelcomeVirtualFile welcomeFile = new WelcomeVirtualFile();
+        ReleaseNotesVirtualFile releaseNotesFile = new ReleaseNotesVirtualFile();
         LightVirtualFile normalFile = new LightVirtualFile("Sample.java");
 
         if (!provider.accept(project, tableFile)) throw new AssertionError("Provider should accept TableDataVirtualFile");
         if (!provider.accept(project, consoleFile)) throw new AssertionError("Provider should accept SqlConsoleVirtualFile");
-        if (!provider.accept(project, welcomeFile)) throw new AssertionError("Provider should accept WelcomeVirtualFile");
+        if (!provider.accept(project, releaseNotesFile)) throw new AssertionError("Provider should accept ReleaseNotesVirtualFile");
         if (provider.accept(project, normalFile)) throw new AssertionError("Provider must NOT accept regular LightVirtualFile");
 
         if (provider.getPolicy() != FileEditorPolicy.HIDE_DEFAULT_EDITOR) {

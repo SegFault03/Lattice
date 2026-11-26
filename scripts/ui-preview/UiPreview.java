@@ -27,7 +27,7 @@ public final class UiPreview {
     static Path output;
     static final List<String> snapshots = new ArrayList<>();
     static final Set<String> FEATURED_PREVIEWS = Set.of(
-            "cell-details-1440", "welcome-900", "connection-mysql-740", "schema-alter-table-800", "table-1100",
+            "cell-details-1440", "home-returning-340", "connection-mysql-740", "schema-alter-table-800", "table-1100",
             "table-new-row-1100", "sql-console-1100");
     static boolean featuredOnly;
     private static Font previewFont() {
@@ -1096,44 +1096,43 @@ public final class UiPreview {
         if (normal.getBorder().getBorderInsets(normal).top != 0) throw new AssertionError("Modified/error border leaked into a normal cell");
         System.out.println("Cell menu actions and renderer state verified");
     }
-    static JPanel welcome(boolean configured) throws Exception {
-        var settings = new com.segfault03.ideadb.state.DatabaseSettingsState();
-        if (configured) {
-            var state = (com.segfault03.ideadb.state.DatabaseSettingsState.State)field(settings, "state");
-            state.connections.add(config(DatabaseType.MYSQL));
-        }
-        var constructor = com.segfault03.ideadb.ui.WelcomePanel.class.getDeclaredConstructor(
-                com.intellij.openapi.project.Project.class, com.segfault03.ideadb.state.DatabaseSettingsState.class);
-        constructor.setAccessible(true);
-        return constructor.newInstance(null, settings);
-    }
-
-    static void verifyWelcome() throws Exception {
-        JPanel panel = welcome(false);
-        JButton console = (JButton)field(panel, "openConsole");
-        if (console.isEnabled()) throw new AssertionError("A SQL console needs a saved connection");
-        var settings = (com.segfault03.ideadb.state.DatabaseSettingsState)field(panel, "settings");
-        var state = (com.segfault03.ideadb.state.DatabaseSettingsState.State)field(settings, "state");
-        state.connections.add(config(DatabaseType.MYSQL));
-        invoke(panel, "updateConsoleAvailability", new Class<?>[]{});
-        if (!console.isEnabled()) throw new AssertionError("Console must become available after adding a connection");
-        verifyWelcomePreference(panel, settings);
+    static void verifyStatusReset() {
         JLabel status = new JLabel();
         com.segfault03.ideadb.ui.DatabaseUi.status(status, "Query failed", com.segfault03.ideadb.ui.DatabaseUi.Tone.ERROR);
         if (status.getIcon() == null) throw new AssertionError("Error needs a severity icon");
         com.segfault03.ideadb.ui.DatabaseUi.status(status, "Ready", com.segfault03.ideadb.ui.DatabaseUi.Tone.NORMAL);
         if (status.getIcon() != null) throw new AssertionError("Status icon must reset");
-        System.out.println("Welcome availability, startup preference and status reset verified");
+        System.out.println("Status reset verified");
     }
 
-    static void verifyWelcomePreference(Container panel, com.segfault03.ideadb.state.DatabaseSettingsState settings) {
-        for (Component component : panel.getComponents()) {
-            if (component instanceof JCheckBox check && "Show welcome screen on startup".equals(check.getText())) {
-                check.doClick(0);
-                if (settings.isShowWelcomeScreen()) throw new AssertionError("Startup preference should follow the positive checkbox");
-                check.doClick(0);
-                if (!settings.isShowWelcomeScreen()) throw new AssertionError("Startup preference should be restored");
-            } else if (component instanceof Container nested) verifyWelcomePreference(nested, settings);
+    /** Explorer home (welcome as home): first run, returning, long list, collapsed, narrow; then the default states at font 2.0. */
+    static void renderHome(String theme) throws Exception {
+        ConnectionConfig mysql = config(DatabaseType.MYSQL);
+        render(com.segfault03.ideadb.ui.ExplorerPreview.create(mysql, true), theme + "-home-first-run-340", 340, 620);
+        render(com.segfault03.ideadb.ui.ExplorerPreview.home(mysql, 6, false), theme + "-home-returning-340", 340, 620);
+        render(com.segfault03.ideadb.ui.ExplorerPreview.home(mysql, 3, false), theme + "-home-few-340", 340, 620);
+        render(com.segfault03.ideadb.ui.ExplorerPreview.home(mysql, 40, false), theme + "-home-long-340", 340, 620);
+        render(com.segfault03.ideadb.ui.ExplorerPreview.home(mysql, 6, true), theme + "-home-collapsed-340", 340, 620);
+        render(com.segfault03.ideadb.ui.ExplorerPreview.home(mysql, 6, false), theme + "-home-narrow-280", 280, 620);
+        JPanel selected = com.segfault03.ideadb.ui.ExplorerPreview.home(mysql, 6, false);
+        Object section = selected.getClientProperty("lattice.preview.explorer.recent");
+        var list = (javax.swing.JList<?>)invokeResult(section, "recentList");
+        list.setSelectedIndex(1);
+        render(selected, theme + "-home-selected-340", 340, 620);
+        Map<Object, Font> original = new HashMap<>();
+        // Font scale 2.0 at UI scale 1.0, as the design concepts render it: one doubled text font, icons unchanged.
+        Font base = UIManager.getFont("Label.font");
+        Font doubled = new javax.swing.plaf.FontUIResource(base.getFamily(), Font.PLAIN, base.getSize() * 2);
+        for (String key : List.of("defaultFont", "Label.font", "Button.font", "CheckBox.font", "ComboBox.font", "TextField.font",
+                "TextArea.font", "Tree.font", "List.font", "TextPane.font", "EditorPane.font")) {
+            original.put(key, UIManager.getFont(key));
+            UIManager.put(key, doubled);
+        }
+        try {
+            render(com.segfault03.ideadb.ui.ExplorerPreview.create(mysql, true), theme + "-home-first-run-font2-340", 340, 900);
+            render(com.segfault03.ideadb.ui.ExplorerPreview.home(mysql, 6, false), theme + "-home-returning-font2-340", 340, 900);
+        } finally {
+            original.forEach((key, font) -> UIManager.put(key, font));
         }
     }
 
@@ -1198,7 +1197,7 @@ public final class UiPreview {
     }
 
     static void renderFeatured(String theme) throws Exception {
-        render(welcome(false), theme + "-welcome-900", 900, 680);
+        render(com.segfault03.ideadb.ui.ExplorerPreview.home(config(DatabaseType.MYSQL), 6, false), theme + "-home-returning-340", 340, 620);
         render(valueWorkspacePreview(), theme + "-cell-details-1440", 1440, 900);
         AlterTableDialog alter = alterTableDialog();
         render(alter.previewPanel(), theme + "-schema-alter-table-800", 800, alter.previewPanel().getPreferredSize().height);
@@ -1366,7 +1365,8 @@ public final class UiPreview {
             boolean searchOnly = args.length >= 3 && args[2].equals("search");
             boolean tabIconsOnly = args.length >= 3 && args[2].equals("tab-icons");
             boolean cellDetailsOnly = args.length >= 3 && args[2].equals("cell-details");
-            featuredOnly = !sourceFilterOnly && !searchOnly && !tabIconsOnly && !cellDetailsOnly && (args.length < 3 || !args[2].equals("all"));
+            boolean homeOnly = args.length >= 3 && args[2].equals("home");
+            featuredOnly = !sourceFilterOnly && !searchOnly && !tabIconsOnly && !cellDetailsOnly && !homeOnly && (args.length < 3 || !args[2].equals("all"));
             if (!installIslandsTheme(theme.equals("dark"))) {
                 UIManager.setLookAndFeel(theme.equals("dark") ? new FlatDarculaLaf() : new FlatIntelliJLaf());
                 Font font = new javax.swing.plaf.FontUIResource(previewFont());
@@ -1385,9 +1385,9 @@ public final class UiPreview {
                 catch (Exception exception) { throw new RuntimeException(exception); }
             });
             if (args.length >= 3 && args[2].equals("checks")) return;
-            if (sourceFilterOnly || searchOnly || tabIconsOnly || cellDetailsOnly) {
+            if (sourceFilterOnly || searchOnly || tabIconsOnly || cellDetailsOnly || homeOnly) {
                 SwingUtilities.invokeAndWait(() -> {
-                    try { if (cellDetailsOnly) renderCellDetails(theme); else if (tabIconsOnly) renderTableTabIcons(theme); else if (searchOnly) renderExplorerSearch(theme); else renderSourceFilter(theme); }
+                    try { if (homeOnly) renderHome(theme); else if (cellDetailsOnly) renderCellDetails(theme); else if (tabIconsOnly) renderTableTabIcons(theme); else if (searchOnly) renderExplorerSearch(theme); else renderSourceFilter(theme); }
                     catch (Exception exception) { throw new RuntimeException(exception); }
                 });
                 Files.write(output.resolve(theme + "-manifest.txt"), snapshots);
@@ -1404,10 +1404,8 @@ public final class UiPreview {
             SwingUtilities.invokeAndWait(() -> {
                 try {
                 inputPreviews(theme);
-                render(welcome(false), theme + "-welcome-900", 900, 680);
-                render(welcome(false), theme + "-welcome-520", 520, 680);
-                render(welcome(true), theme + "-welcome-connected-900", 900, 680);
-                verifyWelcome();
+                renderHome(theme);
+                verifyStatusReset();
                 renderSourceFilter(theme);
                 renderExplorerSearch(theme);
                 renderTableTabIcons(theme);
@@ -1415,10 +1413,6 @@ public final class UiPreview {
                 renderSqlParameters(theme);
                 renderDryRun(theme);
                 render(ExplorerPreview.create(config(DatabaseType.MYSQL), true), theme + "-side-panel-empty-340", 340, 620);
-                connectionMenuPreview(ExplorerPreview.create(config(DatabaseType.MYSQL), true),
-                        "Add a connection…", theme + "-side-panel-connection-menu-340", 340, 620);
-                connectionMenuPreview(welcome(false), "Add connection…",
-                        theme + "-welcome-connection-menu-900", 900, 680);
                 render(ExplorerPreview.error(config(DatabaseType.MYSQL)), theme + "-side-panel-error-340", 340, 620);
                 SqlQueryConsolePanel console = console();
                 render(console, theme + "-sql-console-1100", 1100, 620);

@@ -8,6 +8,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.segfault03.ideadb.model.ConnectionConfig;
 import com.segfault03.ideadb.model.TableMetadata;
+import com.segfault03.ideadb.state.RecentItemsState;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Map;
@@ -48,6 +49,8 @@ public class DatabaseEditorManager implements com.intellij.openapi.Disposable {
 
     public void openTableData(ConnectionConfig config, String databaseName, TableMetadata tableMetadata) {
         String key = "table:" + config.getId() + ":" + databaseName + ":" + tableMetadata.getName();
+        RecentItemsState.getInstance(project).record(RecentItemsState.Item.table(config.getId(), databaseName,
+                tableMetadata.getCatalog(), tableMetadata.getSchema(), tableMetadata.getName(), tableMetadata.getType()));
         ApplicationManager.getApplication().invokeLater(() -> {
             if(disposed || project.isDisposed()) return;
             DatabaseVirtualFile vf = openFiles.get(key);
@@ -64,6 +67,7 @@ public class DatabaseEditorManager implements com.intellij.openapi.Disposable {
     /** With {@code run}, the console also runs {@code initialSql} as soon as it can. */
     public void openConsole(ConnectionConfig config, String initialDb, String initialSql, boolean run) {
         String key = "console:" + config.getId() + ":" + (initialDb != null ? initialDb : "");
+        RecentItemsState.getInstance(project).record(RecentItemsState.Item.console(config.getId(), initialDb));
         ApplicationManager.getApplication().invokeLater(() -> {
             if (disposed || project.isDisposed()) return;
             DatabaseVirtualFile vf = openFiles.get(key);
@@ -90,19 +94,6 @@ public class DatabaseEditorManager implements com.intellij.openapi.Disposable {
     @Override public void dispose() {
         disposed=true; openFiles.clear(); tasks.cancelPending();
         ApplicationManager.getApplication().executeOnPooledThread(tasks::close);
-    }
-
-    public void openWelcome() {
-        String key = "welcome:root";
-        ApplicationManager.getApplication().invokeLater(() -> {
-            if(disposed || project.isDisposed()) return;
-            DatabaseVirtualFile vf = openFiles.get(key);
-            if (vf == null || !FileEditorManager.getInstance(project).isFileOpen(vf)) {
-                vf = new WelcomeVirtualFile();
-                openFiles.put(key, vf);
-            }
-            new OpenFileDescriptor(project, vf).navigate(true);
-        });
     }
 
     public void openReleaseNotes() {

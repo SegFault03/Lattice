@@ -29,7 +29,7 @@ Lattice is in alpha; the current release is **0.2.0-alpha**. Expect changes betw
 
 **0.2.0-alpha** is a minor alpha release, with the following changes since
 **0.1.0-alpha**. Open **Tools → What's New in Lattice**
-or use the link on Lattice's welcome screen for illustrated, offline feature guides.
+or the help button in Lattice's explorer for illustrated, offline feature guides.
 A dismissible update notice appears once per version across projects; **Don't show
 again** disables future notices without hiding the guide.
 
@@ -47,9 +47,9 @@ See the [changelog](docs/CHANGELOG.md) and [commits since the last release](http
 
 Previews use sample data and show the current production Swing screens.
 
-### Welcome and value inspector
+### Explorer home and value inspector
 
-<img src="screenshots/welcome.png" alt="Welcome screen with four supported database sources and current workflows" width="900">
+<img src="screenshots/explorer-home.png" alt="Lattice explorer with recent tables and consoles above the connection tree" width="340">
 
 <img src="screenshots/side-panel.png" alt="Table editor with the Value Workspace inspector open beside a selected cell" width="900">
 

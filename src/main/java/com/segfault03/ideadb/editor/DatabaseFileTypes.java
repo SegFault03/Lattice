@@ -39,10 +39,10 @@ public final class DatabaseFileTypes {
         @Override public boolean isReadOnly() { return true; }
     };
 
-    public static final FileType WELCOME = new FileType() {
-        @Override public @NotNull String getName() { return "DatabaseWelcome"; }
-        @Override public @NotNull @Nls String getDescription() { return "Lattice Welcome"; }
-        @Override public @NotNull String getDefaultExtension() { return "dbwelcome"; }
+    public static final FileType RELEASE_NOTES = new FileType() {
+        @Override public @NotNull String getName() { return "LatticeReleaseNotes"; }
+        @Override public @NotNull @Nls String getDescription() { return "Lattice What's New"; }
+        @Override public @NotNull String getDefaultExtension() { return "dbwhatsnew"; }
         @Override public @Nullable Icon getIcon() { return Icons.LATTICE; }
         @Override public boolean isBinary() { return true; }
         @Override public boolean isReadOnly() { return false; }

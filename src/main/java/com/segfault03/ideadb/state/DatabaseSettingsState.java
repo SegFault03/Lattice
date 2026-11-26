@@ -15,7 +15,6 @@ import java.util.concurrent.atomic.AtomicLong;
 public class DatabaseSettingsState implements PersistentStateComponent<DatabaseSettingsState.State> {
     public static class State {
         public List<ConnectionConfig> connections = new ArrayList<>();
-        public boolean showWelcomeScreen = true;
     }
     public record Secret(String password, String customUrl) {}
     public interface CredentialStore {
@@ -61,7 +60,7 @@ public class DatabaseSettingsState implements PersistentStateComponent<DatabaseS
 
     /** Only sanitized copies enter the IDE's XML persistence pipeline. */
     @Override public synchronized State getState() {
-        State persisted = new State(); persisted.showWelcomeScreen = state.showWelcomeScreen;
+        State persisted = new State();
         for (ConnectionConfig config : state.connections) {
             ConnectionConfig copy = config.copy(); copy.setPassword(""); copy.setCustomUrl("");
             persisted.connections.add(copy);
@@ -69,7 +68,7 @@ public class DatabaseSettingsState implements PersistentStateComponent<DatabaseS
         return persisted;
     }
     @Override public synchronized void loadState(@NotNull State loaded) {
-        State restored = new State(); restored.showWelcomeScreen = loaded.showWelcomeScreen;
+        State restored = new State();
         for (ConnectionConfig stored : loaded.connections) {
             ConnectionConfig copy = stored.copy();
             // Old XML may contain either a plain password or a JDBC URL containing credentials.
@@ -96,8 +95,6 @@ public class DatabaseSettingsState implements PersistentStateComponent<DatabaseS
     public synchronized List<ConnectionConfig> getConnections() { return state.connections.stream().map(ConnectionConfig::copy).toList(); }
     /** How many connections are saved, without copying them. */
     public synchronized int connectionCount() { return state.connections.size(); }
-    public synchronized boolean isShowWelcomeScreen() { return state.showWelcomeScreen; }
-    public synchronized void setShowWelcomeScreen(boolean show) { state.showWelcomeScreen = show; }
     public void addConnection(ConnectionConfig config) { updateConnection(config); }
     /** Saves from any thread; on the EDT the credential write runs under a modal progress so a slow keychain cannot freeze the IDE. */
     public void saveConnection(com.intellij.openapi.project.Project project, ConnectionConfig config) {

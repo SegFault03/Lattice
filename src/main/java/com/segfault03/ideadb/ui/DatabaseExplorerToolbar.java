@@ -26,7 +26,7 @@ final class DatabaseExplorerToolbar extends JPanel {
 
     DatabaseExplorerToolbar(Consumer<Component> addConnection, Runnable editConnection,
                             Runnable removeConnection, Runnable refreshConnection,
-                            Runnable openConsole, Consumer<Component> selectSources, Runnable toggleSearch, Runnable showHelp,
+                            Runnable openConsole, Consumer<Component> selectSources, Runnable toggleSearch, Runnable showWhatsNew,
                             Runnable openSettings) {
         setLayout(new BoxLayout(this, BoxLayout.X_AXIS));
         setBorder(JBUI.Borders.empty(6, 12));
@@ -41,7 +41,7 @@ final class DatabaseExplorerToolbar extends JPanel {
         viewOnly.addActionListener(e -> selectSources.accept((Component)e.getSource()));
         search = button(AllIcons.Actions.Search, "Search explorer", toggleSearch);
         separator();
-        help = button(AllIcons.General.ContextHelp, "Welcome to Lattice", showHelp);
+        help = button(AllIcons.General.ContextHelp, "What's New in Lattice", showWhatsNew);
         settings = button(AllIcons.General.Settings, "Lattice settings…", openSettings);
         setHasConnections(false);
     }

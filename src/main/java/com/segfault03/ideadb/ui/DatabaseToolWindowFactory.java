@@ -15,8 +15,6 @@ import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.ui.content.Content;
 import com.intellij.ui.content.ContentFactory;
-import com.segfault03.ideadb.editor.DatabaseEditorManager;
-import com.segfault03.ideadb.state.DatabaseSettingsState;
 import org.jetbrains.annotations.NotNull;
 
 public class DatabaseToolWindowFactory implements ToolWindowFactory, DumbAware {
@@ -31,10 +29,6 @@ public class DatabaseToolWindowFactory implements ToolWindowFactory, DumbAware {
         content.setDisposer(panel);
         toolWindow.getContentManager().addContent(content);
         applyCompactWidth(project, toolWindow, panel);
-
-        if (DatabaseSettingsState.getInstance().isShowWelcomeScreen()) {
-            DatabaseEditorManager.getInstance(project).openWelcome();
-        }
     }
 
     private static void applyCompactWidth(Project project, ToolWindow toolWindow, DatabaseMainPanel panel) {

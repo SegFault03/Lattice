@@ -19,8 +19,32 @@ Take Lattice from 0.2.0-alpha to 1.0 as the data tools layer for IntelliJ IDEA w
 - T0.1–T0.7, T0.9–T0.12 (see `ROADMAP.md`). Verified on the real IDE (dark, full run, 100 captures): Cancel default on Drop table, NULL italic in new rows, refit columns, 4.84:1 welcome subline, cell menu targets the clicked cell, source filter run passes.
 - Fixed along the way: cell context menu acted on the previous selection; newly added connections stayed hidden in a collapsed type group; `SqlColorConsistencyTest` did not know `SqlScriptPanel`; the create/alter-table study renderers no longer compiled.
 
+## In progress: welcome as home (R7, T5.1)
+Owner picked concept 04 Explorer home (artifact https://claude.ai/artifact/SzpE9pCdFyDxAyewLuDbnK; source `design/welcome-home/`), with 03's ranked search as a Search Everywhere tab and 02's environment tags and status in the tree. Owner answers (2026-11-26):
+- Order: A+B (remove the welcome tab; first-run empty state; Recent section in the tool window), then C (Search Everywhere tab), then D (tags and status).
+- Welcome tab removed completely: `WelcomePanel`, `WelcomeVirtualFile`, the `showWelcomeScreen` setting. The explorer's help button opens What's New.
+- Status shows only what Lattice already knows (open sessions, last failed open); never contact a server on its own.
+- Environment tags: fixed set (none, local, development, staging, production).
+
+Done (A+B):
+- Welcome tab, `WelcomePanel`, `WelcomeVirtualFile` and the `showWelcomeScreen` setting removed; the What's New file type is `DatabaseFileTypes.RELEASE_NOTES`. The explorer's help button opens What's New.
+- First run: `EmptyConnectionPanel` shows "No connections yet" and one `ActionLink` per `DatabaseType`, each opening the connection dialog for it.
+- `RecentItemsState` (project service, workspace file, newest first, 50 max), recorded in `DatabaseEditorManager.openTableData`/`openConsole`; `ExplorerRecentSection` above the tree: last 4, "N more…" popup with speed search, collapsible header (persisted), double-click/Enter opens, Delete or context menu removes, Clear Recent. Hidden while explorer search is open and when empty.
+- Previews: `python scripts/ui-preview.py --home-only --output .temp/ui-preview-home` renders every state in both themes and first run/returning at font 2.0 (2025.1 SDK, headless; not the tracked-image baseline).
+
+Deviations from concept 04 (tell the owner):
+- Recent is fixed above the tree and does not scroll with it (matches the concept's long-list note, not a single scroll).
+- First-run hint says "Recent tables and consoles will appear here."; Search Everywhere and scripts are added to the copy when C lands and scripts are recorded.
+- Only the four existing engines; MariaDB and SQLite appear when their providers exist.
+- The tree keeps its visible "Data Sources" root; tags and status in tree rows are part of D.
+- The arrival motion (new connection rises into the tree) waits for the owner to confirm the motion defaults.
+
+Remaining for R7:
+- `screenshots/explorer-home.png` is the old welcome image renamed; re-render the featured images on IntelliJ 2026.2.3 Islands Light (`python scripts/ui-preview.py --ide-home <idea-2026.2.3>`).
+- C: Search Everywhere contributor (Lattice tab: recents, tables in loaded schemas, connections; Enter opens, Alt+Enter console).
+- D: environment tag connection setting and inline status/tag in tree rows (known state only).
+
 ## Waiting for the owner
-- Welcome concepts (R7, T5.1), rebuilt per the `design-primer` skill: `design/welcome-home/`; render with `python design/welcome-home/render.py --output .temp/concepts/welcome-home` and open `.temp/concepts/welcome-home/index.html`. Concepts 02 Board, 03 Command, 04 Explorer home (radical; no welcome tab). Recommendation: 04 with 03's ranked search as its Search Everywhere tab and 02's tags and status in the tree; fallback 03 with 02's status.
 - Motion defaults proposed in the viewer (quiet, ease-out-quart, 150 ms state changes, one focal moment when the first connection arrives); record in `DESIGN.md` once the owner confirms.
 - T0.8 red inspector Cancel: documented design choice in `docs/UI_PREVIEW.md`; change only on the owner's word.
 

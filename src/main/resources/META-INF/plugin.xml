@@ -144,6 +144,7 @@
         <applicationService serviceImplementation="com.segfault03.ideadb.state.DatabaseSettingsState"/>
         <applicationService serviceImplementation="com.segfault03.ideadb.state.MetadataCacheState"/>
         <projectService serviceImplementation="com.segfault03.ideadb.state.TableDraftState"/>
+        <projectService serviceImplementation="com.segfault03.ideadb.state.RecentItemsState"/>
         <applicationService serviceImplementation="com.segfault03.ideadb.service.DatabaseTaskService"/>
         <applicationService serviceImplementation="com.segfault03.ideadb.service.DatabaseConnectionManager"/>
         <applicationService serviceImplementation="com.segfault03.ideadb.service.DriverRegistry"/>

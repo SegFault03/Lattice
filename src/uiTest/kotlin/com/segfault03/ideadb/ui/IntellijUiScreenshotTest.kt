@@ -1828,7 +1828,7 @@ class IntellijUiScreenshotTest {
                 appendLine("Production root Swing class: com.segfault03.ideadb.ui.DatabaseMainPanel")
                 appendLine("Production root bounds: $rootBounds")
                 appendLine("JetBrains child Swing class: com.intellij.ui.components.ActionLink")
-                appendLine("JetBrains ActionLink child bounds on Welcome screen: $jetBrainsActionLinkBounds")
+                appendLine("JetBrains ActionLink child bounds in the first-run explorer: $jetBrainsActionLinkBounds")
                 appendLine("IDE JBR release: ${Files.readString(ideHome.resolve("jbr/release")).lineSequence().filter { it.startsWith("JAVA_VERSION=") || it.startsWith("IMPLEMENTOR=") }.joinToString(", ")}")
                 appendLine("Test worker JVM: ${System.getProperty("java.version")} (${System.getProperty("java.vendor")})")
                 appendLine("Connection flow: ${if (h2) "H2 TCP server / H2 2.5.252" else if (postgres) "PostgreSQL server $postgresPort / pgJDBC 42.7.14" else "HSQLDB in-memory server"}; live test connection succeeded")
@@ -2865,16 +2865,18 @@ class IntellijUiScreenshotTest {
     }
 
     private fun openConnectionMenu(root: UiComponent, frame: IdeaFrameUI, itemText: String) {
+        // With no connections, the explorer's first-run state links each data source directly.
+        val firstRunLink = root.xx { byVisibleText(itemText) }.list().firstOrNull { it.component.isShowing() }
+        if (firstRunLink != null) {
+            firstRunLink.click()
+            return
+        }
         // A late IDE focus change (for example Maven import finishing) can close a
         // transient popup. Retry opening the production menu, not the whole test.
         repeat(3) {
-            val welcomeAction = root.xx { byVisibleText("Add a connection…") }.list().firstOrNull()
-            if (welcomeAction != null) welcomeAction.click()
-            else {
-                val addButton = root.xx { byAccessibleName("Add connection…") }.list().firstOrNull()
-                if (addButton != null) addButton.click()
-                else openToolbarOverflow(root, "Explorer actions").x { byAccessibleName("Add connection…") }.waitFound().click()
-            }
+            val addButton = root.xx { byAccessibleName("Add connection…") }.list().firstOrNull()
+            if (addButton != null) addButton.click()
+            else openToolbarOverflow(root, "Explorer actions").x { byAccessibleName("Add connection…") }.waitFound().click()
             repeat(20) {
                 val item = frame.xx { byVisibleText(itemText) }.list().firstOrNull()
                 if (item != null) {

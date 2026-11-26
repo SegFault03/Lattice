@@ -55,6 +55,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     private final DatabaseExplorerHint selectionHint = new DatabaseExplorerHint();
     private final CardLayout explorerLayout = new CardLayout();
     private final JPanel explorerCards = new JPanel(explorerLayout);
+    private ExplorerRecentSection recentSection;
 
     public DatabaseMainPanel(Project project) {
         super(new BorderLayout(0, 0));
@@ -96,7 +97,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 this::refreshSelectedNode, this::openConsoleForSelected,
                 this::showSourceFilter,
                 this::toggleSearch,
-                () -> DatabaseEditorManager.getInstance(project).openWelcome(),
+                () -> DatabaseEditorManager.getInstance(project).openReleaseNotes(),
                 () -> com.segfault03.ideadb.sql.SqlEditorSupport.openSettings(project));
         searchBar = new DatabaseExplorerSearchBar(query -> {
             if (searchController != null) searchController.changed(query);
@@ -128,8 +129,13 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
 
         JBScrollPane treeScrollPane = new JBScrollPane(databaseTree);
         treeScrollPane.setBorder(JBUI.Borders.empty());
-        explorerCards.add(treeScrollPane, "tree");
-        explorerCards.add(new EmptyConnectionPanel(this::showAddConnectionMenu), "empty");
+        recentSection = new ExplorerRecentSection(project, this);
+        JPanel home = new JPanel(new BorderLayout());
+        home.setOpaque(false);
+        home.add(recentSection, BorderLayout.NORTH);
+        home.add(treeScrollPane, BorderLayout.CENTER);
+        explorerCards.add(home, "tree");
+        explorerCards.add(new EmptyConnectionPanel(this::showAddConnectionDialog), "empty");
         JPanel filteredEmpty = new JPanel(new GridBagLayout());
         GridBagConstraints prompt = new GridBagConstraints();
         prompt.gridx = 0;
@@ -221,6 +227,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     private void setSearchVisible(boolean visible) {
         searchBar.setVisible(visible);
         toolbar.setSearchVisible(visible);
+        recentSection.setSuppressed(visible);
         if (visible) SwingUtilities.invokeLater(searchBar::focusInput);
         else {
             searchBar.setText("");

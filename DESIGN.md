@@ -38,7 +38,7 @@ Always: real renders with real data, the skill's coverage matrix, motion designe
 | Table data editor (`TableDataEditorPanel`, filter, cell details) | Operate |
 | SQL console and SQL editor (cards, dry run, run actions, status widget) | Operate |
 | Connection dialog, create/alter table, create database, SQL script dialogs | Operate |
-| Welcome screen (`WelcomePanel`, `EmptyConnectionPanel`) | Persuade |
+| Explorer home (`EmptyConnectionPanel` first run, `ExplorerRecentSection`) | Operate |
 | What's New page (`ReleaseNotesPanel`) | Read |
 | Plugin icon, Marketplace assets | Persuade |
 

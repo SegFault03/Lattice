@@ -8,7 +8,7 @@ import org.jetbrains.annotations.NotNull;
 
 public final class ReleaseNotesVirtualFile extends DatabaseVirtualFile {
     public ReleaseNotesVirtualFile() {
-        super("What's New in Lattice", "release-notes:" + ReleaseNotesContent.version(), DatabaseFileTypes.WELCOME);
+        super("What's New in Lattice", "release-notes:" + ReleaseNotesContent.version(), DatabaseFileTypes.RELEASE_NOTES);
     }
     @Override public JComponent createComponent(@NotNull Project project) { return new ReleaseNotesPanel(project); }
 }
