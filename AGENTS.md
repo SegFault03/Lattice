@@ -52,4 +52,6 @@ run, an isolated YAML comment or a helper's default command.
   dated validation narratives and associated review evidence. Keep maintained
   docs, instructions and guides.
 
+For any UI/UX work, read DESIGN.md, then .claude/skills/design-primer/SKILL.md, and follow them.
+
 Explicit task instructions take precedence over these repository conventions.

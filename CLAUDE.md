@@ -17,8 +17,6 @@ python -m unittest discover -s scripts/tests -v   # tooling regression tests
 python scripts/ui-preview.py        # headless Swing screenshots (light, nine README images)
 ```
 
-Tracked images are rendered headlessly on IntelliJ 2026.2.3 in Islands Light with the default Periwinkle schema colors; see `docs/UI_PREVIEW.md#baseline-for-tracked-images`.
-
 Real-IDE UI screenshots need Xvfb, `xdpyinfo` and a window manager (`openbox` works):
 
 ```sh
@@ -39,7 +37,7 @@ Live database suites need owned fixtures; see `docs/CONTRIBUTING.md`. Do not run
 - Do not create a pull request unless asked.
 - Screenshots and preview output may hold private content: keep them in git-ignored `.temp/` or `build/`, never commit or upload them. Never enter credentials or sign in for the owner (ask them to), and never print secrets.
 - Working style: use a subagent only for bulky read-only work whose raw output is not needed later; search before reading and cap long output; report only checks that actually ran, with their result.
-- UI changes: produce one to three concepts and get the owner's opinion before wiring; verify with the headless previews in `docs/UI_PREVIEW.md` and say so (no emulator or device in cloud sessions).
+- For any UI/UX work, read DESIGN.md, then .claude/skills/design-primer/SKILL.md, and follow them.
 - Never push to a remote without the user's request or explicit approval. Commit locally and ask first.
 - Branches: do not create or push a new branch on your own. Ask the user which branch to work on. If the user names no branch, use `main`. Do not push to any branch other than the one the user chose.
 - Permissions and approvals the user gives during a session take precedence over the pre-defined rules above, for the scope the user stated (for example, standing permission to push a named branch at checkpoints). Outside that scope, the rules still apply.

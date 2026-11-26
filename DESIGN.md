@@ -1,0 +1,86 @@
+# DESIGN.md: Lattice
+
+<!-- Created by `init`, kept by `create`, `refine` and `accept`. This is the one place for this project's UI/UX rules. Project facts: under 120 lines. Write from what is built, not from intent. Every line is read from the repo or stated by the owner. -->
+
+## How to work on UI here
+For any UI/UX task, read this file, then `.claude/skills/design-primer/SKILL.md` (paths in the skill are relative to its folder). Project rules in this file override the skill.
+
+| Task | Command (file in the skill folder) | Reads |
+|---|---|---|
+| Set up or refresh this file | `commands/init.md` | stack file, this template |
+| New screen, redesign, concepts | `commands/create.md` | inventory, design, concept-sheets, motion, platform, craft-floor |
+| Critique or audit, no edits | `commands/review.md` | inventory, review, platform, craft-floor |
+| Targeted pass (polish, harden, typeset...) | `commands/refine.md` | refine, the pass's topic file, craft-floor |
+| List every UI surface | `commands/inventory.md` | inventory, platform |
+| Owner accepted the build | `commands/accept.md` | this file |
+
+Always: real data, every surface and state, light and dark, font scale 2.0, motion designed in, verify on the real render, concepts stay until accepted, renders stay git-ignored.
+
+## Project overrides
+- Cloud sessions have no emulator or device: verify UI with the headless Swing previews (`python scripts/ui-preview.py`, `docs/UI_PREVIEW.md`) and say so. [from CLAUDE.md]
+- Before wiring a UI change, produce one to three concepts and get the owner's opinion. [from CLAUDE.md]
+- Tracked images are rendered headlessly on IntelliJ 2026.2.3 in Islands Light with the default Periwinkle schema colors (`docs/UI_PREVIEW.md#baseline-for-tracked-images`). [from CLAUDE.md]
+- Design studies follow `design/README.md`: concepts stay out of the plugin source set, reuse production parts (`DatabaseInputs`, `DatabaseUi`, `DatabaseTable`, `Icons`), add no behavior, share one fixture, include a production baseline, and label renders as Swing painting at 2x with FlatLaf approximating the IDE themes. [from design/README.md]
+
+## Platform and stack
+- Platform: IntelliJ Platform plugin, Java Swing with IntelliJ UI classes (`JBColor`, `JBUI.scale`); compiled against IntelliJ 2025.1 and 2026.3. [from CLAUDE.md]
+- Component library: IntelliJ Platform UI; icon set: bundled SVGs in `src/main/resources/icons/` (29 files, 8 `_dark` variants) and `META-INF/pluginIcon*.svg`.
+- Shared UI helpers: `src/main/java/com/segfault03/ideadb/ui/DatabaseUi.java`, `DatabaseInputs.java`, `Icons.java`.
+
+## Users and job
+- TODO(owner): who uses it, in what situation.
+- Database client for MySQL, PostgreSQL, HSQLDB and H2 inside IntelliJ IDEA. [from CLAUDE.md]
+
+## Surface modes (proposed; full inventory via `inventory`)
+| Surface | Mode |
+|---|---|
+| Explorer tool window (`Lattice`, `DatabaseMainPanel`, tree, search, toolbar) | Operate |
+| Table data editor (`TableDataEditorPanel`, filter, cell details) | Operate |
+| SQL console and SQL editor (cards, dry run, run actions, status widget) | Operate |
+| Connection dialog, create/alter table, create database, SQL script dialogs | Operate |
+| Welcome screen (`WelcomePanel`, `EmptyConnectionPanel`) | Persuade |
+| What's New page (`ReleaseNotesPanel`) | Read |
+| Plugin icon, Marketplace assets | Persuade |
+
+## Chosen direction
+- Established world in code: the IDE's own look. Colors come from `JBColor` pairs and named IDE keys (for example `Button.default.startBackground` in `DatabaseUi.java`), sizes go through `JBUI.scale`, the What's New page follows the current IDE theme.
+- TODO(owner): direction chosen via `create`. No direction is recorded here.
+
+## Tokens
+- Location in code: `src/main/java/com/segfault03/ideadb/ui/DatabaseUi.java` (action colors `POSITIVE_ACTION_COLOR`, `PRIMARY_ACTION_COLOR`, button metrics, rounded fills of 10 and 6 scaled px).
+- Spacing scale, radii, elevation: TODO(owner), no token file found; values are inline in `DatabaseUi`.
+- Dark theme: `JBColor` light/dark pairs and `_dark` SVG variants. Dynamic color: not applicable.
+
+## Fonts and licenses
+- No bundled font files. Text uses IDE fonts; SQL highlighting follows the IDE editor scheme (`SqlSwingHighlighter`).
+
+## Motion scheme
+- No animation framework found. Timers exist only for delays: hover cards (`SqlCardHoverController`), alter-table preview (300 ms), copied hint (1800 ms), copy hover (120 ms).
+- TODO(owner): personality, easing, reduced-motion behavior.
+
+## Banned in this project
+- None recorded.
+
+## Other consolidated UI rules
+- Preview and screenshot output may hold private content: keep it in git-ignored `.temp/` or `build/` and never commit or upload it (the line also covers credentials and stays in CLAUDE.md). [from CLAUDE.md]
+- Real-IDE screenshots come from `uiScreenshotTest` (`src/uiTest/kotlin/`) and `scripts/linux/capture-intellij-ui.sh`; they need Xvfb, `xdpyinfo` and a window manager. [from CLAUDE.md]
+- Native UI tests reveal explorer paths one parent at a time and wait for lazy metadata; they must not assume fixed row numbers or automatic expansion. [from docs/UI_PREVIEW.md]
+
+## Fixtures and real data
+- Design studies use one fixture per screen (for example the six-column `shop.customers` table with `email` selected). [from design/create-table/README.md]
+- README images come from `WhatsNewRendersJavaFixtureTest`; the nine tracked images live in `screenshots/`.
+- Private content: renders go in `.temp/` (git-ignored).
+
+## Concepts
+- Render pipeline: `design/<screen>/render.py` compiles the plugin and `<Screen>Concepts.java`, paints light and dark, writes `renders/` and `index.html`.
+- Existing studies: `design/alter-table/`, `design/create-table/` (with `final/` native captures).
+- New concept tasks: `design/<screen>/` per `design/README.md`; images may also go in `.temp/concepts/<task>/`. Delete after `accept`.
+
+## Verification setup
+- Headless Swing: `python scripts/ui-preview.py` (light, nine README images). Real IDE: Xvfb capture script above.
+- Untested without an owner: any physical display, high-DPI hardware, the Windows native UI scripts.
+
+## Decisions log
+| Date | Decision | Why |
+|---|---|---|
+| 2026-11-26 | Created by `init`; UI rules moved from CLAUDE.md | One home for UI rules |
