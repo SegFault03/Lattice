@@ -77,7 +77,7 @@ Each milestone is a release. Sizes: S ≤ 1 day, M 2–4 days, L 1–2 weeks, XL
 - [~] T0.8 Inspector: one disabled style (done); neutral Cancel waits for the owner (documented design choice) (S)
 - [x] T0.9 Cell context menu: Copy value, Inspect, Delete row; menu now targets the clicked cell (S). Copy as SQL literal moves to T1.4
 - [x] T0.10 Script dialog: "Run from Statement N" after a stopped run; full statement and error text in a tooltip (M)
-- [ ] T0.11 Investigate the failed `sourceFilterOnly` and UI-scale-2.0 capture runs (S)
+- [x] T0.11 Failed captures: `sourceFilterOnly` exposed a real bug (a newly added connection stayed hidden in a collapsed type group), fixed; the UI-scale-2.0 run needs a larger Xvfb screen (harness limit) (S)
 - [x] T0.12 Error reporter: `ErrorReportSubmitter` that opens a prefilled GitHub issue (S)
 
 ### 0.3: data editor (R2, R1, R3)

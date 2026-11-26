@@ -201,6 +201,16 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 DefaultMutableTreeNode typeNode = (DefaultMutableTreeNode) treeModel.getChild(rootNode, i);
                 databaseTree.expandPath(new TreePath(typeNode.getPath()));
             }
+        } else {
+            // Preserved view state keeps a type group collapsed when it did not exist before; a connection the user
+            // just added must still be visible, wherever it was added from.
+            for (var node : treeModel.connectionNodes()) {
+                String id = ((TreeNodeData) node.getUserObject()).getConnectionConfig().getId();
+                if (existing.containsKey(id)) continue;
+                TreePath path = new TreePath(node.getPath());
+                databaseTree.expandPath(path.getParentPath());
+                databaseTree.scrollPathToVisible(path);
+            }
         }
         updateSelectionActions();
         if (searchController != null) searchController.reset();
