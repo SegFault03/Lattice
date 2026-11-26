@@ -3,7 +3,7 @@
 <!-- Created by `init`, kept by `create`, `refine` and `accept`. This is the one place for this project's UI/UX rules. Project facts: under 120 lines. Write from what is built, not from intent. Every line is read from the repo or stated by the owner. -->
 
 ## How to work on UI here
-For any UI/UX task, read this file, then the `design-primer` skill: `anthropic-skills:design-primer`, or `.claude/skills/design-primer/SKILL.md` in a checkout that has it (paths in the skill are relative to its folder). If neither is available, stop and tell the owner rather than working without it. Project rules in this file override the skill.
+For any UI/UX task, read this file, then load the design-primer skill (`anthropic-skills:design-primer`, or `.claude/skills/design-primer/SKILL.md` in a checkout that has it; paths in the skill are relative to its own folder). If neither is available, stop and tell the owner rather than working without it. Project rules in this file override the skill.
 
 | Task | Command (file in the skill folder) | Reads |
 |---|---|---|
@@ -14,7 +14,7 @@ For any UI/UX task, read this file, then the `design-primer` skill: `anthropic-s
 | List every UI surface | `commands/inventory.md` | inventory, platform |
 | Owner accepted the build | `commands/accept.md` | this file |
 
-Always: real data, every surface and state, light and dark, font scale 2.0, motion designed in, verify on the real render, concepts stay until accepted, renders stay git-ignored.
+Always: real renders with real data, the skill's coverage matrix, motion designed in, verify on the real render, concepts published as an artifact, local renders git-ignored.
 
 ## Project overrides
 - Cloud sessions have no emulator or device: verify UI with the headless Swing previews (`python scripts/ui-preview.py`, `docs/UI_PREVIEW.md`) and say so. [from CLAUDE.md]
@@ -74,7 +74,8 @@ Always: real data, every surface and state, light and dark, font scale 2.0, moti
 ## Concepts
 - Render pipeline: `design/<screen>/render.py` compiles the plugin and `<Screen>Concepts.java` and paints every frame in light and dark. `design/welcome-home/` also writes the primer's concept viewer (`index.html`) into its git-ignored output folder; older studies keep their tracked `renders/` gallery.
 - Existing studies: `design/alter-table/`, `design/create-table/` (with `final/` native captures).
-- New concept tasks: `design/<screen>/` per `design/README.md`; images may also go in `.temp/concepts/<task>/`. Delete after `accept`.
+- New concept tasks: `design/<screen>/` per `design/README.md`; images may also go in `.temp/concepts/<task>/`. Publish each as a private concept-viewer artifact; delete local code and images after `accept`, the artifact stays.
+- Concept artifacts: none recorded.
 
 ## Verification setup
 - Headless Swing: `python scripts/ui-preview.py` (light, nine README images). Real IDE: Xvfb capture script above.
@@ -84,3 +85,4 @@ Always: real data, every surface and state, light and dark, font scale 2.0, moti
 | Date | Decision | Why |
 |---|---|---|
 | 2026-11-26 | Created by `init`; UI rules moved from CLAUDE.md | One home for UI rules |
+| 2026-11-26 | `init` re-run against design-primer 2.0.0: shared block, artifact-based concepts, pointer line | Match the updated skill |
