@@ -735,7 +735,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         ConnectionDialog dlg = new ConnectionDialog(project, newCfg, true);
         if (dlg.showAndGet()) {
             ConnectionConfig result = dlg.getResultConfig();
-            DatabaseSettingsState.getInstance().addConnection(result);
+            DatabaseSettingsState.getInstance().saveConnection(project, result);
         }
     }
 
@@ -755,7 +755,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         ConnectionDialog dlg = new ConnectionDialog(project, cfg);
         if (dlg.showAndGet()) {
             ConnectionConfig updated = dlg.getResultConfig();
-            DatabaseSettingsState.getInstance().updateConnection(updated);
+            DatabaseSettingsState.getInstance().saveConnection(project, updated);
         }
     }
 
@@ -774,7 +774,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     private void removeConnection(ConnectionConfig cfg) {
         int confirm = Messages.showYesNoDialog(project, "Remove connection '" + cfg.getName() + "'?\nOnly the saved connection settings will be removed. Your database and data will be kept.", "Remove connection", "Remove connection", "Cancel", Messages.getQuestionIcon());
         if (confirm == Messages.YES) {
-            DatabaseSettingsState.getInstance().removeConnection(cfg.getId());
+            DatabaseSettingsState.getInstance().removeConnection(project, cfg.getId());
         }
     }
 

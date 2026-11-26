@@ -188,7 +188,7 @@ public class SqlQueryConsolePanel extends JPanel implements AutoCloseable {
         queryTitle.setFont(queryTitle.getFont().deriveFont(Font.BOLD));
         queryCaption.add(queryTitle);
         JBLabel shortcutHint = new WrappingLabel(runShortcut + " · Run selection or query");
-        shortcutHint.setForeground(JBColor.namedColor("Label.infoForeground", JBColor.GRAY));
+        shortcutHint.setForeground(DatabaseUi.SECONDARY_TEXT);
         queryCaption.add(shortcutHint);
         queryPanel.add(queryCaption, BorderLayout.NORTH);
         queryPanel.add(editorView, BorderLayout.CENTER);

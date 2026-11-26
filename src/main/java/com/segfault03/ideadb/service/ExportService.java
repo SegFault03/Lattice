@@ -32,7 +32,7 @@ public class ExportService {
             for (List<Object> row : result.getRows()) {
                 for (int i = 0; i < row.size(); i++) {
                     Object val = row.get(i);
-                    bw.write(escapeCsv(val != null ? textValue(val) : ""));
+                    bw.write(csvField(val));
                     if (i < row.size() - 1) bw.write(",");
                 }
                 bw.newLine();
@@ -122,7 +122,7 @@ public class ExportService {
                         for(int col=1;col<=columns.size();col++) row.add(DataService.detachValue(DatabaseProviders.get(config.getType()).readValue(rows,metadata,col)));
                         if("sql".equals(format)) writeInsert(writer,config,schema,table,columns,types,row,override,omitted);
                         else if("csv".equals(format)) {
-                            for(int col=0;col<row.size();col++) { if(col>0) writer.write(","); writer.write(escapeCsv(row.get(col)==null ? "" : textValue(row.get(col)))); } writer.newLine();
+                            for(int col=0;col<row.size();col++) { if(col>0) writer.write(","); writer.write(csvField(row.get(col))); } writer.newLine();
                         } else {
                             if(count>0) writer.write(",\n"); writer.write("  {");
                             for(int col=0;col<columns.size();col++) {
@@ -142,6 +142,13 @@ public class ExportService {
         } finally { java.nio.file.Files.deleteIfExists(temporary); }
     }
 
+
+    /** SQL NULL is an empty unquoted field and an empty string is {@code ""}, so importers can tell them apart. */
+    private String csvField(Object value) {
+        if (value == null) return "";
+        String text = textValue(value);
+        return text.isEmpty() ? "\"\"" : escapeCsv(text);
+    }
 
     private String escapeCsv(String value) {
         if (value == null) return "";

@@ -398,7 +398,7 @@ public final class SqlScriptPanel extends JPanel implements Disposable {
         if (current == null || phase != Phase.RUNNING) return;
         summaryOverride = "Stopping…";
         showSummary();
-        if (ApplicationManager.getApplication() != null) DatabaseTaskService.getInstance().submit(current::cancel);
+        if (ApplicationManager.getApplication() != null) ApplicationManager.getApplication().executeOnPooledThread(current::cancel);
         else current.cancel();
     }
 
@@ -766,6 +766,10 @@ public final class SqlScriptPanel extends JPanel implements Disposable {
 
     @Override public void dispose() {
         SqlScriptRunner current = runner;
-        if (current != null) current.cancel();
+        if (current == null) return;
+        // A JDBC cancel can open a connection (MySQL sends KILL QUERY): keep it off the EDT, and off the bounded
+        // JDBC pool, where it could queue behind the very statement it should stop.
+        if (ApplicationManager.getApplication() != null) ApplicationManager.getApplication().executeOnPooledThread(current::cancel);
+        else current.cancel();
     }
 }

@@ -100,6 +100,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
 
     private int currentPage = 1;
     private int pageSize = 100;
+    private boolean columnsFittedToRows;
     private long totalRowCount = -1;
     private String appliedWhere = "";
     private String appliedOrder = "";
@@ -323,8 +324,27 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         dataTable.getColumnModel().getSelectionModel().setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         dataTable.setDefaultRenderer(Object.class, new CellHighlightRenderer());
         JPopupMenu cellMenu = DatabaseUi.popupMenu();
+        JMenuItem copyItem = new JMenuItem("Copy value", AllIcons.Actions.Copy);
+        copyItem.setToolTipText("Copy the cell's raw value; SQL NULL copies as NULL");
+        copyItem.addActionListener(event -> {
+            int row = dataTable.getSelectedRow(), col = dataTable.getSelectedColumn();
+            if (row < 0 || col < 0) return;
+            Object value = tableModel.getValueAt(dataTable.convertRowIndexToModel(row), dataTable.convertColumnIndexToModel(col));
+            com.intellij.openapi.ide.CopyPasteManager.getInstance().setContents(
+                    new java.awt.datatransfer.StringSelection(CellValuePresentation.raw(value)));
+        });
+        JMenuItem inspectItem = new JMenuItem("Inspect", AllIcons.Actions.Preview);
+        inspectItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.ALT_DOWN_MASK));
+        inspectItem.addActionListener(event -> { if (!inspectorVisible) toggleInspector(); });
+        JMenuItem deleteItem = new JMenuItem("Delete row\u2026", AllIcons.General.Remove);
+        deleteItem.addActionListener(event -> deleteSelectedRows());
+        cellMenu.add(copyItem);
+        cellMenu.add(inspectItem);
+        cellMenu.addSeparator();
         cellMenu.add(nullBtn);
         cellMenu.add(defaultBtn);
+        cellMenu.addSeparator();
+        cellMenu.add(deleteItem);
         dataTable.setComponentPopupMenu(cellMenu);
         dataTable.addMouseListener(new MouseAdapter() {
             private void selectPopupCell(MouseEvent event) {
@@ -350,6 +370,9 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 int modelCol = col < 0 ? -1 : dataTable.convertColumnIndexToModel(col);
                 ColumnMetadata column = col < 0 ? null : tableModel.getColumnMeta(modelCol);
                 nullBtn.setEnabled(editable && tableModel.isCellEditable(modelRow, modelCol) && column != null && column.isNullable());
+                copyItem.setEnabled(row >= 0 && col >= 0);
+                inspectItem.setEnabled(row >= 0 && col >= 0 && !disposed);
+                deleteItem.setEnabled(editable && delRowBtn.isEnabled());
                 defaultBtn.setEnabled(editable && tableModel.isRowNew(modelRow) && tableModel.isCellEditable(modelRow, modelCol)
                         && column != null && (column.getDefaultValue() != null || column.isAutoIncrement()));
             }
@@ -784,7 +807,11 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     pageSize = requestedSize;
                     int selectedRow = dataTable.getSelectedRow(), selectedColumn = dataTable.getSelectedColumn();
                     boolean schemaChanged = tableModel.setData(result.getColumnNames(), result.getColumnTypes(), result.getRows());
-                    if (schemaChanged) dataTable.sizeColumnsToContent();
+                    // Columns sized while the table was empty fit only their headers; fit them once more when loaded rows arrive.
+                    if (schemaChanged || !columnsFittedToRows && !result.getRows().isEmpty()) {
+                        dataTable.sizeColumnsToContent();
+                        columnsFittedToRows = !result.getRows().isEmpty();
+                    }
                     else if (samePage && selectedRow >= 0 && selectedRow < dataTable.getRowCount() && selectedColumn >= 0) {
                         dataTable.setRowSelectionInterval(selectedRow, selectedRow);
                         dataTable.setColumnSelectionInterval(selectedColumn, selectedColumn);
@@ -1713,6 +1740,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 setBorder(BorderFactory.createCompoundBorder(
                         BorderFactory.createLineBorder(inspectedBorder, JBUI.scale(2)), JBUI.Borders.empty(0, 6)));
             }
+            // SQL NULL and DEFAULT stay italic in every row state, so they never read as the text 'NULL' or '(Default)'.
+            if (value == null || value == RowDefaults.Value.USE_DEFAULT) setFont(getFont().deriveFont(Font.ITALIC));
             if (value == null) {
                 setText("NULL");
             } else if (value instanceof byte[] bytes) {

@@ -17,7 +17,7 @@ final class DatabaseExplorerHint extends JPanel {
                 JBUI.Borders.customLineTop(JBUI.CurrentTheme.ActionButton.SEPARATOR_COLOR),
                 JBUI.Borders.empty(6, 12)));
         label.setFont(label.getFont().deriveFont(11f));
-        label.setForeground(JBColor.namedColor("Label.infoForeground", JBColor.GRAY));
+        label.setForeground(DatabaseUi.SECONDARY_TEXT);
         add(label, BorderLayout.CENTER);
         setVisible(false);
     }

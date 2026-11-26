@@ -25,7 +25,7 @@ class SqlColorConsistencyTest {
     private static final Path MAIN = Path.of("src/main/java");
 
     /** The classes that show SQL in a Swing pane, through {@code SqlSwingHighlighter} with the connection's schema. */
-    private static final Set<String> PANES = Set.of("GeneratedSqlDialog", "CreateTablePanel", "AlterTablePanel", "SqlParameterForm");
+    private static final Set<String> PANES = Set.of("GeneratedSqlDialog", "CreateTablePanel", "AlterTablePanel", "SqlParameterForm", "SqlScriptPanel");
 
     private static List<Path> sources() throws IOException {
         try (Stream<Path> files = Files.walk(MAIN)) { return files.filter(path -> path.toString().endsWith(".java")).toList(); }

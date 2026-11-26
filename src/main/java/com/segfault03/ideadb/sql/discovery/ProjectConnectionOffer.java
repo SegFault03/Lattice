@@ -36,7 +36,7 @@ public final class ProjectConnectionOffer {
         ConnectionDialog dialog = new ConnectionDialog(project, config, true);
         if (!dialog.showAndGet()) return;
         ConnectionConfig saved = dialog.getResultConfig();
-        DatabaseSettingsState.getInstance().addConnection(saved);
+        DatabaseSettingsState.getInstance().saveConnection(project, saved);
         SqlBindingsState bindings = SqlBindingsState.getInstance(project);
         if (bindings.defaultConnectionId().isEmpty()) bindings.setDefaultConnectionId(saved.getId());
         if (file != null) SqlEditorRefresh.refresh(project, file); else SqlEditorRefresh.refreshAll(project);

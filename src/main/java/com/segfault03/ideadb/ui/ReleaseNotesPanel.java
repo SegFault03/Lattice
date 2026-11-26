@@ -90,7 +90,7 @@ public final class ReleaseNotesPanel extends JPanel {
         if (section != null) content.scrollRectToVisible(section.getBounds());
     }
     private static Font font() { return UIManager.getFont("Label.font"); }
-    private static Color secondary() { return JBColor.namedColor("Label.infoForeground", new JBColor(0x657185, 0xABB3BE)); }
+    private static Color secondary() { return DatabaseUi.SECONDARY_TEXT; }
     private static JLabel heading(String title, int extra) {
         JLabel label = new JLabel(title); label.setFont(font().deriveFont(Font.BOLD, font().getSize2D() + extra)); return label;
     }

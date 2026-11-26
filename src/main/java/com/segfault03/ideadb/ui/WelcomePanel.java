@@ -55,7 +55,7 @@ public class WelcomePanel extends JPanel implements AutoCloseable {
         gbc.anchor = GridBagConstraints.NORTHWEST;
 
         JBLabel brand = new JBLabel("Lattice", Icons.LATTICE_LARGE, SwingConstants.LEFT);
-        brand.setFont(brand.getFont().deriveFont(Font.BOLD, 18f));
+        brand.setFont(com.intellij.util.ui.JBFont.h3().asBold()); // follows the IDE font size, unlike a fixed point size
         brand.setIconTextGap(JBUI.scale(12));
         content.add(brand, gbc);
 
@@ -63,7 +63,7 @@ public class WelcomePanel extends JPanel implements AutoCloseable {
         gbc.insets = JBUI.insets(22, 0, 8, 0);
         JTextArea headline = description("Database work, inside your IDE.");
         headline.setForeground(JBColor.namedColor("Label.foreground", JBColor.foreground()));
-        headline.setFont(headline.getFont().deriveFont(Font.BOLD, 25f));
+        headline.setFont(com.intellij.util.ui.JBFont.h1().asBold());
         headline.setColumns(34);
         content.add(headline, gbc);
 
@@ -108,6 +108,9 @@ public class WelcomePanel extends JPanel implements AutoCloseable {
         // Keep the reading column comfortable on wide editors and let it contract on narrow ones.
         JPanel frame = new JPanel(new GridBagLayout()) {
             @Override public void doLayout() {
+                // Narrow editors (HiDPI with tool windows open) keep the text column instead of spending it on gutters.
+                int side = getWidth() < JBUI.scale(480) ? 12 : 32;
+                if (content.getInsets().left != JBUI.scale(side)) content.setBorder(JBUI.Borders.empty(36, side, 28, side));
                 content.setPreferredSize(new Dimension(Math.min(JBUI.scale(760), getWidth()),
                         content.getPreferredSize().height));
                 super.doLayout();
@@ -157,7 +160,7 @@ public class WelcomePanel extends JPanel implements AutoCloseable {
     private static JTextArea description(String text) {
         JTextArea copy = new JTextArea(text);
         copy.setFont(UIManager.getFont("Label.font"));
-        copy.setForeground(JBColor.namedColor("Label.infoForeground", new JBColor(0x616872, 0xA8ADB7)));
+        copy.setForeground(DatabaseUi.SECONDARY_TEXT);
         copy.setEditable(false);
         copy.setFocusable(false);
         copy.setOpaque(false);
@@ -188,7 +191,7 @@ public class WelcomePanel extends JPanel implements AutoCloseable {
         ConnectionDialog dlg = new ConnectionDialog(project, newCfg, true);
         if (dlg.showAndGet()) {
             ConnectionConfig result = dlg.getResultConfig();
-            settings.addConnection(result);
+            settings.saveConnection(project, result);
             updateConsoleAvailability();
         }
     }

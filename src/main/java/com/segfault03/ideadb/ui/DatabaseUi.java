@@ -20,6 +20,33 @@ public final class DatabaseUi {
     public static final Color PRIMARY_ACTION_COLOR = JBColor.namedColor("Button.default.startBackground", new JBColor(0x3574F0, 0x3574F0));
     public static final Color DESTRUCTIVE_ACTION_COLOR = new JBColor(new Color(0xC62828), new Color(0xC43D3D));
     // The new UI's toggled tool button fill; a theme's pressed color can be its light default under a dark theme.
+    /**
+     * Secondary text derived from the theme's own label and panel colors. The themes' Label.infoForeground measures about
+     * 2.9:1 in dark and 3.5:1 in light; this mix stays above the 4.5:1 WCAG minimum for body text in both.
+     */
+    public static final Color SECONDARY_TEXT = JBColor.lazy(() -> secondaryText(
+            com.intellij.util.ui.UIUtil.getPanelBackground(), com.intellij.util.ui.UIUtil.getLabelForeground()));
+
+    /** The softest mix of {@code foreground} into {@code background} that keeps 4.5:1, or {@code foreground} itself. */
+    static Color secondaryText(Color background, Color foreground) {
+        for (int step = 6; step < 10; step++) {
+            Color candidate = com.intellij.ui.ColorUtil.mix(background, foreground, step / 10.0);
+            if (contrast(background, candidate) >= 4.5) return candidate;
+        }
+        return foreground;
+    }
+
+    static double contrast(Color a, Color b) {
+        double first = luminance(a), second = luminance(b);
+        return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+    }
+
+    private static double luminance(Color color) {
+        double[] channels = {color.getRed() / 255.0, color.getGreen() / 255.0, color.getBlue() / 255.0};
+        for (int i = 0; i < 3; i++)
+            channels[i] = channels[i] <= 0.03928 ? channels[i] / 12.92 : Math.pow((channels[i] + 0.055) / 1.055, 2.4);
+        return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+    }
     private static final Color TOGGLED_ACTION_BACKGROUND = new JBColor(new Color(0xDFE1E5), new Color(0x43454A));
 
     private DatabaseUi() {}
@@ -141,8 +168,9 @@ public final class DatabaseUi {
 
     public static boolean confirmDestructive(com.intellij.openapi.project.Project project,
                                              String title, String message, String action) {
-        return com.intellij.openapi.ui.Messages.showYesNoDialog(project, message, title, action, "Cancel",
-                com.intellij.openapi.ui.Messages.getWarningIcon()) == com.intellij.openapi.ui.Messages.YES;
+        // Cancel is the default button, so Enter never drops, truncates or deletes.
+        return com.intellij.openapi.ui.Messages.showDialog(project, message, title, new String[]{action, "Cancel"}, 1,
+                com.intellij.openapi.ui.Messages.getWarningIcon()) == 0;
     }
 
     public static JButton action(String text, Icon icon, String tooltip) {

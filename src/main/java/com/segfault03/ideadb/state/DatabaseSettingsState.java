@@ -99,8 +99,30 @@ public class DatabaseSettingsState implements PersistentStateComponent<DatabaseS
     public synchronized boolean isShowWelcomeScreen() { return state.showWelcomeScreen; }
     public synchronized void setShowWelcomeScreen(boolean show) { state.showWelcomeScreen = show; }
     public void addConnection(ConnectionConfig config) { updateConnection(config); }
-    public synchronized void removeConnection(String id) {
+    /** Saves from any thread; on the EDT the credential write runs under a modal progress so a slow keychain cannot freeze the IDE. */
+    public void saveConnection(com.intellij.openapi.project.Project project, ConnectionConfig config) {
+        Secret secret = new Secret(config.getPassword(), config.getCustomUrl());
+        writeSecret(project, config.getId(), secret);
+        applyUpdate(config);
+    }
+    /** Removes from any thread, with the credential deletion handled as in {@link #saveConnection}. */
+    public void removeConnection(com.intellij.openapi.project.Project project, String id) {
+        writeSecret(project, id, null);
+        applyRemoval(id);
+    }
+    private void writeSecret(com.intellij.openapi.project.Project project, String id, Secret secret) {
+        var application = ApplicationManager.getApplication();
+        if (application == null || !application.isDispatchThread()) { credentials.set(id, secret); return; }
+        com.intellij.openapi.progress.ProgressManager.getInstance().runProcessWithProgressSynchronously(
+                (com.intellij.openapi.util.ThrowableComputable<Void, RuntimeException>) () -> { credentials.set(id, secret); return null; },
+                "Saving connection credentials", false, project);
+    }
+    // Credential I/O happens before the lock is taken, so readers never wait on the keychain; a failed write changes nothing.
+    public void removeConnection(String id) {
         credentials.set(id, null);
+        applyRemoval(id);
+    }
+    private synchronized void applyRemoval(String id) {
         com.segfault03.ideadb.service.DatabaseConnectionManager.getInstance().removeConfiguration(id);
         state.connections.removeIf(c -> c.getId().equals(id));
         MetadataCacheState.getInstance().remove(id);
@@ -114,8 +136,11 @@ public class DatabaseSettingsState implements PersistentStateComponent<DatabaseS
         if (projects == null) return;
         for (var project : projects.getOpenProjects()) TableDraftState.getInstance(project).removeConnection(connectionId);
     }
-    public synchronized void updateConnection(ConnectionConfig config) {
+    public void updateConnection(ConnectionConfig config) {
         credentials.set(config.getId(), new Secret(config.getPassword(), config.getCustomUrl()));
+        applyUpdate(config);
+    }
+    private synchronized void applyUpdate(ConnectionConfig config) {
         // Replace in place so editing a connection keeps its position in the list.
         ConnectionConfig stored = config.copy();
         int index = -1;

@@ -300,7 +300,8 @@ final class CellDetailsPanel extends JPanel {
             DatabaseUi.configureActionSizing(this);
         }
         @Override public Color getForeground() {
-            if (style == ButtonStyle.PRIMARY) return isEnabled() ? Color.WHITE : new JBColor(0x40536F, 0xDAE5F7);
+            // A disabled primary uses the secondary disabled look, so it never reads as an available default action.
+            if (style == ButtonStyle.PRIMARY && isEnabled()) return Color.WHITE;
             if (style == ButtonStyle.DANGER && !isEnabled()) return new JBColor(0x936D72, 0xCBA1A5);
             if (style == ButtonStyle.DANGER) return new JBColor(0xA32D36, 0xFFC0C5);
             return isEnabled() ? super.getForeground() : new JBColor(0x667185, 0xA8B2C1);
@@ -309,9 +310,9 @@ final class CellDetailsPanel extends JPanel {
             Graphics2D g = (Graphics2D)graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             boolean hover = isEnabled() && (getModel().isRollover() || getModel().isPressed());
-            Color surface = style == ButtonStyle.PRIMARY
-                    ? !isEnabled() ? new JBColor(0xD5E0F0, 0x3C506D)
-                    : getModel().isPressed() ? new JBColor(0x124DCE, 0x2054CD)
+            Color surface = style == ButtonStyle.PRIMARY && !isEnabled() ? new JBColor(0xFFFFFF, 0x2B2D30)
+                    : style == ButtonStyle.PRIMARY
+                    ? getModel().isPressed() ? new JBColor(0x124DCE, 0x2054CD)
                     : hover ? new JBColor(0x1B57DF, 0x326DFA) : new JBColor(0x1F62F2, 0x2864F6)
                     : style == ButtonStyle.DANGER ? !isEnabled() ? new JBColor(0xF0E3E4, 0x49383C)
                     : hover ? new JBColor(0xF6D3D6, 0x65353F) : new JBColor(0xFBE8E8, 0x522E35)
@@ -322,7 +323,7 @@ final class CellDetailsPanel extends JPanel {
                 g.setColor(surface); g.fillRoundRect(0, 0, getWidth(), getHeight(), arc, arc);
                 if (style != ButtonStyle.QUIET) {
                     g.setColor(style == ButtonStyle.PRIMARY
-                            ? isEnabled() ? new JBColor(0x1753D5, 0x3B73FC) : new JBColor(0x90A1BA, 0x6C819C)
+                            ? isEnabled() ? new JBColor(0x1753D5, 0x3B73FC) : new JBColor(0xD4D9E1, 0x484C54)
                             : style == ButtonStyle.DANGER ? !isEnabled() ? new JBColor(0xD3BFC1, 0x755B60)
                             : new JBColor(0xD89EA4, 0x99505B)
                             : new JBColor(0xD4D9E1, 0x484C54));
@@ -407,8 +408,8 @@ final class CellDetailsPanel extends JPanel {
         bodyScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         bodyScroll.getVerticalScrollBar().setUnitIncrement(JBUI.scale(16));
         add(bodyScroll, BorderLayout.CENTER);
-        identity.setForeground(JBColor.namedColor("Label.infoForeground", JBColor.GRAY));
-        summary.setForeground(JBColor.namedColor("Label.infoForeground", JBColor.GRAY));
+        identity.setForeground(DatabaseUi.SECONDARY_TEXT);
+        summary.setForeground(DatabaseUi.SECONDARY_TEXT);
         tabs.setOpaque(false);
         styleTextToggle(formattedTab); styleTextToggle(rawTab); styleTextToggle(wrap);
         ButtonGroup presentation = new ButtonGroup(); presentation.add(formattedTab); presentation.add(rawTab);

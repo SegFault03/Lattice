@@ -298,7 +298,7 @@ public class ConnectionDialog extends DialogWrapper {
         driverJarField.addBrowseFolderListener(null, FileChooserDescriptorFactory.createSingleFileDescriptor("jar").withTitle("Select JDBC Driver JAR"));
         driverCards.add(driverJarField, DriverSource.LOCAL_JAR.name());
         driverForm.addRow(1, "", driverCards, false);
-        driverStatusLabel.setForeground(JBColor.namedColor("Label.infoForeground", new JBColor(0x63666C, 0xB5B8BD)));
+        driverStatusLabel.setForeground(com.segfault03.ideadb.ui.DatabaseUi.SECONDARY_TEXT);
         driverForm.addRow(2, "", driverStatusLabel, false);
         driverDetails = driverForm;
         driverBody.add(driverDetails, BorderLayout.CENTER);
