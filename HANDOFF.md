@@ -55,7 +55,7 @@ Take Lattice from 0.2.0-alpha to 1.0 as the data tools layer for IntelliJ IDEA w
 - Font scale 2.0 was checked only in headless previews (one doubled font, icons unchanged); the real-IDE harness scales components, not fonts.
 
 - Success-modal slice: full review run passed (checked `table-edit-committed.png`: "Changes committed · 1 row · …"; `table-export-complete.png`: "Exported 1 row to persisted-rows.csv"); `homeOnly` passed on rerun (first run hit the TIMESTAMP flake).
-- `createTableOnly` fails at `assertCreateTableLayout` ("The small CREATE statement must fit the SQL preview", the preview's visible height is below its preferred height). Pre-existing: the same failure on 596614a, the session's starting commit. Its later steps (`verifyCreateComposer`, `verifyMutationRefresh`) therefore did not run, so the explorer success lines (Created/Dropped/Truncated table) and the edited "Table created"/"Changes Saved" steps there are compiled but not exercised.
+- `createTableOnly`: the TIMESTAMP/DECIMAL "combo selection" flake is fixed in the test helper (it now waits for the popup and retries a miss). The scenario still fails at `assertCreateTableLayout` ("The small CREATE statement must fit the SQL preview"), deterministically and also on 596614a: the check runs with six columns, a nine-line statement, and the Composer is already at its 700 px maximum, so the 180 px preview scrolls. Needs an owner decision (taller dialog, a preview that grows, or a test that expects scrolling). Until then `verifyCreateComposer` / `verifyMutationRefresh` do not run, so the explorer success lines are compiled but not exercised.
 
 ## Open questions
 See `ROADMAP.md` → Open questions (Settings Sync roaming, minimum IDE, licensing).
