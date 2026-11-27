@@ -36,7 +36,7 @@ Take Lattice from 0.2.0-alpha to 1.0 as the data tools layer for IntelliJ IDEA w
 
 ## Verification status
 - `./gradlew test`: passed. Full real-IDE review run (light, `-Plattice.ui.review=true`): passed end to end after the fixes below; `table-filter-error.png` and `table-commit-failure.png` checked (in git-ignored `.temp/reviews/table-banner/`).
-- Fixed on the way: stale "Welcome to Lattice" lookup in `assertExplorerOverflow`; `ConnectionDialog` clipped buttons (UI hierarchy showed Swing bounds 516 px vs a 487 px native window after a resize while shown). `refreshFormSize()` now packs synchronously before show and, once shown, refits once on the next event and skips no-op resizes. The failure was intermittent, so one passing run is weak evidence.
+- Fixed on the way: stale "Welcome to Lattice" lookup in `assertExplorerOverflow`; `ConnectionDialog` clipped buttons (UI hierarchy showed Swing bounds 516 px vs a 487 px native window after a resize while shown). `refreshFormSize()` now packs synchronously before show and, once shown, refits once on the next event and skips no-op resizes. The failure was intermittent; two full runs have passed since.
 - Not rendered: dark theme, font scale 2.0, and the other banners (truncate, DDL, delete, export, auto-refresh).
 
 ## Decided (owner, 2026-11-27, later)
