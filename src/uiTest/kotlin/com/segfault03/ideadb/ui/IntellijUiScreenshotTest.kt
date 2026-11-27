@@ -3046,20 +3046,29 @@ class IntellijUiScreenshotTest {
         check(index >= 0) { "Missing combo item '$label': ${combo.listValues()}" }
         // Navigate the real popup and verify its result before using the next card. Home stays in an
         // editable combo's text, so step from the row the popup opens on.
-        val current = combo.driver.cast(combo.component, LiveComboSelection::class).getSelectedIndex().coerceAtLeast(0)
-        clickComboArrow(combo)
+        val live = combo.driver.cast(combo.component, LiveComboSelection::class)
         val robot = Robot()
-        val step = if (index >= current) KeyEvent.VK_DOWN else KeyEvent.VK_UP
-        repeat(kotlin.math.abs(index - current)) {
-            robot.keyPress(step)
-            robot.keyRelease(step)
+        // Keys sent before the popup opens are lost and leave the selection short; wait for it, and retry a miss.
+        for (attempt in 1..3) {
+            val current = live.getSelectedIndex().coerceAtLeast(0)
+            if (current == index) break
+            clickComboArrow(combo)
+            waitUntil("combo popup for '$label'", 5_000) { live.isPopupVisible() }
+            val step = if (index >= current) KeyEvent.VK_DOWN else KeyEvent.VK_UP
+            repeat(kotlin.math.abs(index - current)) {
+                robot.keyPress(step)
+                robot.keyRelease(step)
+            }
+            robot.waitForIdle()
+            robot.keyPress(KeyEvent.VK_ENTER)
+            robot.keyRelease(KeyEvent.VK_ENTER)
+            robot.waitForIdle()
+            val deadline = System.nanoTime() + 5_000_000_000
+            while (System.nanoTime() < deadline && live.getSelectedIndex() != index) Thread.sleep(100)
+            if (live.getSelectedIndex() == index) break
+            if (live.isPopupVisible()) pressEscape()
         }
-        robot.keyPress(KeyEvent.VK_ENTER)
-        robot.keyRelease(KeyEvent.VK_ENTER)
-        robot.waitForIdle()
-        waitUntil("combo selection '$label'") {
-            combo.driver.cast(combo.component, LiveComboSelection::class).getSelectedIndex() == index
-        }
+        waitUntil("combo selection '$label'") { live.getSelectedIndex() == index }
         println("Keyboard combo transition verified: $label")
     }
 
@@ -3409,7 +3418,7 @@ interface LiveIcon {
 interface LiveObject { fun getClass(): LiveClass }
 
 @Remote("javax.swing.JComboBox")
-interface LiveComboSelection { fun getSelectedIndex(): Int }
+interface LiveComboSelection { fun getSelectedIndex(): Int; fun isPopupVisible(): Boolean }
 
 @Remote("java.lang.Class")
 interface LiveClass { fun getName(): String }
