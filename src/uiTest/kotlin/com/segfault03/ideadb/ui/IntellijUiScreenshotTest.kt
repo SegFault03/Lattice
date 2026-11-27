@@ -2157,7 +2157,13 @@ class IntellijUiScreenshotTest {
             check(text.getText().startsWith("CREATE TABLE") && text.getCaretPosition() == 0)
             val livePreview = cast(preview.component, LiveSwingComponent::class)
             check(livePreview.getVisibleRect().y == 0)
-            check(livePreview.getVisibleRect().height >= livePreview.getPreferredSize().getHeight()) { "The small CREATE statement must fit the SQL preview" }
+            // A longer statement scrolls inside the preview (owner decision); it must still open at the top and show
+            // at least the three lines the preview reserves.
+            val visibleHeight = livePreview.getVisibleRect().height
+            val lineHeight = livePreview.getPreferredSize().getHeight() / text.getText().lines().size
+            check(visibleHeight >= livePreview.getPreferredSize().getHeight() || visibleHeight >= lineHeight * 3) {
+                "The SQL preview shows fewer than three lines: $visibleHeight px for ${text.getText().lines().size} lines"
+            }
             for (field in fields) {
                 val live = cast(field.component, LiveSwingComponent::class)
                 if (!live.isShowing()) continue
