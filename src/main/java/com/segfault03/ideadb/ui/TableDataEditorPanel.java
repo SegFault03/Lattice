@@ -78,6 +78,10 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     private JButton nextPageBtn;
     private JBLabel pageLabel;
     private JBLabel statusLabel;
+    // Banner subjects: a later success of the same operation clears its banner.
+    private static final String BANNER_LOAD = "load", BANNER_COMMIT = "commit", BANNER_DELETE = "delete",
+            BANNER_TRUNCATE = "truncate", BANNER_DDL = "ddl", BANNER_EXPORT = "export";
+    private ErrorBanner banner;
     private JButton saveBtn;
     private JButton revertBtn;
     private JButton filterBtn;
@@ -314,6 +318,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 pageSizeCombo, prevPageBtn, nextPageBtn));
         heading.add(toolbar, BorderLayout.NORTH);
         heading.add(filters, BorderLayout.CENTER);
+        banner = new ErrorBanner(project, new Insets(8, 12, 0, 12));
+        heading.add(banner, BorderLayout.SOUTH);
         tableWorkspace.add(heading, BorderLayout.NORTH);
 
         tableModel = new EditableTableModel();
@@ -808,6 +814,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     if (disposed || generation != loadGeneration || mutationRunning || dataTable.isEditing() || tableModel.hasPendingChanges()) return;
                     tableUnavailable = false;
                     setReadRunning(false);
+                    banner.clear(BANNER_LOAD);
                     tableMetadata.setColumns(cols);
                     totalRowCount = knownCount;
                     appliedWhere = where;
@@ -853,16 +860,22 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                         updateOperationControls();
                         return;
                     }
-                    DatabaseUi.status(statusLabel, "Could not load data · See error details", DatabaseUi.Tone.ERROR);
+                    DatabaseUi.status(statusLabel, "Could not load data", DatabaseUi.Tone.ERROR);
                     statusLabel.setToolTipText(ex.getMessage());
                     if (autoRefresh) {
-                        // A failing timer would otherwise open a modal every tick; stop it and report in the status line.
+                        // A failing timer would otherwise report every tick; stop it.
                         autoRefreshCombo.setSelectedIndex(0);
                         DatabaseUi.status(statusLabel, "Auto-refresh stopped · Could not load data", DatabaseUi.Tone.ERROR);
                         statusLabel.setToolTipText(ex.getMessage());
-                        return;
                     }
-                    Messages.showErrorDialog(project, "Error: " + ex.getMessage(), "Data Fetch Error");
+                    var actions = new LinkedHashMap<String, Runnable>();
+                    actions.put("Retry", () -> loadData(requestedPage, requestedSize, true));
+                    if (!where.isEmpty() || !order.isEmpty()) actions.put("Clear filter", () -> {
+                        whereInput.setText("");
+                        orderInput.setText("");
+                        loadData(1, pageSize);
+                    });
+                    banner.error(BANNER_LOAD, autoRefresh ? "Auto-refresh stopped" : "Could not load data", ex.getMessage(), actions);
                 });
             }
         });
@@ -999,15 +1012,16 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 SwingUtilities.invokeLater(() -> {
                     if (disposed) return;
                     setMutationRunning(false);
+                    banner.clear(BANNER_TRUNCATE);
                     Messages.showInfoMessage(project, "Table '" + tableMetadata.getName() + "' truncated successfully.", "Table Truncated");
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
                     if (disposed) return;
                     setMutationRunning(false);
-                    DatabaseUi.status(statusLabel, "Truncate failed · See error details", DatabaseUi.Tone.ERROR);
+                    DatabaseUi.status(statusLabel, "Truncate failed", DatabaseUi.Tone.ERROR);
                     statusLabel.setToolTipText(ex.getMessage());
-                    Messages.showErrorDialog(project, "Failed to truncate table: " + ex.getMessage(), "Truncate Error");
+                    banner.error(BANNER_TRUNCATE, "Could not truncate " + tableMetadata.getName(), ex.getMessage(), Map.of());
                 });
             }
         });
@@ -1030,6 +1044,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     if(disposed) return;
                     setReadRunning(false);
                     DatabaseUi.status(statusLabel, "CREATE TABLE statement loaded", DatabaseUi.Tone.NORMAL);
+                    banner.clear(BANNER_DDL);
                     new GeneratedSqlDialog(project, "CREATE TABLE DDL - " + tableMetadata.getName(), config, databaseName, ddl,
                             () -> DatabaseEditorManager.getInstance(project).openConsole(config, databaseName, ddl + "\n")).show();
                 });
@@ -1039,7 +1054,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     setReadRunning(false);
                     DatabaseUi.status(statusLabel, "Could not load CREATE TABLE statement", DatabaseUi.Tone.ERROR);
                     statusLabel.setToolTipText(ex.getMessage());
-                    Messages.showErrorDialog(project, "Failed to fetch CREATE statement: " + ex.getMessage(), "DDL Error");
+                    banner.error(BANNER_DDL, "Could not load the CREATE TABLE statement", ex.getMessage(),
+                            Map.of("Retry", TableDataEditorPanel.this::showCreateTableDialog));
                 });
             }
         });
@@ -1059,7 +1075,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 if (!tableModel.isRowNew(row)) keys.add(tableModel.getRowOriginalPkValues(row, pkNames));
             }
         } catch (IllegalStateException e) {
-            Messages.showWarningDialog(project, e.getMessage(), "Cannot Delete"); return;
+            banner.warning(BANNER_DELETE, "Cannot delete", e.getMessage(), Map.of()); return;
         }
         if (keys.isEmpty()) {
             tableModel.removeRows(modelRows);
@@ -1090,6 +1106,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     if (disposed) return;
                     tableModel.removeRows(modelRows);
                     setMutationRunning(false);
+                    banner.clear(BANNER_DELETE);
                     DatabaseUi.status(statusLabel, "Deleted " + keys.size() + (keys.size() == 1 ? " saved row" : " saved rows"), DatabaseUi.Tone.SUCCESS);
                     scheduleRefresh();
                 });
@@ -1098,7 +1115,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     if (disposed) return;
                     setMutationRunning(false);
                     DatabaseUi.status(statusLabel, "Delete failed · Check database before retrying", DatabaseUi.Tone.ERROR);
-                    Messages.showErrorDialog(project, "Delete failed: " + ex.getMessage() + "\nIf the connection failed, verify database state before retrying.", "Delete Error");
+                    // No Retry: after a lost connection the delete may have applied, so the recovery is to look first.
+                    banner.error(BANNER_DELETE, "Delete failed", ex.getMessage(), Map.of("Refresh", this::loadData));
                 });
             }
         });
@@ -1109,11 +1127,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         if (!tableModel.hasPendingChanges()) return;
 
         Map<CellCoord, String> errors = tableModel.getValidationErrors();
-        if (!errors.isEmpty()) {
-            String firstError = errors.values().iterator().next();
-            Messages.showWarningDialog(project, "Fix the invalid cells before committing.\n\n" + firstError, "Validation Error");
-            return;
-        }
+        // The footer and validation line already name the invalid cells, and Commit is disabled while they exist.
+        if (!errors.isEmpty()) return;
 
         List<String> pkNames = tableMetadata.getPrimaryKeyColumnNames();
 
@@ -1154,7 +1169,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     updates.add(new DataService.RowUpdate(row.getValue(), tableModel.getRowOriginalPkValues(row.getKey(), pkNames)));
                 }
         } catch (Exception e) {
-            Messages.showErrorDialog(project, e.getMessage(), "Cannot Commit"); return;
+            banner.warning(BANNER_COMMIT, "Cannot commit", e.getMessage(), Map.of()); return;
         }
         TableDraftState draftStore = project == null ? null : TableDraftState.getInstance(project);
         setMutationRunning(true);
@@ -1172,6 +1187,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     if (disposed) return;
                     tableModel.markCommitted();
                     setMutationRunning(false);
+                    banner.clear(BANNER_COMMIT);
                     Messages.showInfoMessage(project, "Changes committed.", "Changes Saved");
                 });
             } catch (Exception ex) {
@@ -1179,7 +1195,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     if (disposed) return;
                     setMutationRunning(false);
                     DatabaseUi.status(statusLabel, "Commit failed · Pending edits kept", DatabaseUi.Tone.ERROR);
-                    Messages.showErrorDialog(project, "Commit failed: " + ex.getMessage() + "\nIf the connection failed, verify database state before retrying.", "Commit Error");
+                    // No Retry: after a lost connection the commit may have applied; check the table before committing again.
+                    banner.error(BANNER_COMMIT, "Commit failed", ex.getMessage(), Map.of());
                 });
             }
         });
@@ -1282,7 +1299,9 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
             if(rows.isEmpty()) { statusLabel.setText("Select rows to export."); return; }
         } else if(scope==ExportScope.PAGE) for(List<Object> row:tableModel.rows) rows.add(new ArrayList<>(row));
         if(rows.stream().anyMatch(row -> row.stream().anyMatch(TruncatedValue.class::isInstance))) {
-            Messages.showErrorDialog(project,"Some displayed values are truncated and would be exported incomplete. Use the full-table export (All persisted rows), which fails instead of truncating oversized values.","Export Error");
+            banner.warning(BANNER_EXPORT, "Some displayed values are truncated and would export incomplete",
+                    "Export all persisted rows instead; it fails rather than truncating oversized values.",
+                    Map.of("Export all persisted rows", () -> exportData(format, ExportScope.ALL_PERSISTED)));
             return;
         }
         String filter=appliedWhere;
@@ -1307,9 +1326,10 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 else if ("json".equalsIgnoreCase(format)) ExportService.getInstance().exportToJson(result,targetFile);
                 else ExportService.getInstance().exportToSqlInsert(config,databaseName,tableMetadata.getName(),result,targetFile);
                 long exported=count;
-                SwingUtilities.invokeLater(() -> { if (!disposed) { setReadRunning(false); DatabaseUi.status(statusLabel, "Exported " + QueryResult.formatRowCount(exported), DatabaseUi.Tone.SUCCESS); Messages.showInfoMessage(project,"Exported " + QueryResult.formatRowCount(exported) + " to " + targetFile.getName(),"Export Complete"); } });
+                SwingUtilities.invokeLater(() -> { if (!disposed) { setReadRunning(false); banner.clear(BANNER_EXPORT); DatabaseUi.status(statusLabel, "Exported " + QueryResult.formatRowCount(exported), DatabaseUi.Tone.SUCCESS); Messages.showInfoMessage(project,"Exported " + QueryResult.formatRowCount(exported) + " to " + targetFile.getName(),"Export Complete"); } });
             } catch(Exception error) {
-                SwingUtilities.invokeLater(() -> { if (!disposed) { setReadRunning(false); DatabaseUi.status(statusLabel, "Export failed · See error details", DatabaseUi.Tone.ERROR); Messages.showErrorDialog(project,"Export failed: " + error.getMessage(),"Export Error"); } });
+                SwingUtilities.invokeLater(() -> { if (!disposed) { setReadRunning(false); DatabaseUi.status(statusLabel, "Export failed", DatabaseUi.Tone.ERROR);
+                        banner.error(BANNER_EXPORT, "Export failed", error.getMessage(), Map.of("Retry", () -> exportData(format, scope))); } });
             }
         });
     }

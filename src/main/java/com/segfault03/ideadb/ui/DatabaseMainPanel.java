@@ -57,7 +57,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
     private final JPanel explorerCards = new JPanel(explorerLayout);
     private ExplorerRecentSection recentSection;
     private ConnectionArrival arrival;
-    private ExplorerBanner banner;
+    private ErrorBanner banner;
 
     public DatabaseMainPanel(Project project) {
         super(new BorderLayout(0, 0));
@@ -151,7 +151,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         showAll.addActionListener(event -> applySourceFilter(java.util.EnumSet.allOf(DatabaseType.class)));
         filteredEmpty.add(showAll, prompt);
         explorerCards.add(filteredEmpty, "filtered-empty");
-        banner = new ExplorerBanner(project);
+        banner = new ErrorBanner(project, new Insets(0, 8, 8, 8));
         JPanel body = new JPanel(new BorderLayout());
         body.setOpaque(false);
         body.add(banner, BorderLayout.NORTH);
@@ -621,7 +621,9 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
-                    if (!finishNodeLoad(connNode, data, "Could not load databases · Refresh to retry", DatabaseUi.Tone.ERROR)) return;
+                    // The banner already names the failure; the footer repeats it only when no banner is shown.
+                    if (!finishNodeLoad(connNode, data, showErrorDialog ? "Ready" : "Could not load databases · Refresh to retry",
+                            showErrorDialog ? DatabaseUi.Tone.NORMAL : DatabaseUi.Tone.ERROR)) return;
                     restoreCachedConnection(connNode);
                     if (MetadataCacheState.getInstance().snapshot(cfg) == null) {
                         ExplorerTreeViewState.preserving(databaseTree, () -> {

@@ -1473,10 +1473,11 @@ class IntellijUiScreenshotTest {
                 captureBusyState(jdbcFixture, tableEditor, "Committing changes…", "table-commit-failure-busy.png", screenshotsDirectory) {
                     commitButton.click()
                 }
-                frame.x(DialogUiComponent::class.java) { byTitle("Commit Error") }.waitFound().also {
-                    captureScreen(screenshotsDirectory.resolve("table-commit-failure.png"))
-                    it.pressButton("OK")
+                waitUntil("commit failure banner") {
+                    tableEditor.xx { byJavaClass("com.intellij.ui.InlineBanner") }.list().any { it.hasSubtext("Commit failed") }
                 }
+                check(frame.xx(DialogUiComponent::class.java) { byTitle("Commit Error") }.list().isEmpty()) { "A failed commit must not raise a modal" }
+                captureScreen(screenshotsDirectory.resolve("table-commit-failure.png"))
                 check(tableEditor.hasSubtext("Commit failed · Pending edits kept") && commitButton.component.isEnabled() && revertButton.component.isEnabled())
                 captureScreen(screenshotsDirectory.resolve("table-commit-failure-recovered.png"))
                 revertButton.click()
@@ -1677,10 +1678,11 @@ class IntellijUiScreenshotTest {
                 captureScreen(screenshotsDirectory.resolve("table-filter-empty.png"))
                 setWhereClause(tableEditor, "invalid_column = 1")
                 tableEditor.x { byVisibleText("Apply") }.waitFound().click()
-                frame.x(DialogUiComponent::class.java) { byTitle("Data Fetch Error") }.waitFound().also {
-                    captureScreen(screenshotsDirectory.resolve("table-filter-error.png"))
-                    it.pressButton("OK")
+                waitUntil("filter error banner") {
+                    tableEditor.xx { byJavaClass("com.intellij.ui.InlineBanner") }.list().any { it.hasSubtext("Could not load data") && it.hasSubtext("Clear filter") }
                 }
+                check(frame.xx(DialogUiComponent::class.java) { byTitle("Data Fetch Error") }.list().isEmpty()) { "A failed filter must not raise a modal" }
+                captureScreen(screenshotsDirectory.resolve("table-filter-error.png"))
                 tableEditor.x { byAccessibleName("Clear WHERE and ORDER BY clauses") }.waitFound().click()
                 check(!tableEditor.x { byAccessibleName("Clear WHERE and ORDER BY clauses") }.waitFound().component.isEnabled())
                 check(applyButton.component.isEnabled()) { "Clearing an applied filter must allow resetting the data" }

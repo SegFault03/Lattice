@@ -25,16 +25,22 @@ Take Lattice from 0.2.0-alpha to 1.0 as the data tools layer for IntelliJ IDEA w
   - Environment tags: `model/Environment`, `ConnectionConfig.environment`, Environment row in `ConnectionDialog`; tree rows append "Unreachable" (when not connected and the first child is an error node) then the tag in `DatabaseUi.environmentColor` (local omitted).
   - Approved deviations from concept 04 are listed in `DESIGN.md` (decisions log) and on the artifact banner.
 - Motion: `ui/ConnectionArrival` + `DatabaseTreeCellRenderer.paintComponent`; started from `loadConnectionsFromState` for newly added connection ids. Clock is injectable (`ConnectionArrival(JTree, LongSupplier)`) so previews paint frozen moments. Reduced motion = screen reader active or `RemoteDesktopService.isRemoteSession()` (the IDE has no reduced-motion setting; `UISettings.getAnimateWindows()` is a registry flag off by default, do not use it).
-- R3 explorer slice: `ui/ExplorerBanner` (platform `InlineBanner`, one at a time, first line of the driver message + Retry / Edit connection / Details) replaces the explorer's four error modals (failed open of a cached table, failed connection expand, SQL generation failure, failed create/drop). A successful load of the same connection clears it. The Remove confirmation stays modal on purpose.
+- R3 explorer slice: `ui/ExplorerBanner` (now `ErrorBanner`) (platform `InlineBanner`, one at a time, first line of the driver message + Retry / Edit connection / Details) replaces the explorer's four error modals (failed open of a cached table, failed connection expand, SQL generation failure, failed create/drop). A successful load of the same connection clears it. The Remove confirmation stays modal on purpose.
 - README images `explorer-home.png` and `connection-dialog.png` rendered on the IntelliJ 2026.2.3 Islands Light baseline.
 
-## Waiting for the owner (asked, not yet answered)
-- A failed open now shows three times: banner, red "Connection failed · Refresh to retry" child row in the tree, and the footer status line ("Could not load databases · Refresh to retry"). Proposed: drop the footer line for this case, maybe the tree row too. Do not change without an answer.
-- Next R3 slice: (a) the explorer's remaining success modals (`Messages.showInfoMessage` for Created/Dropped/Table created/Table dropped/Table truncated in `DatabaseMainPanel`; the UI tests press OK on "Table created", so update them too), or (b) the table editor's 10 error modals (roadmap T1.13). Owner has not picked.
-- T0.8 red inspector Cancel: documented design choice in `docs/UI_PREVIEW.md`; change only on the owner's word.
+- R3 table editor slice (T1.13), owner picked 2026-11-27: `ui/ExplorerBanner` renamed `ui/ErrorBanner` (padding argument, `warning` variant) and placed under the table editor's filters. It replaces the 10 error/warning modals in `TableDataEditorPanel`: load/filter failure (Retry, Clear filter when a filter is set; auto-refresh failure also shows it), truncate, CREATE TABLE fetch (Retry), Cannot delete, delete failure (Refresh), Cannot commit, commit failure (no Retry on purpose), truncated-values export (Export all persisted rows), export failure (Retry). The validation modal became a plain return (Commit is disabled while cells are invalid and the footer names them). Footer messages lost their "· See error details" suffix. UI tests now wait for the banner instead of pressing OK on "Commit Error" / "Data Fetch Error".
+- Explorer duplicate: a failed connection expand no longer repeats "Could not load databases" in the footer while the banner shows (footer returns to Ready); background refreshes with no banner keep the footer error. The red tree row stays (owner, 2026-11-27).
 
-## Next (once answered)
-- The chosen R3 slice above. Remaining R3 after that: table editor (10), dry runs (`sql/run/DryRunRunner`, 4), `ConnectionDialog` (3), `RunQueryAction`, `DatabaseEditorManager`, `CreateTableDialog`, `AlterTableDialog` (1 each).
+## Decided (owner, 2026-11-27)
+- T0.8 red inspector Cancel stays as documented.
+
+## Verification status
+- `./gradlew test compileUiTestKotlin` was running at the last commit; result not yet recorded here.
+- Not yet rendered: the table editor banners. Evidence needs the full review run with the JDBC fixture (`-Plattice.ui.review=true`, no focused flag); its `table-filter-error.png` and `table-commit-failure.png` cover the two main states.
+
+## Next
+- Verify the above, then the remaining success modals: table editor (Table truncated, Changes saved, Export complete) and explorer (Created/Dropped/Table created/Table dropped/Table truncated; UI tests press OK on "Table created").
+- Remaining R3 error modals: dry runs (`sql/run/DryRunRunner`, 4), `ConnectionDialog` (3), `RunQueryAction`, `DatabaseEditorManager`, `CreateTableDialog`, `AlterTableDialog` (1 each).
 - Then milestone 0.3 data editor, starting with the T1.1 grid model spike (`ROADMAP.md`).
 
 ## Known gaps and findings

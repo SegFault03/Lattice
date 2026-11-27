@@ -12,18 +12,18 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * The explorer's one error banner, between the toolbar and the tree: it names the problem and the recovery in place of
- * a modal dialog. A new error replaces the previous one; the full driver message is one click away under Details.
+ * A surface's one error banner (explorer, table editor): it names the problem and the recovery in place of a modal
+ * dialog. A new message replaces the previous one; the full driver message is one click away under Details.
  */
-final class ExplorerBanner extends JPanel {
+final class ErrorBanner extends JPanel {
     private final Project project;
     private String subject;
 
-    ExplorerBanner(Project project) {
+    ErrorBanner(Project project, Insets padding) {
         super(new BorderLayout());
         this.project = project;
         setOpaque(false);
-        setBorder(JBUI.Borders.empty(0, 8, 8, 8));
+        setBorder(JBUI.Borders.empty(padding.top, padding.left, padding.bottom, padding.right));
         setVisible(false);
     }
 
@@ -32,9 +32,18 @@ final class ExplorerBanner extends JPanel {
      * about (a connection id, for example) so a later success can clear it; {@code actions} are recovery links.
      */
     void error(String subject, String summary, String detail, Map<String, Runnable> actions) {
+        show(EditorNotificationPanel.Status.Error, subject, summary, detail, actions);
+    }
+
+    /** Like {@link #error}, for a request Lattice refused before contacting the database. */
+    void warning(String subject, String summary, String detail, Map<String, Runnable> actions) {
+        show(EditorNotificationPanel.Status.Warning, subject, summary, detail, actions);
+    }
+
+    private void show(EditorNotificationPanel.Status status, String subject, String summary, String detail, Map<String, Runnable> actions) {
         this.subject = subject;
         String reason = firstLine(detail);
-        InlineBanner banner = new InlineBanner(reason.isEmpty() ? summary : summary + ": " + reason, EditorNotificationPanel.Status.Error);
+        InlineBanner banner = new InlineBanner(reason.isEmpty() ? summary : summary + ": " + reason, status);
         Map<String, Runnable> links = new LinkedHashMap<>(actions);
         if (detail != null && !detail.isBlank() && !detail.strip().equals(reason))
             links.put("Details", () -> Messages.showErrorDialog(project, detail, summary));
