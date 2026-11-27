@@ -860,14 +860,9 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                         updateOperationControls();
                         return;
                     }
-                    DatabaseUi.status(statusLabel, "Could not load data", DatabaseUi.Tone.ERROR);
-                    statusLabel.setToolTipText(ex.getMessage());
-                    if (autoRefresh) {
-                        // A failing timer would otherwise report every tick; stop it.
-                        autoRefreshCombo.setSelectedIndex(0);
-                        DatabaseUi.status(statusLabel, "Auto-refresh stopped · Could not load data", DatabaseUi.Tone.ERROR);
-                        statusLabel.setToolTipText(ex.getMessage());
-                    }
+                    statusReady();
+                    // A failing timer would otherwise report every tick; stop it.
+                    if (autoRefresh) autoRefreshCombo.setSelectedIndex(0);
                     var actions = new LinkedHashMap<String, Runnable>();
                     actions.put("Retry", () -> loadData(requestedPage, requestedSize, true));
                     if (!where.isEmpty() || !order.isEmpty()) actions.put("Clear filter", () -> {
@@ -1019,8 +1014,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 SwingUtilities.invokeLater(() -> {
                     if (disposed) return;
                     setMutationRunning(false);
-                    DatabaseUi.status(statusLabel, "Truncate failed", DatabaseUi.Tone.ERROR);
-                    statusLabel.setToolTipText(ex.getMessage());
+                    statusReady();
                     banner.error(BANNER_TRUNCATE, "Could not truncate " + tableMetadata.getName(), ex.getMessage(), Map.of());
                 });
             }
@@ -1052,8 +1046,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 SwingUtilities.invokeLater(() -> {
                     if(disposed) return;
                     setReadRunning(false);
-                    DatabaseUi.status(statusLabel, "Could not load CREATE TABLE statement", DatabaseUi.Tone.ERROR);
-                    statusLabel.setToolTipText(ex.getMessage());
+                    statusReady();
                     banner.error(BANNER_DDL, "Could not load the CREATE TABLE statement", ex.getMessage(),
                             Map.of("Retry", TableDataEditorPanel.this::showCreateTableDialog));
                 });
@@ -1202,6 +1195,11 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
         });
     }
 
+    /** The footer after a failure the banner already names: it repeats only what the banner does not say. */
+    private void statusReady() {
+        DatabaseUi.status(statusLabel, "Ready", DatabaseUi.Tone.NORMAL);
+    }
+
     private boolean finishCellEditing() {
         return (cellDetails == null || cellDetails.finishEditing()) && finishGridCellEditing();
     }
@@ -1328,7 +1326,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 long exported=count;
                 SwingUtilities.invokeLater(() -> { if (!disposed) { setReadRunning(false); banner.clear(BANNER_EXPORT); DatabaseUi.status(statusLabel, "Exported " + QueryResult.formatRowCount(exported), DatabaseUi.Tone.SUCCESS); Messages.showInfoMessage(project,"Exported " + QueryResult.formatRowCount(exported) + " to " + targetFile.getName(),"Export Complete"); } });
             } catch(Exception error) {
-                SwingUtilities.invokeLater(() -> { if (!disposed) { setReadRunning(false); DatabaseUi.status(statusLabel, "Export failed", DatabaseUi.Tone.ERROR);
+                SwingUtilities.invokeLater(() -> { if (!disposed) { setReadRunning(false); statusReady();
                         banner.error(BANNER_EXPORT, "Export failed", error.getMessage(), Map.of("Retry", () -> exportData(format, scope))); } });
             }
         });

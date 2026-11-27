@@ -39,8 +39,8 @@ Take Lattice from 0.2.0-alpha to 1.0 as the data tools layer for IntelliJ IDEA w
 - Fixed on the way: stale "Welcome to Lattice" lookup in `assertExplorerOverflow`; `ConnectionDialog` clipped buttons (UI hierarchy showed Swing bounds 516 px vs a 487 px native window after a resize while shown). `refreshFormSize()` now packs synchronously before show and, once shown, refits once on the next event and skips no-op resizes. The failure was intermittent, so one passing run is weak evidence.
 - Not rendered: dark theme, font scale 2.0, and the other banners (truncate, DDL, delete, export, auto-refresh).
 
-## Open question for the owner
-- The filter-error footer still reads "Could not load data" under a banner saying the same. The explorer footer was silenced in this case; the table editor footer was kept because for commit it adds the consequence ("Pending edits kept"). Proposed: drop the pure duplicates (load, truncate, export failure) and keep consequence lines.
+## Decided (owner, 2026-11-27, later)
+- Table editor footer no longer repeats the banner: load (and auto-refresh), truncate, CREATE TABLE fetch and export failures return it to "Ready" (`statusReady()`); delete and commit keep their consequence lines.
 
 ## Next
 - Verify the above, then the remaining success modals: table editor (Table truncated, Changes saved, Export complete) and explorer (Created/Dropped/Table created/Table dropped/Table truncated; UI tests press OK on "Table created").
