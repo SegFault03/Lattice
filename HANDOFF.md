@@ -35,8 +35,11 @@ Take Lattice from 0.2.0-alpha to 1.0 as the data tools layer for IntelliJ IDEA w
 - T0.8 red inspector Cancel stays as documented.
 
 ## Verification status
-- `./gradlew test compileUiTestKotlin` was running at the last commit; result not yet recorded here.
-- Not yet rendered: the table editor banners. Evidence needs the full review run with the JDBC fixture (`-Plattice.ui.review=true`, no focused flag); its `table-filter-error.png` and `table-commit-failure.png` cover the two main states.
+- `./gradlew test compileUiTestKotlin`: passed.
+- Table editor banners not yet rendered. The full review run (`-Plattice.ui.review=true`, light, no focused flag) is the only capture covering `table-filter-error.png` and `table-commit-failure.png`. Three attempts did not reach those steps:
+  1. Stale lookup "Welcome to Lattice" in `assertExplorerOverflow` (fixed: "What's New in Lattice").
+  2. Known flaky "combo selection 'TIMESTAMP'" in create table.
+  3. `ConnectionDialog` for MySQL opened clipped at the bottom (buttons cut off), so "Add connection" was never pressed (`IntellijUiScreenshotTest.kt` ~line 1052). Intermittent; looks like a real sizing defect around `refreshFormSize()` / first pack, possibly since the Environment row. Not investigated yet.
 
 ## Next
 - Verify the above, then the remaining success modals: table editor (Table truncated, Changes saved, Export complete) and explorer (Created/Dropped/Table created/Table dropped/Table truncated; UI tests press OK on "Table created").
