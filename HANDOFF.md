@@ -54,6 +54,9 @@ Take Lattice from 0.2.0-alpha to 1.0 as the data tools layer for IntelliJ IDEA w
 - `DatabaseUi.SECONDARY_TEXT` may fall below 4.5:1 on the light panel (estimate, never measured; check on a render).
 - Font scale 2.0 was checked only in headless previews (one doubled font, icons unchanged); the real-IDE harness scales components, not fonts.
 
+- Success-modal slice: full review run passed (checked `table-edit-committed.png`: "Changes committed · 1 row · …"; `table-export-complete.png`: "Exported 1 row to persisted-rows.csv"); `homeOnly` passed on rerun (first run hit the TIMESTAMP flake).
+- `createTableOnly` fails at `assertCreateTableLayout` ("The small CREATE statement must fit the SQL preview", the preview's visible height is below its preferred height). Pre-existing: the same failure on 596614a, the session's starting commit. Its later steps (`verifyCreateComposer`, `verifyMutationRefresh`) therefore did not run, so the explorer success lines (Created/Dropped/Truncated table) and the edited "Table created"/"Changes Saved" steps there are compiled but not exercised.
+
 ## Open questions
 See `ROADMAP.md` → Open questions (Settings Sync roaming, minimum IDE, licensing).
 
