@@ -509,6 +509,11 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         }
     }
 
+    /** Confirms a write in the footer; the refresh that follows may replace it, and the tree then shows the result. */
+    private void reportSuccess(String message) {
+        updateExplorerStatus(message, DatabaseUi.Tone.SUCCESS);
+    }
+
     private boolean beginNodeLoad(DefaultMutableTreeNode node, TreeNodeData data, String message) {
         if (disposed || project.isDisposed() || mutationRunning || data.isLoading() || node.getRoot() != rootNode) return false;
         data.setLoading(true);
@@ -910,7 +915,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                     if (disposed || project.isDisposed()) return;
                     mutationRunning = false;
                     databaseTree.setEnabled(true);
-                    updateExplorerStatus(failure + " · See the banner above", DatabaseUi.Tone.ERROR);
+                    updateExplorerStatus("Ready", DatabaseUi.Tone.NORMAL);
                     banner.error(null, failure, error.getMessage(), links());
                     drainRefreshes();
                 });
@@ -925,7 +930,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         String object = DatabaseProviders.get(cfg.getType()).namespaceLabel();
         runMutation(cfg, "Creating " + object + "…", "Create " + object + " failed",
                 conn -> DdlService.getInstance().createDatabase(conn, cfg, dbName), DatabaseChange.connection(cfg.getId()), () -> {
-                    Messages.showInfoMessage(project, "Created " + object + " '" + dbName + "'.", "Created");
+                    reportSuccess("Created " + object + " " + dbName);
                 });
     }
 
@@ -935,7 +940,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 "Drop " + object + " '" + dbName + "'?\nAll tables and their data will be permanently deleted.", "Drop " + object)) return;
         runMutation(cfg, "Dropping " + object + "…", "Drop " + object + " failed",
                 conn -> DdlService.getInstance().dropDatabase(conn, cfg, dbName), DatabaseChange.connection(cfg.getId()), () -> {
-                    Messages.showInfoMessage(project, "Dropped " + object + " '" + dbName + "'.", "Dropped");
+                    reportSuccess("Dropped " + object + " " + dbName);
                 });
     }
 
@@ -943,7 +948,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         CreateTableDialog dlg = new CreateTableDialog(project, cfg, dbName);
         if (!dlg.showAndGet()) return;
         String tableName = dlg.getTableName();
-        Messages.showInfoMessage(project, "Table '" + tableName + "' created.", "Table created");
+        reportSuccess("Created table " + tableName);
     }
 
     private void doDropTable(ConnectionConfig cfg, String dbName, String tableName, boolean foreign) {
@@ -951,7 +956,7 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
                 "Drop table '" + tableName + "'?\nThe table structure and all its data will be permanently deleted.", "Drop table")) return;
         runMutation(cfg, "Dropping table…", "Drop table failed",
                 conn -> { if (foreign) DdlService.getInstance().dropForeignTable(conn, cfg, dbName, tableName); else DdlService.getInstance().dropTable(conn, cfg, dbName, tableName); }, DatabaseChange.table(cfg.getId(), dbName, tableName), () -> {
-                    Messages.showInfoMessage(project, "Table '" + tableName + "' dropped.", "Table dropped");
+                    reportSuccess("Dropped table " + tableName);
                 });
     }
 
@@ -961,6 +966,6 @@ public class DatabaseMainPanel extends JPanel implements com.intellij.openapi.Di
         runMutation(cfg, "Truncating table…", "Truncate table failed",
                 conn -> DdlService.getInstance().truncateTable(conn, cfg, dbName, tableName),
                 DatabaseChange.table(cfg.getId(), dbName, tableName),
-                () -> Messages.showInfoMessage(project, "All rows removed from '" + tableName + "'.", "Table truncated"));
+                () -> reportSuccess("Truncated table " + tableName));
     }
 }

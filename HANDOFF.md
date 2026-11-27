@@ -34,6 +34,8 @@ Take Lattice from 0.2.0-alpha to 1.0 as the data tools layer for IntelliJ IDEA w
 ## Decided (owner, 2026-11-27)
 - T0.8 red inspector Cancel stays as documented.
 
+- R3 success modals (owner picked 2026-11-27): table editor (Truncated, Changes committed, Exported N rows to <file>) and explorer (Created/Dropped schema, Created/Dropped/Truncated table) now report in the footer instead of `Messages.showInfoMessage`. The table editor carries the note into the next load's status (`successNote`); the explorer does not (a timed note collided with user-started refreshes). Explorer mutation failures no longer append "· See the banner above"; the footer returns to Ready. UI tests no longer press OK on these dialogs; exports wait for "to <file>" in the footer.
+
 ## Verification status
 - `./gradlew test`: passed. Full real-IDE review run (light, `-Plattice.ui.review=true`): passed end to end after the fixes below; `table-filter-error.png` and `table-commit-failure.png` checked (in git-ignored `.temp/reviews/table-banner/`).
 - Fixed on the way: stale "Welcome to Lattice" lookup in `assertExplorerOverflow`; `ConnectionDialog` clipped buttons (UI hierarchy showed Swing bounds 516 px vs a 487 px native window after a resize while shown). `refreshFormSize()` now packs synchronously before show and, once shown, refits once on the next event and skips no-op resizes. The failure was intermittent; two full runs have passed since.
@@ -43,7 +45,6 @@ Take Lattice from 0.2.0-alpha to 1.0 as the data tools layer for IntelliJ IDEA w
 - Table editor footer no longer repeats the banner: load (and auto-refresh), truncate, CREATE TABLE fetch and export failures return it to "Ready" (`statusReady()`); delete and commit keep their consequence lines.
 
 ## Next
-- Verify the above, then the remaining success modals: table editor (Table truncated, Changes saved, Export complete) and explorer (Created/Dropped/Table created/Table dropped/Table truncated; UI tests press OK on "Table created").
 - Remaining R3 error modals: dry runs (`sql/run/DryRunRunner`, 4), `ConnectionDialog` (3), `RunQueryAction`, `DatabaseEditorManager`, `CreateTableDialog`, `AlterTableDialog` (1 each).
 - Then milestone 0.3 data editor, starting with the T1.1 grid model spike (`ROADMAP.md`).
 

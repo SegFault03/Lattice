@@ -69,6 +69,7 @@ Always: real renders with real data, the skill's coverage matrix, motion designe
 - Status by color alone (every status has its word: Unreachable, tag text); gray text on tinted surfaces; colored bars along one side of a row.
 - Pinging servers just to show status.
 - Modals for routine failures. The explorer and the table editor report them in `ErrorBanner` (platform `InlineBanner`, one at a time, first line of the driver message, recovery links and Details; warning style for requests refused before reaching the database). A failure is said once per place: the banner names it; the footer adds only a consequence the banner does not state ("Pending edits kept", "Check database before retrying") and otherwise returns to "Ready". Commit and delete failures offer no Retry, since after a lost connection the change may have applied. Dry runs and dialogs still raise modals until roadmap R3 reaches them.
+- Modals for routine success. A finished write is confirmed in the surface's footer (SUCCESS tone): the table editor keeps it ahead of the reload that follows ("Changes committed · 1 row · …"); in the explorer the refresh may replace it, and the tree change is the confirmation.
 
 ## Other consolidated UI rules
 - Preview and screenshot output may hold private content: keep it in git-ignored `.temp/` or `build/` and never commit or upload it (the line also covers credentials and stays in CLAUDE.md). [from CLAUDE.md]

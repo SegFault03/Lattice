@@ -82,6 +82,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
     private static final String BANNER_LOAD = "load", BANNER_COMMIT = "commit", BANNER_DELETE = "delete",
             BANNER_TRUNCATE = "truncate", BANNER_DDL = "ddl", BANNER_EXPORT = "export";
     private ErrorBanner banner;
+    // A finished write the reload that follows it would otherwise overwrite in the footer.
+    private String successNote;
     private JButton saveBtn;
     private JButton revertBtn;
     private JButton filterBtn;
@@ -840,14 +842,19 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     nextPageBtn.setEnabled(hasNext);
                     pageLabel.setText("Page " + currentPage + (maxPage > 0 ? " of " + maxPage : ""));
 
-                    DatabaseUi.status(statusLabel, String.format("%s · %d ms · Total: %s",
+                    boolean unstablePages = keys.isEmpty() && order.isEmpty();
+                    String note = successNote == null ? "" : successNote + " · ";
+                    DatabaseUi.status(statusLabel, note + String.format("%s · %d ms · Total: %s",
                             QueryResult.formatRowCount(result.getRows().size()), result.getExecutionTimeMs(),
-                            totalRowCount >= 0 ? String.valueOf(totalRowCount) : "not counted") + (keys.isEmpty() && order.isEmpty() ? " · No primary key: set ORDER BY for stable pages" : ""), keys.isEmpty() && order.isEmpty() ? DatabaseUi.Tone.WARNING : DatabaseUi.Tone.NORMAL);
+                            totalRowCount >= 0 ? String.valueOf(totalRowCount) : "not counted") + (unstablePages ? " · No primary key: set ORDER BY for stable pages" : ""),
+                            unstablePages ? DatabaseUi.Tone.WARNING : successNote != null ? DatabaseUi.Tone.SUCCESS : DatabaseUi.Tone.NORMAL);
+                    successNote = null;
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
                     if (disposed || generation != loadGeneration || mutationRunning) return;
                     setReadRunning(false);
+                    successNote = null;
                     if (ex instanceof MissingTableException) {
                         tableUnavailable = true;
                         tableMetadata.setColumns(List.of());
@@ -1008,7 +1015,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     if (disposed) return;
                     setMutationRunning(false);
                     banner.clear(BANNER_TRUNCATE);
-                    Messages.showInfoMessage(project, "Table '" + tableMetadata.getName() + "' truncated successfully.", "Table Truncated");
+                    successNote = "Truncated " + tableMetadata.getName();
+                    DatabaseUi.status(statusLabel, successNote, DatabaseUi.Tone.SUCCESS);
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
@@ -1181,7 +1189,8 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                     tableModel.markCommitted();
                     setMutationRunning(false);
                     banner.clear(BANNER_COMMIT);
-                    Messages.showInfoMessage(project, "Changes committed.", "Changes Saved");
+                    successNote = "Changes committed";
+                    DatabaseUi.status(statusLabel, successNote, DatabaseUi.Tone.SUCCESS);
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
@@ -1324,7 +1333,7 @@ public class TableDataEditorPanel extends JPanel implements AutoCloseable {
                 else if ("json".equalsIgnoreCase(format)) ExportService.getInstance().exportToJson(result,targetFile);
                 else ExportService.getInstance().exportToSqlInsert(config,databaseName,tableMetadata.getName(),result,targetFile);
                 long exported=count;
-                SwingUtilities.invokeLater(() -> { if (!disposed) { setReadRunning(false); banner.clear(BANNER_EXPORT); DatabaseUi.status(statusLabel, "Exported " + QueryResult.formatRowCount(exported), DatabaseUi.Tone.SUCCESS); Messages.showInfoMessage(project,"Exported " + QueryResult.formatRowCount(exported) + " to " + targetFile.getName(),"Export Complete"); } });
+                SwingUtilities.invokeLater(() -> { if (!disposed) { setReadRunning(false); banner.clear(BANNER_EXPORT); DatabaseUi.status(statusLabel, "Exported " + QueryResult.formatRowCount(exported) + " to " + targetFile.getName(), DatabaseUi.Tone.SUCCESS); } });
             } catch(Exception error) {
                 SwingUtilities.invokeLater(() -> { if (!disposed) { setReadRunning(false); statusReady();
                         banner.error(BANNER_EXPORT, "Export failed", error.getMessage(), Map.of("Retry", () -> exportData(format, scope))); } });

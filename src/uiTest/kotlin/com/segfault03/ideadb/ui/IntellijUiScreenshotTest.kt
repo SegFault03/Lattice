@@ -403,7 +403,6 @@ class IntellijUiScreenshotTest {
                         addScenarioColumns(dialog)
                         dialog.x { byAccessibleName("Create new table") }.waitFound().click()
                     }
-                    frame.x(DialogUiComponent::class.java) { byTitle("Table created") }.waitFound().pressButton("OK")
                     ideFrame { waitForNoOpenedDialogs() }
                     waitUntil("$name in the explorer") { tree.pathExists(*(schema + "Tables (${index + 1})")) }
                 }
@@ -513,7 +512,6 @@ class IntellijUiScreenshotTest {
                         addScenarioColumns(dialog)
                         dialog.x { byAccessibleName("Create new table") }.waitFound().click()
                     }
-                    frame.x(DialogUiComponent::class.java) { byTitle("Table created") }.waitFound().pressButton("OK")
                     ideFrame { waitForNoOpenedDialogs() }
                     waitUntil("$name in the explorer") { tree.pathExists(*(schema + "Tables (${if (name == "SEARCH_CUSTOMERS") 1 else 2})")) }
                 }
@@ -1111,7 +1109,6 @@ class IntellijUiScreenshotTest {
                     captureBusyState(requireNotNull(jdbcFixture), pluginRoot, "Creating schema…", "explorer-creating-schema.png", screenshotsDirectory) {
                         schemaDialog.pressButton("Create schema")
                     }
-                    frame.x(DialogUiComponent::class.java) { byTitle("Created") }.waitFound().pressButton("OK")
                     val createdSchemaPath = connectionPath + "UI_REVIEW_SCHEMA"
                     waitUntil("created schema is visible") { databaseTree.pathExists(*createdSchemaPath) }
                     rightClickExplorerPath(databaseTree, createdSchemaPath.joinToString(databaseTree.fixture.separator()))
@@ -1120,7 +1117,6 @@ class IntellijUiScreenshotTest {
                     captureBusyState(jdbcFixture, pluginRoot, "Dropping schema…", "explorer-dropping-schema.png", screenshotsDirectory) {
                         dropSchema.pressButton("Drop schema")
                     }
-                    frame.x(DialogUiComponent::class.java) { byTitle("Dropped") }.waitFound().pressButton("OK")
                     waitUntil("dropped schema removed from explorer") { !databaseTree.pathExists(*createdSchemaPath) && databaseTree.pathExists(*publicSchemaPath) }
                 }
 
@@ -1151,9 +1147,6 @@ class IntellijUiScreenshotTest {
             if (jdbcFixture != null) captureBusyState(jdbcFixture, createTableDialog, "Creating table…", "explorer-creating-table.png", screenshotsDirectory) {
                 createTableDialog.x { byAccessibleName("Create new table") }.waitFound().click()
             } else createTableDialog.x { byAccessibleName("Create new table") }.waitFound().click()
-            frame.x(DialogUiComponent::class.java) {
-                byTitle("Table created")
-            }.waitFound().pressButton("OK")
             ideFrame {
                 waitForNoOpenedDialogs()
             }
@@ -1230,9 +1223,6 @@ class IntellijUiScreenshotTest {
             if (jdbcFixture != null) captureBusyState(jdbcFixture, tableEditor, "Committing changes…", "table-committing.png", screenshotsDirectory) {
                 commitButton.click()
             } else commitButton.click()
-            frame.x(DialogUiComponent::class.java) {
-                byTitle("Changes Saved")
-            }.waitFound().pressButton("OK")
             waitUntil("committed row reload") {
                 dataGrid.rowCount() == 1 && tableEditor.hasSubtext("1 row ·")
             }
@@ -1251,7 +1241,6 @@ class IntellijUiScreenshotTest {
                 tableEditor.x { byAccessibleName("Add a new row") }.waitFound().click()
                 replaceCellValue(dataGrid, 0, 1, "Ada Lovelace")
                 commitButton.click()
-                frame.x(DialogUiComponent::class.java) { byTitle("Changes Saved") }.waitFound().pressButton("OK")
                 waitUntil("replacement saved row loaded") { dataGrid.rowCount() == 1 && tableEditor.hasSubtext("1 row ·") }
             }
             }
@@ -1608,9 +1597,6 @@ class IntellijUiScreenshotTest {
             }
 
             commitButton.click()
-            frame.x(DialogUiComponent::class.java) {
-                byTitle("Changes Saved")
-            }.waitFound().pressButton("OK")
             waitUntil("valid integer change is committed and reloaded") {
                 dataGrid.rowCount() == 1 && tableEditor.hasSubtext("1 row ·") && tableCellText(dataGrid, 0, 0).toLongOrNull() == changedId
             }
@@ -1757,7 +1743,7 @@ class IntellijUiScreenshotTest {
                     if (windowsFileChooser) acceptNativeFileChooser()
                     else requireNotNull(saveExport).pressButton("OK")
                 }
-                frame.x(DialogUiComponent::class.java) { byTitle("Export Complete") }.waitFound().pressButton("OK")
+                waitUntil("export finished") { tableEditor.hasSubtext("to ${exportFile.fileName}") }
                 check(Files.readString(exportFile).contains("Ada Lovelace")) { "Real persisted-row export must contain the saved database value" }
                 captureScreen(screenshotsDirectory.resolve("table-export-complete.png"))
                 if (postgres || h2) for (format in listOf("JSON", "SQL")) {
@@ -1784,7 +1770,7 @@ class IntellijUiScreenshotTest {
                     val exported = nameSaveTarget(
                         save, screenshotsDirectory.resolve("persisted-rows.${format.lowercase()}").toAbsolutePath(), format.lowercase(), projectDirectory)
                     save.pressButton("OK")
-                    frame.x(DialogUiComponent::class.java) { byTitle("Export Complete") }.waitFound().pressButton("OK")
+                    waitUntil("export finished") { tableEditor.hasSubtext("to ${exported.fileName}") }
                     val text = Files.readString(exported)
                     check(text.contains("Ada Lovelace")) { "$format persisted export lost its saved value" }
                     if (format == "SQL") check(text.contains("INSERT INTO $peopleSql")) { "SQL export used an unexpected target: $text" }
@@ -2443,7 +2429,7 @@ class IntellijUiScreenshotTest {
         captureBusyState(fixture,dialog,"Creating table…","create-composer-busy.png",directory) {
             dialog.x { byAccessibleName("Create new table") }.waitFound().click()
         }
-        frame.x(DialogUiComponent::class.java) { byTitle("Table created") }.waitFound().pressButton("OK"); frame.waitForNoOpenedDialogs()
+        frame.waitForNoOpenedDialogs()
         check(columns("customers").map { it.first } == listOf("id","name","email","status","balance","created_at"))
         check(columns("customers")[1].second == 120 && columns("customers")[2].second == 255)
         java.sql.DriverManager.getConnection(fixture.jdbcUrl,"SA","").use { conn ->
@@ -2462,7 +2448,7 @@ class IntellijUiScreenshotTest {
         check(inspectorInput(dialog,"Column name").text == "nickname" && inspectorInput(dialog,"Length / precision").text == "64")
         inspectorInput(dialog,"Table name").text = "customers_archive"; ready(dialog)
         dialog.x { byAccessibleName("Create new table") }.waitFound().click()
-        frame.x(DialogUiComponent::class.java) { byTitle("Table created") }.waitFound().pressButton("OK"); frame.waitForNoOpenedDialogs()
+        frame.waitForNoOpenedDialogs()
         check(columns("customers_archive").size == 2 && columns("customers_archive").last() == ("nickname" to 64))
         waitUntil("archive appears") { tree.pathExists(*(schema + arrayOf("Tables (2)","customers_archive"))) }
         dialog = open(); inspectorInput(dialog,"Table name").text = "discarded_table"; dialog.pressButton("Cancel")
@@ -2713,13 +2699,11 @@ class IntellijUiScreenshotTest {
 
         replaceCellValue(grid, 0, 1, "Grid update")
         commit.click()
-        frame.x(DialogUiComponent::class.java) { byTitle("Changes Saved") }.waitFound().pressButton("OK")
         waitUntil("grid update forces reload") { "Grid update" in values() && editor.hasSubtext("1 row ·") }
         editor.x { byAccessibleName("Add a new row") }.waitFound().click()
         replaceCellValue(grid, 1, 1, "Grid insert")
         replaceCellValue(grid, 1, 2, "insert@example.com")
         commit.click()
-        frame.x(DialogUiComponent::class.java) { byTitle("Changes Saved") }.waitFound().pressButton("OK")
         waitUntil("grid insert forces reload including identity") { grid.rowCount() == 2 && editor.hasSubtext("2 rows ·") && "(Auto)" !in values() }
         grid.clickCell(1, 1)
         editor.x { byAccessibleName("Delete selected rows") }.waitFound().click()
@@ -2769,11 +2753,9 @@ class IntellijUiScreenshotTest {
 
         menu("Truncate table…")
         frame.x(DialogUiComponent::class.java) { byTitle("Truncate table") }.waitFound().pressButton("Truncate table")
-        frame.x(DialogUiComponent::class.java) { byTitle("Table truncated") }.waitFound().pressButton("OK")
         waitUntil("explorer truncate refreshes the open grid") { grid.rowCount() == 0 && editor.hasSubtext("0 rows ·") }
         menu("Drop table…")
         frame.x(DialogUiComponent::class.java) { byTitle("Drop table") }.waitFound().pressButton("Drop table")
-        frame.x(DialogUiComponent::class.java) { byTitle("Table dropped") }.waitFound().pressButton("OK")
         waitUntil("drop refreshes folder counts and the open grid") {
             tree.pathExists(*(schema + arrayOf("Tables (1)", "customers_archive"))) && editor.hasSubtext("Table no longer exists")
         }
