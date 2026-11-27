@@ -64,6 +64,7 @@ public class ConnectionDialog extends DialogWrapper {
     private final ActionLink driverToggle = new ActionLink("Driver options");
     private final JBLabel driverSummary = new JBLabel();
     private boolean uiInitialized;
+    private boolean refitQueued;
     private JComboBox<DriverSource> driverSourceCombo;
     private JComboBox<InstalledDriver> bundledDriverCombo;
     private JComboBox<String> driverVersionCombo;
@@ -368,14 +369,28 @@ public class ConnectionDialog extends DialogWrapper {
         rootPanel.revalidate();
         rootPanel.repaint();
         Window window = getWindow();
-        if (window != null) {
-            window.setMinimumSize(null);
-            Dimension preferred = window.getPreferredSize();
-            window.setMinimumSize(new Dimension(JBUI.scale(740), preferred.height));
-            if (!window.isShowing()) window.pack();
-            else
-                window.setSize(Math.max(window.getWidth(), JBUI.scale(740)), preferred.height);
+        if (window == null) return;
+        if (!window.isShowing()) {
+            fitWindow(window);
+            return;
         }
+        // Several state changes (driver discovery, combo refills) each ask for a refit. Fit once after they settle:
+        // resizing a shown window to an intermediate height can leave the native window short on X11.
+        if (refitQueued) return;
+        refitQueued = true;
+        SwingUtilities.invokeLater(() -> {
+            refitQueued = false;
+            if (!isDisposed()) fitWindow(window);
+        });
+    }
+
+    private void fitWindow(Window window) {
+        window.setMinimumSize(null);
+        Dimension preferred = window.getPreferredSize();
+        window.setMinimumSize(new Dimension(JBUI.scale(740), preferred.height));
+        if (!window.isShowing()) window.pack();
+        else if (window.getHeight() != preferred.height || window.getWidth() < JBUI.scale(740))
+            window.setSize(Math.max(window.getWidth(), JBUI.scale(740)), preferred.height);
     }
 
     @Override
